@@ -9341,6 +9341,10 @@ impl App {
         }
         // AURORA_DEMO_LINK's lost link, before the frame takes the window
         self.demo_link_lost();
+        // Folderstorm: a remembered previous look lasts one login
+        if !matches!(self.screen, Screen::World) {
+            ui::appearance::previous_look::forget(&self.egui_ctx);
+        }
         let Some(mut gfx) = self.gfx.take() else {
             return;
         };
