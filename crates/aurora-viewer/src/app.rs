@@ -19870,6 +19870,9 @@ impl ApplicationHandler for App {
                         | "bulk-permissions"
                         | "bulk-multi"
                         | "bulk-folder"
+                        // Folderstorm: Review bulk changes
+                        | "bulk-review"
+                        | "aurora-bulk-review"
                         | "sort"
                         | "filters"
                         | "preferences"
@@ -19980,6 +19983,9 @@ impl ApplicationHandler for App {
                         if view == "bulk-permissions" {
                             self.inventory_ui.open_bulk_permissions(ids);
                         }
+                    }
+                    if view.ends_with("bulk-review") {
+                        ui::inventory::bulk_review_demo(&mut self.inventory_ui, &self.world.inventory); // Folderstorm
                     }
                     if view == "permissions" {
                         self.inventory_ui.show_next_owner = true;
