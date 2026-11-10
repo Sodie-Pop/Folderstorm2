@@ -9355,7 +9355,9 @@ impl App {
         self.update_blender_live(&mut gfx.renderer);
         let t_up = Instant::now();
         // Folderstorm: the world's part of the window (custom world viewport)
+        self.viewport_demo(gfx.renderer.size());
         gfx.renderer.set_world_rect(self.world_viewport(gfx.renderer.size()));
+        folderstorm_viewport::publish_monitors(&self.egui_ctx, &gfx.window, self.frame_count);
         let (w, h) = gfx.renderer.size();
         // a photo drawn at its own size this frame: its proportions, the
         // part of it this frame draws, the height its details are chosen for

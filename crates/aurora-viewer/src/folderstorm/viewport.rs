@@ -126,6 +126,28 @@ pub fn set_bars_area(ctx: &egui::Context, rect: Option<egui::Rect>) {
     ctx.data_mut(|d| d.insert_temp::<Option<egui::Rect>>(bars_id(), rect));
 }
 
+/// The window and the monitors on the desktop, as (x, y, width, height)
+/// in pixels: what "Fit to a monitor" works from.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MonitorLayout {
+    pub window: [i32; 4],
+    pub monitors: Vec<[i32; 4]>,
+}
+
+fn monitors_id() -> egui::Id {
+    egui::Id::unique("folderstorm_viewport_monitors")
+}
+
+/// The app's latest look at the window and the monitors.
+pub fn set_monitors(ctx: &egui::Context, layout: MonitorLayout) {
+    ctx.data_mut(|d| d.insert_temp(monitors_id(), layout));
+}
+
+/// The window and the monitors, once the app has looked.
+pub fn monitors(ctx: &egui::Context) -> Option<MonitorLayout> {
+    ctx.data(|d| d.get_temp::<MonitorLayout>(monitors_id()))
+}
+
 /// The rectangle the bars are laid out in: the world viewport's when they
 /// stay inside it, the window's otherwise.
 pub fn bars_screen(ctx: &egui::Context) -> egui::Rect {

@@ -38,12 +38,57 @@ impl App {
         }
     }
 
+    /// `AURORA_DEMO_VIEWPORT=<mode>`: the viewport turned on once, at the
+    /// start of a demo run (in the demo's own settings): `1` keeps the
+    /// right two thirds of the window, `bars-window` the same with the bars
+    /// over the whole window, `middle` the middle third (as the middle one
+    /// of three monitors), `mouselook-full` drops it in mouselook.
+    pub(super) fn viewport_demo(&mut self, size: (u32, u32)) {
+        static APPLIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !self.demo || APPLIED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let Ok(mode) = std::env::var("AURORA_DEMO_VIEWPORT") else { return };
+        let third = size.0 / 3;
+        let s = &mut self.settings.folderstorm_viewport;
+        *s = viewport::ViewportSettings {
+            enabled: true,
+            left: third,
+            right: if mode == "middle" { third } else { 0 },
+            in_mouselook: mode != "mouselook-full",
+            bars_in_viewport: mode != "bars-window",
+            ..Default::default()
+        };
+    }
+
     /// Width over height of the world's part of the window, when it has one.
     pub(super) fn world_aspect(&self) -> Option<f32> {
         let size = self.gfx.as_ref()?.window.inner_size();
         let [_, _, w, h] = self.world_viewport((size.width, size.height))?;
         Some(w as f32 / h.max(1) as f32)
     }
+}
+
+/// Tells Preferences where the window and the monitors are, about once a
+/// second (listing the monitors is a system call).
+pub(super) fn publish_monitors(ctx: &egui::Context, window: &winit::window::Window, frame: u64) {
+    if !frame.is_multiple_of(60) {
+        return;
+    }
+    // (Wayland gives no window position: no "Fit to a monitor" there)
+    let Ok(at) = window.inner_position() else { return };
+    let size = window.inner_size();
+    let monitors = window
+        .available_monitors()
+        .map(|m| [m.position().x, m.position().y, m.size().width as i32, m.size().height as i32])
+        .collect();
+    viewport::set_monitors(
+        ctx,
+        viewport::MonitorLayout {
+            window: [at.x, at.y, size.width as i32, size.height as i32],
+            monitors,
+        },
+    );
 }
 
 /// The camera's view-projection carried into window coordinates: points the
