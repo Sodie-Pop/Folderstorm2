@@ -2204,6 +2204,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "folderstorm-mcp-bridge"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "getrandom 0.4.3",
+ "log",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tempfile",
+]
+
+[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
