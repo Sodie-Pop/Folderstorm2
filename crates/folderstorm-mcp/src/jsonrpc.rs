@@ -164,11 +164,17 @@ mod tests {
     #[test]
     fn initialize_negotiates_the_version() {
         let mut s = Server::new(Fake(Vec::new()));
-        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"#);
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"#,
+        );
         assert_eq!(a["id"], 1);
         assert_eq!(a["result"]["protocolVersion"], "2025-03-26");
         assert!(a["result"]["capabilities"]["tools"].is_object());
-        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":"x","method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#);
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":"x","method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#,
+        );
         assert_eq!(a["id"], "x");
         assert_eq!(a["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
     }
@@ -185,7 +191,12 @@ mod tests {
     fn lists_the_tools() {
         let mut s = Server::new(Fake(Vec::new()));
         let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
-        let names: Vec<_> = a["result"]["tools"].as_array().expect("tools").iter().map(|t| t["name"].clone()).collect();
+        let names: Vec<_> = a["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .map(|t| t["name"].clone())
+            .collect();
         assert_eq!(names.len(), TOOLS.len());
         assert!(names.contains(&json!("inventory_search")));
         assert_eq!(a["result"]["tools"][0]["inputSchema"]["type"], "object");
@@ -201,14 +212,20 @@ mod tests {
         assert_eq!(a["result"]["isError"], false);
         assert_eq!(a["result"]["structuredContent"]["arguments"]["query"], "boot");
         assert!(a["result"]["content"][0]["text"].as_str().expect("text").contains("boot"));
-        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_status"}}"#);
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_status"}}"#,
+        );
         assert_eq!(a["result"]["structuredContent"]["arguments"], json!({}));
     }
 
     #[test]
     fn a_tool_error_is_a_result_the_assistant_reads() {
         let mut s = Server::new(Fake(Vec::new()));
-        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"worn_items","arguments":{}}}"#);
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"worn_items","arguments":{}}}"#,
+        );
         assert_eq!(a["result"]["isError"], true);
         assert_eq!(a["result"]["content"][0]["text"], "permission_denied: not allowed");
     }
@@ -219,11 +236,23 @@ mod tests {
         assert_eq!(ask(&mut s, "{nope")["error"]["code"], PARSE_ERROR);
         assert_eq!(ask(&mut s, "[1]")["error"]["code"], INVALID_REQUEST);
         assert_eq!(ask(&mut s, r#"{"id":1,"method":"ping"}"#)["error"]["code"], INVALID_REQUEST);
-        assert_eq!(ask(&mut s, r#"{"jsonrpc":"2.0","id":{},"method":"ping"}"#)["error"]["code"], INVALID_REQUEST);
-        assert_eq!(ask(&mut s, r#"{"jsonrpc":"2.0","id":1,"method":"resources/list"}"#)["error"]["code"], METHOD_NOT_FOUND);
-        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"inventory_delete"}}"#);
+        assert_eq!(
+            ask(&mut s, r#"{"jsonrpc":"2.0","id":{},"method":"ping"}"#)["error"]["code"],
+            INVALID_REQUEST
+        );
+        assert_eq!(
+            ask(&mut s, r#"{"jsonrpc":"2.0","id":1,"method":"resources/list"}"#)["error"]["code"],
+            METHOD_NOT_FOUND
+        );
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"inventory_delete"}}"#,
+        );
         assert_eq!(a["error"]["code"], INVALID_PARAMS);
-        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"worn_items","arguments":[1]}}"#);
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"worn_items","arguments":[1]}}"#,
+        );
         assert_eq!(a["error"]["code"], INVALID_PARAMS);
         assert_eq!(ask(&mut s, r#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#)["result"], json!({}));
         assert!(s.backend.0.is_empty(), "nothing reached the viewer");

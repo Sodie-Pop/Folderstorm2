@@ -174,15 +174,24 @@ mod tests {
 
     #[test]
     fn limits_and_malformed_messages() {
-        assert!(matches!(read(b"POST / HTTP/1.1\r\nContent-Length: 11\r\n\r\n", 10), Err(HttpError::TooLarge)));
+        assert!(matches!(
+            read(b"POST / HTTP/1.1\r\nContent-Length: 11\r\n\r\n", 10),
+            Err(HttpError::TooLarge)
+        ));
         let huge = format!("GET / HTTP/1.1\r\nX: {}\r\n\r\n", "a".repeat(MAX_HEAD));
         assert!(matches!(read(huge.as_bytes(), 10), Err(HttpError::TooLarge)));
-        assert!(matches!(read(b"GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n", 10), Err(HttpError::Malformed(_))));
+        assert!(matches!(
+            read(b"GET / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n", 10),
+            Err(HttpError::Malformed(_))
+        ));
         assert!(matches!(
             read(b"GET / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n", 10),
             Err(HttpError::Malformed(_))
         ));
-        assert!(matches!(read(b"POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\n{}", 10), Err(HttpError::Malformed(_))));
+        assert!(matches!(
+            read(b"POST / HTTP/1.1\r\nContent-Length: 4\r\n\r\n{}", 10),
+            Err(HttpError::Malformed(_))
+        ));
         assert!(matches!(read(b"GET / HTTP/1.1\r\n", 10), Err(HttpError::Malformed(_))));
         assert!(matches!(read(b"GET / HTTP/1.1\r\nbad\r\n\r\n", 10), Err(HttpError::Malformed(_))));
     }

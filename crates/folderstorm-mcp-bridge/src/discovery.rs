@@ -207,11 +207,7 @@ mod tests {
         std::fs::write(dir.path().join("folderstorm2-mcp-2.json"), vec![b' '; 5000]).expect("written");
         // a file whose name does not match its pid
         let d = sample(3, 1);
-        std::fs::write(
-            dir.path().join("folderstorm2-mcp-4.json"),
-            serde_json::to_string(&d).expect("json"),
-        )
-        .expect("written");
+        std::fs::write(dir.path().join("folderstorm2-mcp-4.json"), serde_json::to_string(&d).expect("json")).expect("written");
         let mut wrong = sample(5, 1);
         wrong.schema = 99;
         std::fs::write(dir.path().join(file_name(5)), serde_json::to_string(&wrong).expect("json")).expect("written");

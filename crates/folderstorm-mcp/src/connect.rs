@@ -33,7 +33,10 @@ impl std::fmt::Display for NotFound {
                 f,
                 "{product} is not running, or \"Allow local assistant access\" is off (Preferences › Privacy › Local assistant)"
             ),
-            NotFound::NoAnswer => write!(f, "{product} did not answer; it may have quit. Start it, or turn local assistant access off and on"),
+            NotFound::NoAnswer => write!(
+                f,
+                "{product} did not answer; it may have quit. Start it, or turn local assistant access off and on"
+            ),
             NotFound::OtherVersion(v) => write!(
                 f,
                 "{product} speaks bridge API {v}, this sidecar {}: use the sidecar installed with the viewer",
@@ -88,15 +91,19 @@ impl Viewer {
             let client = match &self.client {
                 Some(client) => client.clone(),
                 None => {
-                    let (client, _) = find(self.dir.as_deref(), self.pid, false)
-                        .map_err(|e| ToolError::new(ErrorCode::Unavailable, e.to_string()))?;
+                    let (client, _) =
+                        find(self.dir.as_deref(), self.pid, false).map_err(|e| ToolError::new(ErrorCode::Unavailable, e.to_string()))?;
                     self.client = Some(client.clone());
                     client
                 }
             };
             match client.call(tool, arguments.clone()) {
                 Ok(result) => return Ok(result),
-                Err(ClientError::Connect(_)) | Err(ClientError::Tool(ToolError { code: ErrorCode::Unauthorized, .. })) if attempt == 0 => {
+                Err(ClientError::Connect(_))
+                | Err(ClientError::Tool(ToolError {
+                    code: ErrorCode::Unauthorized,
+                    ..
+                })) if attempt == 0 => {
                     self.client = None;
                 }
                 Err(ClientError::Tool(e)) => return Err(e),

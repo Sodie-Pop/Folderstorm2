@@ -53,7 +53,10 @@ fn listens_on_loopback_and_answers_a_call() {
     let health = client.health().expect("health");
     assert_eq!(health.api, crate::API_VERSION);
     assert!(health.read_allowed);
-    assert_eq!(client.call("worn_items", json!({})).expect("answered"), json!({"tool": "worn_items"}));
+    assert_eq!(
+        client.call("worn_items", json!({})).expect("answered"),
+        json!({"tool": "worn_items"})
+    );
     let activity = bridge.activity();
     assert_eq!(activity.len(), 1, "health is not activity");
     assert_eq!(activity[0].tool, "worn_items");
@@ -81,7 +84,9 @@ fn browsers_and_foreign_hosts_are_refused() {
     let token = bridge.token().secret().to_owned();
     let (status, _) = raw(
         port,
-        &format!("GET /v1/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: https://example.com\r\nAuthorization: Bearer {token}\r\n\r\n"),
+        &format!(
+            "GET /v1/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: https://example.com\r\nAuthorization: Bearer {token}\r\n\r\n"
+        ),
     );
     assert_eq!(status, 403);
     let (status, _) = raw(
@@ -89,9 +94,15 @@ fn browsers_and_foreign_hosts_are_refused() {
         &format!("GET /v1/health HTTP/1.1\r\nHost: evil.example:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"),
     );
     assert_eq!(status, 403);
-    let (status, _) = raw(port, &format!("GET /v1/health HTTP/1.1\r\nHost: localhost:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"));
+    let (status, _) = raw(
+        port,
+        &format!("GET /v1/health HTTP/1.1\r\nHost: localhost:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"),
+    );
     assert_eq!(status, 200);
-    let (status, _) = raw(port, &format!("GET /other HTTP/1.1\r\nHost: localhost:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"));
+    let (status, _) = raw(
+        port,
+        &format!("GET /other HTTP/1.1\r\nHost: localhost:{port}\r\nAuthorization: Bearer {token}\r\n\r\n"),
+    );
     assert_eq!(status, 404);
 }
 
@@ -101,7 +112,10 @@ fn oversized_requests_are_refused() {
     let port = bridge.port();
     let (status, body) = raw(
         port,
-        &format!("POST /v1/call HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\n\r\n", http::MAX_REQUEST_BODY + 1),
+        &format!(
+            "POST /v1/call HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\n\r\n",
+            http::MAX_REQUEST_BODY + 1
+        ),
     );
     assert_eq!(status, 413);
     assert_eq!(body["error"]["code"], "too_large");
@@ -114,7 +128,10 @@ fn reads_set_to_never_are_refused_before_reaching_the_viewer() {
     permissions.set(Class::Read, Level::Never);
     bridge.set_permissions(permissions);
     let client = Client::new(bridge.port(), bridge.token().clone());
-    assert_eq!(code(client.call("inventory_search", json!({"query": "x"})).expect_err("refused")), ErrorCode::PermissionDenied);
+    assert_eq!(
+        code(client.call("inventory_search", json!({"query": "x"})).expect_err("refused")),
+        ErrorCode::PermissionDenied
+    );
     assert!(!client.health().expect("health still works").read_allowed);
     assert!(calls.try_recv().is_err(), "nothing reached the viewer");
     assert_eq!(bridge.activity()[0].outcome, Outcome::Refused);
@@ -129,14 +146,20 @@ fn reads_set_to_never_are_refused_before_reaching_the_viewer() {
 fn unknown_tools_are_refused() {
     let (bridge, _calls) = start(VIEWER_TIMEOUT, None);
     let client = Client::new(bridge.port(), bridge.token().clone());
-    assert_eq!(code(client.call("inventory_delete", json!({})).expect_err("refused")), ErrorCode::UnknownTool);
+    assert_eq!(
+        code(client.call("inventory_delete", json!({})).expect_err("refused")),
+        ErrorCode::UnknownTool
+    );
 }
 
 #[test]
 fn a_viewer_that_does_not_answer_times_out() {
     let (bridge, _calls) = start(Duration::from_millis(100), None);
     let client = Client::new(bridge.port(), bridge.token().clone());
-    assert_eq!(code(client.call("worn_items", json!({})).expect_err("timed out")), ErrorCode::Timeout);
+    assert_eq!(
+        code(client.call("worn_items", json!({})).expect_err("timed out")),
+        ErrorCode::Timeout
+    );
 }
 
 #[test]

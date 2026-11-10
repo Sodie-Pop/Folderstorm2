@@ -50,7 +50,10 @@ fn an_assistant_reaches_the_viewer_through_the_sidecar() {
     let (bridge, calls) = start(dir.path(), 4242);
     let viewer = fake_viewer(calls);
     let mut server = Server::new(Live(Viewer::new(Some(dir.path().to_path_buf()), None)));
-    rpc(&mut server, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#);
+    rpc(
+        &mut server,
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+    );
     let a = rpc(
         &mut server,
         r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inventory_search","arguments":{"query":"boot"}}}"#,
@@ -73,17 +76,28 @@ fn an_assistant_reaches_the_viewer_through_the_sidecar() {
         r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"inventory_search","arguments":{"query":"boot"}}}"#,
     );
     assert_eq!(a["result"]["isError"], true);
-    assert!(a["result"]["content"][0]["text"].as_str().expect("text").starts_with("permission_denied"));
+    assert!(
+        a["result"]["content"][0]["text"]
+            .as_str()
+            .expect("text")
+            .starts_with("permission_denied")
+    );
 
     // the viewer turns access off and on again: new port, new token
     bridge.stop();
     viewer.join().expect("fake viewer");
-    let a = rpc(&mut server, r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_status"}}"#);
+    let a = rpc(
+        &mut server,
+        r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_status"}}"#,
+    );
     assert_eq!(a["result"]["isError"], true, "no viewer now");
     assert!(a["result"]["content"][0]["text"].as_str().expect("text").contains("not running"));
     let (bridge, calls) = start(dir.path(), 4242);
     let viewer = fake_viewer(calls);
-    let a = rpc(&mut server, r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"viewer_status"}}"#);
+    let a = rpc(
+        &mut server,
+        r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"viewer_status"}}"#,
+    );
     assert_eq!(a["result"]["structuredContent"]["session"], "demo", "{a}");
     bridge.stop();
     viewer.join().expect("fake viewer");

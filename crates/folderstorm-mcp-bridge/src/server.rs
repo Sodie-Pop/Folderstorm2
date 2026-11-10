@@ -186,7 +186,10 @@ impl Bridge {
         }
         if let Some(accept) = self.accept.take() {
             // wake the blocking accept
-            let _ = TcpStream::connect_timeout(&SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.shared.port).into(), Duration::from_secs(1));
+            let _ = TcpStream::connect_timeout(
+                &SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.shared.port).into(),
+                Duration::from_secs(1),
+            );
             if accept.join().is_err() {
                 log::warn!("local assistant bridge: the listener thread panicked");
             }

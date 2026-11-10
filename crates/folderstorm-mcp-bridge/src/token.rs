@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn only_the_same_secret_matches() {
         let token = Token::generate().expect("random source");
-        assert!(token.matches(&token.secret().to_owned()));
+        assert!(token.matches(token.secret()));
         let mut other = token.secret().to_owned();
         let last = if other.ends_with('0') { "1" } else { "0" };
         other.replace_range(63.., last);

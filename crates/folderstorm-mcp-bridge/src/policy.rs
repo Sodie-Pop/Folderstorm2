@@ -71,11 +71,19 @@ impl Permissions {
             Class::Trash => self.trash,
         };
         // Read has no Ask: a hand-edited file cannot give it one
-        if level == Level::Ask && !class.can_ask() { Level::Never } else { level }
+        if level == Level::Ask && !class.can_ask() {
+            Level::Never
+        } else {
+            level
+        }
     }
 
     pub fn set(&mut self, class: Class, level: Level) {
-        let level = if level == Level::Ask && !class.can_ask() { Level::Never } else { level };
+        let level = if level == Level::Ask && !class.can_ask() {
+            Level::Never
+        } else {
+            level
+        };
         match class {
             Class::Read => self.read = level,
             Class::Edit => self.edit = level,

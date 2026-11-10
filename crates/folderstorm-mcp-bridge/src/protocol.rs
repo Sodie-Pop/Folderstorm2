@@ -234,14 +234,22 @@ mod tests {
             assert!(!t.description.is_empty());
         }
         assert!(tool("viewer_status").is_some_and(|t| t.class.is_none()));
-        assert!(TOOLS.iter().filter(|t| t.name != "viewer_status").all(|t| t.class == Some(Class::Read)));
+        assert!(
+            TOOLS
+                .iter()
+                .filter(|t| t.name != "viewer_status")
+                .all(|t| t.class == Some(Class::Read))
+        );
         assert!(tool("inventory_delete").is_none());
     }
 
     #[test]
     fn errors_serialize_with_snake_case_codes() {
         let e = ToolError::new(ErrorCode::PermissionDenied, "no");
-        assert_eq!(serde_json::to_value(&e).expect("json"), json!({"code": "permission_denied", "message": "no"}));
+        assert_eq!(
+            serde_json::to_value(&e).expect("json"),
+            json!({"code": "permission_denied", "message": "no"})
+        );
         assert_eq!(e.to_string(), "permission_denied: no");
         assert_eq!(ErrorCode::Timeout.status(), 504);
     }
