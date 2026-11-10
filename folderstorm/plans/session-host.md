@@ -161,7 +161,7 @@ migration. A named profile changes the following:
 |---|---|---|
 | Settings folder (`settings::config_dir()`): `settings.json`, `login_accounts.json`, `accounts/<uuid>/` (transcripts, contact sets, HUD sizes), layouts, skins, keybinds, spelling, autoreplace, `cache.key` fallback, `graphics-before-safe.json` | `<config root>/profiles/<name>/` (under the demo subfolder in demo mode) | `settings.json` is last-writer-wins between processes (`Settings::save` → `atomic_file::write`); window geometry, graphics and UI belong to each character. One hook redirects all callers (they all go through `config_dir()`). |
 | Profile lease | `profiles/<name>/profile.lock`, held with `File::try_lock` (as `media_pack.rs` does) for the process's life | One process per profile. A second launch hands its link (if any) to the running one, brings it forward and exits. The main profile keeps allowing several instances, as today. |
-| Asset cache (`cache_dir()`), pipeline cache, browser cache, media plugins | **Shared** (default location), unless that profile picks its own cache folder | Files are multi-writer safe (section 3); a shared cache saves bandwidth, decoding and disk. The `cache.key` fallback file (used without a credential store, `cache_key.rs`) must then be read from the main settings root, or profiles would seal one cache with different keys |
+| Asset cache (`cache_dir()`), pipeline cache, browser cache, media plugins | **Separate per profile by default** (decision 4, section 17); sharing the main cache is an option per profile | Files are multi-writer safe (section 3); a shared cache saves bandwidth, decoding and disk. The `cache.key` fallback file (used without a credential store, `cache_key.rs`) must then be read from the main settings root, or profiles would seal one cache with different keys |
 | Logs | Shared folder; log name `aurora-<profile>.log` with the usual `.previous.log` (one hook in `log_stem`) | Easy to find; still one file per process thanks to the lease |
 | `instances/` registry | **Shared** (it sits beside the logs folder: `logs_dir().with_file_name("instances")`) | Otherwise the viewers would stop seeing each other. A reason not to move the logs folder per profile. |
 | Crash sessions | Shared (UUID folders). The "GPU trouble" marker (`crash::take_gpu_trouble`) is consumed by whichever viewer starts next | Accepted for now; can be scoped per profile later |
@@ -613,19 +613,30 @@ snapshot wait on a busy card and RLVa effects in snapshots; driving `frame()`
 without a window (R5); the real RAM, CPU and VRAM cost per character; what
 exactly caused the past bug in the earlier port (section 17).
 
-## 17. Open questions for the human
+## 17. Decisions (the human, 2026-11-10)
 
-1. Behind another Folderstorm2 window, should named profiles default to 3D
-   **Off** (recommended) or Limited? Should the main profile keep today's
-   behaviour?
-2. OK to build the host into the same executable (`--session-host`), rather
-   than ship a second program?
-3. Keep the C++ limits of 5 characters and 4 monitors?
-4. OK to **share the asset cache** between profiles (recommended: less
-   download and disk)?
-5. Background characters: sound muted and voice off by default?
-6. In your earlier port, do you remember the message and the situation (box
-   text; window minimised, hidden or behind; how long before it closed)? That
-   would confirm which of the cases in section 6.2 it was.
-7. On Linux, is "host plus chat plus monitors, switching best effort" enough,
-   with full window arrangement on Windows only?
+1. **Inactive characters: 3D Off by default**, on only while a monitor of that
+   character is being viewed (then Limited, section 12).
+2. **The host is a mode of the main program** (`--session-host`), provided
+   that is the most stable implementation; revisit only if it proves less
+   stable than a separate program.
+3. **At most 5 characters.** (Monitors: one per other character, so at most 4.)
+4. **Separate asset caches by default**, one per profile; sharing the cache
+   is an **option** per profile (it saves downloads and disk, the files being
+   multi-writer safe, section 3). This replaces the shared default suggested in
+   sections 3–5: a profile's cache folder defaults to its own, and the
+   `cache.key` note in section 5 applies only when sharing is chosen.
+5. **Background characters: sound muted and voice off** by default.
+6. **The past bug:** the inactive viewer closed almost immediately when another
+   viewer became active, with a box listing several possible reasons, one of
+   them the graphics card being disconnected. That matches Aurora's
+   `app-gpu-lost` message ("its driver was reset …, or the card was removed or
+   taken by another program … Aurora closes when you press OK"), i.e. the
+   device-lost path of section 6.2, reached when focus moves to another
+   instance (an `Outdated`/`Lost` surface or a lost device on a window that lost
+   focus or was occluded). **Checkpoint 1 acceptance:** with two instances,
+   switching the active window back and forth repeatedly (including minimise and
+   restore, and full-screen) never shows that box or closes a character, and a
+   real loss in one character never downgrades or closes the others.
+7. **Windows is the target platform**; Linux and macOS are nice to have
+   (launcher, chat and monitors; switching best effort).
