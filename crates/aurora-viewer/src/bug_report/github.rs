@@ -6,11 +6,14 @@ use crossbeam_channel::{Receiver, Sender};
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
-pub const ISSUES: &str = "https://github.com/Aurora-Viewer/Aurora-Viewer/issues";
-const API: &str = "https://api.github.com/repos/Aurora-Viewer/Aurora-Viewer/issues";
+// Folderstorm: reports go to the fork's repository
+pub const ISSUES: &str = "https://github.com/Sodie-Pop/Folderstorm2/issues";
+const API: &str = "https://api.github.com/repos/Sodie-Pop/Folderstorm2/issues";
 pub const VERIFY: &str = "https://github.com/login/device";
 // Public identifier, supplied by the project's GitHub App registration.
-pub const CLIENT_ID: &str = "Iv23liT7PLWClMLztI1W";
+// Folderstorm: no GitHub App yet: empty = direct sending shown as not
+// configured, the browser draft stays available.
+pub const CLIENT_ID: &str = "";
 
 pub struct BrowserDraft {
     pub url: String,

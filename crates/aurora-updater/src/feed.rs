@@ -8,9 +8,11 @@ use semver::Version;
 use serde::Deserialize;
 use std::time::Duration;
 
-pub const RELEASES: &str = "https://api.github.com/repos/Aurora-Viewer/Aurora-Viewer/releases?per_page=100";
-pub const RELEASE_PAGE: &str = "https://github.com/Aurora-Viewer/Aurora-Viewer/releases";
-const DOWNLOADS: &str = "https://github.com/Aurora-Viewer/Aurora-Viewer/releases/download";
+// Folderstorm: the fork's releases only: an update must never replace
+// Folderstorm2 with Aurora Viewer.
+pub const RELEASES: &str = folderstorm_brand::RELEASES_API;
+pub const RELEASE_PAGE: &str = folderstorm_brand::RELEASES_PAGE;
+const DOWNLOADS: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases/download";
 pub const POLICY: &str = "aurora-update-policy.json";
 pub const MAX_ARCHIVE: u64 = 2 * 1024 * 1024 * 1024;
 /// How long an installation below a new minimum may still sign in, when

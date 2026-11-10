@@ -212,7 +212,12 @@ pub fn show(
                                     .fit_to_exact_size(Vec2::splat((if screen.height() < 800.0 { 32.0 } else { 64.0 }) * layout.scale)),
                             );
                         }
-                        ui.label(RichText::new("Aurora Viewer").size(28.0 * layout.text_scale).strong().color(p.ink));
+                        ui.label(
+                            RichText::new(folderstorm_brand::PRODUCT)
+                                .size(28.0 * layout.text_scale)
+                                .strong()
+                                .color(p.ink),
+                        );
                         ui.label(
                             RichText::new(crate::ui::login::client_tagline())
                                 .size(13.0 * layout.text_scale)

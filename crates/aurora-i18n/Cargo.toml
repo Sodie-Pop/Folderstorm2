@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 fluent-bundle = "0.16"
 fluent-syntax = "0.12"
+# Folderstorm: the product name (src/folderstorm.rs)
+folderstorm-brand = { path = "../folderstorm-brand" }
 log = "0.4"
 sys-locale = "0.3"
 unic-langid = "0.9"

@@ -120,7 +120,11 @@ pub fn release_notes(version: &str) -> Option<String> {
 /// its English labels).
 pub fn copy_text(sections: &[Section]) -> String {
     let version = aurora_version::version();
-    let mut out = format!("Aurora Viewer {version}\n");
+    let mut out = format!(
+        "{} {version} (based on {})\n",
+        folderstorm_brand::PRODUCT,
+        folderstorm_brand::BASED_ON
+    ); // Folderstorm: product name
     if let Some(url) = release_notes(version) {
         out.push_str(&format!("Release notes: {url}\n"));
     }
@@ -259,7 +263,7 @@ fn hero(ui: &mut egui::Ui, p: &Palette, logo: Option<&egui::TextureHandle>) {
         }
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 4.0;
-            ui.label(sheet::semibold(ui, "Aurora Viewer", 22.0, p.ink));
+            ui.label(sheet::semibold(ui, folderstorm_brand::PRODUCT, 22.0, p.ink));
             ui.label(RichText::new(crate::ui::login::client_tagline()).size(12.0).color(p.violet_pale));
             ui.add(
                 egui::Label::new(
