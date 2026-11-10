@@ -84,7 +84,7 @@ Needed before shipping any build. They also keep merges simple.
 
 | # | Feature | What it does | Aurora today | Source | Prio | Status |
 |---|---|---|---|---|---|---|
-| 5.1 | Session host | Separate Windows app that runs up to five characters, one viewer process each, in one interface: warm / economy standby, switching the active character without relogging, shared chat for all characters, low-rate read-only monitors of the others, pop-out panels, restart and recovery, character quick-action buttons, profile copy, audio / voice follows the active character. Off by default. The largest feature by far: re-plan it for Aurora rather than port it as is. | – | `doc/plans/multi-character-*.md`, `session-*.md`, `host-*.md`, `character-quick-actions.md`, `tools/session-host/` | P3 | ⬜ |
+| 5.1 | Session host | Separate Windows app that runs up to five characters, one viewer process each, in one interface: warm / economy standby, switching the active character without relogging, shared chat for all characters, low-rate read-only monitors of the others, pop-out panels, restart and recovery, character quick-action buttons, profile copy, audio / voice follows the active character. Off by default. The largest feature by far: re-plan it for Aurora rather than port it as is. | – | `doc/plans/multi-character-*.md`, `session-*.md`, `host-*.md`, `character-quick-actions.md`, `tools/session-host/` | P3 | 📝 plan: [plans/session-host.md](plans/session-host.md) |
 
 ## 6. Small extras
 
