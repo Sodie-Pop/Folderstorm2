@@ -235,6 +235,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, inv: &Invent
     let Some(mut jump) = st.folder_jump.take() else { return };
     jump.update(inv);
     let mut open = true;
+    let mut close = false;
     let mut chosen = None;
     let window_id = format!("inventory_folder_jump_{}", st.ui_id);
     Floater::new(
@@ -261,7 +262,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, inv: &Invent
                 jump.step(false);
             }
             if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                open = false;
+                close = true;
             }
             if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 chosen = jump.selected;
@@ -350,7 +351,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, inv: &Invent
                     }
                 });
                 if flat_button(ui, p, aurora_i18n::tr!("common-cancel")).clicked() {
-                    open = false;
+                    close = true;
                 }
             });
         });
@@ -360,7 +361,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, inv: &Invent
         go(inv, st, id);
         return;
     }
-    if open {
+    if open && !close {
         st.folder_jump = Some(jump);
     }
 }
@@ -384,7 +385,7 @@ mod tests {
         Uuid::from_u128(n)
     }
 
-    fn folder(inv: &mut Inventory, n: u128, parent: Uuid, name: &str, kind: i8) {
+    fn folder(inv: &mut Inventory, n: u128, parent: Uuid, name: &str, kind: i32) {
         inv.folders.insert(
             id(n),
             Folder {
