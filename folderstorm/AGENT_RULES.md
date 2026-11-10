@@ -102,7 +102,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace            # filter by name if needed; never -p alone
 ```
 
-On the human's Windows PC, `./scripts/check.ps1` does all three. On GitHub,
+On Linux (a cloud session), Windows-only helpers look unused, so run clippy
+with `-- -D warnings -A dead-code` as upstream's Linux CI job does, then run it
+once more without `-A dead-code` and check that no error points at a file you
+changed: the Windows CI job denies unused code. On the human's Windows PC,
+`./scripts/check.ps1` does all three. On GitHub,
 CI runs them as well; which workflows run on the fork, and why, is in
 [CI.md](CI.md). Never edit an upstream workflow file: add a
 `folderstorm-*.yml` workflow instead. Demo mode
