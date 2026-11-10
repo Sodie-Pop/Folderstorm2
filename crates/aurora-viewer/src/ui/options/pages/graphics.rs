@@ -84,6 +84,7 @@ pub fn page(cx: &mut Cx, tab: usize) {
         4 => image(cx),
         5 => {
             frames_per_second(cx);
+            super::folderstorm_characters::group(cx); // Folderstorm: other Folderstorm2 windows
             graphics_card(cx);
             overlays(cx);
         }

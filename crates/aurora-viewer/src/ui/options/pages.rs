@@ -12,6 +12,7 @@ pub mod commands;
 pub mod confirmations;
 pub mod controls;
 pub mod folderstorm_viewport; // Folderstorm: world viewport
+pub mod folderstorm_characters; // Folderstorm: other Folderstorm2 windows
 pub mod fun;
 pub mod graphics;
 pub mod inventory;

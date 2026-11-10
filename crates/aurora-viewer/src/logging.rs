@@ -63,6 +63,10 @@ fn log_stem() -> String {
     } else {
         "aurora"
     };
+    // Folderstorm: `aurora-<profile>` (folderstorm_characters/profile.rs)
+    if let Some(stem) = crate::folderstorm_characters::profile::log_stem(base) {
+        return stem;
+    }
     match crate::cli::title_slug() {
         Some(slug) => format!("{base}-{slug}"),
         None => format!("{base}-{}", std::process::id()),
