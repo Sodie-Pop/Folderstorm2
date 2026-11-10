@@ -165,7 +165,7 @@ mod win {
         write(&class, None, "URL:Virtual World")?;
         write(&class, Some("URL Protocol"), "")?;
         write(&format!(r"{class}\DefaultIcon"), None, &format!("\"{exe}\",0"))?;
-        write(&format!(r"{class}\shell\open"), Some("FriendlyAppName"), "Aurora Viewer")?;
+        write(&format!(r"{class}\shell\open"), Some("FriendlyAppName"), folderstorm_brand::PRODUCT) /* Folderstorm */?;
         write(&format!(r"{class}\shell\open\command"), None, &format!("\"{exe}\" -url \"%1\""))?;
         log::info!("{scheme} links: registered for this user");
         Ok(())
@@ -244,7 +244,7 @@ mod xdg {
 
     /// Aurora's own entry, hidden from the menus (the shipped
     /// `aurora-viewer.desktop` claims no scheme: registering stays a choice).
-    const DESKTOP_ID: &str = "aurora-viewer-slurl.desktop";
+    const DESKTOP_ID: &str = folderstorm_brand::LINUX_SLURL_DESKTOP_ID; // Folderstorm: own link handler entry
     const DEFAULTS: &str = "Default Applications";
 
     fn home_dir(var: &str, fallback: &str) -> Option<PathBuf> {
@@ -765,8 +765,8 @@ mod xdg_tests {
     #[test]
     fn mimeapps_defaults_are_edited_in_place() {
         let key = "x-scheme-handler/secondlife";
-        let set = with_value(LIST, "Default Applications", key, Some("aurora-viewer-slurl.desktop"));
-        assert_eq!(value(&set, "Default Applications", key), Some("aurora-viewer-slurl.desktop"));
+        let set = with_value(LIST, "Default Applications", key, Some("folderstorm2-slurl.desktop"));
+        assert_eq!(value(&set, "Default Applications", key), Some("folderstorm2-slurl.desktop"));
         // the other sections, keys and the comment stay
         assert_eq!(value(&set, "Added Associations", "text/html"), Some("firefox.desktop;"));
         assert_eq!(value(&set, "Default Applications", "text/plain"), Some("kate.desktop"));
@@ -789,18 +789,18 @@ mod xdg_tests {
         let on = ours_first(earlier);
         assert_eq!(
             on,
-            format!("aurora-viewer-slurl.desktop;{}", earlier.expect("the fixture's default"))
+            format!("folderstorm2-slurl.desktop;{}", earlier.expect("the fixture's default"))
         );
         assert_eq!(without_ours(Some(&on)).as_deref(), earlier);
         // registered twice, or already in the list: listed once, first
         assert_eq!(ours_first(Some(&on)), on);
         assert_eq!(
-            ours_first(Some("a.desktop; aurora-viewer-slurl.desktop;b.desktop")),
-            "aurora-viewer-slurl.desktop;a.desktop;b.desktop;"
+            ours_first(Some("a.desktop; folderstorm2-slurl.desktop;b.desktop")),
+            "folderstorm2-slurl.desktop;a.desktop;b.desktop;"
         );
         // no earlier handler: Aurora alone, and nothing left once off
-        assert_eq!(ours_first(None), "aurora-viewer-slurl.desktop;");
-        assert_eq!(without_ours(Some("aurora-viewer-slurl.desktop;")), None);
+        assert_eq!(ours_first(None), "folderstorm2-slurl.desktop;");
+        assert_eq!(without_ours(Some("folderstorm2-slurl.desktop;")), None);
         assert_eq!(without_ours(None), None);
     }
 

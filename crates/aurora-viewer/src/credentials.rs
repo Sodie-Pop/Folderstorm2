@@ -3,8 +3,9 @@
 //! the system credential store (Windows Credential Manager, protected by the
 //! user's session) instead of Firestorm's bin_conf.dat file.
 
-const SERVICE: &str = "Aurora Viewer";
-const MFA_SERVICE: &str = "Aurora Viewer MFA";
+// Folderstorm: never share saved passwords with Aurora Viewer
+const SERVICE: &str = folderstorm_brand::KEYRING_LOGIN;
+const MFA_SERVICE: &str = folderstorm_brand::KEYRING_MFA;
 const MFA_LIFETIME: u64 = 30 * 24 * 60 * 60;
 
 /// Firestorm LLLoginInstance::saveMFAHash: separate protected map per user/grid.

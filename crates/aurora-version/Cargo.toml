@@ -10,6 +10,10 @@ publish.workspace = true
 # (DEP_AURORA_VERSION_*), for the Windows resources of aurora-viewer.exe.
 links = "aurora-version"
 
+[dependencies]
+# Folderstorm: the product identity
+folderstorm-brand = { path = "../folderstorm-brand" }
+
 [build-dependencies]
 semver = "1"
 
