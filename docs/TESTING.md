@@ -5066,6 +5066,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
+| `AURORA_DEMO_MCP=1` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5079,6 +5080,19 @@ In demo mode, and with `AURORA_DEMO=1 aurora-viewer --uninstall`, nothing is
 read from or removed in the registry, the desktop files, the credential
 store or Blender: the log says what a real removal would do. Capture after
 frame 700 in English, French and Japanese.
+
+`AURORA_DEMO_MCP=1` (Folderstorm2, `src/mcp_bridge.rs`): the bridge starts
+as `--mcp-api` would, for this session only, and writes
+`folderstorm2-mcp-<pid>.json` into the demo's settings folder.
+`AURORA_DEMO_OPTIONS=privacy:local-assistant` scrolls to the group: the
+switches, the presets, "Ready on 127.0.0.1, port …", recent activity and the
+Setup rows. With both, `folderstorm-mcp --diagnose --discovery <demo settings
+folder>` (or "Check connection", once `cargo build --workspace` has put the
+sidecar beside the viewer) reaches the demo inventory and reports
+`"session":"demo"`. Check that the access key appears nowhere on the page nor
+in the copied configuration, that the file disappears when access is turned
+off or the viewer quits, and Read set to Never under Custom (the sidecar's
+calls answer `permission_denied`). Capture in English, French and Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and
