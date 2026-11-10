@@ -1372,6 +1372,7 @@ impl Renderer {
         ui: Option<crate::EguiFrame>,
         output: Option<wgpu::Texture>,
     ) -> RenderStats {
+        let has_output = output.is_some(); // Folderstorm: world viewport
         let t0 = Instant::now();
         let mut ui = ui;
         if let Some((frame, queue)) = &self.demo_hang
@@ -1477,7 +1478,9 @@ impl Renderer {
                 width: self.size.0,
                 height: self.size.1,
                 vsync: self.vsync,
-                world_rect: self.world_rect, // Folderstorm: world viewport
+                // Folderstorm: world viewport (a frame drawn into its own
+                // texture, such as a VR eye, fills it)
+                world_rect: if has_output { None } else { self.world_rect },
             },
             settings: self.settings,
             hover: self.hover_request.take(),
