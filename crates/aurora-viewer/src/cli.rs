@@ -32,6 +32,8 @@ pub struct Cli {
     /// `--uninstall`: remove what the viewer registered on this computer,
     /// print what it did and exit, without a window (`uninstall.rs`).
     pub uninstall: bool,
+    /// Folderstorm: `--mcp-api`, local assistant access for this session only.
+    pub mcp_api: bool,
     help: bool,
     version: bool,
 }
@@ -83,6 +85,7 @@ pub fn get() -> &'static Cli {
                 .collect::<Vec<_>>()
                 .join(", ");
             println!("{}", aurora_i18n::tr!("cli-help", languages = languages));
+            println!("{}", aurora_i18n::tr!("fs-mcp-cli-help")); // Folderstorm: --mcp-api
             std::process::exit(0);
         }
         if cli.version {
@@ -103,6 +106,8 @@ fn parse(args: impl Iterator<Item = String>) -> Cli {
             cli.version = true;
         } else if a == "--uninstall" {
             cli.uninstall = true;
+        } else if a == "--mcp-api" {
+            cli.mcp_api = true; // Folderstorm: local assistant for this session
         } else if let Some(value) = a.strip_prefix("--language=") {
             cli.language = Some(value.to_owned());
         } else if a == "--language" {

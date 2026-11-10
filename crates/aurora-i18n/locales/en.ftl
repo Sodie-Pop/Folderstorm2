@@ -782,6 +782,60 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = Loading folders…
 inventory-move-loading-failed = Some folders could not be loaded.
 inventory-move-confirm = Move
+# Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs)
+fs-mcp-group = Local assistant
+fs-mcp-intro = Lets an assistant running on this computer (Claude Code, Cursor, Codex…) read your inventory and outfits through the folderstorm-mcp helper. Other programs running under your account can use this access too.
+fs-mcp-allow = Allow local assistant access
+fs-mcp-allow-hint = Opens a connection on this computer only (127.0.0.1), with a new access key each time. Off by default. The --mcp-api command-line option turns it on for one session.
+fs-mcp-session-only = Use these settings for this session only
+fs-mcp-session-only-hint = Changes made here last until you quit. Your saved settings resume when the viewer restarts.
+fs-mcp-permissions = What the assistant may do
+fs-mcp-permissions-hint = Read only: it can look, never change anything. Ask before changes: it asks you before each change. Custom: choose for each kind of action.
+fs-mcp-preset-read-only = Read only
+fs-mcp-preset-ask = Ask before changes
+fs-mcp-preset-custom = Custom
+fs-mcp-read = Read inventory and outfits
+fs-mcp-read-hint = Search, folder lists, item details, outfits and worn items. Asset ids are only given for items with full permissions, as in the inventory.
+fs-mcp-level-allow = Allow
+fs-mcp-level-never = Never
+fs-mcp-changes-later = This version only reads. Changes (rename, move, wear, Trash) will come in a later version, and will always ask or be refused as chosen here.
+fs-mcp-status = Status
+fs-mcp-status-hint = Whether the connection is open. The access key is never shown.
+fs-mcp-status-off = Off
+fs-mcp-status-ready = Ready on 127.0.0.1, port { $port }
+fs-mcp-status-failed = Could not open the connection ({ $reason })
+fs-mcp-activity = Recent activity
+fs-mcp-activity-hint = The last requests an assistant made, without their content.
+fs-mcp-activity-none = No requests yet.
+fs-mcp-activity-entry = { $tool }: { $outcome }, { $ago }
+fs-mcp-outcome-done = done
+fs-mcp-outcome-refused = refused
+fs-mcp-outcome-failed = failed
+fs-mcp-ago-seconds = { $count ->
+    [one] { $count } second ago
+   *[other] { $count } seconds ago
+    }
+fs-mcp-ago-minutes = { $count ->
+    [one] { $count } minute ago
+   *[other] { $count } minutes ago
+    }
+fs-mcp-setup-client = Assistant
+fs-mcp-setup-client-hint = The program to connect to this viewer.
+fs-mcp-setup-copy = Copy configuration
+fs-mcp-setup-copy-hint = Copies the entry to add to that program's MCP settings: the folderstorm-mcp helper beside this viewer and this viewer's settings folder. It holds no access key. Keep the other servers already there.
+fs-mcp-setup-copied = Copied. Add it to the assistant's MCP settings, then restart the assistant.
+fs-mcp-setup-missing = The folderstorm-mcp helper is not beside the viewer. Reinstall the viewer, or build it with cargo build --workspace.
+fs-mcp-check = Check connection
+fs-mcp-check-hint = Runs the helper once to see whether it reaches this viewer. It does not prove that your assistant has loaded its settings.
+fs-mcp-check-off = Turn on access first.
+fs-mcp-check-running = Checking…
+fs-mcp-check-passed = The helper reached this viewer.
+fs-mcp-check-passed-logged-out = The helper reached this viewer. Log in to use the inventory.
+fs-mcp-check-failed = The check failed at the step “{ $stage }”.
+fs-mcp-check-missing = The helper is missing beside the viewer.
+fs-mcp-check-launch = The helper could not be started.
+fs-mcp-check-timeout = The helper did not answer in time.
+fs-mcp-cli-help = { "  --mcp-api        Allow local assistant access for this session only, without saving it" }
 inventory-folder-jump-menu = Go to folder…
 inventory-folder-jump-menu-tip = Find a folder by its name or its parent's name and open it (Ctrl+J).
 inventory-folder-jump-title = Go to inventory folder

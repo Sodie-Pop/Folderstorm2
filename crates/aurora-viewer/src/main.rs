@@ -70,6 +70,7 @@ mod lsl_keywords;
 #[cfg(target_os = "macos")]
 mod mac_quit;
 mod machine_id;
+mod mcp_bridge; // Folderstorm: local assistant bridge
 mod media;
 mod movement;
 mod natural_order;
