@@ -117,7 +117,9 @@ impl Scaled {
         (self.texture.width(), self.texture.height())
     }
 
-    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+    /// `viewport` (Folderstorm): the part of the target it is drawn into,
+    /// the whole target when None.
+    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, viewport: Option<[u32; 4]>) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("RLVa scene upscale"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -131,6 +133,9 @@ impl Scaled {
             })],
             ..Default::default()
         });
+        if let Some([x, y, w, h]) = viewport {
+            pass.set_viewport(x as f32, y as f32, w as f32, h as f32, 0.0, 1.0);
+        }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.group, &[]);
         pass.draw(0..3, 0..1);

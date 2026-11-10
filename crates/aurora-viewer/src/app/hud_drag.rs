@@ -71,6 +71,10 @@ impl App {
     /// hidden interface and full-frame photos use the whole window
     /// (LLViewerWindow::updateWorldViewRect, indra/newview/llviewerwindow.cpp).
     pub(super) fn hud_area(&self, size: [u32; 2]) -> Option<[f32; 4]> {
+        // Folderstorm: the HUDs stay in a custom world viewport
+        if let Some(area) = self.viewport_hud_area(size) {
+            return Some(area);
+        }
         if self.camera.mouselook()
             || self.interface.hidden
             || self.snapshots.capturing.is_some()
