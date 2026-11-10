@@ -32,6 +32,7 @@ impl Ask {
     }
 
     /// The folder and how it would be worn.
+    #[cfg(test)]
     pub(super) fn target(&self) -> (Uuid, WearMode) {
         (self.folder, self.mode)
     }
