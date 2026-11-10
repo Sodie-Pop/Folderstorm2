@@ -3278,16 +3278,17 @@ mod tests {
         frame(&inv, Vec::new());
         frame(&inv, click(true));
         let (_, actions) = frame(&inv, click(false));
+        // Folderstorm: the unlocked replacement asks first (outfit_safety.rs)
         assert!(
-            actions
-                .iter()
-                .any(|a| matches!(a, InvAction::Appearance(model::Action::WearContents {
-            folder,
-            mode: model::WearMode::ReplaceOutfit,
-        }) if *folder == outfit)),
-            "replacement unlocks when the original arrives"
+            !actions.iter().any(|a| matches!(a, InvAction::Appearance(_))),
+            "nothing is worn before the confirmation"
         );
         assert!(!actions.iter().any(|a| matches!(a, InvAction::PrepareOutfit(_))));
+        assert!(
+            st.outfit_ask
+                .is_some_and(|ask| matches!(ask.target(), (folder, model::WearMode::ReplaceOutfit) if folder == outfit)),
+            "replacement unlocks when the original arrives, behind its confirmation"
+        );
         model::plan(
             &inv,
             model::Action::WearContents {

@@ -30,6 +30,11 @@ impl Ask {
     pub(super) fn new(folder: Uuid, mode: WearMode) -> Self {
         Self { folder, mode }
     }
+
+    /// The folder and how it would be worn.
+    pub(super) fn target(&self) -> (Uuid, WearMode) {
+        (self.folder, self.mode)
+    }
 }
 
 /// Wear greyed unless allowed; the folder outfit entries ask first.
@@ -63,16 +68,17 @@ fn still_allowed(inv: &Inventory, facts: &Facts, ask: &Ask) -> bool {
 pub(super) fn show(ctx: &egui::Context, p: &Palette, inv: &Inventory, st: &mut InventoryUi, facts: &Facts, actions: &mut Vec<InvAction>) {
     let Some(ask) = st.outfit_ask.take() else { return };
     let mut open = true;
+    let mut cancel_clicked = false;
     let mut accept = false;
     let replace = matches!(ask.mode, WearMode::ReplaceOutfit);
     let window_id = format!("inventory_outfit_ask_{}", st.ui_id);
     Floater::new(
         &window_id,
-        aurora_i18n::tr!(if replace {
-            "inventory-outfit-ask-replace-title"
+        if replace {
+            aurora_i18n::tr!("inventory-outfit-ask-replace-title")
         } else {
-            "inventory-outfit-ask-add-title"
-        }),
+            aurora_i18n::tr!("inventory-outfit-ask-add-title")
+        },
         ctx.content_rect().center() - egui::vec2(210.0, 70.0),
         Vec2::new(420.0, 140.0),
     )
@@ -96,7 +102,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, inv: &Inventory, st: &mut I
                 cancel.request_focus();
             }
             if cancel.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                open = false;
+                cancel_clicked = true;
             }
             ui.add_enabled_ui(allowed, |ui| {
                 let label = if replace {
@@ -117,7 +123,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, inv: &Inventory, st: &mut I
         }));
         return;
     }
-    if open && !accept {
+    if open && !accept && !cancel_clicked {
         st.outfit_ask = Some(ask);
     }
 }
@@ -215,6 +221,9 @@ mod tests {
         facts.appearance_busy = true;
         assert!(!still_allowed(&inv, &facts, &ask), "an outfit change under way");
         facts.appearance_busy = false;
-        assert!(!still_allowed(&inv, &facts, &Ask::new(Uuid::from_u128(424242), WearMode::Append)), "gone");
+        assert!(
+            !still_allowed(&inv, &facts, &Ask::new(Uuid::from_u128(424242), WearMode::Append)),
+            "gone"
+        );
     }
 }
