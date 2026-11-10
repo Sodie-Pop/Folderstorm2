@@ -188,6 +188,7 @@ fn filter_actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
 }
 
 fn tree_actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
+    super::folder_jump::legacy_button(ui, p, st); // Folderstorm: Go to folder
     if underlined_button(ui, p, aurora_i18n::tr!("common-collapse"), false)
         .on_hover_text(aurora_i18n::tr!("ui-inventory-controls-collapse-displayed-folders"))
         .clicked()

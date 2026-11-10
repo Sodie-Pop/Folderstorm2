@@ -19888,6 +19888,9 @@ impl ApplicationHandler for App {
                         | "aurora-folder-colors"
                         | "aurora-folder-colors-behind"
                         | "aurora-folder-colors-follow"
+                        // Folderstorm: Go to folder
+                        | "folder-jump"
+                        | "aurora-folder-jump"
                         // Folderstorm: outfit safety
                         | "outfit-ask"
                         | "aurora-outfit-ask"
@@ -19906,6 +19909,9 @@ impl ApplicationHandler for App {
                         self.inventory_ui
                             .show_original(&self.world.inventory, crate::world::inventory::demo::LOST_FOLDER);
                         self.inventory_ui.expand_all = Some(true);
+                    }
+                    if view.ends_with("folder-jump") {
+                        ui::inventory::folder_jump_demo(&mut self.inventory_ui); // Folderstorm: Go to folder
                     }
                     if view.ends_with("outfit-ask") {
                         ui::inventory::outfit_ask_demo(&mut self.inventory_ui); // Folderstorm: outfit safety

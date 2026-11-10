@@ -6157,6 +6157,11 @@ failure. Grid validation and any paid upload are performed by the human.
   in front). `aurora-folder-colors-follow`: the palette follows the selection;
   Clothing selected at 700, an item at 780: capture 750 (Clothing named, its
   pink outlined) and 830 ("Select a folder to color it.", palette greyed).
+- **`AURORA_DEMO_INVENTORY=folder-jump|aurora-folder-jump`** (Folderstorm2):
+  opens "Go to folder…" (Ctrl+J) over the Legacy or Aurora inventory, searching
+  "clo". Check that the Clothing folders come first with their parent paths
+  ("In A personal folder"), the best match selected, the count under the list,
+  and that Open folder (or Enter) opens a folder window on it.
 - **`AURORA_DEMO_INVENTORY=outfit-ask|aurora-outfit-ask`** (Folderstorm2):
   the confirmation of Replace Current Outfit on "Right-click tests", over the
   Legacy or Aurora inventory. Check Cancel first and focused (Enter and Escape

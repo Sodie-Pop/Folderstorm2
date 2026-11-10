@@ -785,6 +785,22 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = Chargement des dossiers…
 inventory-move-loading-failed = Certains dossiers n’ont pas pu être chargés.
 inventory-move-confirm = Déplacer
+inventory-folder-jump-menu = Aller au dossier…
+inventory-folder-jump-menu-tip = Trouver un dossier par son nom ou celui de son parent, puis l'ouvrir (Ctrl+J).
+inventory-folder-jump-title = Aller à un dossier de l'inventaire
+inventory-folder-jump-filter = Nom du dossier ou du parent
+inventory-folder-jump-filter-tip = Cherche dans les noms et les chemins des dossiers. Par exemple : Vêtements / Bottes.
+inventory-folder-jump-open = Ouvrir le dossier
+inventory-folder-jump-open-tip = Ouvre ce dossier dans une fenêtre de dossier. Votre recherche dans l'inventaire est conservée.
+inventory-folder-jump-in = Dans { $path }
+inventory-folder-jump-looking = Recherche des dossiers…
+inventory-folder-jump-none = Aucun dossier ne correspond. Essayez une partie du nom d'un dossier ou de son parent.
+inventory-folder-jump-limited = { $limit } affichés sur { $count }. Précisez la recherche pour réduire la liste.
+inventory-folder-jump-matches = { $count ->
+    [one] { $count } dossier correspondant
+   *[other] { $count } dossiers correspondants
+    }
+inventory-folder-jump-top = Dossiers de premier niveau
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar

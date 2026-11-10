@@ -273,6 +273,7 @@ fn sort_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut I
         }
         menu::separator(ui, p);
     }
+    super::super::folder_jump::menu_item(ui, p, st); // Folderstorm: Go to folder
     menu::submenu(ui, p, "search", aurora_i18n::tr!("inventory-search-in"), true, |ui| {
         for (field, label) in [
             (SearchField::Name, aurora_i18n::tr!("common-name")),
