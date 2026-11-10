@@ -375,7 +375,7 @@ fn remembered() -> Vec<PathBuf> {
 }
 
 fn remembered_paths() -> Option<PathBuf> {
-    directories::ProjectDirs::from("org", "Aurora", "AuroraViewer").map(|d| d.config_dir().join("blender-installations.json"))
+    folderstorm_brand::project_dirs().map(|d| d.config_dir().join("blender-installations.json"))
 }
 
 fn remember_selected(executable: &Path) -> Result<(), String> {

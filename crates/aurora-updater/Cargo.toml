@@ -7,6 +7,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+# Folderstorm: the product identity
+folderstorm-brand = { path = "../folderstorm-brand" }
 anyhow = "1.0.104"
 aurora-version = { version = "0.1.0", path = "../aurora-version" }
 directories = "6.0.0"

@@ -565,6 +565,7 @@ version = "0.1.0"
 dependencies = [
  "fluent-bundle",
  "fluent-syntax",
+ "folderstorm-brand",
  "log",
  "sys-locale",
  "unic-langid",
@@ -616,6 +617,7 @@ dependencies = [
  "base64 0.23.1",
  "bitflags 2.13.2",
  "crossbeam-channel",
+ "folderstorm-brand",
  "glam 0.34.1",
  "log",
  "md5",
@@ -677,6 +679,7 @@ dependencies = [
  "anyhow",
  "aurora-version",
  "directories",
+ "folderstorm-brand",
  "log",
  "reqwest",
  "semver",
@@ -693,6 +696,7 @@ dependencies = [
 name = "aurora-version"
 version = "0.1.0"
 dependencies = [
+ "folderstorm-brand",
  "semver",
 ]
 
@@ -727,6 +731,7 @@ dependencies = [
  "env_logger",
  "fancy-regex",
  "flate2",
+ "folderstorm-brand",
  "foldhash 0.2.0",
  "fontconfig-parser",
  "gilrs-core",
@@ -2189,6 +2194,13 @@ checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
 dependencies = [
  "memchr",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "folderstorm-brand"
+version = "0.1.0"
+dependencies = [
+ "directories",
 ]
 
 [[package]]

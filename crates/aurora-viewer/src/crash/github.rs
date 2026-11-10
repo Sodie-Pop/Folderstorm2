@@ -10,13 +10,17 @@ use crossbeam_channel::{Receiver, Sender};
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
-const API: &str = "https://api.github.com/repos/Aurora-Viewer/Aurora-Viewer/issues";
-pub const ISSUES: &str = "https://github.com/Aurora-Viewer/Aurora-Viewer/issues";
+// Folderstorm: reports go to the fork's repository
+const API: &str = "https://api.github.com/repos/Sodie-Pop/Folderstorm2/issues";
+pub const ISSUES: &str = "https://github.com/Sodie-Pop/Folderstorm2/issues";
 pub const VERIFY: &str = "https://github.com/login/device";
 const TOKEN: &str = "https://github.com/login/oauth/access_token";
 // Public identifier of the project's GitHub App (Device Flow enabled).
-const CLIENT_ID: &str = "Iv23liT7PLWClMLztI1W";
-const SERVICE: &str = "Aurora Viewer GitHub";
+// Folderstorm: no GitHub App yet (Aurora's cannot post to the fork): the
+// browser draft is the way to report until the fork registers its own.
+const CLIENT_ID: &str = "";
+// Folderstorm: own credential entry
+const SERVICE: &str = folderstorm_brand::KEYRING_GITHUB;
 const ACCOUNT: &str = "crash-reports";
 /// The credential store's entry of the authorization (service, account),
 /// for the removal from this computer (`uninstall.rs`).

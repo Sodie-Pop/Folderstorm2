@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(p["agentId"].as_str(), AGENT.to_string());
         assert_eq!(p["secureSessionId"].as_str(), SESSION.to_string());
         assert_eq!(p["currencyBuy"], Llsd::Integer(1000));
-        assert_eq!(p["viewerChannel"].as_str(), "Aurora Viewer");
+        assert_eq!(p["viewerChannel"].as_str(), crate::login::CHANNEL);
         assert!(matches!(p["viewerMajorVersion"], Llsd::Integer(_)));
         assert!(matches!(p["viewerBuildVersion"], Llsd::String(_)));
         assert!(!p.has("confirm") && !p.has("password"));

@@ -10,7 +10,8 @@ use uuid::Uuid;
 pub const SL_MAIN_GRID: &str = "https://login.agni.lindenlab.com/cgi-bin/login.cgi";
 pub const SL_BETA_GRID: &str = "https://login.aditi.lindenlab.com/cgi-bin/login.cgi";
 
-pub const CHANNEL: &str = "Aurora Viewer";
+// Folderstorm: the viewer identifies itself to the grid
+pub const CHANNEL: &str = folderstorm_brand::GRID_CHANNEL;
 
 #[derive(Debug, Clone)]
 pub enum StartLocation {
