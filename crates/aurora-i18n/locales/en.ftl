@@ -782,6 +782,22 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = Loading folders…
 inventory-move-loading-failed = Some folders could not be loaded.
 inventory-move-confirm = Move
+inventory-folder-jump-menu = Go to folder…
+inventory-folder-jump-menu-tip = Find a folder by its name or its parent's name and open it (Ctrl+J).
+inventory-folder-jump-title = Go to inventory folder
+inventory-folder-jump-filter = Folder or parent name
+inventory-folder-jump-filter-tip = Search folder names and paths. For example, Clothes / Boots.
+inventory-folder-jump-open = Open folder
+inventory-folder-jump-open-tip = Open this folder in a folder window. Your current inventory search is kept.
+inventory-folder-jump-in = In { $path }
+inventory-folder-jump-looking = Finding folders…
+inventory-folder-jump-none = No folders match. Try part of a folder or parent name.
+inventory-folder-jump-limited = Showing { $limit } of { $count }. Type more to narrow the list.
+inventory-folder-jump-matches = { $count ->
+    [one] { $count } matching folder
+   *[other] { $count } matching folders
+    }
+inventory-folder-jump-top = Top-level folders
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations

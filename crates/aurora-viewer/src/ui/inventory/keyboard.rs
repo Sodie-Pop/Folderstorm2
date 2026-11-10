@@ -9,6 +9,7 @@ use super::*;
 /// Run after rebuilding the displayed order and before laying out its viewport,
 /// including while Aurora's explorer has swapped its flat tree into `plain`.
 pub(super) fn navigate(ui: &egui::Ui, inv: &Inventory, st: &mut InventoryUi, filtered: bool) -> bool {
+    super::folder_jump::shortcut(ui, st); // Folderstorm: Ctrl+J
     if !clipboard::list_has_focus(ui, st) || st.rename.is_some() {
         return false;
     }
