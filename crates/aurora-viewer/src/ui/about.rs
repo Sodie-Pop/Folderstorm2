@@ -439,7 +439,8 @@ mod tests {
     fn release_notes_only_for_a_published_version() {
         assert_eq!(
             release_notes("0.7.0").as_deref(),
-            Some("https://github.com/Aurora-Viewer/Aurora-Viewer/releases/tag/v0.7.0")
+            // Folderstorm: the fork's releases
+            Some("https://github.com/Sodie-Pop/Folderstorm2/releases/tag/v0.7.0")
         );
         assert_eq!(release_notes("0.7.0+3.gabcdef123"), None);
         assert_eq!(release_notes("0.0.0"), None);
@@ -461,7 +462,8 @@ mod tests {
         ];
         let text = copy_text(&sections);
         let blocks: Vec<&str> = text.split("\n\n").collect();
-        assert!(blocks[0].starts_with(&format!("Aurora Viewer {}", aurora_version::version())));
+        // Folderstorm: the product, then its origin
+        assert!(blocks[0].starts_with(&format!("Folderstorm2 {} (based on Aurora Viewer)", aurora_version::version())));
         assert_eq!(
             blocks[1],
             format!(
