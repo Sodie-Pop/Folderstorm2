@@ -39,6 +39,8 @@ pub(crate) mod drag;
 mod embedded;
 mod folder_colors;
 pub use folder_colors::{demo as folder_colors_demo, demo_frame as folder_colors_demo_frame};
+// Folderstorm: outfit safety demo
+pub use outfit_safety::demo as outfit_ask_demo;
 mod hover;
 pub use hover::demo_events as hover_demo_events;
 mod keyboard;
@@ -46,6 +48,8 @@ pub(crate) mod listings;
 mod markdown;
 pub use markdown::View as NotecardView;
 mod move_to;
+// Folderstorm: outfit safety
+mod outfit_safety;
 pub use document::document_demo_events;
 pub(crate) mod permissions;
 mod progress;
@@ -558,6 +562,8 @@ pub struct InventoryUi {
     pub dialog: Option<EditDialog>,
     folder_color: Option<folder_colors::Picker>,
     move_to: Option<move_to::MoveTo>,
+    // Folderstorm: a folder outfit change waiting for its confirmation
+    outfit_ask: Option<outfit_safety::Ask>,
     pub links_filter: Option<Uuid>,
     pub windows: Vec<InventoryWindow>,
     pub thumbnail: thumbnail::ThumbnailUi,
@@ -2247,6 +2253,7 @@ pub fn show(
     finish_hidden_rename(inv, st, &mut actions);
     dialogs::show(ctx, p, icons, inv, st, prefs, &facts, images, &mut actions);
     move_to::show(ctx, p, icons, inv, st, prefs, &facts, &mut actions);
+    outfit_safety::show(ctx, p, inv, st, &facts, &mut actions); // Folderstorm: outfit safety
     dialogs::preview(ctx, p, icons, inv, inv, st, images, prefs, script_settings, &mut actions);
     st.thumbnail.show(
         ctx,
@@ -2385,6 +2392,7 @@ pub fn show(
         context_catalog::process_deferred(&mut world.inventory, &mut w.state, prefs, &facts);
         dialogs::show(ctx, p, icons, &world.inventory, &mut w.state, prefs, &facts, images, &mut actions);
         move_to::show(ctx, p, icons, &mut world.inventory, &mut w.state, prefs, &facts, &mut actions);
+        outfit_safety::show(ctx, p, &world.inventory, &mut w.state, &facts, &mut actions); // Folderstorm: outfit safety
         dialogs::preview(
             ctx,
             p,

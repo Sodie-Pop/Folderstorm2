@@ -19887,6 +19887,9 @@ impl ApplicationHandler for App {
                         | "aurora-folder-colors"
                         | "aurora-folder-colors-behind"
                         | "aurora-folder-colors-follow"
+                        // Folderstorm: outfit safety
+                        | "outfit-ask"
+                        | "aurora-outfit-ask"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
@@ -19902,6 +19905,9 @@ impl ApplicationHandler for App {
                         self.inventory_ui
                             .show_original(&self.world.inventory, crate::world::inventory::demo::LOST_FOLDER);
                         self.inventory_ui.expand_all = Some(true);
+                    }
+                    if view.ends_with("outfit-ask") {
+                        ui::inventory::outfit_ask_demo(&mut self.inventory_ui); // Folderstorm: outfit safety
                     }
                     if view.contains("folder-colors") {
                         ui::inventory::folder_colors_demo(&mut self.inventory_ui, &mut self.settings.inventory);
