@@ -12891,6 +12891,27 @@ blender-object-linkset = { $name } — root #1 · { $prims } prims
 blender-object-linked-prim = #{ $number } · { $name }
 
 inventory-bulk-permissions = Bulk permissions
+inventory-bulk-review-menu = Review bulk changes…
+inventory-bulk-review-title = Review bulk changes
+inventory-bulk-review-frozen = { $count ->
+    [one] { $count } object selected. This selection stays fixed while you review.
+   *[other] { $count } objects selected. This selection stays fixed while you review.
+    }
+inventory-bulk-review-move = Move
+inventory-bulk-review-pattern = Name pattern:
+inventory-bulk-review-pattern-help = Use {"{"}name{"}"} for the current name and {"{"}n{"}"} for the number in the selection. Example: Sorted {"{"}n{"}"} - {"{"}name{"}"}
+inventory-bulk-review-preview = Preview
+inventory-bulk-review-stale = Settings changed. Preview again before executing.
+inventory-bulk-review-counts = Requested: { $count } · Eligible: { $eligible } · Skipped: { $skipped }
+inventory-bulk-review-skipped = Skipped: { $reason }
+inventory-bulk-review-execute = Execute
+inventory-bulk-review-changed = The inventory changed since the preview. Check the new preview, then execute again.
+inventory-bulk-review-nothing = Nothing to change.
+inventory-bulk-review-choose = Choose a destination folder.
+inventory-bulk-review-destination = Destination: { $path }
+inventory-bulk-review-skip-rename = This object cannot be renamed.
+inventory-bulk-review-skip-unchanged = The name stays the same.
+inventory-bulk-review-skip-there = Already in that folder.
 inventory-bulk-adjust = Adjust item permissions
 inventory-bulk-reading = Reading selected folders and subfolders…
 inventory-bulk-load-failed = Could not read all selected folders. No permissions were changed. Try again.
