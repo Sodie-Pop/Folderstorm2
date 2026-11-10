@@ -1155,6 +1155,7 @@ exe before publishing; the local build also writes it to `version.txt`.
 | `-h`, `--help` | Shows the help |
 | `-V`, `--version` | Prints the built version then exits, with no window, log or network |
 | `--uninstall` | Removes what Aurora registered on this computer, prints it and the folders left, then exits, with no window |
+| `--profile <name>` (Folderstorm2) | Runs a separate character profile: its own settings, cache, log and window title; one window per profile |
 
 - `--title`: the build profile ends the title (Dev, Release, Debug); the log
   file is `aurora-<text>.log` (`aurora-demo-<text>.log` in demo mode).
@@ -1190,6 +1191,25 @@ exe before publishing; the local build also writes it to `version.txt`.
 - `--login`: the account follows the usual "remember" choices; a single
   user name is written `<name> Resident`. `--grid` alone selects the grid of
   a new account's form.
+- `--profile <name>` (Folderstorm2, for several characters on one PC; also
+  `--profile=<name>`): 1 to 32 letters, digits, `_` or `-`, starting with a
+  letter or a digit, without case (`Alt1` and `alt1` are one profile); `main`
+  is the main profile, which is what starting without the argument gives,
+  with its usual folders. Anything else is refused with a message. A named
+  profile keeps its settings, accounts list, transcripts and layouts in
+  `…\config\profiles\<name>` (`…\config\demo\profiles\<name>` in demo
+  mode) and its asset cache in `…\cache-profiles\<name>` beside the main
+  cache (Preferences › Graphics › Frames per second › "Share the main
+  profile's cache" uses the main one instead, from the next start). Saved
+  passwords are shared: a profile finds the password of an account it lists.
+  The log is `aurora-<name>.log`, the window title ends with the name, and a
+  `secondlife://` link given with `--profile <name>` goes to that profile's
+  window (a browser's link still goes to the last focused window). A second
+  launch of a profile already open brings its window forward instead. Named
+  profiles start with "3D while another Folderstorm2 window is in front" set
+  to Off (Preferences › Graphics › Frames per second): a window behind
+  another Folderstorm2 window stops drawing the world and keeps its chat and
+  connection at a few frames per second, until it is clicked.
 
 ### Demo mode and test switches
 

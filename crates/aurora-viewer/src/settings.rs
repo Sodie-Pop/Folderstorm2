@@ -1383,6 +1383,8 @@ pub struct Settings {
     /// by another program), a new window and device instead of closing
     /// (app/gpu_recovery.rs). On by default; the Legacy Viewer closes.
     pub gpu_recovery: bool,
+    // Folderstorm: 3D behind another Folderstorm2 window, shared cache
+    pub folderstorm_characters: crate::folderstorm_characters::Settings,
     /// Maximum live particles (0 = particles off).
     pub max_particles: u32,
     /// RenderAttachedParticles: the particles of what avatars wear (on;
@@ -2249,6 +2251,7 @@ impl Default for Settings {
             background_fps_limit: 15,
             background_gpu_pause: true,
             gpu_recovery: true,
+            folderstorm_characters: Default::default(), // Folderstorm
             max_particles: 4096,
             attached_particles: true,
             tracker_beacon: true,
@@ -2371,7 +2374,8 @@ pub fn config_dir() -> PathBuf {
     if let Some(test) = aurora_updater::test_environment() {
         return test.root.join("profile");
     }
-    for_mode(default_config_root())
+    // Folderstorm: a named profile's own folder (folderstorm_characters/profile.rs)
+    crate::folderstorm_characters::profile::config_dir(for_mode(default_config_root()))
 }
 
 /// The settings folder before the demo's subfolder.
@@ -2402,10 +2406,13 @@ pub fn cache_dir() -> PathBuf {
         return test.root.join("cache");
     }
     // the folder chosen in the preferences, read at startup (cache_location.rs)
+    // Folderstorm: a named profile's own cache, or the main one it shares
+    // (folderstorm_characters/profile.rs)
+    use crate::folderstorm_characters::profile::cache_root;
     if let Some(chosen) = crate::cache_location::chosen() {
-        return for_mode(chosen.to_path_buf());
+        return for_mode(cache_root(chosen.to_path_buf()));
     }
-    for_mode(default_cache_root())
+    for_mode(cache_root(default_cache_root()))
 }
 
 /// The folder of the sealed asset cache (cache.rs), inside [`cache_dir`].

@@ -5331,6 +5331,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
+| `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6552,6 +6553,31 @@ failure. Grid validation and any paid upload are performed by the human.
   Render when the card is overloaded" off, nothing pauses. A capture run
   pauses too (a real one never does): `AURORA_FPS_LIMIT=60`,
   `AURORA_DEMO_BUSY_PAUSE=900` and `AURORA_CAPTURE_FRAMES=1000`.
+- **`AURORA_DEMO_SESSION_BEHIND=1|off|limited|normal`** (Folderstorm2,
+  session host checkpoint 1): the window counts as behind another
+  Folderstorm2 window (the instances registry is off in demo mode) until a
+  click in it. `1` keeps the profile's choice in Preferences › Graphics ›
+  Frames per second › "3D while another Folderstorm2 window is in front"
+  (Off for a named profile, `--profile Alt1`; Normal for the main one);
+  `off`, `limited` and `normal` replace it for the run. With Off the world
+  stops drawing, what is left is blurred and darkened, the notice "3D paused
+  while another Folderstorm2 window is in front" shows in amber, the chat
+  and the interface go on at "Frame rate behind" (5 fps by default, 2 to
+  15), and the log says `3D paused: another Folderstorm2 window is in
+  front`; a click brings the world back at once (`3D resumed`). Limited
+  keeps drawing the world at that rate, Normal changes nothing (a single
+  viewer's behaviour). A capture run pauses too. Combined with the GPU
+  switches below, it tests the rules for windows behind (the window's
+  focus, a minimised or covered window count the same):
+  - `AURORA_DEMO_GPU_STALL=600:20`: after 6 s the log says `the graphics
+    card does not answer while the window is not in front`, and no box
+    shows; click the window while the stall lasts and the usual box comes.
+  - `AURORA_DEMO_GPU_LOST=600`: the log says `the graphics card is lost
+    while the window is not in front …: the session goes on`; no box, no
+    recovery, no safe graphics level, no close, and the chat keeps
+    receiving (the image stays as it was). A click (with the window really
+    focused) recovers on a new window, `recovering on a new window and
+    device, not counted`, with the settings unchanged.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

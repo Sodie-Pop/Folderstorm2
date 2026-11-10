@@ -80,6 +80,16 @@ pub const SLURL_RECEIVER_PREFIX: &str = "Folderstorm2.SLurl.Receiver.2.";
 /// "aurora-viewer-slurl.desktop").
 pub const LINUX_SLURL_DESKTOP_ID: &str = "folderstorm2-slurl.desktop";
 
+/// Folder of the named profiles (`--profile <name>`, session-host plan
+/// section 5): `<settings folder>/profiles/<name>`, and the caches of the
+/// profiles beside the main cache, in `<cache folder>-profiles/<name>`.
+pub const PROFILES_FOLDER: &str = "profiles";
+
+/// What a second launch of a named profile hands to the viewer already
+/// running it, through the `secondlife://` hand-over: bring the window
+/// forward. Not a link: nothing else reads it.
+pub const PROFILE_RAISE_REQUEST: &str = "folderstorm2:raise-profile";
+
 /// The fork's GitHub repository: updates, issues, source links.
 pub const REPOSITORY: &str = "Sodie-Pop/Folderstorm2";
 pub const GITHUB: &str = "https://github.com/Sodie-Pop/Folderstorm2";
@@ -121,6 +131,7 @@ mod tests {
             SLURL_PIPE_PREFIX,
             SLURL_RECEIVER_PREFIX,
             LINUX_SLURL_DESKTOP_ID,
+            PROFILE_RAISE_REQUEST,
         ] {
             assert!(!aurora.contains(&ours), "{ours} is Aurora Viewer's");
         }

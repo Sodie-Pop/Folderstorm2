@@ -732,6 +732,7 @@ dependencies = [
  "fancy-regex",
  "flate2",
  "folderstorm-brand",
+ "folderstorm-session",
  "foldhash 0.2.0",
  "fontconfig-parser",
  "gilrs-core",
@@ -2201,6 +2202,14 @@ name = "folderstorm-brand"
 version = "0.1.0"
 dependencies = [
  "directories",
+]
+
+[[package]]
+name = "folderstorm-session"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "serde",
 ]
 
 [[package]]

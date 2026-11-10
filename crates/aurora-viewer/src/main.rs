@@ -37,6 +37,7 @@ mod disk_io;
 mod dof;
 mod external_url;
 mod fast_hash;
+mod folderstorm_characters; // Folderstorm: several characters (FEATURES.md 5.1)
 mod frame_par;
 mod frame_profile;
 mod gestures;
@@ -153,12 +154,20 @@ fn main() -> anyhow::Result<()> {
     if crash::helper()? {
         return Ok(());
     }
+    // Folderstorm: a refused `--profile` name ends here, before anything is written
+    if !folderstorm_characters::profile::check() {
+        std::process::exit(2);
+    }
     // a link opened while a viewer runs goes to it, before this one opens
     // anything (LLAppViewer::initConfiguration, SLURLPassToOtherInstance)
     if let Some(url) = cli::get().url.as_deref()
         && external_url::classify(url) != external_url::Request::Ignored
         && slurl_handoff::hand_off(url)
     {
+        return Ok(());
+    }
+    // Folderstorm: one process per named profile; a second launch brings it forward
+    if !folderstorm_characters::profile::take_lease() {
         return Ok(());
     }
     aurora_i18n::select("default", cli::get().language.as_deref());
