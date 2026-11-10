@@ -2204,6 +2204,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "folderstorm-mcp"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "folderstorm-mcp-bridge",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "folderstorm-mcp-bridge"
 version = "0.1.0"
 dependencies = [
