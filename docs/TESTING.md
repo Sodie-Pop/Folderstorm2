@@ -6162,6 +6162,12 @@ failure. Grid validation and any paid upload are performed by the human.
   "clo". Check that the Clothing folders come first with their parent paths
   ("In A personal folder"), the best match selected, the count under the list,
   and that Open folder (or Enter) opens a folder window on it.
+- **`AURORA_DEMO_INVENTORY=outfit-ask|aurora-outfit-ask`** (Folderstorm2):
+  the confirmation of Replace Current Outfit on "Right-click tests", over the
+  Legacy or Aurora inventory. Check Cancel first and focused (Enter and Escape
+  cancel), the folder named in the question, and that an item's Wear entry is
+  greyed in its menu until Preferences › Inventory › Enable "Wear" in inventory
+  menus is on.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory
