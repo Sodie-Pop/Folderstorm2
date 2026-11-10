@@ -9,7 +9,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetPropW, GetWind
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
-const FOCUS: *const u16 = windows_sys::w!("Aurora.SLurl.Focus.2");
+// Folderstorm: own window names, never Aurora Viewer's
+const FOCUS: *const u16 = windows_sys::w!("Folderstorm2.SLurl.Focus.2");
 
 static PUBLISHED: Mutex<Option<Published>> = Mutex::new(None);
 
@@ -34,7 +35,11 @@ impl Scope {
     }
 
     pub fn property(&self) -> Vec<u16> {
-        let mut name = format!("Aurora.SLurl.Receiver.2.{}", if self.demo { "Demo" } else { "Online" });
+        let mut name = format!(
+            "{}{}",
+            folderstorm_brand::SLURL_RECEIVER_PREFIX,
+            if self.demo { "Demo" } else { "Online" }
+        );
         if let Some(title) = &self.title {
             name.push('.');
             name.push_str(title);

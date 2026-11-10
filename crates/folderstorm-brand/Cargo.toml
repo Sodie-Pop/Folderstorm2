@@ -1,0 +1,15 @@
+[package]
+name = "folderstorm-brand"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "The Folderstorm2 product identity: name, folders, system and network identifiers"
+
+[dependencies]
+# the same version as aurora-viewer and aurora-updater
+directories = "6.0.0"
+
+[lints]
+workspace = true

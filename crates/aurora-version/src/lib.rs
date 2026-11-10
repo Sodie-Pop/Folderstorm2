@@ -19,7 +19,8 @@ pub const fn commit() -> &'static str {
 
 /// HTTP clients use the same version as the interface.
 pub const fn user_agent() -> &'static str {
-    concat!("AuroraViewer/", env!("AURORA_COMPILED_VERSION"))
+    // Folderstorm: the product in the HTTP user agent
+    concat!(folderstorm_brand::product!(), "/", env!("AURORA_COMPILED_VERSION"))
 }
 
 /// SL's login uses four numeric components, as LLVersionInfo::getVersion:

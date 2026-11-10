@@ -39,7 +39,7 @@ fn legacy_name(scope: &Scope) -> String {
     unsafe {
         ProcessIdToSessionId(GetCurrentProcessId(), &mut session);
     }
-    let mut name = format!(r"\\.\pipe\aurora-viewer-slurl-{session}");
+    let mut name = format!(r"\\.\pipe\{}{session}", folderstorm_brand::SLURL_PIPE_PREFIX); // Folderstorm: own pipe
     if scope.demo {
         name.push_str("-demo");
     }

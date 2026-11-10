@@ -53,7 +53,8 @@ fn sources_without_tags_or_git_are_clearly_identified() {
 
 #[test]
 fn runtime_and_http_read_the_compiled_version() {
-    assert_eq!(aurora_version::user_agent(), format!("AuroraViewer/{}", aurora_version::version()));
+    // Folderstorm: the product in the user agent
+    assert_eq!(aurora_version::user_agent(), format!("Folderstorm2/{}", aurora_version::version()));
     let version = semver::Version::parse(aurora_version::version()).unwrap();
     assert!(aurora_version::login_version().starts_with(&format!("{}.{}.{}.", version.major, version.minor, version.patch)));
 }

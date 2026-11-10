@@ -51,6 +51,9 @@ upstream file is a possible conflict at every merge, so:
   resolve.
 - **Never reformat, rename or "tidy" upstream code** you are not required to
   change.
+- **The product name and identifiers come from `folderstorm-brand`**: never
+  write "Folderstorm2" or a fork id in upstream code. See
+  [BRANDING.md](BRANDING.md).
 - **Prefer extending upstream mechanisms** (settings, windows, menus, demo
   scenarios) over forking them. If a feature needs a deep change to upstream
   code, stop and propose options to the human first: sometimes the right
