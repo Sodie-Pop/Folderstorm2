@@ -836,6 +836,16 @@ impl App {
     }
 
     pub(super) fn apply_appearance_action_from(&mut self, action: crate::world::appearance::Action, actor: Uuid) {
+        // Folderstorm: Restore previous look (ui/appearance/previous_look.rs)
+        let locked = ui::appearance::previous_look::rlva_locked(&self.world, &self.egui_ctx);
+        let action =
+            match ui::appearance::previous_look::prepare(&self.egui_ctx, &self.world.inventory, self.world.agent_id, locked, action) {
+                Ok(action) => action,
+                Err(reason) => {
+                    self.appearance_ui.message = reason;
+                    return;
+                }
+            };
         match &action {
             crate::world::appearance::Action::ExportJson(folder) => {
                 let result =
