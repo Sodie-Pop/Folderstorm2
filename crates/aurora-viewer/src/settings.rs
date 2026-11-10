@@ -485,6 +485,8 @@ pub struct Settings {
     pub build: crate::build::BuildSettings,
     /// Camera (Firestorm "Move & View › View").
     pub camera: crate::camera::CameraSettings,
+    // Folderstorm: custom world viewport (folderstorm/viewport.rs)
+    pub folderstorm_viewport: crate::folderstorm::viewport::ViewportSettings,
     /// The crosshair in mouselook (ShowCrosshairs; #1166).
     pub crosshair: crate::ui::crosshair::Settings,
     /// LLViewerJoystick: device, axis mapping and separate avatar/flycam tuning.
@@ -1911,6 +1913,7 @@ impl Default for Settings {
             dev_toolbox: None,
             build: Default::default(),
             camera: Default::default(),
+            folderstorm_viewport: Default::default(), // Folderstorm: world viewport
             crosshair: Default::default(),
             joystick: Default::default(),
             auto_hover_height: false,
