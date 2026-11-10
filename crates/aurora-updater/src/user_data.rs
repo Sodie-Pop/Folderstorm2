@@ -34,7 +34,7 @@ fn paths(install: &Path) -> Result<(PathBuf, PathBuf)> {
         crate::feed::Source::local(marker["feed"].as_str().context("test feed")?)?;
         return Ok((root.join("cache"), root.join("profile/settings.json")));
     }
-    let dirs = directories::ProjectDirs::from("org", "Aurora", "AuroraViewer").context("user data directories unavailable")?;
+    let dirs = folderstorm_brand::project_dirs().context("user data directories unavailable")?;
     Ok((dirs.cache_dir().into(), dirs.config_dir().join("settings.json")))
 }
 

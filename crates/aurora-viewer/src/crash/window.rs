@@ -227,7 +227,7 @@ impl Recovery {
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.horizontal_wrapped(|ui| {
-                            ui.label(RichText::new(format!("Aurora Viewer {}", self.record.version)).strong());
+                            ui.label(RichText::new(format!("{} {}", folderstorm_brand::PRODUCT, self.record.version)).strong());
                             ui.label(
                                 RichText::new(format!("· {} · {}", self.record.profile, self.record.language.to_uppercase()))
                                     .color(p.muted),

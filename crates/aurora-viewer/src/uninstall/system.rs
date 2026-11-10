@@ -71,7 +71,7 @@ impl System for DryRun {
                 .to_vec()
         } else if cfg!(target_os = "linux") {
             vec![
-                "~/.local/share/applications/aurora-viewer-slurl.desktop".to_owned(),
+                format!("~/.local/share/applications/{}", folderstorm_brand::LINUX_SLURL_DESKTOP_ID), /* Folderstorm */
                 "~/.config/mimeapps.list (x-scheme-handler/secondlife)".to_owned(),
             ]
         } else {
@@ -85,7 +85,12 @@ impl System for DryRun {
     }
 
     fn notification_id(&self) -> Option<String> {
-        cfg!(windows).then(|| r"HKEY_CURRENT_USER\Software\Classes\AppUserModelId\Aurora.Viewer".to_owned())
+        cfg!(windows).then(|| {
+            format!(
+                r"HKEY_CURRENT_USER\Software\Classes\AppUserModelId\{}",
+                folderstorm_brand::WINDOWS_AUMID
+            )
+        } /* Folderstorm */)
     }
 
     fn remove_notification_id(&mut self) -> Result<(), String> {

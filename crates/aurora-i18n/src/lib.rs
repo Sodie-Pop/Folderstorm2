@@ -10,6 +10,8 @@ use std::sync::{LazyLock, OnceLock, RwLock};
 
 pub use fluent_bundle::FluentValue;
 include!(concat!(env!("OUT_DIR"), "/locales.rs"));
+// Folderstorm: the product name in the catalogs
+mod folderstorm;
 
 struct Catalog {
     code: &'static str,
@@ -66,7 +68,8 @@ fn catalogs() -> &'static [Catalog] {
             .iter()
             .map(|&(code, source)| {
                 let locale = code.parse().expect("bundled locale filename is a language identifier");
-                let resource = FluentResource::try_new(source.to_owned()).expect("bundled Fluent syntax is checked by tests");
+                // Folderstorm: the product name in the catalogs
+                let resource = FluentResource::try_new(folderstorm::rebrand(source)).expect("bundled Fluent syntax is checked by tests");
                 let keys: Vec<_> = resource
                     .entries()
                     .filter_map(|entry| match entry {
