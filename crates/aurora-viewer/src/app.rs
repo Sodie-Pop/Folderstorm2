@@ -8858,6 +8858,7 @@ impl App {
         aurora_render::frame_priority::apply();
         self.world.anti_spam.configure(self.settings.anti_spam);
         self.update_rlva();
+        crate::mcp_bridge::frame(&self.settings.local_assistant, &self.world, self.demo); // Folderstorm: local assistant
         if self.demo && self.frame_count == 700 && std::env::var_os("AURORA_DEMO_ANTI_SPAM").is_some() {
             for event in crate::demo::anti_spam::events(self.world.agent_id) {
                 if let Some(event) = self.world.apply(event) {
@@ -20845,6 +20846,7 @@ impl ApplicationHandler for App {
     /// closed connection and every exit ended in a segmentation fault (before
     /// the browsers' private profiles were cleaned up).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        crate::mcp_bridge::shutdown(); // Folderstorm: delete the local assistant's discovery file
         #[cfg(windows)]
         crate::slurl_handoff::release();
         self.gfx = None;

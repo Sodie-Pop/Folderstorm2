@@ -17,6 +17,7 @@ pub mod graphics;
 pub mod inventory;
 pub mod joystick;
 pub mod layout;
+pub mod local_assistant; // Folderstorm: local assistant
 pub mod media;
 pub mod network;
 pub mod privacy;

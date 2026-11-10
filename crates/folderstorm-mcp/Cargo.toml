@@ -1,0 +1,23 @@
+[package]
+name = "folderstorm-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Folderstorm2's MCP sidecar: speaks MCP over stdio to a local assistant and calls the viewer's loopback bridge"
+
+[[bin]]
+name = "folderstorm-mcp"
+path = "src/main.rs"
+
+[dependencies]
+folderstorm-brand = { path = "../folderstorm-brand" }
+folderstorm-mcp-bridge = { path = "../folderstorm-mcp-bridge" }
+serde_json = "1.0.151"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints]
+workspace = true
