@@ -10,11 +10,43 @@
 use super::super::cx::{Cx, Nothing, field};
 use crate::folderstorm::chat_upload::{self, TokenStatus, settings, token};
 use crate::ui::widgets;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, Once};
 
 /// What is typed in the token field, until it is saved. Never saved
-/// elsewhere.
+/// elsewhere, and wiped once the field is no longer shown (`forget`).
 static TYPED: Mutex<String> = Mutex::new(String::new());
+/// The last frame the token field was drawn in.
+static DRAWN: AtomicU64 = AtomicU64::new(0);
+/// `forget` runs at the start of each frame of this context.
+static WATCHING: Once = Once::new();
+
+/// At the start of a frame: a token typed but not saved is wiped when its
+/// field was not drawn in the previous frame (Preferences closed, another
+/// page or another host shown).
+fn forget(ui: &mut egui::Ui) {
+    let ctx = ui.ctx();
+    let mut typed = TYPED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !typed.is_empty() && !shown_last_frame(DRAWN.load(Ordering::Relaxed), ctx.cumulative_frame_nr()) {
+        wipe(&mut typed);
+    }
+}
+
+/// Whether a field drawn in frame `drawn` was still shown just before
+/// frame `now`.
+pub(in crate::ui::options) fn shown_last_frame(drawn: u64, now: u64) -> bool {
+    drawn.saturating_add(1) >= now
+}
+
+/// Empties `text` after writing over its bytes, so the token does not stay
+/// in the freed memory.
+pub(in crate::ui::options) fn wipe(text: &mut String) {
+    let len = text.len();
+    text.clear();
+    // within the capacity: the same bytes are written over
+    text.extend(std::iter::repeat_n('\0', len));
+    text.clear();
+}
 
 pub(in crate::ui::options) fn group(cx: &mut Cx) {
     use aurora_i18n::tr;
@@ -123,6 +155,8 @@ fn token_row(ui: &mut egui::Ui, p: &crate::theme::Palette, s: &settings::UploadS
         return;
     };
     let status = chat_upload::token_status(ui.ctx(), &origin);
+    WATCHING.call_once(|| ui.ctx().on_begin_pass("fs-chat-upload-token", std::sync::Arc::new(forget)));
+    DRAWN.store(ui.ctx().cumulative_frame_nr(), Ordering::Relaxed);
     ui.vertical(|ui| {
         let (text, color) = match status {
             TokenStatus::Checking => (tr!("fs-chat-upload-token-checking"), p.muted),
@@ -169,4 +203,30 @@ fn token_row(ui: &mut egui::Ui, p: &crate::theme::Palette, s: &settings::UploadS
             }
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_typed_token_is_wiped_once_its_field_is_gone() {
+        // drawn in the frame before: kept; one frame or more missed: wiped
+        assert!(super::shown_last_frame(9, 10));
+        assert!(super::shown_last_frame(10, 10));
+        assert!(!super::shown_last_frame(8, 10));
+        assert!(super::shown_last_frame(u64::MAX, 3));
+        let mut typed = "secret-token".to_owned();
+        let capacity = typed.capacity();
+        super::wipe(&mut typed);
+        assert!(typed.is_empty());
+        assert_eq!(typed.capacity(), capacity, "the same buffer, written over");
+        // the hook wipes after a frame without the field
+        let ctx = egui::Context::default();
+        *super::TYPED.lock().expect("lock") = "unsaved".into();
+        super::DRAWN.store(0, std::sync::atomic::Ordering::Relaxed);
+        for _ in 0..3 {
+            ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
+        }
+        ctx.run_ui(egui::RawInput::default(), super::forget).textures_delta.clear();
+        assert!(super::TYPED.lock().expect("lock").is_empty());
+    }
 }
