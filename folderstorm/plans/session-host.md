@@ -318,8 +318,9 @@ available.
 - **Launch.** The host spawns `current_exe --profile <name> --managed`. It
   never passes `--login` and never sees passwords: each character logs in on
   its own viewer's login screen, which may use its remembered password.
-- **Bootstrap.** The child's **stdin is an anonymous pipe** held only by the
-  host and that child. The host writes one bounded line (control pipe name
+- **Bootstrap.** The child's **stdin is a pipe** held only by the host and
+  that child (anonymous on Linux and macOS; on Windows Rust makes a randomly
+  named pipe whose ends are connected as it is made). The host writes one bounded line (control pipe name
   and a one-time 128-bit token) and closes it; the viewer reads it in the CLI
   hook and drops stdin. Nothing on the command line or in the environment.
   Std's `Command` passes stdin to GUI-subsystem processes through
@@ -587,9 +588,14 @@ May be two small PRs: 1a profiles, 1b behind policy.
     to that painter or move the host to wgpu then.
   - **IPC: two one-way channels instead of one two-way pipe.** Host to
     viewer is the viewer's standard input for the whole session, not only
-    for the bootstrap: an anonymous pipe has no name to find or squat, only
-    the host and that child hold it, and its end is exactly "the host is
-    gone" (unmanaged fallback) on every system, with no Windows-only code.
+    for the bootstrap: only the host and that child hold it, and its end
+    is exactly "the host is gone" (unmanaged fallback) on every system,
+    with no Windows-only code. On Linux and macOS it is an anonymous pipe.
+    On Windows, Rust's piped standard input is a named pipe with a random
+    name (`\\.\pipe\__rust_anonymous_pipe1__.<pid>.<random>`, first
+    instance only, remote clients rejected) whose other end is opened as
+    soon as it is made, so there is no moment when another process could
+    join it, but it does have a name.
     Viewer to host is the private endpoint of section 8, inbound only. A
     blocking two-way named pipe would also have needed overlapped I/O (a
     blocked read holds a write on the same synchronous handle). The
