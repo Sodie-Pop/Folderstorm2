@@ -53,6 +53,12 @@ pub fn page(cx: &mut Cx) {
         );
         // the colors themselves, given from a folder's menu
         cx.track(&field!(inventory.folder_colors));
+        // Folderstorm: outfit safety (ui/inventory/outfit_safety.rs)
+        cx.toggle(
+            tr!("inventory-context-wear"),
+            tr!("inventory-context-wear-help"),
+            &field!(inventory.context_wear),
+        );
         cx.toggle(tr!("ui-inventory-controls-recent-tab"), "", &field!(inventory.show_recent));
         let off = !cx.s.inventory.show_recent;
         cx.subs(off, |cx| {
