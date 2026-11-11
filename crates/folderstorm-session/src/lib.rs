@@ -21,8 +21,18 @@
 //! - [`host`]: the host's desk: slots, the active character, voice given
 //!   up before it is given, liveness without false deaths, restart and
 //!   "Quit all" (sections 10 and 11).
+//!
+//! Checkpoint 3 (shared chat, section 9):
+//! - [`export`]: which lines of a viewer's conversations are new, by
+//!   observation of the viewer's own line numbers, and a line to say said
+//!   at most once;
+//! - [`chat`]: the host's chat: conversations per character and "All",
+//!   drafts bound to their character, login and conversation, bounded
+//!   history with gaps, unread counts, uncertain sends, attention items.
 
 pub mod behind;
+pub mod chat;
+pub mod export;
 pub mod gpu;
 pub mod host;
 pub mod ipc;
