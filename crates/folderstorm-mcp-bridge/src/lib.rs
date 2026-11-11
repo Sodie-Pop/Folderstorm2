@@ -19,7 +19,7 @@ pub mod protocol;
 pub mod server;
 pub mod token;
 
-pub use policy::{Class, Level, LocalAssistant, Permissions, Preset};
+pub use policy::{Class, Decision, Level, LocalAssistant, Permissions, Preset};
 pub use protocol::{ErrorCode, ToolError};
 pub use server::{Bridge, Pending};
 
