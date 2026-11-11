@@ -200,6 +200,7 @@ fn destination() -> Option<(String, Option<String>)> {
 /// text paste keeps priority: a picture only arrives when the clipboard
 /// holds no text).
 pub fn paste(ui: &egui::Ui, field: egui::Id) {
+    escape(ui, field);
     if !usable() {
         return;
     }
@@ -224,6 +225,20 @@ pub fn paste(ui: &egui::Ui, field: egui::Id) {
             u.last_paste = Some(key);
         }
         stage(ui.ctx(), field, Source::Pasted(image));
+    }
+}
+
+/// Escape in a focused chat field (`paste`'s caller checks the focus)
+/// with a confirmation over it: that confirmation is cancelled and the key
+/// goes no further. Escape anywhere else leaves confirmations alone.
+fn escape(ui: &egui::Ui, field: egui::Id) {
+    let mut u = uploads();
+    let Some(at) = u.jobs.iter().position(|j| j.field == field && matches!(j.state, State::Confirm)) else {
+        return;
+    };
+    if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        u.jobs.remove(at);
+        ui.ctx().request_repaint();
     }
 }
 
@@ -706,7 +721,7 @@ fn show_jobs(ctx: &egui::Context, p: &Palette, field: egui::Id, rect: egui::Rect
                         ui.add_space(6.0);
                     }
                     match &job.state {
-                        State::Confirm => confirm(ui, p, job, n == 0, &mut choices),
+                        State::Confirm => confirm(ui, p, job, &mut choices),
                         State::Preparing | State::Uploading => busy(ui, p, job, &mut choices),
                         State::Failed { message, retry } => failed(ui, p, job, message, *retry, &mut choices),
                         State::Ready(_) => {}
@@ -752,7 +767,7 @@ fn icon(ui: &mut egui::Ui, name: &str, side: f32, tint: egui::Color32) {
     }
 }
 
-fn confirm(ui: &mut egui::Ui, p: &Palette, job: &Shown, first: bool, choices: &mut Vec<Choice>) {
+fn confirm(ui: &mut egui::Ui, p: &Palette, job: &Shown, choices: &mut Vec<Choice>) {
     use aurora_i18n::tr;
     let Some(image) = &job.image else { return };
     ui.horizontal_top(|ui| {
@@ -789,12 +804,15 @@ fn confirm(ui: &mut egui::Ui, p: &Palette, job: &Shown, first: bool, choices: &m
     ui.horizontal(|ui| {
         let size = egui::vec2(0.0, 26.0);
         use crate::ui::widgets::{ActionKind, action_button};
-        if action_button(ui, p, "upload", tr!("fs-chat-upload-upload"), ActionKind::Primary, size).clicked() {
+        let upload = action_button(ui, p, "upload", tr!("fs-chat-upload-upload"), ActionKind::Primary, size);
+        if upload.clicked() {
             choices.push(Choice::Upload(job.id));
         }
-        if action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, size).clicked()
-            || (first && ui.input(|i| i.key_pressed(egui::Key::Escape)))
-        {
+        let cancel = action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, size);
+        // Escape here only when this confirmation has the keyboard (its
+        // field's Escape is taken by `escape`)
+        let focused = upload.has_focus() || cancel.has_focus();
+        if cancel.clicked() || (focused && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
             choices.push(Choice::Cancel(job.id));
         }
     });

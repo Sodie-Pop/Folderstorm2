@@ -936,6 +936,52 @@ fn a_dropped_file_always_waits_for_upload() {
 }
 
 #[test]
+fn escape_cancels_only_the_confirmation_of_the_focused_field() {
+    let ctx = egui::Context::default();
+    crate::theme::Theme::default().apply(&ctx, 1.0);
+    let p = crate::theme::Theme::default().palette();
+    let (mine, other) = (u64::MAX - 30, u64::MAX - 31);
+    let (field, elsewhere) = (job(mine, State::Confirm).field, job(other, State::Confirm).field);
+    {
+        let mut u = uploads();
+        u.jobs.push(job(mine, State::Confirm));
+        u.jobs.push(job(other, State::Confirm));
+    }
+    let escape_frame = |run: &mut dyn FnMut(&mut egui::Ui)| {
+        let input = egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        };
+        // no renderer here to take the textures
+        ctx.run_ui(input, |ui| run(ui)).textures_delta.clear();
+    };
+    let present = |id| uploads().jobs.iter().any(|j| j.id == id);
+    // Escape with no confirmation focused: the chips stay
+    escape_frame(&mut |ui| {
+        let rect = egui::Rect::from_min_size(egui::pos2(10.0, 300.0), egui::vec2(200.0, 30.0));
+        show_jobs(ui.ctx(), &p, elsewhere, rect);
+    });
+    assert!(present(other));
+    // Escape in the focused field: its confirmation goes, the key with it
+    let mut left = true;
+    escape_frame(&mut |ui| {
+        paste(ui, field);
+        left = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    });
+    let (gone, kept) = (!present(mine), present(other));
+    uploads().jobs.retain(|j| j.id != mine && j.id != other);
+    assert!(gone);
+    assert!(!left, "the field's editor does not see the Escape too");
+    assert!(kept, "another field's confirmation stays");
+}
+
+#[test]
 fn a_drop_goes_to_the_field_under_the_pointer_then_to_the_focused_one() {
     let (bar, conversation) = (egui::Id::unique("bar"), egui::Id::unique("conversation"));
     let dropped = |fields: Vec<(egui::Id, bool, bool)>| Dropped {
