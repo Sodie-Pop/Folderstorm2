@@ -5373,7 +5373,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6674,6 +6674,42 @@ failure. Grid validation and any paid upload are performed by the human.
     or "It lost the graphics card, and recovers when its window is brought
     forward"; the host itself draws on the processor and opens no graphics
     device.
+  - **shared chat** (checkpoint 3), on the right of the host's window (a
+    window narrower than about 940 points shows "Characters" and "Chat" as
+    two pages). A few seconds after a demo character arrives it hears a
+    neighbour ("Demo line 1 in the nearby chat"), then gets an instant
+    message from Tess Touch, then a teleport offer, and so on every 9
+    seconds: the lines appear in the character's tab (its nearby chat and
+    its conversation with Tess) and in **All**, each with its character and
+    conversation; the tabs of the characters that are not looked at count
+    their unread lines. Above the offer: "Attention: … has something to
+    answer" with **Switch to answer**, which brings that character's window
+    forward; nothing is accepted from the host (the offer is still pending
+    in the viewer).
+  - type in a character's tab: the box says "Send as <name> — <place>";
+    Enter sends, and the line comes back from that viewer as its own line
+    (the demo echoes nearby chat as "Aurora Demo"; the viewer's log has no
+    line for another character). Type something without sending, pick
+    another character's tab: the box there is empty; come back: the text
+    is still there. In **All**, click a line (each starts with
+    "[character › conversation]") to choose where the box writes.
+  - close a character's viewer while text is typed for it, then
+    **Restart**: once it has heard something again the box shows the text
+    as held ("typed before … was restarted"), with "Use it as … now" and
+    "Discard"; it is not sent by Enter.
+  - type a line and end that viewer in the task manager at once (or end it
+    first, then press Enter within the same second): the conversation says
+    either "Not sent" (the text is back in the box) or "It is not known
+    whether this was said", never both, and the line is not sent again.
+  - "Sound when a background character gets a message" (off by default):
+    on Windows the system's notification sound plays when a character that
+    is not the active one gets an instant message; the taskbar button of
+    the host flashes either way while its window has not the keyboard.
+  - RLVa is covered by unit tests (`folderstorm_characters/chat_export.rs`):
+    what the viewer's own chat hides (a name under `@shownames`, a line
+    refused by `@recvchat` / `@recvim`) is hidden or absent in what the
+    host is told; when a restriction comes after lines were told, the
+    host's copy of the conversation is replaced.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames.

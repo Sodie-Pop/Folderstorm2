@@ -1229,6 +1229,13 @@ exe before publishing; the local build also writes it to `version.txt`.
   place" is on; clicking a character's window does the same. A viewer that
   closed or crashed shows **Restart**; one that is slow or silent is only
   marked, never closed by the host. **Quit all** asks each to log out.
+  The window's **Chat** shows what every character hears and reads (nearby
+  chat, instant messages, group chats and conferences), per character and
+  in "All", with unread counts; a line typed there is said by the character
+  named above the box ("Send as …") through that character's own viewer,
+  with its rules and restrictions. Offers, requests and script dialogs are
+  only listed ("Switch to answer"): they are answered in the character's
+  window. Transcripts stay in each viewer.
   Closing or losing the host closes no viewer: they stay logged in and go
   back to their own settings. The list is saved in
   `…\config\session-host.json`; the log is `aurora-session-host.log`.
