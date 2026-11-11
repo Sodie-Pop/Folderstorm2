@@ -185,6 +185,22 @@ impl App {
         self.minimized_mute.active != was
     }
 
+    /// `shutdown`, with the graphics card holding a frame: false when the
+    /// session host asked this viewer to quit. Its Quit is no close from
+    /// the card's box: the session is not reported as ended in GPU trouble
+    /// and the next start keeps its graphics (rules R4, R5: a character
+    /// behind never lowers them).
+    pub(super) fn folderstorm_gpu_close_counts(&self, stalled: Duration) -> bool {
+        if !gpu::stalled_close_reported(self.folderstorm_characters.quit_by_host) {
+            log::warn!(
+                "quitting at the session host's request while the graphics card holds a frame ({} s): not counted as a close in GPU trouble",
+                stalled.as_secs()
+            );
+            return false;
+        }
+        true
+    }
+
     /// Every turn of the event loop, in a viewer the session host started:
     /// the host's commands are carried out and the host is told how this
     /// viewer does. Never waits. Not the frame's job: frames may be rare
@@ -234,6 +250,7 @@ impl App {
                 }
                 HostEvent::Command(ipc::ToViewer::Quit) => {
                     log::info!("session host: asked to quit");
+                    self.folderstorm_characters.quit_by_host = true;
                     self.request_exit();
                     self.confirm_exit(ui::exit::Action::Quit);
                 }

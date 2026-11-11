@@ -661,6 +661,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
   - **Background sound** rides Aurora's "mute when minimised" transient
     mute (never saved); **voice** is `voice_enabled && allowed` where the
     voice session is fed, and the microphone is released by the same mute.
+  - **A host's Quit while the card holds a frame** is not recorded as a
+    close in GPU trouble: the next start keeps its graphics (R4, R5).
   - Not done here: the host does not adopt viewers already running
     (section 11), the per-character sound choice "alerts only / all"
     (section 10), the same-account refusal (the host only warns: the login

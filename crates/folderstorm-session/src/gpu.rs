@@ -90,6 +90,15 @@ pub fn stall_notice_allowed(place: Place) -> bool {
     place == Place::Front
 }
 
+/// Whether closing while the card holds a frame is reported as a session
+/// ended in GPU trouble (the next start then offers the safe graphics):
+/// not when the session host asked the viewer to quit. That Quit is the
+/// user's choice in the host, not a close from the card's box, and a
+/// character behind never lowers its graphics (R4, R5).
+pub fn stalled_close_reported(quit_by_host: bool) -> bool {
+    !quit_by_host
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +158,11 @@ mod tests {
         assert!(stall_notice_allowed(Place::Front));
         assert!(!stall_notice_allowed(Place::Behind));
         assert!(!stall_notice_allowed(Place::Minimised));
+    }
+
+    #[test]
+    fn the_host_s_quit_is_no_close_in_gpu_trouble() {
+        assert!(!stalled_close_reported(true));
+        assert!(stalled_close_reported(false));
     }
 }

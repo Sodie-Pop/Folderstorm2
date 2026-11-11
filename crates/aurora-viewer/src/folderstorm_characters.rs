@@ -70,6 +70,8 @@ pub struct State {
     pub managed: ::folderstorm_session::managed::Managed,
     /// What the host is told of this viewer.
     pub report: Report,
+    /// The session host asked this viewer to quit.
+    pub quit_by_host: bool,
 }
 
 /// What a managed viewer keeps of its reports to the host.

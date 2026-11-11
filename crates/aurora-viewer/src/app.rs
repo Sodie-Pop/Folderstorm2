@@ -6102,7 +6102,10 @@ impl App {
         // closed while the graphics card still holds a frame, from its
         // notice or not: reported, and the next start offers the safe
         // graphics (app/gpu_stall.rs)
-        if let Some(stalled) = self.gfx.as_ref().and_then(|g| g.renderer.stalled_for()) {
+        // Folderstorm: not at the session host's Quit (folderstorm_gpu_close_counts)
+        if let Some(stalled) = self.gfx.as_ref().and_then(|g| g.renderer.stalled_for())
+            && self.folderstorm_gpu_close_counts(stalled)
+        {
             // the whole stall and where the render thread is now
             crate::crash::gpu_stalled(stalled.as_secs());
             crate::crash::gpu_closed();
