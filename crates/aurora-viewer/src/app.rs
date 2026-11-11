@@ -19954,6 +19954,9 @@ impl ApplicationHandler for App {
                         // Folderstorm: outfit safety
                         | "outfit-ask"
                         | "aurora-outfit-ask"
+                        // Folderstorm: custom Inventory tabs
+                        | "custom-tabs"
+                        | "aurora-custom-tabs"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
@@ -19975,6 +19978,10 @@ impl ApplicationHandler for App {
                     }
                     if view.ends_with("outfit-ask") {
                         ui::inventory::outfit_ask_demo(&mut self.inventory_ui); // Folderstorm: outfit safety
+                    }
+                    if view.ends_with("custom-tabs") {
+                        // Folderstorm: custom Inventory tabs
+                        ui::inventory::custom_tabs::demo(&mut self.inventory_ui, &mut self.settings.inventory);
                     }
                     if view.contains("folder-colors") {
                         ui::inventory::folder_colors_demo(&mut self.inventory_ui, &mut self.settings.inventory);

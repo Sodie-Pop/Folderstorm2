@@ -887,6 +887,24 @@ inventory-folder-jump-matches = { $count ->
    *[other] { $count } matching folders
     }
 inventory-folder-jump-top = Top-level folders
+inventory-custom-tab-customize = Customize tab…
+inventory-custom-tab-customize-tip = Edit this tab's filters. The tab remembers its filters and its search.
+inventory-custom-tab-rename = Rename…
+inventory-custom-tab-clone = Clone
+inventory-custom-tab-clone-tip = Make a copy of this tab with its filters and search.
+inventory-custom-tab-clone-builtin-tip = Make a custom tab with the filters and search this tab has now.
+inventory-custom-tab-limit = A viewer window holds at most { $count } custom tabs. Delete one first.
+inventory-custom-tab-delete = Delete…
+inventory-custom-tab-filters-title = Customize tab: { $name }
+inventory-custom-tab-rename-title = Rename tab
+inventory-custom-tab-name-label = Tab name
+inventory-custom-tab-name-empty = Enter a name for the tab.
+inventory-custom-tab-name-taken = Another custom tab already has this name.
+inventory-custom-tab-delete-title = Delete tab
+inventory-custom-tab-delete-question = Delete the custom tab “{ $name }”? Its filters and search are forgotten. No inventory items are changed.
+inventory-custom-tab-clone-name = { $name } copy
+inventory-custom-tab-demo-media = Textures and sounds
+inventory-custom-tab-demo-named = Demo items
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations

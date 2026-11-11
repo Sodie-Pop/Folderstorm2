@@ -890,6 +890,24 @@ inventory-folder-jump-matches = { $count ->
    *[other] { $count } dossiers correspondants
     }
 inventory-folder-jump-top = Dossiers de premier niveau
+inventory-custom-tab-customize = Personnaliser l'onglet…
+inventory-custom-tab-customize-tip = Modifier les filtres de cet onglet. L'onglet se souvient de ses filtres et de sa recherche.
+inventory-custom-tab-rename = Renommer…
+inventory-custom-tab-clone = Dupliquer
+inventory-custom-tab-clone-tip = Faire une copie de cet onglet avec ses filtres et sa recherche.
+inventory-custom-tab-clone-builtin-tip = Créer un onglet personnalisé avec les filtres et la recherche actuels de cet onglet.
+inventory-custom-tab-limit = Une fenêtre du viewer contient au plus { $count } onglets personnalisés. Supprimez-en un d'abord.
+inventory-custom-tab-delete = Supprimer…
+inventory-custom-tab-filters-title = Personnaliser l'onglet : { $name }
+inventory-custom-tab-rename-title = Renommer l'onglet
+inventory-custom-tab-name-label = Nom de l'onglet
+inventory-custom-tab-name-empty = Saisissez un nom pour l'onglet.
+inventory-custom-tab-name-taken = Un autre onglet personnalisé porte déjà ce nom.
+inventory-custom-tab-delete-title = Supprimer l'onglet
+inventory-custom-tab-delete-question = Supprimer l'onglet personnalisé « { $name } » ? Ses filtres et sa recherche seront oubliés. Aucun objet de l'inventaire n'est modifié.
+inventory-custom-tab-clone-name = { $name } (copie)
+inventory-custom-tab-demo-media = Textures et sons
+inventory-custom-tab-demo-named = Objets de démo
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar
