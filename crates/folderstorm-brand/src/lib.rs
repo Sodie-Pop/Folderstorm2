@@ -90,6 +90,16 @@ pub const PROFILES_FOLDER: &str = "profiles";
 /// forward. Not a link: nothing else reads it.
 pub const PROFILE_RAISE_REQUEST: &str = "folderstorm2:raise-profile";
 
+/// Name prefix of the endpoint a managed viewer reports to its session host
+/// on: a Windows pipe `\\.\pipe\<prefix><session>-<host pid>-<slot>-<random>`,
+/// a socket file of that name elsewhere (session-host plan, section 8).
+pub const SESSION_PIPE_PREFIX: &str = "folderstorm2-session-";
+
+/// The session host's settings file, in the main settings folder, and the
+/// lock that keeps one host per settings folder.
+pub const SESSION_HOST_FILE: &str = "session-host.json";
+pub const SESSION_HOST_LOCK: &str = "session-host.lock";
+
 /// The fork's GitHub repository: updates, issues, source links.
 pub const REPOSITORY: &str = "Sodie-Pop/Folderstorm2";
 pub const GITHUB: &str = "https://github.com/Sodie-Pop/Folderstorm2";
@@ -132,9 +142,12 @@ mod tests {
             SLURL_RECEIVER_PREFIX,
             LINUX_SLURL_DESKTOP_ID,
             PROFILE_RAISE_REQUEST,
+            SESSION_PIPE_PREFIX,
         ] {
             assert!(!aurora.contains(&ours), "{ours} is Aurora Viewer's");
         }
+        // a link never reaches the session host's pipes, nor the reverse
+        assert!(!SESSION_PIPE_PREFIX.starts_with(SLURL_PIPE_PREFIX) && !SLURL_PIPE_PREFIX.starts_with(SESSION_PIPE_PREFIX));
     }
 
     #[test]
