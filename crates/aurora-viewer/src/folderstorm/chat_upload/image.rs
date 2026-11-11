@@ -105,9 +105,22 @@ pub struct Prepared {
     pub thumb: Option<egui::ColorImage>,
 }
 
-/// Reads and prepares a file, at most `max` bytes.
+/// Reads and prepares a file, at most `max` bytes. Only a regular file
+/// is opened: opening a named pipe (FIFO) or a device can block for good.
 pub fn prepare_file(path: &std::path::Path, max: u64) -> Result<Prepared, Refusal> {
-    let file = std::fs::File::open(path).map_err(|_| Refusal::Unreadable)?;
+    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
+        return Err(Refusal::Unreadable);
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // swapped for a pipe between the look and the opening: the opening
+    // still does not wait (no effect on a regular file's reads)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path).map_err(|_| Refusal::Unreadable)?;
     let meta = file.metadata().map_err(|_| Refusal::Unreadable)?;
     if !meta.is_file() {
         return Err(Refusal::Unreadable);

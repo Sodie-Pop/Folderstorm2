@@ -589,6 +589,23 @@ fn the_size_limit_is_checked_first() {
     assert_eq!(img::prepare_file(dir.path(), 1 << 20).err(), Some(Refusal::Unreadable));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_named_pipe_is_never_opened() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("pipe.png");
+    let c_path = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).expect("a path");
+    // SAFETY: a valid NUL-terminated path; mkfifo only creates the node
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0, "a FIFO");
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(img::prepare_file(&path, 1 << 20).err());
+    });
+    // a FIFO with no writer would block an opening for reading forever
+    let got = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("returned at once");
+    assert_eq!(got, Some(Refusal::Unreadable));
+}
+
 #[test]
 fn a_broken_or_huge_picture_is_refused() {
     let mut bytes = png(8, 8);
