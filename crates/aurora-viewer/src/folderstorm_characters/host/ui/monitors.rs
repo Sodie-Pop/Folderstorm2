@@ -88,10 +88,7 @@ fn state_text(watch: Watch, viewer: Option<State>, health: Health, pictured: boo
         State::NotInWorld => (tr!("folderstorm-monitor-not-in-world").to_owned(), false),
         State::Occupied => (tr!("folderstorm-monitor-occupied").to_owned(), false),
         State::Off | State::Live if !pictured => (tr!("folderstorm-monitor-waiting").to_owned(), false),
-        State::Off | State::Live if lowered => (
-            tr!("folderstorm-monitor-budget", rate = per_second(order.interval_ms)),
-            false,
-        ),
+        State::Off | State::Live if lowered => (tr!("folderstorm-monitor-budget", rate = per_second(order.interval_ms)), false),
         State::Off | State::Live => (tr!("folderstorm-monitor-live").to_owned(), false),
     }
 }
@@ -203,8 +200,7 @@ impl Window_ {
         match (texture.as_ref(), shown) {
             (Some(texture), Some(shown)) => {
                 let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                ui.painter()
-                    .image(texture.id(), fitted(room, shown.size), uv, egui::Color32::WHITE);
+                ui.painter().image(texture.id(), fitted(room, shown.size), uv, egui::Color32::WHITE);
             }
             _ => {
                 // no picture: why, in its place
@@ -295,7 +291,10 @@ mod tests {
     fn the_label_says_the_age_and_how_the_viewer_does() {
         assert_eq!(age_text(Duration::from_millis(900)), tr!("folderstorm-monitor-age-now"));
         assert_eq!(age_text(Duration::from_secs(7)), tr!("folderstorm-monitor-age", seconds = 7));
-        assert_eq!(age_text(Duration::from_secs(190)), tr!("folderstorm-monitor-age-minutes", minutes = 3));
+        assert_eq!(
+            age_text(Duration::from_secs(190)),
+            tr!("folderstorm-monitor-age-minutes", minutes = 3)
+        );
         assert_eq!(per_second(1000), "1.0");
         assert_eq!(per_second(768), "1.3");
         assert_eq!(per_second(2500), "0.40");
@@ -304,17 +303,32 @@ mod tests {
             lowered: false,
         };
         let text = |watch, viewer, health, pictured| state_text(watch, Some(viewer), health, pictured);
-        assert_eq!(text(asked, State::Live, Health::Healthy, true), (tr!("folderstorm-monitor-live").to_owned(), false));
+        assert_eq!(
+            text(asked, State::Live, Health::Healthy, true),
+            (tr!("folderstorm-monitor-live").to_owned(), false)
+        );
         assert_eq!(
             text(asked, State::Live, Health::Healthy, false).0,
             tr!("folderstorm-monitor-waiting"),
             "no picture yet"
         );
         // a busy card is said, and noticed
-        assert_eq!(text(asked, State::Slowed, Health::Healthy, true), (tr!("folderstorm-monitor-slowed").to_owned(), true));
-        assert_eq!(text(asked, State::CardBusy, Health::Healthy, true).0, tr!("folderstorm-monitor-card-busy"));
-        assert_eq!(text(asked, State::Minimised, Health::Healthy, false).0, tr!("folderstorm-monitor-minimised"));
-        assert_eq!(text(asked, State::NotInWorld, Health::Healthy, false).0, tr!("folderstorm-monitor-not-in-world"));
+        assert_eq!(
+            text(asked, State::Slowed, Health::Healthy, true),
+            (tr!("folderstorm-monitor-slowed").to_owned(), true)
+        );
+        assert_eq!(
+            text(asked, State::CardBusy, Health::Healthy, true).0,
+            tr!("folderstorm-monitor-card-busy")
+        );
+        assert_eq!(
+            text(asked, State::Minimised, Health::Healthy, false).0,
+            tr!("folderstorm-monitor-minimised")
+        );
+        assert_eq!(
+            text(asked, State::NotInWorld, Health::Healthy, false).0,
+            tr!("folderstorm-monitor-not-in-world")
+        );
         // a viewer that does not answer comes before what it last said
         assert_eq!(
             text(asked, State::Live, Health::NotAnswering, true),
@@ -332,8 +346,14 @@ mod tests {
             text(lowered, State::Live, Health::Healthy, true).0,
             tr!("folderstorm-monitor-budget", rate = "1.3")
         );
-        assert_eq!(text(Watch::InFront, State::Off, Health::Healthy, false).0, tr!("folderstorm-monitor-in-front"));
-        assert_eq!(text(Watch::Hidden, State::Off, Health::Healthy, true).0, tr!("folderstorm-monitor-hidden"));
+        assert_eq!(
+            text(Watch::InFront, State::Off, Health::Healthy, false).0,
+            tr!("folderstorm-monitor-in-front")
+        );
+        assert_eq!(
+            text(Watch::Hidden, State::Off, Health::Healthy, true).0,
+            tr!("folderstorm-monitor-hidden")
+        );
     }
 
     #[test]
@@ -368,10 +388,15 @@ mod tests {
         assert!(app.monitors.textures[1].is_some());
         assert!(app.host.screens[1].fresh.is_none(), "taken for the texture");
         assert!(shows(&drawn, "Character 2"));
-        assert!(shows(&drawn, tr!("folderstorm-monitor-age-now")), "{drawn:?}");
+        // (its age in words is `age_text`'s test: this drawing takes its time)
+        assert!(shows(&drawn, "Character 2 · "), "{drawn:?}");
         assert!(shows(&drawn, tr!("folderstorm-monitor-live")));
         let reds = |pixels: &[u32]| pixels.iter().filter(|p| **p == 0x00C8_1E1E).count();
-        assert!(reds(&pixels) > 480 * 270 / 2, "the picture is painted: {} red pixels", reds(&pixels));
+        assert!(
+            reds(&pixels) > 480 * 270 / 2,
+            "the picture is painted: {} red pixels",
+            reds(&pixels)
+        );
         // the next one replaces it in the same texture: no second texture,
         // nothing of the first one left on screen
         let id = app.monitors.textures[1].as_ref().map(egui::TextureHandle::id);

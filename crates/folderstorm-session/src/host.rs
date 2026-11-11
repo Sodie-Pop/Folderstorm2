@@ -1057,8 +1057,7 @@ impl Desk {
     /// when it is sent (None: nothing can have changed but the standby).
     fn sync(&mut self, now: Option<Instant>) {
         let active = self.active;
-        let orders = self.orders();
-        for slot in 0..MAX_SLOTS {
+        for (slot, order) in self.orders().into_iter().enumerate() {
             let voice_held_elsewhere = self.slots().any(|(i, s)| i != slot && s.voice_out);
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running) else {
                 continue;
@@ -1066,7 +1065,7 @@ impl Desk {
             let is_active = active == Some(slot);
             let mut wanted = Assignment {
                 seq: 0,
-                role: match orders[slot] {
+                role: match order {
                     _ if is_active => Role::Active,
                     Some(order) => Role::Monitor(order),
                     None => Role::Background,

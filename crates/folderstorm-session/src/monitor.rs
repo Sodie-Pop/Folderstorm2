@@ -416,9 +416,7 @@ impl Schedule {
             return false;
         }
         let interval = self.interval(order, c);
-        let due = self
-            .last
-            .is_none_or(|last| now.saturating_duration_since(last) >= interval);
+        let due = self.last.is_none_or(|last| now.saturating_duration_since(last) >= interval);
         if due {
             self.asked = Some(now);
             // on the order's own beat while the frames keep up with it (a

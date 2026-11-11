@@ -565,7 +565,10 @@ mod tests {
                 break;
             }
         }
-        let pictures: Vec<_> = seen.iter().filter_map(|(report, rgb)| rgb.as_ref().map(|rgb| (report, rgb))).collect();
+        let pictures: Vec<_> = seen
+            .iter()
+            .filter_map(|(report, rgb)| rgb.as_ref().map(|rgb| (report, rgb)))
+            .collect();
         assert_eq!(pictures.len(), 1, "one picture, the latest");
         let (ToHost::Frame(header), rgb) = pictures[0] else {
             panic!("not a picture");

@@ -239,15 +239,7 @@ fn write_commands(mut to_viewer: impl Write, boot: &Bootstrap, queued: &Receiver
 
 /// The reader thread, once the viewer reached the endpoint: its hello,
 /// then its reports until it ends or says something that is not one.
-fn read_reports(
-    mut from_viewer: impl Read,
-    slot: usize,
-    launch: u32,
-    token: &str,
-    build: &str,
-    events: &Sender<Event>,
-    shots: &Shots,
-) {
+fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &str, build: &str, events: &Sender<Event>, shots: &Shots) {
     let tell = |kind| events.send(Event { slot, launch, kind }).is_ok();
     let hello = match ipc::read_frame::<ToHost>(&mut from_viewer) {
         Ok(ToHost::Hello(hello)) => hello.check(slot as u8, token, build),
@@ -425,10 +417,7 @@ mod tests {
         write_frame(&mut wire, &ToHost::Heartbeat { loop_count: 2 }).expect("written");
         let (told, shot, replaced) = told_and_shown(&wire);
         // the reports around the pictures read as before: in step
-        assert!(matches!(
-            told.as_slice(),
-            [Kind::Connected, Kind::Heartbeat(1), Kind::Heartbeat(2)]
-        ));
+        assert!(matches!(told.as_slice(), [Kind::Connected, Kind::Heartbeat(1), Kind::Heartbeat(2)]));
         // nobody looked in between: the two older pictures were replaced
         let shot = shot.expect("the latest picture");
         assert_eq!((shot.header.seq, shot.image.size), (3, [240, 180]));
@@ -726,7 +715,9 @@ mod tests {
         assert_eq!(taken.role.monitor(), Some(order));
 
         // the largest picture, a pattern that would show any byte out of place
-        let rgba: Vec<u8> = (0..640 * 360).flat_map(|i: u32| [i as u8, (i >> 8) as u8, (i >> 16) as u8, 255]).collect();
+        let rgba: Vec<u8> = (0..640 * 360)
+            .flat_map(|i: u32| [i as u8, (i >> 8) as u8, (i >> 16) as u8, 255])
+            .collect();
         let picture = |seq, rgba: Vec<u8>| managed::Picture {
             generation: 1,
             seq,
@@ -804,7 +795,15 @@ mod tests {
         let reader = std::thread::spawn(move || {
             let cancelled = AtomicBool::new(false);
             let from_viewer = listener.accept(std::process::id(), &cancelled).expect("accepted");
-            read_reports(from_viewer, SLOT, LAUNCH, &token, &managed::build_id(), &events_tx, &Shots::default());
+            read_reports(
+                from_viewer,
+                SLOT,
+                LAUNCH,
+                &token,
+                &managed::build_id(),
+                &events_tx,
+                &Shots::default(),
+            );
         });
         // the viewer's standard input: a pipe the host writes
         let (mut to_viewer, viewer_input) = UnixStream::pair().expect("pipe");
