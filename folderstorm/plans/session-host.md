@@ -830,7 +830,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
     (runs behind the active one), Show (is the active one), LogIn (waits at
     its login screen: its window comes forward and it becomes the active
     one), Wait (starting: it comes forward when it reports), Launch,
-    Restart, Nothing (closing, "Quit all" under way, empty slot).
+    Restart, Nothing (closing, a viewer the host let go that still runs,
+    "Quit all" under way, empty slot).
     `quick_act` is `switch` behind that table, so a slot never gets a
     second process: a live slot is never launched. In the window: a strip
     of numbered buttons above the rows ("1 · name"), the icon and the
