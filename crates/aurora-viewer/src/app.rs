@@ -16983,6 +16983,7 @@ impl App {
                 let complexity = self.scene.avatar_complexity.get(&self.world.agent_id).copied().unwrap_or_default();
                 let mut open = self.panels.appearance;
                 self.appearance_ui.fill_previews = self.settings.appearance_fill_previews;
+                self.appearance_ui.gallery_size = self.settings.appearance_gallery_size; // Folderstorm: thumbnail size
                 for action in ui::appearance::show(
                     &ctx,
                     &p,
@@ -16999,6 +17000,12 @@ impl App {
                 }
                 if self.settings.appearance_fill_previews != self.appearance_ui.fill_previews {
                     self.settings.appearance_fill_previews = self.appearance_ui.fill_previews;
+                    self.settings.save();
+                }
+                // Folderstorm: the gallery's thumbnail size
+                let size = ui::appearance::gallery_size::sanitized(self.appearance_ui.gallery_size);
+                if self.settings.appearance_gallery_size != size {
+                    self.settings.appearance_gallery_size = size;
                     self.settings.save();
                 }
                 self.panels.appearance = open;
@@ -19719,6 +19726,11 @@ impl ApplicationHandler for App {
                 if matches!(view.as_str(), "gallery-fit" | "gallery-fill") {
                     ui::appearance::demo_previews(&self.egui_ctx, &mut self.world.inventory, &mut self.ui_images);
                     self.settings.appearance_fill_previews = view == "gallery-fill";
+                }
+                // Folderstorm: the gallery with a chosen thumbnail size
+                if view == "gallery-size" {
+                    ui::appearance::demo_previews(&self.egui_ctx, &mut self.world.inventory, &mut self.ui_images);
+                    self.settings.appearance_gallery_size = 96.0;
                 }
                 let many = crate::world::appearance::demo_outfit_count();
                 if many > 0 {
