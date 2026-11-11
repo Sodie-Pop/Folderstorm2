@@ -30,11 +30,21 @@
 //!   drafts bound to their character, login and conversation, bounded
 //!   history with gaps, unread counts, uncertain sends, attention items.
 
+//!
+//! Checkpoint 4 (comfort, section 13):
+//! - [`hotkeys`]: the host's global hotkeys: which keys, for what, and
+//!   what is wrong with a choice;
+//! - [`copy`]: "New character profile…": what a new profile takes from
+//!   the one it is made from, and what it never takes;
+//! - [`host`]: quick actions, next and previous, who holds the voice.
+
 pub mod behind;
 pub mod chat;
+pub mod copy;
 pub mod export;
 pub mod gpu;
 pub mod host;
+pub mod hotkeys;
 pub mod ipc;
 pub mod managed;
 pub mod profile;
