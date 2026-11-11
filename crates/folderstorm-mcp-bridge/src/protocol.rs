@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::Duration;
 
+// Folderstorm: phase 3, part 3 (world observation), its own catalogue
+pub mod world;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -461,7 +464,12 @@ pub const TOOLS: &[ToolSpec] = &[
 ];
 
 pub fn tool(name: &str) -> Option<&'static ToolSpec> {
-    TOOLS.iter().find(|t| t.name == name)
+    all().find(|t| t.name == name)
+}
+
+/// Every tool: [`TOOLS`], then the groups phase 3 adds.
+pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
+    TOOLS.iter().chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
 }
 
 #[cfg(test)]

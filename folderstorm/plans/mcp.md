@@ -291,3 +291,51 @@ workspace uses them; `tempfile` for tests (already in the lock).
 Not testable here: the look of the page and of the dialog (no display in
 the sandbox), real MCP clients on Windows, and the grid's answers (the
 bake wait against a real region).
+
+## Phase 3, part 3: world observation
+
+Step 4 of the MCP parity order (first half): the six `world_*` reads of
+Folderstorm (C++) (`tools/fs-mcp/internal/mcptools/world.go`,
+`doc/plans/mcp-world-observation.md`), with the C++ names. Their catalogue
+is its own file (`protocol/world.rs`, listed with `protocol::all()`); the
+viewer answers them in `mcp_bridge/world.rs`, from what it has already
+loaded and shows, on the frame thread. They are **Read** (Allow / Never,
+never ask): they change nothing, send nothing to the server, and keep
+nothing between calls (no history of other avatars in the bridge). The
+Read row of Preferences now says that it covers the surroundings too.
+
+Folderstorm (C++) put these behind a separate opt-in `world_read` class.
+Here they share Read, as the approved order asked; a separate class could
+follow once the camera PR's `Class::Camera` has merged (both edit
+`policy.rs`).
+
+| Tool | Arguments | Returns | RLVa |
+|---|---|---|---|
+| `world_location` | none | region (name, maturity, size), parcel name, position in the region, global position, facing (heading, compass point), flying, sitting | `@showloc`: region and parcel replaced by the navigation bar's hidden labels, no coordinates (`location_hidden_by_rlv`) |
+| `world_parcel` | none | About Land's summary: local id, name, description, owner (resident or group), area, prims used / max, for sale and price, flags (fly, build, group build, scripts, group scripts, damage, push restricted, landmarks, terraform, voice, local sounds, see avatars, avatar sounds) | `@showloc`: `not_allowed`, unless the user owns the parcel or manages it through a group (`World::rlva_can_view_parcel`'s rule), and then its name still goes through the RLVa text filter (hidden); `@shownames`: an anonymous owner, no id |
+| `world_nearby_avatars` | `radius` (1–256 m, 64), `limit` (1–100, 25) | the avatars `radar::sightings` gives (loaded ones, then coarse locations), nearest first: name, id, distance (none when the altitude is unknown), same region, loaded, sitting, friend, offset east / north / up | `@shownearby`: `not_allowed` (People › Nearby is empty); `@shownames`, and `@shownametags` for a hidden tag (stricter than the People list): the anonymous name, no id, no friend flag; `@showminimap`: no offsets (`positions_hidden_by_rlv`) |
+| `world_nearby_objects` | `radius`, `limit` | loaded root objects (no avatars, attachments or HUDs; the parcel isolation applies), nearest first: id, distance, offset, prim count, tree; name, description and owner only when the viewer already holds them (Area Search, a hover tip, the selection), else `name_known: false` | names and descriptions through the viewer's RLVa text filter; `@shownames`: an anonymous owner, no id |
+| `world_audio_sources` | `radius`, `limit` | the Sound Explorer's history, newest first: kind (`avatar`, `collision`, `llTriggerSound`, `llLoopSound`, `llPlaySound`), owner name, playing, started / stopped seconds ago, distance | `@shownames`: an anonymous owner (`sound_owner_name`) |
+| `world_media_sources` | `radius`, `limit` | the parcel's music and media: configured or not, media type, description, size, looping; loaded objects nearby with media on a face (not worn ones): id, distance, faces | descriptions through the RLVa text filter |
+
+- Every list gives `radius`, `limit`, `count`, `total` (rows in the radius)
+  and `truncated`; nothing past the limit is computed into the answer.
+- Creators' permissions: no asset id at all (sound assets included, even
+  where the Sound Explorer would show one), no object contents, no hover
+  text, no media or music URL.
+- Not ready (`not_ready`): logged out, during a teleport, before the
+  region is known; `world_parcel` before the parcel's properties came;
+  `world_audio_sources` without the scene's history.
+- Unknown is not absence: what the viewer has not loaded is not listed,
+  and an empty list proves nothing. Playback state of media is not
+  reported (the media manager is not read).
+- Upstream hooks: `app/area_search.rs` gives its loaded properties to the
+  bridge (`Feed::props`, read only). `app/local_assistant.rs` (ours) adds
+  the property caches and the sound history to `mcp_bridge::View`;
+  `mcp_bridge::frame` answers the `world_*` calls before the desk.
+- Tests (`mcp_bridge/world_tests.rs`, on the demo plaza): each tool, the
+  argument bounds, not ready, the 100-row cap and the order, each
+  restriction (`@showloc` for the place and the parcel, the owner's
+  exception, `@shownearby`, `@shownames` with an exception,
+  `@shownametags`, `@showminimap`), no asset id or URL in any answer; the
+  catalogue (`protocol/world.rs`) and the sidecar's `tools/list`.

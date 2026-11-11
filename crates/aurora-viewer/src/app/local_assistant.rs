@@ -18,6 +18,9 @@ impl App {
             // as RLVa reads it (app/rlva.rs): the outfit write, then its
             // detaches
             appearance_busy: self.appearance_ui.pending.is_some() || self.world.rlva_detach_in_flight(Instant::now()),
+            // phase 3, part 3: only what the viewer already holds, never fetched for it
+            object_props: vec![self.area_search_feed.props(), &self.interactions.props, &self.build.props],
+            sounds: Some(&self.scene.sounds.history),
         }
     }
 

@@ -20,12 +20,15 @@ pub mod setup;
 #[cfg(test)]
 mod tests;
 pub mod tools;
+pub mod world; // Folderstorm: phase 3, part 3 (world observation)
+#[cfg(test)]
+mod world_tests;
 
 use crate::world::World;
 pub use desk::Desk;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
 use folderstorm_mcp_bridge::{Bridge, LocalAssistant, Preset, ToolError};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Receiver;
 use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
@@ -109,6 +112,11 @@ pub struct View<'a> {
     /// An outfit change is still on its way (Appearance waits for the
     /// server, or its detaches have not landed yet).
     pub appearance_busy: bool,
+    /// Object names and owners the viewer already holds (Area Search, the
+    /// hover tips, the selection), for `world_nearby_objects`.
+    pub object_props: Vec<&'a HashMap<Uuid, aurora_net::build::ObjectProps>>,
+    /// The Sound Explorer's history, for `world_audio_sources`.
+    pub sounds: Option<&'a crate::scene::sounds::history::History>,
 }
 
 impl View<'_> {
@@ -130,6 +138,16 @@ impl View<'_> {
             inventory_locked: world.rlva.has("showinv"),
             protected: self.protected.clone(),
             outfit_points: world.outfit_attachment_points(),
+        }
+    }
+
+    /// What the world observations read this frame.
+    pub fn observation(&self) -> world::Observation<'_> {
+        world::Observation {
+            world: self.world,
+            demo: self.demo,
+            object_props: &self.object_props,
+            sounds: self.sounds,
         }
     }
 
@@ -198,6 +216,12 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         let mut cx = None;
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
+            if world::answers(&call.tool) {
+                // reads of what the viewer shows, answered at once
+                let result = world::answer(&call.tool, &call.arguments, &view.observation());
+                call.answer(result);
+                continue;
+            }
             let cx = cx.get_or_insert_with(|| view.context());
             rt.desk.take(call, cx, now);
         }
