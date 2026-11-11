@@ -5,8 +5,12 @@
 //! stretched over several monitors while the 3D world (its camera, its HUDs,
 //! the mouse in the world) stays in one rectangle, set by left, right, top and
 //! bottom margins. Windows (inventory, map, chat, Preferences…) can sit in the
-//! margins without covering the world. If two opposite margins would leave
-//! less than 5% of the window, they are scaled down. A separate switch keeps
+//! margins without covering the world. Folderstorm scaled two opposite
+//! margins down when they left less than 5% of the window; here, margins that
+//! leave the world less than a quarter of the window's width or height are
+//! set aside and the world fills the window, so that a window shrunk from two
+//! monitors to one (a monitor unplugged) never leaves the interface beside a
+//! sliver of world. A separate switch keeps
 //! or drops the viewport in mouselook. By default the top, bottom and side
 //! bars follow the viewport instead of the whole window.
 //!
@@ -16,8 +20,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// What the least wide or tall world keeps of the window (Folderstorm's 5%).
-pub const MIN_SHARE: f32 = 0.05;
+/// The least share of the window's width and height the world keeps; below
+/// it the margins are set aside until the window grows or they change.
+pub const MIN_SHARE: f32 = 0.25;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -59,19 +64,11 @@ pub struct Overrides {
     pub full_frame: bool,
 }
 
-/// Two opposite margins, scaled down together so that the world keeps at
-/// least [`MIN_SHARE`] of `span`.
-fn fit_pair(a: u32, b: u32, span: u32) -> (u32, u32) {
-    let keep = ((span as f32 * MIN_SHARE).ceil() as u32).max(1).min(span);
-    let room = span - keep;
-    let sum = a.saturating_add(b);
-    if sum <= room {
-        return (a, b);
-    }
-    let scale = room as f64 / sum as f64;
-    let a2 = (a as f64 * scale).floor() as u32;
-    let b2 = (b as f64 * scale).floor() as u32;
-    (a2, b2)
+/// The world's span between two opposite margins, or None when it keeps
+/// less than [`MIN_SHARE`] of `span`.
+fn fit_pair(a: u32, b: u32, span: u32) -> Option<u32> {
+    let keep = ((span as f32 * MIN_SHARE).ceil() as u32).max(1);
+    span.checked_sub(a.saturating_add(b)).filter(|&world| world >= keep)
 }
 
 /// The world's part of a window of `size` (x, y, width, height in window
@@ -80,9 +77,9 @@ pub fn world_rect(size: (u32, u32), s: &ViewportSettings, now: Overrides) -> Opt
     if !s.enabled || now.full_frame || (now.mouselook && !s.in_mouselook) || size.0 == 0 || size.1 == 0 {
         return None;
     }
-    let (left, right) = fit_pair(s.left, s.right, size.0);
-    let (top, bottom) = fit_pair(s.top, s.bottom, size.1);
-    let rect = [left, top, size.0 - left - right, size.1 - top - bottom];
+    let width = fit_pair(s.left, s.right, size.0)?;
+    let height = fit_pair(s.top, s.bottom, size.1)?;
+    let rect = [s.left, s.top, width, height];
     (rect != [0, 0, size.0, size.1]).then_some(rect)
 }
 
@@ -184,15 +181,22 @@ mod tests {
     }
 
     #[test]
-    fn margins_leaving_less_than_five_percent_are_scaled_down() {
-        // 1000 wide: at least 50 stay for the world
-        let rect = world_rect((1000, 800), &on(600, 600, 0, 0), Overrides::default()).expect("a rect");
-        assert!(rect[2] >= 50, "{rect:?}");
-        assert_eq!(rect[0], 475, "the two margins shrink alike");
-        assert!(rect[0] + rect[2] <= 1000);
-        // a margin alone wider than the window
-        let rect = world_rect((1000, 800), &on(5000, 0, 0, 0), Overrides::default()).expect("a rect");
-        assert_eq!(rect, [950, 0, 50, 800]);
+    fn margins_leaving_less_than_a_quarter_fill_the_window() {
+        // a window over two monitors shrunk to one: the margin set for the
+        // left monitor would leave nothing, so the world takes the window
+        let two = on(1920, 0, 0, 0);
+        assert_eq!(world_rect((3840, 1080), &two, Overrides::default()), Some([1920, 0, 1920, 1080]));
+        assert_eq!(world_rect((1920, 1080), &two, Overrides::default()), None);
+        assert_eq!(world_rect((2000, 1080), &two, Overrides::default()), None, "an 80 px sliver");
+        // exactly a quarter is kept, just under it is not
+        assert_eq!(
+            world_rect((1000, 800), &on(375, 375, 0, 0), Overrides::default()),
+            Some([375, 0, 250, 800])
+        );
+        assert_eq!(world_rect((1000, 800), &on(376, 375, 0, 0), Overrides::default()), None);
+        // the height alike, and margins larger than the window
+        assert_eq!(world_rect((1000, 800), &on(0, 0, 700, 0), Overrides::default()), None);
+        assert_eq!(world_rect((1000, 800), &on(u32::MAX, u32::MAX, 0, 0), Overrides::default()), None);
     }
 
     #[test]
