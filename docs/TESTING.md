@@ -5373,7 +5373,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view) |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view); with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors` (or `all`), those panels start in windows of their own |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6795,9 +6795,59 @@ failure. Grid validation and any paid upload are performed by the human.
       statistics) with every monitor closed, then with four open at 1 / s.
     Nothing of a picture is written anywhere: the host keeps the latest
     one in memory while its monitor is open.
+  - **pop-out panels** (checkpoint 6). At the top of the host's window,
+    "In a window of its own:" with **Chat**, **Characters** and
+    **Monitors**. `AURORA_DEMO_SESSION_HOST_PANELS=chat,monitors` (the
+    names `chat`, `controls` or `characters`, `monitors`, or `all`; with
+    `AURORA_DEMO_SESSION_HOST`) starts the demo's host with those panels
+    out:
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_PANELS=chat,monitors cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - tick **Chat**: the chat leaves the host's window for a window of its
+      own (`… Chat — …` in its title), which comes in front as a window
+      you asked for; the host's window keeps the characters. The same for
+      **Characters** and **Monitors** (the cards then keep each monitor's
+      size and rate and say "Its picture is in the Monitors window"). The
+      host's log says `session host: chat in its own window`.
+    - type and send in the chat's window, switch characters from the
+      characters' window or with **Switch** under a picture in the
+      monitors' window: everything works as in the host's window, and the
+      host's window goes on working (untick a box there, add a
+      character).
+    - **Dock back** in a panel's window, its close button, or unticking
+      its box: the panel is back in the host's window (`docked back`). A
+      monitor's latest picture moves with it, without waiting for the
+      next one. Closing a panel's window never closes the host or a
+      character, and never asks "Quit all".
+    - with every panel out, the host's window lists them with **Dock
+      back**. Close the host's window while characters run: its question
+      (Quit all, Close only this window, Cancel) is asked in the host's
+      own window.
+    - minimise the monitors' window, or cover it whole: within a second
+      the watched viewers' logs say `session monitor: off`, although the
+      host's own window is in view; bring it back: `on`. With the
+      monitors docked, minimising the chat's window changes nothing for
+      them.
+    - lines arriving in the chat's window are read only while that
+      window has the keyboard; with "Sound for a message…" on, a message
+      for a background character flashes the chat's window in the
+      taskbar and never brings it forward.
+    - outside the demo, the panels that are out and their windows' places
+      and sizes are in `session-host.json` (`panels`): close the host
+      and start it again, the panels' windows open where they were,
+      without taking the keyboard from the host's window. Move a panel
+      to a second screen, close the host, unplug that screen (or edit
+      the file to a far position) and start again: the window opens whole
+      on a connected screen (`…'s window was off the screens: brought
+      back`).
+    - nothing here touches the characters' windows: popping a panel out
+      or back never brings a viewer forward, moves it or changes which
+      one is active.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
-  window's picture at each of its frames (its monitors included).
+  window's picture at each of its frames (its monitors included), and
+  each panel's own window to `<file>-chat.png`, `<file>-controls.png`
+  or `<file>-monitors.png`.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

@@ -1103,8 +1103,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
     drawing only a small world rectangle, a large active window with the
     host's panels beside it): not small, it needs the host to place
     panels over another process's window; HUD attachments in the picture
-    (off, as in a photo by default); monitors as separate windows
-    (checkpoint 6); a picture for a minimised window.
+    (off, as in a photo by default); a picture for a minimised window.
+    (Monitors in a window of their own: checkpoint 6.)
 
 ### Checkpoint 6: pop-out panels and fitted layout (optional)
 
@@ -1113,6 +1113,122 @@ May be two small PRs: 1a profiles, 1b behind policy.
   enough.
 - **Acceptance:** dialogs, IME, Alt-Tab, minimise and restore, and DPI
   changes leave no vanished world and no stolen focus.
+
+- **As built (branch `claude/session-checkpoint-6`, on top of checkpoint
+  5):** the rules are pure and tested in `crates/folderstorm-session`
+  (`panels`: which panels are out and where, the file's checks, a saved
+  place brought back onto a connected screen, "closing a panel docks
+  it", the monitors seen window by window; `host`: the desk keeps the
+  panels with the rest of the settings, in `host/panel_tests.rs`). In the
+  viewer: `host/ui/panels.rs` (a `View` is one window with its own
+  interface, painter and pixels; the panels' windows are opened, placed
+  and closed there), `host/ui.rs` (which window draws what),
+  `host/ui/monitors.rs` (the monitors' own window), `host/monitors.rs`
+  (the latest picture stays with the host, for the window that draws it).
+  - **Upstream hooks (new): none.** winit's several windows in one event
+    loop and the crash window's processor painter were enough as they
+    are: no upstream file changes in this checkpoint (locales and
+    `docs/TESTING.md` apart, append-only).
+  - **Decision: no fitted borderless stage.** The human validated
+    checkpoint 2's arrangement (separate top-level windows, the one
+    brought forward taking the stage's place) as working well. The fitted
+    stage was only ever "if that is not enough", it is the form that
+    failed in Folderstorm (C++) (the world vanishing when the host's
+    controls or another program were used, focus and IME trouble), and it
+    cannot exist on Wayland. It is **not built** and no code prepares it.
+    Should it be wanted later, it is a checkpoint of its own.
+  - **Three panels:** the chat, the characters (their cards, the choices,
+    the hotkeys' and the new profile's pages, "Quit all"), the monitors
+    (every open monitor's picture, side by side while there is room, each
+    with its label and "Switch"). At the top of the host's window, "In a
+    window of its own:" and a box per panel; in a panel's window, "Dock
+    back". With the monitors out, a character's card keeps its monitor's
+    box, size and rate and says where the picture is. With the chat or
+    the characters out, the host's window gives its whole width to the
+    other; with both out it lists what is out, each with "Dock back".
+  - **Closing a panel's window docks the panel** (`panels::Config::closed`,
+    `Desk::panel_closed`): no question, no character closed, never the
+    host's end. Only the host's own window closes the host, and its
+    question (Quit all, Close only this window, Cancel) is always asked
+    in that window, also when the characters' panel is out. A panel's
+    window that cannot be made or drawn is docked back, with a line in
+    the log: the host does not close for it.
+  - **Every window is drawn on the processor.** A panel's window has its
+    own egui context (theme, fonts, icons), its own `egui_winit::State`
+    (keys, IME, DPI, cursor: per window, as winit gives them) and its own
+    softbuffer surface and painter. The host still opens no graphics
+    device. (One context per window, and not egui's viewports: a viewport
+    of the host's context would need an integration that hands the frames
+    of several windows to one context, which the crash window's loop is
+    not; separate contexts need nothing new. The cost is one font atlas
+    and one set of icons per open panel, made when it opens.)
+  - **Remembered** in `session-host.json`, `panels`: for each of `chat`,
+    `controls` and `monitors`, `out` and `place` (`position`, the outer
+    corner, absent where the system does not tell, as on Wayland; `size`,
+    the inside; physical pixels). A place is noted when its window is
+    moved or resized, not while it is minimised or maximised, and kept
+    while the panel is docked. **Checked when read:** a size or a
+    position no window can have is dropped (the panel is still out, at
+    its first size); an older file has no `panels` and reads as all
+    docked. **Checked when opened** (`panels::on_screen`): a window keeps
+    its place when a connected screen shows enough of its top edge to
+    catch it (120 × 24 pixels, the title bar not above the screen);
+    otherwise it opens whole on the nearest connected screen, no larger
+    than it. A minimised window's place as Windows tells it (−32000) is
+    never noted and would be corrected anyway.
+  - **No stolen focus, by construction.** A panel the user pops out opens
+    in front, as a window they asked for. The panels found out when the
+    host starts open after the host's own window and without taking the
+    keyboard (`with_active(false)`). After that nothing in the host asks
+    for the foreground: no `focus_window`, no raise; a message for a
+    background character flashes the chat's window in the taskbar
+    (`request_user_attention`), as the host's window did. Nothing here
+    sends anything to a viewer: popping out, docking, moving or closing a
+    panel changes no assignment, no stage and no window of a character
+    (the desk's `panel_*` calls only ask for a save), so no world can
+    vanish for it. The global hotkeys belong to the thread, not to a
+    window, and work whichever window has the keyboard.
+  - **Monitors pause per window** (`panels::seen`): each window notes
+    which monitors its last drawing showed; a window that is minimised or
+    covered whole sees none; a monitor is asked for pictures while any
+    window that draws it is in view. So minimising the monitors' window
+    returns the watched viewers to 3D Off although the host's window is
+    in view, and minimising the host's window does not pause the
+    monitors' window. One window draws the pictures at a time (the
+    monitors' own, or the one with the cards); the host keeps the latest
+    picture (one per monitor, in memory only, as before) so that it moves
+    with its monitor at once when a panel is popped out or docked.
+  - **Chat read state per window:** what the chat shows is read only
+    while the window that draws the chat has the keyboard, and is told
+    at once when that window loses it (a minimised window is not drawn
+    again).
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors`
+    (or `all`) starts the demo's host with those panels out;
+    `AURORA_SESSION_HOST_CAPTURE` also writes each panel's window
+    (`docs/TESTING.md`).
+  - **Checked here:** the rules' tests; each panel's window drawn by the
+    processor's painter without a window (`host/ui/panels.rs`); the three
+    windows opened, drawn and captured under X11 (Xvfb).
+  - **To verify on Windows** (nothing of Win32 runs here): a panel popped
+    out comes in front and takes the keyboard, and no viewer moves, is
+    raised or changes role; the panels restored at start do not take the
+    keyboard from the host's window; Alt-Tab lists each panel's window
+    and switching among the host's windows and the viewers leaves the
+    active character's world drawn; a native dialog of a viewer (file
+    picker) and the host's windows do not fight over the foreground;
+    IME (Japanese) composes in the chat's own window, the candidate box
+    beside its text field; minimise and restore each window, the
+    monitors pausing with the window that draws them (`session monitor:
+    off` / `on` in the viewers' logs); a panel dragged between two
+    screens of different scale is redrawn sharp at the new scale, and
+    its place is restored on the right screen; a place on an unplugged
+    screen comes back onto a connected one; the taskbar flash for a
+    background message is on the chat's window and never brings it
+    forward; global hotkeys work with a panel's window focused.
+  - Not done: the fitted borderless stage (above); the host's own
+    window's place is not remembered (it never was; only the panels'
+    are); a panel's window has no "always on top" choice; one monitors'
+    window for all monitors, not one window per monitor.
 
 ### Checkpoint 7: polish picked by the human
 
