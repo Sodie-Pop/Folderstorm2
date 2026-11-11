@@ -1,9 +1,11 @@
 //! Folderstorm: Preferences › Layout › Bars and windows › World viewport
 //! (`crate::folderstorm::viewport`). Folderstorm (C++) had these under
-//! Move & View › Layout.
+//! Move & View › Layout. The diagram (`crate::folderstorm::diagram`) comes
+//! first; the margin sliders stay as the keyboard route and edit the same
+//! settings.
 
 use super::super::cx::{Cx, field, fields};
-use crate::folderstorm::viewport;
+use crate::folderstorm::{diagram, viewport};
 
 pub(super) fn group(cx: &mut Cx) {
     use aurora_i18n::tr;
@@ -15,6 +17,21 @@ pub(super) fn group(cx: &mut Cx) {
         );
         let off = !cx.s.folderstorm_viewport.enabled;
         cx.subs(off, |cx| {
+            let p = cx.p;
+            cx.below().row(
+                tr!("folderstorm-viewport-diagram"),
+                tr!("folderstorm-viewport-diagram-help"),
+                &fields!(
+                    folderstorm_viewport.left,
+                    folderstorm_viewport.right,
+                    folderstorm_viewport.top,
+                    folderstorm_viewport.bottom
+                ),
+                |ui, s| {
+                    let desktop = diagram::desktop(ui.ctx());
+                    diagram::widget::show(ui, &p, &mut s.folderstorm_viewport, &desktop)
+                },
+            );
             let help = tr!("folderstorm-viewport-margin-help");
             cx.slider(
                 tr!("folderstorm-viewport-left"),

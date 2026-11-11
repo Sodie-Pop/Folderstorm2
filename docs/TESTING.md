@@ -158,6 +158,39 @@ margins are dark, the bars sit inside it (except with `bars-window`), a click
 in a margin selects nothing, windows can be dragged into the margins, and the
 settings are under Preferences › Layout › Bars and windows › World viewport.
 
+**Viewport diagram (Folderstorm2).** Preferences › Layout › Bars and windows ›
+World viewport, behind the cog of "Use a custom world viewport", starts with a
+diagram of the viewer window, the world and the monitors.
+`AURORA_DEMO_MONITORS` pretends a monitor layout: monitors separated by commas
+or semicolons, each `WxH[+X+Y][@scale]` (X11 geometry: `-1920+0` puts one left
+of the main monitor; `@1.5` or `@150%` gives its scale). A monitor without a
+position goes right of the previous one, tops aligned. An optional
+`window+X+Y` item puts the inside of the viewer window there (by default the
+top-left corner of all the monitors); `wayland` pretends the window's position
+is unknown. The window keeps its real size: choose it with
+`AURORA_WINDOW_SIZE`. Add `AURORA_DEMO_VIEWPORT=1` to turn the viewport on and
+`AURORA_DEMO_OPTIONS=layout/0:cogs` to open the group:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_OPTIONS=layout/0:cogs \
+  AURORA_WINDOW_SIZE=3840,1080 AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test viewport diagram"
+```
+
+Other layouts: three equal monitors `1920x1080,1920x1080,1920x1080` (window
+`5760,1080`); unequal ones with mixed scales `1920x1080,2560x1440+1920-180@150%`
+(window `4480,1080`); a monitor left of the main one
+`1920x1080-1920+0,1920x1080+0+0`; the window partly over a monitor
+`1920x1080,1920x1080,window+960+0` (window `1920,1080`); `wayland`. Check that
+dragging an edge of the world moves its margin and the sliders below follow,
+that it snaps to the monitor borders and the window's sides, stops before the
+world gets under a quarter of the window, and that Escape during the drag puts
+it back; that a click selects a monitor (outlined) and a double click or "Put
+the world on monitor N" puts the world on it; that a monitor away from the
+window or barely under it says why it cannot; that margins set too large with
+the sliders show a dashed outline and the note that the world fills the
+window; and that with `wayland` the window is drawn alone.
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
@@ -5352,6 +5385,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_PARCEL_NAME=<text>` | Any parcel name in the place island (odd names, line breaks) |
 | `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
+| `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
