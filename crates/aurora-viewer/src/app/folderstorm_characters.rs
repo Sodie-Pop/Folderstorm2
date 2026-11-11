@@ -7,8 +7,15 @@
 //! `folderstorm-session` crate's pure functions.
 
 use super::*;
+use crate::folderstorm_characters::managed::Event as HostEvent;
 use ::folderstorm_session::behind::{self, Behind3d};
 use ::folderstorm_session::gpu::{self, Loss};
+use ::folderstorm_session::ipc;
+
+/// A managed viewer looks at its state for the host this often, and tells
+/// it when it changed, or after [`REPORT_EVERY`] anyway.
+const REPORT_CHECK: Duration = Duration::from_millis(250);
+const REPORT_EVERY: Duration = Duration::from_secs(1);
 
 impl App {
     /// The policy in force: the profile's, or the demo's for the run.
@@ -37,8 +44,15 @@ impl App {
         }
         let demo = self.folderstorm_demo_behind();
         let focused = self.focused && !demo;
-        let behind = behind::is_behind(focused, demo || self.instances.peers().in_front());
-        let policy = self.folderstorm_policy();
+        // managed, the session host says who is behind and with which
+        // policy; otherwise the instances registry and this profile do
+        let (behind, policy) = match self.folderstorm_characters.managed.behind(self.focused) {
+            Some(managed) if !demo => managed,
+            _ => (
+                behind::is_behind(focused, demo || self.instances.peers().in_front()),
+                self.folderstorm_policy(),
+            ),
+        };
         // (the demo pauses a capture too, as the busy pause's demo does)
         let exempt = timed && !demo;
         let paused = behind::paused(policy, behind, exempt || vr || self.snapshots.drawing());
@@ -143,4 +157,222 @@ impl App {
         state.stall_held = held;
         allowed
     }
+
+    /// In front, for the rules that used the keyboard focus (frame cap,
+    /// texture release, busy pause, the instances registry): focused, or
+    /// the session host's active character while the user is in the host's
+    /// window (rule R3).
+    pub(super) fn folderstorm_in_front(&self) -> bool {
+        self.folderstorm_characters.managed.in_front(self.focused)
+    }
+
+    /// `sync_minimized_mute`'s update of the transient mute: Aurora's
+    /// "mute when minimised", or a background character of the session
+    /// host. True when the mute changed. Nothing saved is touched.
+    pub(super) fn folderstorm_session_mute(&mut self, minimized: Option<bool>) -> bool {
+        let was = self.minimized_mute.active;
+        self.minimized_mute.update(self.settings.audio.mute_when_minimized, minimized);
+        self.minimized_mute.active |= self.folderstorm_characters.managed.sound_muted();
+        self.minimized_mute.active != was
+    }
+
+    /// Every turn of the event loop, in a viewer the session host started:
+    /// the host's commands are carried out and the host is told how this
+    /// viewer does. Never waits. Not the frame's job: frames may be rare
+    /// while the window is minimised (Economy), commands must not be.
+    pub(super) fn folderstorm_managed_pump(&mut self) {
+        let Some(link) = crate::folderstorm_characters::managed::link() else {
+            return;
+        };
+        link.turn();
+        let events: Vec<HostEvent> = link.poll().collect();
+        for event in events {
+            match event {
+                HostEvent::Linked { slot } => {
+                    log::info!("session host: managed, character {}", slot + 1);
+                    self.folderstorm_characters.managed.link();
+                }
+                HostEvent::Command(ipc::ToViewer::Assign(assignment)) => {
+                    if self.folderstorm_characters.managed.assign(assignment) {
+                        log::info!(
+                            "session host: {:?}, {:?} standby, sound {}, voice {}",
+                            assignment.role,
+                            assignment.standby,
+                            if assignment.sound_muted { "cut" } else { "on" },
+                            if assignment.voice_allowed { "allowed" } else { "off" }
+                        );
+                        self.sync_minimized_mute();
+                    }
+                }
+                HostEvent::Command(ipc::ToViewer::Show { stage }) => self.folderstorm_characters.report.show = Some(stage),
+                HostEvent::Command(ipc::ToViewer::Minimise) => {
+                    // (never the active character, never a window with the keyboard)
+                    if !self.folderstorm_in_front()
+                        && let Some(g) = &self.gfx
+                    {
+                        g.window.set_minimized(true);
+                    }
+                }
+                HostEvent::Command(ipc::ToViewer::Quit) => {
+                    log::info!("session host: asked to quit");
+                    self.request_exit();
+                    self.confirm_exit(ui::exit::Action::Quit);
+                }
+                HostEvent::Gone => {
+                    if self.folderstorm_characters.managed.linked() {
+                        log::info!("session host: gone, this viewer goes on by itself");
+                    }
+                    self.folderstorm_characters.managed.release();
+                    self.sync_minimized_mute();
+                }
+            }
+        }
+        if !self.folderstorm_characters.managed.linked() {
+            self.folderstorm_characters.report.show = None;
+            return;
+        }
+        if self.gfx.is_some()
+            && let Some(stage) = self.folderstorm_characters.report.show.take()
+        {
+            self.folderstorm_show(stage);
+        }
+        let now = Instant::now();
+        let report = &self.folderstorm_characters.report;
+        if report.checked.is_some_and(|at| now.duration_since(at) < REPORT_CHECK) {
+            return;
+        }
+        let status = self.folderstorm_status();
+        let report = &mut self.folderstorm_characters.report;
+        report.checked = Some(now);
+        let due = report
+            .sent
+            .as_ref()
+            .is_none_or(|(sent, at)| *sent != status || now.duration_since(*at) >= REPORT_EVERY);
+        if due && link.report(status.clone()) {
+            report.sent = Some((status, now));
+        }
+    }
+
+    /// The host brings this character forward: restored, on the stage when
+    /// there is one, then focused.
+    fn folderstorm_show(&mut self, stage: Option<ipc::Stage>) {
+        let Some(g) = &self.gfx else {
+            return;
+        };
+        let window = &g.window;
+        window.set_minimized(false);
+        // (a full-screen window, a capture and a forced size keep their place)
+        let placed = window.fullscreen().is_none() && self.capture.is_none() && forced_window_size().is_none();
+        if let Some(stage) = stage.filter(|s| placed && s.valid() && on_a_monitor(window, s)) {
+            use winit::dpi::{PhysicalPosition, PhysicalSize};
+            if stage.maximised {
+                if !window.is_maximized() {
+                    // onto the stage's screen first: a window maximises
+                    // where it is
+                    let (x, y) = (stage.x + (stage.width / 4) as i32, stage.y + (stage.height / 4) as i32);
+                    window.set_outer_position(PhysicalPosition::new(x, y));
+                    window.set_maximized(true);
+                }
+            } else {
+                if window.is_maximized() {
+                    window.set_maximized(false);
+                }
+                // the stage is an outer rectangle: the frame's share off
+                let (outer, inner) = (window.outer_size(), window.inner_size());
+                let width = stage.width.saturating_sub(outer.width.saturating_sub(inner.width)).max(1);
+                let height = stage.height.saturating_sub(outer.height.saturating_sub(inner.height)).max(1);
+                window.set_outer_position(PhysicalPosition::new(stage.x, stage.y));
+                let _ = window.request_inner_size(PhysicalSize::new(width, height));
+            }
+            self.geom_changed = Some(Instant::now());
+        }
+        window.focus_window();
+    }
+
+    /// What the host is told of this viewer.
+    fn folderstorm_status(&mut self) -> ipc::Status {
+        let logged_in = self.in_world();
+        let report = &mut self.folderstorm_characters.report;
+        if std::mem::replace(&mut report.logged_in, logged_in) != logged_in {
+            report.generation = report.generation.wrapping_add(1);
+        }
+        let state = &self.folderstorm_characters;
+        let (screen, window, gpu) = match &self.gfx {
+            None => (ipc::Screen::Starting, ipc::WindowState::default(), ipc::Gpu::Ok),
+            Some(g) => {
+                let screen = match self.screen {
+                    Screen::Login => ipc::Screen::Login,
+                    Screen::Loading { .. } => ipc::Screen::Loading,
+                    Screen::World => ipc::Screen::World,
+                };
+                let minimised = g.window.is_minimized().unwrap_or(false);
+                let rect = (!minimised).then(|| g.window.outer_position().ok()).flatten().map(|at| {
+                    let size = g.window.outer_size();
+                    ipc::Stage {
+                        x: at.x,
+                        y: at.y,
+                        width: size.width,
+                        height: size.height,
+                        maximised: g.window.is_maximized(),
+                    }
+                });
+                let window = ipc::WindowState {
+                    rect,
+                    minimised,
+                    fullscreen: g.window.fullscreen().is_some(),
+                };
+                let gpu = if g.renderer.device_lost() {
+                    ipc::Gpu::Lost
+                } else if g.renderer.stalled_for().is_some() {
+                    ipc::Gpu::Stalled
+                } else if self.busy_pause.paused() {
+                    ipc::Gpu::Busy
+                } else {
+                    ipc::Gpu::Ok
+                };
+                (screen, window, gpu)
+            }
+        };
+        ipc::Status {
+            generation: state.report.generation,
+            assign_seq: state.managed.seq(),
+            screen,
+            name: if logged_in { self.world.own_name() } else { String::new() },
+            agent: if logged_in {
+                self.world.agent_id.to_string()
+            } else {
+                String::new()
+            },
+            grid: if logged_in {
+                format!("{:?}", self.settings.grid)
+            } else {
+                String::new()
+            },
+            region: if logged_in { self.world.region_name() } else { String::new() },
+            unread: if logged_in {
+                u32::try_from(self.world.conversations_badge()).unwrap_or(u32::MAX)
+            } else {
+                0
+            },
+            focused: self.focused,
+            window,
+            gpu,
+            paused_3d: state.paused,
+            sound_muted: self.minimized_mute.active,
+            voice_allowed: state.managed.voice_allowed(),
+        }
+        .cleaned()
+    }
+}
+
+/// Whether the stage shows on one of the screens: a place saved when
+/// another screen was plugged in is not taken.
+fn on_a_monitor(window: &winit::window::Window, stage: &ipc::Stage) -> bool {
+    const SEEN: i64 = 120;
+    window.available_monitors().any(|monitor| {
+        let (at, size) = (monitor.position(), monitor.size());
+        let overlap = |a: i64, a_len: i64, b: i64, b_len: i64| (a + a_len).min(b + b_len) - a.max(b);
+        overlap(i64::from(stage.x), i64::from(stage.width), i64::from(at.x), i64::from(size.width)) >= SEEN
+            && overlap(i64::from(stage.y), i64::from(stage.height), i64::from(at.y), i64::from(size.height)) >= SEEN
+    })
 }

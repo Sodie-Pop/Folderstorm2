@@ -33,6 +33,9 @@ use crossbeam_channel::Receiver;
 mod windows;
 #[cfg(windows)]
 pub use windows::{focused, hand_off, listen, release, window_ready};
+// Folderstorm: the session host's report pipe (folderstorm_characters/transport.rs)
+#[cfg(windows)]
+pub use windows::folderstorm_session_pipe;
 
 /// Longest link received (a SLURL is far shorter).
 #[cfg(any(windows, target_os = "linux"))]

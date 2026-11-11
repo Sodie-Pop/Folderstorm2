@@ -6004,7 +6004,9 @@ impl App {
     /// is minimised.
     fn sync_minimized_mute(&mut self) {
         let minimized = self.gfx.as_ref().and_then(|g| g.window.is_minimized());
-        if !self.minimized_mute.update(self.settings.audio.mute_when_minimized, minimized) {
+        // Folderstorm: also cut for a background character of the session host;
+        // the call to `minimized_mute.update` is in app/folderstorm_characters.rs
+        if !self.folderstorm_session_mute(minimized) {
             return;
         }
         let mute = self.minimized_mute.active;
@@ -6637,7 +6639,8 @@ impl App {
         };
         let transmit = self.talking();
         let inputs = crate::voice::VoiceInputs {
-            enabled: self.settings.audio.voice_enabled,
+            // Folderstorm: the session host allows voice to its active character only
+            enabled: self.settings.audio.voice_enabled && self.folderstorm_characters.managed.voice_allowed(),
             in_world: self.in_world(),
             offline: self.demo,
             tuning,
@@ -8841,7 +8844,9 @@ impl App {
         self.sync_minimized_mute();
         // a window behind gives its textures back (texture_budget::Background)
         let minimized = self.gfx.as_ref().and_then(|g| g.window.is_minimized()).unwrap_or(false);
-        self.scene.textures.set_window_state(self.focused, minimized);
+        // Folderstorm: the session host's active character is in front without the keyboard
+        let in_front = self.folderstorm_in_front();
+        self.scene.textures.set_window_state(in_front, minimized);
         // (a demo or a timed run neither publishes nor reads, instances.rs)
         let timed = self.capture.is_some() || self.frame_profile.enabled();
         // the busy card's switch, the same in every viewer (instances.rs)
@@ -8854,7 +8859,7 @@ impl App {
             !self.demo && !timed,
             crate::instances::Own {
                 usage: self.scene.textures.video_usage(),
-                active: self.focused && !minimized,
+                active: in_front && !minimized, // Folderstorm: in_front, was self.focused
                 luid: self.scene.textures.card_luid(),
             },
             switch,
@@ -11601,9 +11606,10 @@ impl App {
         self.screen_rate.poll(&gfx.window, Instant::now());
         let monitor_hz = self.screen_rate.hz();
         let timed = self.capture.is_some() || self.frame_profile.enabled();
+        let in_front = self.folderstorm_in_front(); // Folderstorm: the session host's active character
         let cap = frame_cap(
             &self.settings,
-            self.focused,
+            in_front, // Folderstorm: was self.focused
             self.in_world(),
             monitor_hz,
             timed,
@@ -11613,7 +11619,7 @@ impl App {
         // (instances.rs)
         let cap = crate::instances::throttle(
             cap,
-            self.focused,
+            in_front, // Folderstorm: was self.focused
             self.instances.peers().in_front(),
             timed || !self.settings.background_fps_cap,
         );
@@ -21460,6 +21466,7 @@ impl ApplicationHandler for App {
         self.record_window_geometry();
         self.attention_window();
         self.external_links();
+        self.folderstorm_managed_pump(); // Folderstorm: the session host's commands, this viewer's reports
         if self.gfx.as_ref().is_some_and(|g| !g.shown) {
             // Hidden windows may receive no RedrawRequested event. Keep
             // producing frames until a real presentation makes it visible,

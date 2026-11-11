@@ -9,9 +9,18 @@
 //! - [`State`]: what the frames keep of it (the `impl App` glue is in
 //!   `app/folderstorm_characters.rs`).
 //!
+//! Checkpoint 2, the session host:
+//! - [`host`]: `aurora-viewer --session-host`, the window that starts up to
+//!   five characters, switches between them and watches over them;
+//! - [`managed`]: `--managed`, a viewer's link to the host that started it;
+//! - [`transport`]: the private local endpoint between the two.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
+pub mod host;
+pub mod managed;
 pub mod profile;
+pub mod transport;
 
 use ::folderstorm_session::behind::{self, Behind3d};
 use serde::{Deserialize, Serialize};
@@ -57,6 +66,25 @@ pub struct State {
     pub loss_waiting: bool,
     /// A GPU stall behind whose box was held back has been logged.
     pub stall_held: bool,
+    /// The session host's hold on this viewer (`--managed`).
+    pub managed: ::folderstorm_session::managed::Managed,
+    /// What the host is told of this viewer.
+    pub report: Report,
+}
+
+/// What a managed viewer keeps of its reports to the host.
+#[derive(Debug, Default)]
+pub struct Report {
+    /// Changes at every login and logout.
+    pub generation: u32,
+    /// Logged in (or logging in) as of the last report.
+    pub logged_in: bool,
+    /// The last status looked at, and when; the last one sent, and when.
+    pub checked: Option<std::time::Instant>,
+    pub sent: Option<(::folderstorm_session::ipc::Status, std::time::Instant)>,
+    /// The host asked for the window before there was one: brought forward
+    /// (on that stage, if any) as soon as it exists.
+    pub show: Option<Option<::folderstorm_session::ipc::Stage>>,
 }
 
 /// `AURORA_DEMO_SESSION_BEHIND=1|off|limited|normal`, demo only: the window
