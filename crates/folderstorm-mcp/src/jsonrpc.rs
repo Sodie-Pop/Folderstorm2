@@ -134,7 +134,7 @@ fn initialize(params: &Value) -> Value {
         "capabilities": {"tools": {"listChanged": false}},
         "serverInfo": {"name": "folderstorm-mcp", "title": format!("{} local assistant", folderstorm_brand::PRODUCT), "version": env!("CARGO_PKG_VERSION")},
         "instructions": format!(
-            "Reads and organises the inventory and outfits of the {} viewer running on this computer. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake.",
+            "Reads and organises the inventory and outfits of the {} viewer running on this computer. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake. Calls are bound to the login the viewer was on at the first call: after a logout, another login or a viewer restart a call answers session_changed and is not run; call viewer_status and look again before retrying. A tool that answers unsupported needs a newer viewer.",
             folderstorm_brand::PRODUCT
         )
     })

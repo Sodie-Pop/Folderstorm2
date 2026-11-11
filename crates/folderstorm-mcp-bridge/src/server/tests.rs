@@ -145,11 +145,114 @@ fn reads_set_to_never_are_refused_before_reaching_the_viewer() {
 #[test]
 fn unknown_tools_are_refused() {
     let (bridge, _calls) = start(VIEWER_TIMEOUT, None);
+    // a sidecar that declares capabilities: the viewer is the older side
     let client = Client::new(bridge.port(), bridge.token().clone());
+    let e = client.call("inventory_teleport", json!({})).expect_err("refused");
+    let ClientError::Tool(e) = e else { panic!("not a tool error: {e}") };
+    assert_eq!(e.code, ErrorCode::Unsupported);
+    assert!(e.message.contains("update"), "{e}");
+    // an older sidecar keeps today's code
+    let (status, body) = post(&bridge, &json!({"tool": "inventory_teleport", "arguments": {}}));
+    assert_eq!(status, 400);
+    assert_eq!(body["error"]["code"], "unknown_tool");
+}
+
+/// A call as an older sidecar sends it (no `features`), or any body.
+fn post(bridge: &Bridge, body: &Value) -> (u16, Value) {
+    let port = bridge.port();
+    let body = body.to_string();
+    raw(
+        port,
+        &format!(
+            "POST /v1/call HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\n\r\n{body}",
+            bridge.token().secret(),
+            body.len()
+        ),
+    )
+}
+
+#[test]
+fn health_gives_the_capabilities_and_the_login() {
+    let (bridge, _calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let health = client.health().expect("health");
+    assert_eq!(health.capabilities, Some(crate::binding::capabilities()));
+    assert_eq!(health.viewer_session, None, "no login told yet");
+    bridge.set_login(1, true);
+    let first = client.health().expect("health").viewer_session.expect("logged in");
+    assert!(crate::binding::is_viewer_session(&first));
+    assert_eq!(bridge.viewer_session().as_deref(), Some(first.as_str()));
+    bridge.set_login(1, true);
+    assert_eq!(client.health().expect("health").viewer_session.as_deref(), Some(first.as_str()));
+    bridge.set_login(2, false);
+    assert_eq!(client.health().expect("health").viewer_session, None, "logged out");
+    bridge.set_login(3, true);
+    let second = client.health().expect("health").viewer_session.expect("logged in");
+    assert_ne!(first, second);
+    // the same login on another start of the bridge: another value
+    let (other, _) = start(VIEWER_TIMEOUT, None);
+    other.set_login(3, true);
+    assert_ne!(other.viewer_session().as_deref(), Some(second.as_str()));
+}
+
+#[test]
+fn a_call_pinned_to_another_login_is_refused_before_the_viewer() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    bridge.set_login(1, true);
+    let old = bridge.viewer_session().expect("logged in");
+    bridge.set_login(2, true);
+    let now = bridge.viewer_session().expect("logged in");
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let e = client.call_in("worn_items", json!({}), Some(&old)).expect_err("refused");
+    let ClientError::Tool(e) = e else { panic!("not a tool error: {e}") };
+    assert_eq!(e.code, ErrorCode::SessionChanged);
+    assert_eq!(e.viewer_session.as_deref(), Some(now.as_str()), "the login now");
+    assert!(calls.try_recv().is_err(), "nothing reached the viewer");
+    // the health tool answers on any login; the right pin goes through
+    let viewer = std::thread::spawn(move || {
+        let status = calls.recv().expect("viewer_status");
+        status.answer(Ok(json!({})));
+        let read = calls.recv().expect("a read");
+        let session = read.session.clone();
+        read.answer(Ok(json!({})));
+        session
+    });
+    client.call_in("viewer_status", json!({}), Some(&old)).expect("not bound");
+    client.call_in("worn_items", json!({}), Some(&now)).expect("bound to this login");
     assert_eq!(
-        code(client.call("inventory_teleport", json!({})).expect_err("refused")),
-        ErrorCode::UnknownTool
+        viewer.join().expect("viewer").as_deref(),
+        Some(now.as_str()),
+        "the frame thread checks again"
     );
+    // logged out: every bound call pinned to a login is refused
+    bridge.set_login(3, false);
+    let e = client.call_in("worn_items", json!({}), Some(&now)).expect_err("refused");
+    let ClientError::Tool(e) = e else { panic!("not a tool error: {e}") };
+    assert_eq!((e.code, e.viewer_session), (ErrorCode::SessionChanged, None));
+}
+
+#[test]
+fn an_older_sidecar_gets_only_the_codes_it_knows() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    bridge.set_login(1, true);
+    let now = bridge.viewer_session().expect("logged in");
+    // the frame thread refuses a waiting call: the login changed under it
+    let viewer = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let call = calls.recv().expect("a call");
+            call.answer(Err(crate::binding::session_changed(None)));
+        }
+    });
+    let (status, body) = post(&bridge, &json!({"tool": "worn_items", "arguments": {}}));
+    assert_eq!(status, 409);
+    assert_eq!(body["error"]["code"], "not_ready", "{body}");
+    assert!(body["error"].get("viewer_session").is_none());
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let e = client.call_in("worn_items", json!({}), Some(&now)).expect_err("refused");
+    assert_eq!(code(e), ErrorCode::SessionChanged);
+    viewer.join().expect("viewer");
+    // an older sidecar's call is never bound: it reaches the viewer
+    assert_eq!(bridge.activity().len(), 2);
 }
 
 #[test]

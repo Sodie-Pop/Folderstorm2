@@ -74,6 +74,7 @@ fn ctx(inv: &Inventory) -> Ctx<'_> {
         inventory_locked: false,
         protected: HashSet::new(),
         outfit_points: HashMap::new(),
+        viewer_session: None,
     }
 }
 
@@ -810,3 +811,6 @@ fn an_assistant_changes_the_demo_inventory_end_to_end() {
 
 /// A waiting call decided again with the levels and the login in force.
 mod recheck;
+
+/// Calls bound to one login (`viewer_session`) and capability versions.
+mod binding;

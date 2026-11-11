@@ -12,12 +12,18 @@
 //! whose class now asks goes back to asking, and an Allow never answers a
 //! question already asked. A login change or access turned off refuses
 //! every call still waiting. A change already sent is never undone.
+//!
+//! Login binding (folderstorm/plans/mcp-receipts.md, section 2): a bound
+//! tool pinned by its sidecar to another `viewer_session` than the login's
+//! now is refused with `session_changed` when the desk takes it; once taken,
+//! a call belongs to the login generation it was taken under, and a login
+//! change refuses it with `session_changed` too.
 
 use super::changes::{self, Planned, Work};
 use super::tools::{self, Ctx};
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT, ToolSpec};
 use folderstorm_mcp_bridge::server::Pending;
-use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError};
+use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -124,6 +130,9 @@ pub struct Desk {
     /// The login generation the waiting calls were taken under
     /// ([`Desk::set_login`]).
     login: u64,
+    /// That login's `viewer_session` (None while logged out), which a
+    /// bound call must be pinned to, when pinned at all.
+    session: Option<String>,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -134,7 +143,8 @@ fn refused(message: &str) -> ToolError {
 pub const PERMISSIONS_CHANGED: &str =
     "the user changed the permissions in Preferences › Privacy › Local assistant while the call waited: refused, nothing was sent";
 /// The viewer logged out, or in again, while the call waited.
-pub const LOGIN_CHANGED: &str = "the viewer's login changed while the call waited: refused, nothing was sent; look again before retrying";
+pub const LOGIN_CHANGED: &str =
+    "the viewer's login changed while the call waited: refused, nothing was sent. Call viewer_status and look again before retrying";
 /// The user turned local assistant access off while the call waited.
 pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
 
@@ -160,6 +170,14 @@ pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
 }
 
 impl Desk {
+    /// The login changed under `call`: refused, with the login now.
+    fn login_changed(&self) -> ToolError {
+        ToolError {
+            viewer_session: self.session.clone(),
+            ..ToolError::new(ErrorCode::SessionChanged, LOGIN_CHANGED)
+        }
+    }
+
     /// A new call: a read is answered now; a change is checked, then asks
     /// the user or waits to run; `wait_for_bake` waits.
     pub fn take(&mut self, mut call: Pending, cx: &Ctx, now: Instant) {
@@ -167,6 +185,14 @@ impl Desk {
             call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
             return;
         };
+        // pinned by its sidecar to another login than this one
+        if spec.bound()
+            && let Some(pinned) = &call.session
+            && self.session.as_deref() != Some(pinned.as_str())
+        {
+            let refusal = binding::session_changed(self.session.as_deref());
+            return call.answer(Err(refusal));
+        }
         // the levels may have changed while the call was queued
         match decision(&self.permissions, &call.tool) {
             Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
@@ -209,26 +235,29 @@ impl Desk {
         self.permissions = permissions;
     }
 
-    /// The login generation now, given each frame before the calls: when it
-    /// moved, every call still waiting (question, change not sent, bake
-    /// wait) is refused. Changes already sent wait for their answer.
-    pub fn set_login(&mut self, generation: u64) {
+    /// The login generation now and its `viewer_session`, given each frame
+    /// before the calls: when the generation moved, every call still
+    /// waiting (question, change not sent, bake wait) is refused with
+    /// `session_changed`. Changes already sent wait for their answer.
+    pub fn set_login(&mut self, generation: u64, session: Option<String>) {
+        self.session = session;
         if generation == self.login {
             return;
         }
         self.login = generation;
-        self.refuse_waiting(LOGIN_CHANGED);
+        let refusal = self.login_changed();
+        self.refuse_waiting(&refusal);
     }
 
-    fn refuse_waiting(&mut self, message: &str) {
+    fn refuse_waiting(&mut self, refusal: &ToolError) {
         for ask in std::mem::take(&mut self.asks) {
-            ask.call.answer(Err(refused(message)));
+            ask.call.answer(Err(refusal.clone()));
         }
         for ready in std::mem::take(&mut self.ready) {
-            ready.call.answer(Err(refused(message)));
+            ready.call.answer(Err(refusal.clone()));
         }
         for wait in std::mem::take(&mut self.bakes) {
-            wait.call.answer(Err(refused(message)));
+            wait.call.answer(Err(refusal.clone()));
         }
     }
 
@@ -237,7 +266,7 @@ impl Desk {
     /// starts empty.
     pub fn close(&mut self) {
         let mut old = std::mem::take(self);
-        old.refuse_waiting(ACCESS_OFF);
+        old.refuse_waiting(&refused(ACCESS_OFF));
         for flight in old.sending.take().into_iter().chain(old.sent) {
             flight.call.answer(Err(ToolError::new(
                 ErrorCode::Timeout,
@@ -249,10 +278,11 @@ impl Desk {
     /// Just before the app sends `call`'s change: decided again with the
     /// levels and the login in force. Some: send it now. None: it was
     /// refused, or it goes back to the dialog (its class asks now).
-    pub fn recheck(&mut self, call: Pending, login: u64, cx: &Ctx, now: Instant) -> Option<Pending> {
-        if login != self.login {
-            self.set_login(login);
-            call.answer(Err(refused(LOGIN_CHANGED)));
+    pub fn recheck(&mut self, call: Pending, login: u64, session: Option<String>, cx: &Ctx, now: Instant) -> Option<Pending> {
+        let moved = login != self.login;
+        self.set_login(login, session);
+        if moved {
+            call.answer(Err(self.login_changed()));
             return None;
         }
         match decision(&self.permissions, &call.tool) {

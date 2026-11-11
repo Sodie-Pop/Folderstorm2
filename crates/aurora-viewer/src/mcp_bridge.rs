@@ -11,7 +11,10 @@
 //! window's and Appearance's own paths. The call waits in [`Desk`] until the
 //! server confirms the change ([`observe`]), all polled once per frame.
 //! The desk decides every waiting call again with the permissions and the
-//! login in force ([`desk`], [`login`]).
+//! login in force ([`desk`], [`login`]). The bridge names each login with a
+//! `viewer_session` that the sidecar pins: a call pinned to another login is
+//! refused with `session_changed` (folderstorm/plans/mcp-receipts.md,
+//! section 2).
 
 pub mod ask;
 #[cfg(test)]
@@ -135,7 +138,13 @@ impl View<'_> {
             inventory_locked: world.rlva.has("showinv"),
             protected: self.protected.clone(),
             outfit_points: world.outfit_attachment_points(),
+            viewer_session: None,
         }
+    }
+
+    /// Logged in, or the demo: a login the calls can be bound to.
+    fn logged_in(&self) -> bool {
+        self.demo || self.world.login.is_some()
     }
 
     /// Where the last outfit change stands, for `wait_for_bake`.
@@ -206,13 +215,19 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             running.bridge.set_permissions(wanted.permissions);
         }
         // before any call: the desk decides again with what is in force
-        rt.desk.set_login(generation);
+        running.bridge.set_login(generation, view.logged_in());
+        let session = running.bridge.viewer_session();
+        rt.desk.set_login(generation, session.clone());
         rt.desk.set_permissions(wanted.permissions);
         let now = Instant::now();
         let mut cx = None;
+        let context = || tools::Ctx {
+            viewer_session: session.clone(),
+            ..view.context()
+        };
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
-            let cx = cx.get_or_insert_with(|| view.context());
+            let cx = cx.get_or_insert_with(context);
             rt.desk.take(call, cx, now);
         }
         if view.demo && !rt.demo_asked && demo_asks() && !view.world.inventory.root.is_nil() {
@@ -223,7 +238,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 true,
                 Some("Demo assistant"),
             );
-            rt.desk.take(call, cx.get_or_insert_with(|| view.context()), now);
+            rt.desk.take(call, cx.get_or_insert_with(context), now);
         }
         rt.desk.tick(&view.bake(), now)
     })
@@ -235,12 +250,14 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
 pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)> {
     let cx = view.context();
     let call = with(|rt| {
-        if rt.running.is_none() {
+        let Some(running) = &rt.running else {
             call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
             return None;
-        }
+        };
         let generation = rt.logins.observe(view.world.login.as_ref());
-        rt.desk.recheck(call, generation, &cx, Instant::now())
+        running.bridge.set_login(generation, view.logged_in());
+        let session = running.bridge.viewer_session();
+        rt.desk.recheck(call, generation, session, &cx, Instant::now())
     })?;
     match changes::plan(&call.tool, &call.arguments, &cx) {
         Ok(planned) => Some((call, planned)),

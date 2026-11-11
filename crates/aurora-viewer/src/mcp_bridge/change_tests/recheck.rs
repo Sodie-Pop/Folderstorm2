@@ -24,6 +24,21 @@ fn move_args() -> Value {
     json!({"ids": [TEXTURE.to_string()], "folder_id": SUBFOLDER.to_string()})
 }
 
+const S1: &str = "vs-11111111111111111111111111111111";
+const S2: &str = "vs-22222222222222222222222222222222";
+
+fn s(session: &str) -> Option<String> {
+    Some(session.to_owned())
+}
+
+/// Refused because the login changed while it waited, naming the login now.
+fn login_changed(answer: &Receiver<Result<Value, ToolError>>, now: Option<&str>) {
+    let e = answered(answer).expect_err("refused");
+    assert_eq!(e.code, ErrorCode::SessionChanged, "{e}");
+    assert_eq!(e.message, LOGIN_CHANGED);
+    assert_eq!(e.viewer_session.as_deref(), now);
+}
+
 /// Refused, with this message.
 fn refused_with(answer: &Receiver<Result<Value, ToolError>>, message: &str) {
     let e = answered(answer).expect_err("refused");
@@ -161,7 +176,7 @@ fn a_login_change_refuses_every_waiting_call() {
     let inv = demo_inventory();
     let now = Instant::now();
     let mut desk = desk_with(ask());
-    desk.set_login(1);
+    desk.set_login(1, s(S1));
     // a change already sent before the relog
     let args = json!({"name": "New"});
     let p = planned(&inv, "inventory_create_folder", args.clone());
@@ -175,9 +190,9 @@ fn a_login_change_refuses_every_waiting_call() {
     desk.take(b, &ctx(&inv), now);
     let q = desk.question(now).expect("the dialog");
     // logged out (or in as someone else): the next frame gives a new generation
-    desk.set_login(2);
-    refused_with(&dialog, LOGIN_CHANGED);
-    refused_with(&bake, LOGIN_CHANGED);
+    desk.set_login(2, None);
+    login_changed(&dialog, None);
+    login_changed(&bake, None);
     assert!(desk.question(now).is_none(), "the dialog closed");
     // a late click on the old dialog sends nothing
     desk.decide(q.number, true);
@@ -212,7 +227,7 @@ fn the_last_check_before_the_send() {
     let inv = demo_inventory();
     let now = Instant::now();
     let mut desk = desk_with(allow_all());
-    desk.set_login(1);
+    desk.set_login(1, s(S1));
     let run = |desk: &mut Desk, ask: bool| {
         let (a, answer) = call("inventory_move", move_args(), ask);
         desk.take(a, &ctx(&inv), now);
@@ -222,29 +237,29 @@ fn the_last_check_before_the_send() {
     };
     // nothing changed: sent
     let (a, _) = run(&mut desk, false);
-    assert!(desk.recheck(a, 1, &ctx(&inv), now).is_some());
+    assert!(desk.recheck(a, 1, s(S1), &ctx(&inv), now).is_some());
     // Never by now
     let (b, answer) = run(&mut desk, false);
     desk.set_permissions(with_level(allow_all(), Class::Move, Level::Never));
-    assert!(desk.recheck(b, 1, &ctx(&inv), now).is_none());
+    assert!(desk.recheck(b, 1, s(S1), &ctx(&inv), now).is_none());
     refused_with(&answer, PERMISSIONS_CHANGED);
     // Ask by now, not asked yet: back to the dialog
     desk.set_permissions(allow_all());
     let (c, answer) = run(&mut desk, false);
     desk.set_permissions(with_level(allow_all(), Class::Move, Level::Ask));
-    assert!(desk.recheck(c, 1, &ctx(&inv), now).is_none());
+    assert!(desk.recheck(c, 1, s(S1), &ctx(&inv), now).is_none());
     assert!(answer.try_recv().is_err());
     assert!(desk.question(now).is_some(), "asks");
     // allowed in the dialog: Ask does not ask twice
     let q = desk.question(now).expect("asks");
     desk.decide(q.number, true);
     let mut runs = desk.tick(&IDLE, now);
-    assert!(desk.recheck(runs.remove(0), 1, &ctx(&inv), now).is_some());
+    assert!(desk.recheck(runs.remove(0), 1, s(S1), &ctx(&inv), now).is_some());
     // another login by now
     desk.set_permissions(allow_all());
     let (d, answer) = run(&mut desk, false);
-    assert!(desk.recheck(d, 2, &ctx(&inv), now).is_none());
-    refused_with(&answer, LOGIN_CHANGED);
+    assert!(desk.recheck(d, 2, s(S2), &ctx(&inv), now).is_none());
+    login_changed(&answer, Some(S2));
 }
 
 /// The sidecar → a real 127.0.0.1 socket → the bridge (Ask before

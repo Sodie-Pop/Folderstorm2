@@ -49,6 +49,9 @@ pub struct Ctx<'a> {
     /// The worn objects' points, temporary attachments left out
     /// (`World::outfit_attachment_points`), for the outfit rules.
     pub outfit_points: HashMap<Uuid, u8>,
+    /// The login's `viewer_session` (None while logged out), which
+    /// `viewer_status` gives.
+    pub viewer_session: Option<String>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {
@@ -110,6 +113,10 @@ fn status(cx: &Ctx) -> Value {
             Session::LoggedIn => "logged_in",
             Session::Demo => "demo",
         },
+        // the login the calls are bound to, and what this viewer implements
+        // (folderstorm/plans/mcp-receipts.md, sections 2 and 3)
+        "viewer_session": cx.viewer_session,
+        "capabilities": folderstorm_mcp_bridge::binding::capabilities(),
         "inventory": {
             "usable": usable && !cx.inventory_locked,
             "locked_by_rlv": cx.inventory_locked,
