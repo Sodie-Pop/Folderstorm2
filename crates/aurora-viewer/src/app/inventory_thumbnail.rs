@@ -251,6 +251,7 @@ impl App {
         });
     }
     pub(super) fn finish_inventory_image(&mut self, request: Uuid, error: Option<String>) {
+        crate::mcp_bridge::image_finished(request, error.as_deref()); // Folderstorm: the local assistant's picture
         self.inventory_images.requests.remove(&request);
         if self.inventory_images.outfit == Some(request) {
             // the gallery's snapshot has no window: Appearance says why
@@ -300,7 +301,8 @@ impl App {
                 continue;
             };
             let outfit = self.inventory_images.outfit == Some(reply.request);
-            if !outfit && panel(&mut self.inventory_ui, reply.request).is_none_or(|st| st.item != Some(item)) {
+            let assistant = crate::mcp_bridge::image_job(reply.request); // Folderstorm: the local assistant's picture has no window
+            if !outfit && !assistant && panel(&mut self.inventory_ui, reply.request).is_none_or(|st| st.item != Some(item)) {
                 self.finish_inventory_image(reply.request, None);
                 continue;
             }

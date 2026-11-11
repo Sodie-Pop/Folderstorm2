@@ -4,7 +4,7 @@
 //! `tools/list`, `tools/call`. Notifications get no answer.
 
 use folderstorm_mcp_bridge::ToolError;
-use folderstorm_mcp_bridge::protocol::TOOLS;
+use folderstorm_mcp_bridge::protocol;
 use serde_json::{Value, json};
 
 /// The protocol revisions this server speaks, newest first; a client
@@ -141,8 +141,7 @@ fn initialize(params: &Value) -> Value {
 }
 
 fn tools_list() -> Value {
-    let tools: Vec<Value> = TOOLS
-        .iter()
+    let tools: Vec<Value> = protocol::all()
         .map(|t| {
             json!({
                 "name": t.name,
@@ -241,7 +240,7 @@ mod tests {
             .iter()
             .map(|t| t["name"].clone())
             .collect();
-        assert_eq!(names.len(), TOOLS.len());
+        assert_eq!(names.len(), protocol::all().count());
         for name in [
             "inventory_search",
             "inventory_move",
@@ -314,5 +313,45 @@ mod tests {
         assert_eq!(a["error"]["code"], INVALID_PARAMS);
         assert_eq!(ask(&mut s, r#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#)["result"], json!({}));
         assert!(s.backend.0.is_empty(), "nothing reached the viewer");
+    }
+
+    /// Folderstorm: phase 3, part 2 (inventory gaps).
+    #[test]
+    fn lists_the_inventory_gap_tools_with_their_hints() {
+        let mut s = Server::new(Fake(Vec::new()));
+        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+        let tools = a["result"]["tools"].as_array().expect("tools");
+        let hint = |name: &str| {
+            tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("{name} listed"))["annotations"]["readOnlyHint"].clone()
+        };
+        for read in [
+            "inventory_get_many",
+            "inventory_system_folder",
+            "inventory_types",
+            "inventory_protected_folders",
+            "inventory_changes",
+            "inventory_landmark",
+            "appearance_outfit_items",
+        ] {
+            assert_eq!(hint(read), true, "{read}");
+        }
+        for change in [
+            "inventory_create_item",
+            "inventory_set_favorite",
+            "inventory_batch_rename",
+            "inventory_set_thumbnail",
+        ] {
+            assert_eq!(hint(change), false, "{change}");
+        }
+        assert!(!tools.iter().any(|t| t["name"] == "inventory_next_owner_set"));
+        let search = tools.iter().find(|t| t["name"] == "inventory_search").expect("search");
+        assert!(search["inputSchema"]["properties"]["filter_links"].is_object());
+        // a call reaches the viewer like any other
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"inventory_types","arguments":{}}}"#,
+        );
+        assert_eq!(a["result"]["isError"], false);
+        assert_eq!(s.backend.0, vec!["inventory_types".to_owned()]);
     }
 }

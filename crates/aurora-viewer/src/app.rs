@@ -3314,6 +3314,11 @@ impl App {
             };
             let gesture = item.asset_type == 21;
             let id = item.id;
+            // Folderstorm: the local assistant's new item: no rename in the inventory
+            if crate::mcp_bridge::created_by_assistant(id) {
+                self.world.inventory.add_items(vec![item]);
+                return;
+            }
             if self.create_landmark_ui.created(id, item.parent, item.asset_type) {
                 // the Create Landmark window edits it: no rename in the inventory
                 self.world.inventory.add_items(vec![item]);

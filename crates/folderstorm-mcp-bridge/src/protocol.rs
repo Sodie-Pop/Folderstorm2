@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::Duration;
 
+// Folderstorm: phase 3, part 2 (inventory gaps), its own catalogue
+pub mod inventory;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -155,7 +158,7 @@ fn no_arguments() -> Value {
 }
 
 fn search_schema() -> Value {
-    json!({
+    let mut schema = json!({
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "Text the name must contain (case-insensitive). Empty matches every name, within the filters."},
@@ -167,7 +170,9 @@ fn search_schema() -> Value {
             "limit": {"type": "integer", "minimum": 1, "maximum": SEARCH_MAX, "default": SEARCH_DEFAULT}
         },
         "additionalProperties": false
-    })
+    });
+    inventory::search_filters(&mut schema["properties"]); // Folderstorm: phase 3 filters
+    schema
 }
 
 fn folder_schema() -> Value {
@@ -461,7 +466,12 @@ pub const TOOLS: &[ToolSpec] = &[
 ];
 
 pub fn tool(name: &str) -> Option<&'static ToolSpec> {
-    TOOLS.iter().find(|t| t.name == name)
+    all().find(|t| t.name == name)
+}
+
+/// Every tool: [`TOOLS`], then the groups phase 3 adds.
+pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
+    TOOLS.iter().chain(inventory::INVENTORY_TOOLS) // Folderstorm: phase 3 groups
 }
 
 #[cfg(test)]

@@ -16,6 +16,12 @@ pub mod ask;
 mod change_tests;
 pub mod changes;
 pub mod desk;
+#[cfg(test)]
+mod gap_tests; // Folderstorm: phase 3, part 2 (inventory gaps)
+pub mod inventory_edits;
+pub mod inventory_reads;
+pub mod journal;
+pub mod landmark;
 pub mod setup;
 #[cfg(test)]
 mod tests;
@@ -54,6 +60,9 @@ struct Runtime {
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
+    /// Items the assistant just created, until the app files them
+    /// (phase 3: no rename box in the inventory for them).
+    created: Vec<Uuid>,
 }
 
 static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -211,8 +220,41 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             );
             rt.desk.take(call, cx.get_or_insert_with(|| view.context()), now);
         }
+        rt.desk.tick_reads(view.world, now);
         rt.desk.tick(&view.bake(), now)
     })
+}
+
+/// Folderstorm: whether `item` was just created by the local assistant
+/// (asked once, when the app files it: it then neither selects nor renames
+/// it in the inventory, as Folderstorm (C++) opens no editor for it).
+pub fn created_by_assistant(item: Uuid) -> bool {
+    with(|rt| match rt.created.iter().position(|id| *id == item) {
+        Some(index) => {
+            rt.created.remove(index);
+            true
+        }
+        None => false,
+    })
+}
+
+/// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
+/// asks the landmark cache for them, phase 3).
+pub fn wanted_landmarks() -> Vec<Uuid> {
+    with(|rt| rt.desk.wanted_landmarks())
+}
+
+/// Folderstorm: whether the Image window's job `request` is the local
+/// assistant's `inventory_set_thumbnail` (it then needs no window).
+pub fn image_job(request: Uuid) -> bool {
+    with(|rt| rt.desk.image_job(request))
+}
+
+/// Folderstorm: the Image window's job `request` ended (an error: why).
+pub fn image_finished(request: Uuid, error: Option<&str>) {
+    if let Some(error) = error {
+        with(|rt| rt.desk.image_failed(request, error));
+    }
 }
 
 /// Plan a change again just before it runs: the inventory may have changed
@@ -236,6 +278,15 @@ pub fn sent(request: Option<Uuid>, failure: Option<String>) {
 /// Every inventory and outfit answer of the server passes here first, so
 /// that a waiting change learns its outcome.
 pub fn observe(event: &aurora_net::NetEvent) {
+    if let aurora_net::NetEvent::InventoryCreated(item) = event {
+        with(|rt| {
+            if rt.desk.created(item) {
+                rt.created.truncate(15);
+                rt.created.insert(0, item.id);
+            }
+        });
+        return;
+    }
     let Some(outcome) = desk::outcome(event) else { return };
     with(|rt| rt.desk.observe(outcome));
 }
