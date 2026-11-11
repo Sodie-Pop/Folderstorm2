@@ -17,6 +17,7 @@ pub(super) fn prepare(ui: &Ui, field: Id, local: bool) {
     if !ui.memory(|m| m.has_focus(field)) {
         return;
     }
+    crate::folderstorm::chat_upload::paste(ui, field); // Folderstorm: chat image upload
     ui.input_mut(|i| {
         i.events.retain_mut(|event| {
             match event {
@@ -73,6 +74,7 @@ pub(super) fn show(
     minimum: f32,
     build: impl FnOnce(TextEdit<'_>) -> TextEdit<'_>,
 ) -> egui::text_edit::TextEditOutput {
+    crate::folderstorm::chat_upload::before_field(ui.ctx(), field, text); // Folderstorm: chat image upload
     let previous = height(ui.ctx(), field, minimum);
     let scroll = ui
         .allocate_ui_with_layout(egui::vec2(width, previous), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -108,6 +110,7 @@ pub(super) fn show(
     }
     output.response.response.rect = output.response.rect.intersect(scroll.inner_rect);
     output.text_clip_rect = output.text_clip_rect.intersect(scroll.inner_rect);
+    crate::folderstorm::chat_upload::after_field(ui, field, scroll.inner_rect); // Folderstorm: chat image upload
     output
 }
 

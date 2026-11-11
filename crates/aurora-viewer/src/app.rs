@@ -9369,6 +9369,7 @@ impl App {
         self.viewport_demo(gfx.renderer.size());
         gfx.renderer.set_world_rect(self.world_viewport(gfx.renderer.size()));
         folderstorm_viewport::publish_monitors(&self.egui_ctx, &gfx.window, self.frame_count);
+        crate::folderstorm::chat_upload::frame(&self.settings.folderstorm_chat_upload, &self.palette); // Folderstorm
         let (w, h) = gfx.renderer.size();
         // a photo drawn at its own size this frame: its proportions, the
         // part of it this frame draws, the height its details are chosen for

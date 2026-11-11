@@ -3432,6 +3432,11 @@ fn classic_pane(
                 let b = tool_resp(ui, p, icons, "gif", st.gif_open).on_hover_text(aurora_i18n::tr!("ui-chat-gif"));
                 gif_picker::button(&b, p, st);
             }
+            // Folderstorm: chat image upload (folderstorm/chat_upload)
+            if crate::folderstorm::chat_upload::usable() {
+                let b = tool_resp(ui, p, icons, "photo-filled", false).on_hover_text(aurora_i18n::tr!("fs-chat-upload-button"));
+                crate::folderstorm::chat_upload::button(ui.ctx(), &b, conv_input);
+            }
             // leave exactly the send button + spacing (else the row overflows
             // and the resizable window grows every frame)
             let field_w = (ui.available_width() - SEND_BTN_W - ui.spacing().item_spacing.x).floor().max(40.0);
