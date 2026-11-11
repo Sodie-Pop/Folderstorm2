@@ -250,7 +250,9 @@ impl App {
             self.folderstorm_characters.report.show = None;
             return;
         }
-        if self.gfx.is_some()
+        // (a window not shown yet would be revealed early, or lose the
+        // placing to its own first show: it waits)
+        if self.gfx.as_ref().is_some_and(|g| g.shown)
             && let Some(stage) = self.folderstorm_characters.report.show.take()
         {
             self.folderstorm_show(stage);
