@@ -1,26 +1,21 @@
 //! The image host's token: the user's own, kept in the system's credential
 //! store (Windows Credential Manager, macOS Keychain, Secret Service on
 //! Linux) under `folderstorm_brand::KEYRING_IMAGE_HOST`, with the host's
-//! address as the account, like the login secrets (`credentials.rs`); or
-//! the token a release build carries for Folderstorm's own host.
+//! address as the account, like the login secrets (`credentials.rs`).
+//!
+//! A build never carries a token of its own: anything compiled into a
+//! release can be read out of it, so a built-in token would be public.
+//! Folderstorm's host takes uploads into a folder without one (the build's
+//! folder, `settings::built_in_folder`).
 //!
 //! A token is never written to the settings, the logs or the screen, and
 //! never sent to another host than the one it belongs to.
-
-/// The token a build may carry for the default host, from the
-/// `FOLDERSTORM_IMAGE_HOST_TOKEN` variable at compile time (a release
-/// workflow's secret). Never committed.
-pub fn built_in() -> Option<&'static str> {
-    option_env!("FOLDERSTORM_IMAGE_HOST_TOKEN").filter(|token| !token.trim().is_empty())
-}
 
 /// What the upload sends as `authorization`.
 #[derive(Clone, PartialEq, Eq)]
 pub enum Auth {
     /// The user's own token for this host.
     User(String),
-    /// The build's token: only for the default host.
-    BuiltIn(String),
     /// No header: a host that takes uploads without a token.
     None,
 }
@@ -28,7 +23,7 @@ pub enum Auth {
 impl Auth {
     pub fn header(&self) -> Option<&str> {
         match self {
-            Auth::User(token) | Auth::BuiltIn(token) => Some(token.trim()),
+            Auth::User(token) => Some(token.trim()),
             Auth::None => None,
         }
     }
@@ -39,26 +34,18 @@ impl std::fmt::Debug for Auth {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Auth::User(_) => "Auth::User(…)",
-            Auth::BuiltIn(_) => "Auth::BuiltIn(…)",
             Auth::None => "Auth::None",
         })
     }
 }
 
-/// The user's token for `origin` if they saved one; else the build's, only
-/// when `origin` is the default host (a token made for Folderstorm's host
-/// must never go to another); else none.
-pub fn resolve(origin: &str, user: Option<String>, built_in: Option<&str>) -> Auth {
-    if let Some(token) = user.filter(|t| usable(t)) {
-        return Auth::User(token);
+/// The token the user saved for the host, when it can go in a header;
+/// else none.
+pub fn resolve(user: Option<String>) -> Auth {
+    match user.filter(|t| usable(t)) {
+        Some(token) => Auth::User(token),
+        None => Auth::None,
     }
-    let default = super::settings::origin(folderstorm_brand::IMAGE_HOST);
-    if let Some(token) = built_in.filter(|t| usable(t))
-        && default.as_deref() == Some(origin)
-    {
-        return Auth::BuiltIn(token.to_owned());
-    }
-    Auth::None
 }
 
 /// A token that can go in a header: printable ASCII, bounded.

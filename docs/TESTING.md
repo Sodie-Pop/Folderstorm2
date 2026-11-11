@@ -169,7 +169,9 @@ by itself; `fail` refuses every image as too large; `token` refuses as a host
 that needs a token. Check the confirmation (preview, size, host, the public
 notice), the progress chip and its Stop, the link put at the text cursor (never
 sent by itself), the error chips with Try again and Dismiss, and the settings
-under Preferences › Chat › Image uploads.
+under Preferences › Chat › Image uploads (a build can carry an upload folder for
+Folderstorm's host, shown only as present or absent, but never a token: the
+only token is one the user saves for their own host).
 
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect

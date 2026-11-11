@@ -4,8 +4,8 @@
 //!
 //! The token is never part of the settings: "Save token" writes it to the
 //! system's credential store for the host shown, at once, and the field is
-//! emptied. The built-in token and folder are never shown, only whether the
-//! build has them.
+//! emptied. The built-in folder is never shown, only whether the build has
+//! one; a build never carries a token (`chat_upload::token`).
 
 use super::super::cx::{Cx, Nothing, field};
 use crate::folderstorm::chat_upload::{self, TokenStatus, settings, token};
@@ -78,15 +78,6 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     token_row(ui, &p, &s.folderstorm_chat_upload);
                     false
                 });
-            cx.row(
-                tr!("fs-chat-upload-builtin-token"),
-                tr!("fs-chat-upload-builtin-token-help"),
-                &Nothing,
-                |ui, _| {
-                    present(ui, &p, token::built_in().is_some());
-                    false
-                },
-            );
             cx.slider(
                 tr!("fs-chat-upload-max"),
                 tr!("fs-chat-upload-max-help"),

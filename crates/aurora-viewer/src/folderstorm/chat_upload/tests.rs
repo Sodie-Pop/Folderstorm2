@@ -237,7 +237,7 @@ fn the_request_s_debug_print_hides_the_token() {
         Some("secret-folder"),
         &prepared_png(),
     );
-    let printed = format!("{request:?} {:?}", Auth::BuiltIn("secret-token".into()));
+    let printed = format!("{request:?} {:?}", Auth::User("secret-token".into()));
     assert!(!printed.contains("secret-token"), "{printed}");
     assert!(!printed.contains("secret-folder"), "{printed}");
 }
@@ -245,21 +245,19 @@ fn the_request_s_debug_print_hides_the_token() {
 // ---- the token and the folder
 
 #[test]
-fn the_user_s_token_comes_first_then_the_built_in_one_on_its_host_only() {
-    let default = settings::origin(folderstorm_brand::IMAGE_HOST).expect("default host");
-    let built = Some("build-token");
-    assert_eq!(resolve(&default, Some("mine".into()), built), Auth::User("mine".into()));
-    assert_eq!(resolve(&default, None, built), Auth::BuiltIn("build-token".into()));
-    // an empty saved token does not hide the built-in one
-    assert_eq!(resolve(&default, Some("  ".into()), built), Auth::BuiltIn("build-token".into()));
-    assert_eq!(resolve(&default, None, None), Auth::None);
-    assert_eq!(resolve(&default, None, Some("")), Auth::None);
-    // never to another host
-    assert_eq!(resolve("https://other.example", None, built), Auth::None);
-    assert_eq!(
-        resolve("https://other.example", Some("mine".into()), built),
-        Auth::User("mine".into())
+fn only_the_user_s_own_token_is_ever_sent() {
+    // a build carries no token: without the user's, no authorization header
+    assert_eq!(resolve(Some("mine".into())), Auth::User("mine".into()));
+    assert_eq!(resolve(None), Auth::None);
+    assert_eq!(resolve(Some("  ".into())), Auth::None);
+    assert_eq!(resolve(Some("two words".into())), Auth::None);
+    let request = zipline::request(
+        &settings::origin(folderstorm_brand::IMAGE_HOST).expect("default host"),
+        &resolve(None),
+        Some("builtFolder1"),
+        &prepared_png(),
     );
+    assert!(request.headers.iter().all(|(name, _)| *name != "authorization"));
 }
 
 #[test]

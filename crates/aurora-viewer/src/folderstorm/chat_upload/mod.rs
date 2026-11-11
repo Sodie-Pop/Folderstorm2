@@ -314,9 +314,7 @@ fn stage(ctx: &egui::Context, field: egui::Id, source: Source) {
     let Some((origin, folder)) = destination() else { return };
     // a host is reached through an upload folder or a token: without
     // either, say what to set instead of sending a request bound to fail
-    let token_known = demo::mode().is_some()
-        || matches!(token::resolve(&origin, None, token::built_in()), token::Auth::BuiltIn(_))
-        || token_status(ctx, &origin) != TokenStatus::Absent;
+    let token_known = demo::mode().is_some() || token_status(ctx, &origin) != TokenStatus::Absent;
     let (id, max) = {
         let mut u = uploads();
         let busy = u
@@ -415,8 +413,7 @@ fn start_upload(ctx: &egui::Context, job: &mut Job) {
         let result = match demo::mode() {
             Some(mode) => upload(&demo::Fake(mode), &origin, token::Auth::None, folder.as_deref(), &image),
             None => {
-                let user = token::SystemStore.read(&origin);
-                let auth = token::resolve(&origin, user, token::built_in());
+                let auth = token::resolve(token::SystemStore.read(&origin));
                 upload(&zipline::Network, &origin, auth, folder.as_deref(), &image)
             }
         };
