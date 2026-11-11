@@ -40,6 +40,9 @@ pub enum Kind {
     Refused(Refusal),
     Status(Box<Status>),
     Heartbeat(u64),
+    /// The viewer never reached its endpoint: only other clients came, or
+    /// the endpoint failed. Nothing more comes from this launch.
+    Unreachable,
 }
 
 /// A started viewer.
@@ -168,6 +171,11 @@ pub fn spawn(slot: usize, launch: u32, profile: &ProfileName, events: &Sender<Ev
                 Err(e) => {
                     if !cancelled.load(Ordering::Acquire) {
                         log::warn!("session host: character {} did not reach its endpoint ({e})", slot + 1);
+                        let _ = events.send(Event {
+                            slot,
+                            launch,
+                            kind: Kind::Unreachable,
+                        });
                     }
                     return;
                 }
@@ -468,6 +476,7 @@ mod tests {
                 Kind::Status(status) => desk.status(slot, launch, (**status).clone(), now),
                 Kind::Heartbeat(count) => desk.heartbeat(slot, launch, *count, now),
                 Kind::Refused(refusal) => desk.refused(slot, launch, *refusal),
+                Kind::Unreachable => desk.unreachable(slot, launch),
             }
             kinds.push(kind);
         }

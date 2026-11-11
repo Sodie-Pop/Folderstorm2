@@ -241,7 +241,11 @@ impl Window_ {
                     if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
                         acts.push(Act::Dismiss);
                     }
-                } else if state.closing || self.host.desk.health(slot, now) != Health::Healthy || state.note.is_some() {
+                } else if state.closing
+                    || self.host.desk.health(slot, now) != Health::Healthy
+                    || state.note.is_some()
+                    || self.host.desk.starting_too_long(slot, now)
+                {
                     // offered only when something is wrong: never the usual way out
                     let end = tr!("folderstorm-host-end");
                     if widgets::action_button(ui, p, "player-stop-filled", end, ActionKind::FlatDanger, BUTTON)
@@ -491,7 +495,11 @@ fn warnings(desk: &::folderstorm_session::host::Desk, slot: usize, state: &Slot,
         Some(Note::OpenElsewhere) => lines.push((tr!("folderstorm-host-note-elsewhere").to_owned(), false)),
         Some(Note::Refused(Refusal::Build)) => lines.push((tr!("folderstorm-host-note-build").to_owned(), true)),
         Some(Note::Refused(_)) => lines.push((tr!("folderstorm-host-note-refused").to_owned(), true)),
+        Some(Note::NoLink) => lines.push((tr!("folderstorm-host-note-no-link").to_owned(), true)),
         None => {}
+    }
+    if desk.starting_too_long(slot, now) {
+        lines.push((tr!("folderstorm-host-start-slow").to_owned(), false));
     }
     match desk.health(slot, now) {
         Health::Healthy => {}

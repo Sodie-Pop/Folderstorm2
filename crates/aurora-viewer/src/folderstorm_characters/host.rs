@@ -160,6 +160,7 @@ impl Host {
                 process::Kind::Refused(refusal) => self.desk.refused(slot, launch, refusal),
                 process::Kind::Status(status) => self.desk.status(slot, launch, *status, now),
                 process::Kind::Heartbeat(count) => self.desk.heartbeat(slot, launch, count, now),
+                process::Kind::Unreachable => self.desk.unreachable(slot, launch),
             }
         }
         for slot in 0..MAX_SLOTS {

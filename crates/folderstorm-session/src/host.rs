@@ -41,6 +41,10 @@ pub const RESEND_AFTER: Duration = Duration::from_secs(2);
 /// After the host placed a window, how long that window's reported place
 /// is not taken as the stage: it may still be on its way there.
 pub const STAGE_SETTLE: Duration = Duration::from_millis(1500);
+/// A viewer whose process runs but has not reported for this long since
+/// it started is noted, and End is offered (it may be held by a dialog, a
+/// slow disk, or never reach the host).
+pub const START_NOTE_AFTER: Duration = Duration::from_secs(60);
 
 /// One character of the host's settings file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +152,9 @@ pub enum Note {
     OpenElsewhere,
     /// The viewer's first report was refused.
     Refused(Refusal),
+    /// The viewer never reached the host's endpoint (only other clients
+    /// came, or the endpoint failed).
+    NoLink,
 }
 
 /// One character of the desk.
@@ -172,6 +179,8 @@ pub struct Slot {
     voice_out: bool,
     was_focused: bool,
     placed: Option<Instant>,
+    /// When the desk first saw it starting (`tick`).
+    starting_since: Option<Instant>,
 }
 
 impl Slot {
@@ -193,6 +202,7 @@ impl Slot {
             voice_out: false,
             was_focused: false,
             placed: None,
+            starting_since: None,
         }
     }
 
@@ -486,6 +496,12 @@ impl Desk {
         }
     }
 
+    /// The viewer never reached the endpoint of that launch: it cannot be
+    /// managed (it finds no host and goes on by itself).
+    pub fn unreachable(&mut self, slot: usize, launch: u32) {
+        self.let_go(slot, launch, Note::NoLink);
+    }
+
     /// The viewer's link thread is alive, and its main loop has made
     /// `loop_count` turns.
     pub fn heartbeat(&mut self, slot: usize, launch: u32, loop_count: u64, now: Instant) {
@@ -585,8 +601,14 @@ impl Desk {
         }
     }
 
-    /// Now and then: assignments not acknowledged are sent again.
+    /// Now and then: assignments not acknowledged are sent again, and how
+    /// long each viewer has been starting is kept.
     pub fn tick(&mut self, now: Instant) {
+        for s in self.slots.iter_mut().flatten() {
+            if s.phase == Phase::Starting {
+                s.starting_since.get_or_insert(now);
+            }
+        }
         for slot in 0..MAX_SLOTS {
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running && !s.acknowledged()) else {
                 continue;
@@ -600,6 +622,15 @@ impl Desk {
                 self.send(slot, message);
             }
         }
+    }
+
+    /// The viewer's process has run for [`START_NOTE_AFTER`] without
+    /// reporting: noted, with End offered. Never ended by itself.
+    pub fn starting_too_long(&self, slot: usize, now: Instant) -> bool {
+        self.slot(slot)
+            .filter(|s| s.phase == Phase::Starting)
+            .and_then(|s| s.starting_since)
+            .is_some_and(|since| now.saturating_duration_since(since) >= START_NOTE_AFTER)
     }
 
     /// How a viewer answers. Never a reason to end it.
@@ -1155,6 +1186,29 @@ mod tests {
     }
 
     #[test]
+    fn a_viewer_starting_for_a_minute_is_noted_never_ended() {
+        let (mut d, now) = desk(1);
+        d.launch(0, true);
+        d.tick(now);
+        assert!(!d.starting_too_long(0, now + START_NOTE_AFTER - Duration::from_secs(1)));
+        assert!(d.starting_too_long(0, now + START_NOTE_AFTER));
+        d.tick(now + START_NOTE_AFTER);
+        assert!(
+            !d.take_effects().iter().any(|e| matches!(e, Effect::Kill { .. })),
+            "only the user ends it"
+        );
+        // a viewer let go is not starting any more: no note
+        let (mut u, _) = desk(1);
+        u.launch(0, true);
+        u.tick(now);
+        u.refused(0, 1, Refusal::Token);
+        assert!(!u.starting_too_long(0, now + START_NOTE_AFTER));
+        // it reports at last: no note any more
+        d.connected(0, 1, now + START_NOTE_AFTER);
+        assert!(!d.starting_too_long(0, now + START_NOTE_AFTER * 2));
+    }
+
+    #[test]
     fn an_assignment_not_acknowledged_is_sent_again() {
         let (mut d, now) = desk(1);
         start(&mut d, 0, true, now);
@@ -1235,6 +1289,18 @@ mod tests {
         assert_eq!((s.phase, s.note), (Phase::Stopped, Some(Note::SpawnFailed)));
         d.note(0, Note::OpenElsewhere);
         assert_eq!(d.slot(0).expect("slot").note, Some(Note::OpenElsewhere));
+        // a viewer that never reached the endpoint is let go the same way
+        d.launch(0, true);
+        d.take_effects();
+        d.unreachable(0, 3);
+        let s = d.slot(0).expect("slot");
+        assert_eq!((s.phase, s.note), (Phase::Unmanaged, Some(Note::NoLink)));
+        assert_eq!(d.take_effects(), vec![Effect::LetGo { slot: 0, launch: 3 }]);
+        // a late refusal or report of that launch changes nothing
+        d.refused(0, 3, Refusal::Token);
+        d.connected(0, 3, now);
+        assert_eq!(d.slot(0).expect("slot").phase, Phase::Unmanaged);
+        assert!(d.take_effects().is_empty());
     }
 
     #[test]
