@@ -186,9 +186,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             ui.label(egui::RichText::new(text).size(12.5).color(color));
             false
         });
-        cx.wide()
+        // the label above, one entry per line across the whole row (in the
+        // control column each entry wrapped over several lines)
+        cx.below()
             .row(tr!("fs-mcp-activity"), tr!("fs-mcp-activity-hint"), &Nothing, |ui, _| {
                 ui.vertical(|ui| {
+                    ui.set_width(ui.available_width());
                     if status.activity.is_empty() {
                         ui.label(egui::RichText::new(tr!("fs-mcp-activity-none")).size(12.0).color(p.muted));
                     }
@@ -211,7 +214,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                             outcome = outcome.to_owned(),
                             ago = ago
                         );
-                        ui.label(egui::RichText::new(line).size(12.0).color(p.ink));
+                        ui.add(egui::Label::new(egui::RichText::new(line).size(12.0).color(p.ink)).truncate());
                     }
                 });
                 false
