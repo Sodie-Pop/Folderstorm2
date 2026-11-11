@@ -14,13 +14,14 @@ use uuid::Uuid;
 mod clipboard;
 mod folders;
 mod gallery;
-// Folderstorm: Restore previous look
+// Folderstorm: Outfit Gallery thumbnail size
+pub(crate) mod gallery_size;
 pub(crate) mod items;
 pub(crate) mod json;
 mod layers;
 #[cfg(test)]
 mod perf_tests;
-pub(crate) mod previous_look;
+pub(crate) mod previous_look; // Folderstorm: Restore previous look
 mod selection;
 pub use clipboard::{PasteTo, Request as ClipboardRequest};
 
@@ -34,6 +35,8 @@ pub struct AppearanceUi {
     pub(crate) json: json::State,
     pub tab: usize,
     pub fill_previews: bool,
+    // Folderstorm: the gallery's photo width, 0 = automatic (gallery_size.rs)
+    pub gallery_size: f32,
     pub editing: bool,
     edit_tab: usize,
     search: String,
@@ -826,8 +829,8 @@ fn gallery(
 ) {
     // the columns follow the list's width, not what its scroll bar leaves:
     // the bar's strip must not drop a column
-    let columns = if list_width >= 540.0 { 3 } else { 2 };
-    let width = ((ui.available_width() - 10.0 * (columns - 1) as f32) / columns as f32).max(90.0);
+    // Folderstorm: a chosen thumbnail size, or Aurora's two or three columns
+    let (columns, width) = gallery_size::layout(list_width, ui.available_width(), st.gallery_size);
     // Only the rows in sight are laid out (with their thumbnails asked
     // for); the others leave their height: that of the first row, drawn at
     // every frame to measure it, give or take what a row measured when last
@@ -1882,6 +1885,7 @@ pub fn show(
                         aurora_i18n::tr!("ui-appearance-fill-previews"),
                         &mut st.fill_previews,
                     );
+                    gallery_size::menu_rows(ui, p, &mut st.gallery_size); // Folderstorm: thumbnail size
                     menu::separator(ui, p);
                 }
                 if !st.editing && st.tab < 2 {

@@ -64,6 +64,9 @@ pub(crate) struct SurfaceState {
     pub width: u32,
     pub height: u32,
     pub vsync: bool,
+    /// Folderstorm: the world's part of the window (x, y, width, height in
+    /// pixels), the whole window when None (folderstorm_viewport.rs).
+    pub world_rect: Option<[u32; 4]>,
 }
 
 /// The scene's data on the GPU for one frame: handles (reference counted)
