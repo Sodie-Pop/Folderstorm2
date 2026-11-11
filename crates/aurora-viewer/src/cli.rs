@@ -32,11 +32,11 @@ pub struct Cli {
     /// `--uninstall`: remove what the viewer registered on this computer,
     /// print what it did and exit, without a window (`uninstall.rs`).
     pub uninstall: bool,
-    /// Folderstorm: `--mcp-api`, local assistant access for this session only.
-    pub mcp_api: bool,
     // Folderstorm: `--profile <name>`, one character's own settings
     // (folderstorm_characters/profile.rs); checked there, never used raw
     pub profile: Option<String>,
+    /// Folderstorm: `--mcp-api`, local assistant access for this session only.
+    pub mcp_api: bool,
     help: bool,
     version: bool,
 }
@@ -88,8 +88,8 @@ pub fn get() -> &'static Cli {
                 .collect::<Vec<_>>()
                 .join(", ");
             println!("{}", aurora_i18n::tr!("cli-help", languages = languages));
-            println!("{}", aurora_i18n::tr!("fs-mcp-cli-help")); // Folderstorm: --mcp-api
             println!("{}", aurora_i18n::tr!("folderstorm-cli-help-profile")); // Folderstorm: --profile
+            println!("{}", aurora_i18n::tr!("fs-mcp-cli-help")); // Folderstorm: --mcp-api
             std::process::exit(0);
         }
         if cli.version {

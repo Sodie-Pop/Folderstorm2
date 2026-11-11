@@ -1155,8 +1155,8 @@ exe before publishing; the local build also writes it to `version.txt`.
 | `-h`, `--help` | Shows the help |
 | `-V`, `--version` | Prints the built version then exits, with no window, log or network |
 | `--uninstall` | Removes what Aurora registered on this computer, prints it and the folders left, then exits, with no window |
-| `--mcp-api` | Folderstorm2: allows local assistant access (the MCP bridge) for this session only, without saving it |
 | `--profile <name>` (Folderstorm2) | Runs a separate character profile: its own settings, cache, log and window title; one window per profile |
+| `--mcp-api` | Folderstorm2: allows local assistant access (the MCP bridge) for this session only, without saving it |
 
 - `--title`: the build profile ends the title (Dev, Release, Debug); the log
   file is `aurora-<text>.log` (`aurora-demo-<text>.log` in demo mode).

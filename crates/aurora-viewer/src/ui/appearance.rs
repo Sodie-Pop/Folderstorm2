@@ -16,13 +16,12 @@ mod folders;
 mod gallery;
 // Folderstorm: Outfit Gallery thumbnail size
 pub(crate) mod gallery_size;
-// Folderstorm: Restore previous look
 pub(crate) mod items;
 pub(crate) mod json;
 mod layers;
 #[cfg(test)]
 mod perf_tests;
-pub(crate) mod previous_look;
+pub(crate) mod previous_look; // Folderstorm: Restore previous look
 mod selection;
 pub use clipboard::{PasteTo, Request as ClipboardRequest};
 
