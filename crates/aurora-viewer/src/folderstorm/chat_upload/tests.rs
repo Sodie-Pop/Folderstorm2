@@ -447,6 +447,108 @@ fn a_jpeg_loses_its_metadata_but_keeps_its_orientation() {
     assert_eq!(clean.bytes, plain);
 }
 
+/// A progressive JPEG (16 × 8, several scans) made with Pillow.
+const PROGRESSIVE: &[u8] = include_bytes!("testdata/progressive.jpg");
+
+/// The offsets of a JPEG's markers of `kind` (outside entropy-coded data
+/// for this file, whose scans hold no such byte pair).
+fn markers(bytes: &[u8], kind: u8) -> Vec<usize> {
+    (0..bytes.len().saturating_sub(1))
+        .filter(|&n| bytes[n] == 0xff && bytes[n + 1] == kind)
+        .collect()
+}
+
+#[test]
+fn nothing_after_the_end_of_a_jpeg_is_sent() {
+    let plain = jpeg(16, 8);
+    // a phone's second picture (MPF) with its own EXIF and location, then
+    // a motion photo's video with a location atom
+    let mut tagged = plain.clone();
+    tagged.extend_from_slice(&[0xff, 0xd8]);
+    tagged.extend_from_slice(&exif_segment(1));
+    tagged.extend_from_slice(&plain[2..]);
+    tagged.extend_from_slice(b"\0\0\0\x18ftypmp42\0\0\0\0isommp42\0\0\0\x1c\xa9xyz+48.8566+002.3522/");
+    let prepared = img::prepare_bytes(tagged, 1 << 20).expect("prepared");
+    assert!(prepared.stripped);
+    assert_eq!(prepared.bytes, plain);
+    assert!(!prepared.bytes.windows(3).any(|w| w == b"GPS"));
+    assert!(!prepared.bytes.windows(4).any(|w| w == b"\xa9xyz"));
+}
+
+#[test]
+fn segments_between_the_scans_of_a_progressive_jpeg_are_left_out() {
+    let plain = img::prepare_bytes(PROGRESSIVE.to_vec(), 1 << 20).expect("prepared");
+    assert!(!plain.stripped);
+    assert_eq!(plain.bytes, PROGRESSIVE);
+    let scans = markers(PROGRESSIVE, 0xda);
+    assert!(scans.len() > 2, "{scans:?}");
+    // before the second and the last scans: EXIF with a location, a comment
+    let mut tagged = PROGRESSIVE[..scans[1]].to_vec();
+    tagged.extend_from_slice(&exif_segment(6));
+    let last = *scans.last().expect("a last scan");
+    tagged.extend_from_slice(&PROGRESSIVE[scans[1]..last]);
+    let comment = b"taken at home";
+    tagged.extend_from_slice(&[0xff, 0xfe]);
+    tagged.extend_from_slice(&((comment.len() + 2) as u16).to_be_bytes());
+    tagged.extend_from_slice(comment);
+    tagged.extend_from_slice(&PROGRESSIVE[last..]);
+    let prepared = img::prepare_bytes(tagged, 1 << 20).expect("prepared");
+    assert!(prepared.stripped);
+    // an orientation found after the first scan comes too late to count
+    assert_eq!(prepared.bytes, PROGRESSIVE);
+    ::image::load_from_memory(&prepared.bytes).expect("still a picture");
+}
+
+#[test]
+fn a_jpeg_cut_short_never_panics_nor_hangs() {
+    let mut tagged = PROGRESSIVE.to_vec();
+    tagged.extend_from_slice(&exif_segment(3));
+    for source in [PROGRESSIVE.to_vec(), jpeg(16, 8), tagged] {
+        for cut in 0..source.len() {
+            let piece = &source[..cut];
+            if let Ok((out, _)) = img::strip_jpeg(piece) {
+                // closed, and never longer than the piece and its EOI
+                assert!(out.ends_with(&[0xff, 0xd9]), "cut at {cut}");
+                assert!(out.len() <= piece.len() + 2, "cut at {cut}");
+            }
+            let _ = img::prepare_bytes(piece.to_vec(), 1 << 20);
+        }
+    }
+    // stuffed bytes and restart markers are picture data, not segments
+    let mut scan = PROGRESSIVE[..markers(PROGRESSIVE, 0xda)[0]].to_vec();
+    scan.extend_from_slice(&[0xff, 0xda, 0, 8, 1, 1, 0, 0, 0x3f, 0]);
+    scan.extend_from_slice(&[0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56, 0xff, 0xff, 0xd9, 1, 2, 3]);
+    let (out, stripped) = img::strip_jpeg(&scan).expect("walked");
+    assert!(stripped);
+    assert!(out.ends_with(&[0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56, 0xff, 0xd9]));
+}
+
+#[test]
+fn a_jfif_thumbnail_is_left_out() {
+    let plain = jpeg(16, 8);
+    // JFIF with a 2 × 1 thumbnail, then a JFXX thumbnail
+    let mut jfif = vec![0xff, 0xe0, 0, 16 + 6];
+    jfif.extend_from_slice(b"JFIF\0\x01\x02\0\0\x01\0\x01\x02\x01");
+    jfif.extend_from_slice(&[9, 9, 9, 8, 8, 8]);
+    let mut jfxx = vec![0xff, 0xe0, 0, 2 + 6 + 3];
+    jfxx.extend_from_slice(b"JFXX\0\x13");
+    jfxx.extend_from_slice(&[7, 7, 7]);
+    let mut tagged = plain[..2].to_vec();
+    tagged.extend_from_slice(&jfif);
+    tagged.extend_from_slice(&jfxx);
+    let body_at = 2 + usize::from(u16::from_be_bytes([plain[4], plain[5]])) + 2;
+    let skip = if plain[3] == 0xe0 { body_at } else { 2 };
+    tagged.extend_from_slice(&plain[skip..]);
+    let prepared = img::prepare_bytes(tagged, 1 << 20).expect("prepared");
+    assert!(prepared.stripped);
+    let out = &prepared.bytes;
+    assert_eq!(&out[2..4], &[0xff, 0xe0]);
+    assert_eq!(&out[4..6], &[0, 16]);
+    assert_eq!(&out[6..20], b"JFIF\0\x01\x02\0\0\x01\0\x01\0\0");
+    assert!(!out.windows(4).any(|w| w == b"JFXX"));
+    ::image::load_from_memory(out).expect("still a picture");
+}
+
 #[test]
 fn a_png_loses_its_text_chunks() {
     let plain = png(5, 5);

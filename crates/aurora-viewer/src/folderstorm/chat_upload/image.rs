@@ -212,10 +212,18 @@ fn thumbnail(bytes: &[u8], format: Format) -> Option<egui::ColorImage> {
 // ---- JPEG
 
 /// A JPEG without its APP1 (EXIF, XMP), APP3 to APP13 and APP15 segments
-/// (IPTC, Photoshop, maker data) and comments. JFIF (APP0), the colour
-/// profile (APP2 `ICC_PROFILE`) and Adobe's colour transform (APP14) stay:
-/// the picture looks the same. The EXIF orientation is put back alone, so
-/// that a phone's photo is not turned.
+/// (IPTC, Photoshop, maker data, MPF's index of extra pictures) and
+/// comments. JFIF (APP0, without its thumbnail), the colour profile (APP2
+/// `ICC_PROFILE`) and Adobe's colour transform (APP14) stay: the picture
+/// looks the same. The EXIF orientation is put back alone, so that a
+/// phone's photo is not turned.
+///
+/// The whole file is walked, not only its header: between the scans of a
+/// progressive picture only what decoding needs stays (tables, restart
+/// interval, scans; no APPn, no comment), and nothing after the end of the
+/// picture (EOI) is kept: a phone appends there a second picture with its
+/// own EXIF (MPF) or a motion photo's video with its location. A file cut
+/// short inside its picture data is closed with an EOI.
 pub fn strip_jpeg(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
     if !bytes.starts_with(&[0xff, 0xd8]) {
         return Err(Refusal::Corrupt);
@@ -225,6 +233,8 @@ pub fn strip_jpeg(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
     let mut at = 2;
     let mut stripped = false;
     let mut orientation = None;
+    // a scan was met: what follows its header is entropy-coded data
+    let mut scanned = false;
     loop {
         // fill bytes before a marker are allowed
         while bytes.get(at) == Some(&0xff) && bytes.get(at + 1) == Some(&0xff) {
@@ -240,8 +250,14 @@ pub fn strip_jpeg(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
             continue;
         }
         if marker == 0xd9 {
-            out.extend_from_slice(&bytes[at..]);
+            out.extend_from_slice(&[0xff, 0xd9]);
+            // whatever follows the picture is not part of it
+            stripped |= at + 2 < bytes.len();
             break;
+        }
+        if marker == 0xd8 {
+            // a second start of image before the end of the first
+            return Err(Refusal::Corrupt);
         }
         let len = match (bytes.get(at + 2), bytes.get(at + 3)) {
             (Some(&hi), Some(&lo)) => usize::from(u16::from_be_bytes([hi, lo])),
@@ -253,35 +269,99 @@ pub fn strip_jpeg(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
         }
         let body = &bytes[at + 4..end];
         if marker == 0xda {
-            // start of scan: the picture's data to the end, as it is
-            put_orientation(&mut out, orientation);
-            out.extend_from_slice(&bytes[at..]);
-            break;
+            if !scanned {
+                put_orientation(&mut out, orientation.take());
+                scanned = true;
+            }
+            out.extend_from_slice(&bytes[at..end]);
+            at = end;
+            // the scan's data, to the next marker that is neither a
+            // stuffed 0xFF (FF 00) nor a restart (FF D0 to FF D7)
+            let start = at;
+            loop {
+                let Some(found) = bytes[at..].iter().position(|&b| b == 0xff) else {
+                    at = bytes.len();
+                    break;
+                };
+                at += found;
+                match bytes.get(at + 1) {
+                    Some(0x00 | 0xd0..=0xd7) => at += 2,
+                    Some(_) => break,
+                    None => {
+                        at = bytes.len();
+                        break;
+                    }
+                }
+            }
+            out.extend_from_slice(&bytes[start..at.min(bytes.len())]);
+            if at >= bytes.len() {
+                // cut short: the picture is closed where it stops
+                if out.last() == Some(&0xff) {
+                    out.pop();
+                }
+                out.extend_from_slice(&[0xff, 0xd9]);
+                break;
+            }
+            continue;
         }
         let keep = match marker {
-            0xe0 | 0xee => true,
-            0xe2 => body.starts_with(b"ICC_PROFILE\0"),
+            // nothing but decoding after the first scan
+            0xe0..=0xef | 0xfe if scanned => Keep::No,
+            0xe0 => jfif(body),
+            0xee => Keep::Yes,
+            0xe2 if body.starts_with(b"ICC_PROFILE\0") => Keep::Yes,
             0xe1 => {
                 if body.starts_with(b"Exif\0\0") {
                     orientation = orientation.or_else(|| exif_orientation(&body[6..]));
                 }
-                false
+                Keep::No
             }
-            0xe3..=0xed | 0xef | 0xfe => false,
-            _ => true,
+            0xe2..=0xed | 0xef | 0xfe => Keep::No,
+            _ => Keep::Yes,
         };
-        if keep {
-            // the orientation goes right after JFIF, before the frame
-            if marker != 0xe0 {
-                put_orientation(&mut out, orientation.take());
+        match keep {
+            Keep::No => stripped = true,
+            Keep::Yes | Keep::Rewritten(_) => {
+                // the orientation goes right after JFIF, before the frame
+                if marker != 0xe0 {
+                    put_orientation(&mut out, orientation.take());
+                }
+                if let Keep::Rewritten(segment) = keep {
+                    out.extend_from_slice(&segment);
+                    stripped = true;
+                } else {
+                    out.extend_from_slice(&bytes[at..end]);
+                }
             }
-            out.extend_from_slice(&bytes[at..end]);
-        } else {
-            stripped = true;
         }
         at = end;
     }
     Ok((out, stripped))
+}
+
+/// What becomes of a JPEG segment.
+enum Keep {
+    Yes,
+    No,
+    /// Kept in a shorter form.
+    Rewritten(Vec<u8>),
+}
+
+/// JFIF's APP0 stays, without the thumbnail it may carry; JFXX (a
+/// thumbnail alone) and any other APP0 go.
+fn jfif(body: &[u8]) -> Keep {
+    // "JFIF\0", version, units, densities, thumbnail width and height
+    const HEADER: usize = 14;
+    if !body.starts_with(b"JFIF\0") || body.len() < HEADER {
+        return Keep::No;
+    }
+    if body.len() == HEADER && body[12] == 0 && body[13] == 0 {
+        return Keep::Yes;
+    }
+    let mut segment = vec![0xff, 0xe0, 0, (HEADER + 2) as u8];
+    segment.extend_from_slice(&body[..12]);
+    segment.extend_from_slice(&[0, 0]);
+    Keep::Rewritten(segment)
 }
 
 /// Writes an EXIF segment holding only the orientation (when not upright).
