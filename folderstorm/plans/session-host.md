@@ -793,6 +793,126 @@ May be two small PRs: 1a profiles, 1b behind policy.
   profile starts with the main profile's interface but no accounts; only the
   active character is heard (two test accounts, live voice).
 
+- **As built (branch `claude/session-checkpoint-4`, on top of checkpoint
+  3):** the rules are pure and tested in `crates/folderstorm-session`
+  (`hotkeys`: the hotkeys' texts, what is wrong with a choice, the numbers
+  `RegisterHotKey` takes; `copy`: what a new profile takes and never
+  takes; `host`: the quick action, next and previous, what is heard in
+  the background, who holds the voice; their tests are in
+  `host/comfort_tests.rs`). In the viewer:
+  `folderstorm_characters/host/hotkeys.rs` (the keys taken from Windows),
+  `host/comfort.rs` (the host's side), `host/ui/comfort.rs` (the window's
+  side: the strip, the two pages), `profile_copy.rs` (the files). **No new
+  upstream hook**: everything is in the host's own files, and the host's
+  event loop is built with winit's message hook, as `raw_mouse.rs` does.
+  - **Quick actions.** `Desk::quick(slot)` is the decision table: Switch
+    (runs behind the active one), Show (is the active one), LogIn (waits at
+    its login screen: its window comes forward and it becomes the active
+    one), Wait (starting: it comes forward when it reports), Launch,
+    Restart, Nothing (closing, "Quit all" under way, empty slot).
+    `quick_act` is `switch` behind that table, so a slot never gets a
+    second process: a live slot is never launched. In the window: a strip
+    of numbered buttons above the rows ("1 · name"), the icon and the
+    tooltip saying what the button will do; the rows keep their own
+    buttons.
+  - **Global hotkeys, Windows only.** `RegisterHotKey` with no window:
+    `WM_HOTKEY` comes to the host's main thread whichever program has the
+    keyboard, and winit's message hook hands it to the desk
+    (`Desk::hotkey`) in the same turn of the loop. A character's hotkey is
+    its quick action (it starts a stopped character); next and previous go
+    round the characters that run and never start one. Defaults
+    Ctrl+Alt+1–5, Ctrl+Alt+PageDown (next), Ctrl+Alt+PageUp (previous);
+    "Hotkeys…" changes them as text ("Ctrl+Shift+F5": digits, letters,
+    F1–F24, arrows, PageUp, PageDown, Home, End, Insert, Num0–Num9; Ctrl or
+    Alt needed, and a second modifier unless the key is a function key;
+    Alt+F4 refused), turns them off, or puts the defaults back. Saved as
+    texts under `hotkeys` in `session-host.json`. **Deviation: no key
+    capture**, the keys are typed as text (the host's window draws egui on
+    the processor and a capture field would need its own key handling).
+  - **Conflicts are told.** Each hotkey shows its state on the page: in
+    use, refused by Windows (another program holds it), not a hotkey (with
+    why), the same keys as an earlier action (the first keeps them); the
+    characters' page says "n hotkeys do not work" while one is refused.
+    **Added to the plan: AltGr.** On keyboards with an AltGr key, AltGr is
+    Ctrl+Alt, so the default Ctrl+Alt+digit would take `#`, `{`, `[`…
+    from every program on many European layouts (AZERTY among them).
+    Before registering a Ctrl+Alt chord the host asks the current layout
+    whether it types a character (`ToUnicodeEx`, keyboard state left as it
+    is) and refuses it if so, with "On this keyboard these keys type a
+    character". On such a keyboard some defaults therefore start refused
+    and the user picks others (Ctrl+Shift+digit, function keys).
+    **(verify on Windows)**: the check itself, and whether the layout of
+    the host's thread is the one the user types with.
+  - **The foreground from a hotkey.** The path is checkpoint 2's: the desk
+    emits `AllowForeground` (the host calls `AllowSetForegroundWindow` for
+    that viewer), then `Show`, and the viewer brings itself forward with
+    winit's `focus_window`. The process that receives a hotkey may set the
+    foreground, so the grant holds; the key-ups that follow go to the
+    viewer that had the keyboard and may end it before the new viewer has
+    acted, but winit's `focus_window` on Windows does not depend on it
+    (it sends itself an Alt key press, which lifts the foreground lock,
+    then calls `SetForegroundWindow`). **(verify on Windows)**: a switch by
+    hotkey while a viewer has the keyboard brings the other window forward
+    with the keyboard, not a flashing taskbar button; no key stays held in
+    the viewer left (checkpoint 2's acceptance, now by hotkey).
+  - **Linux and macOS:** no global hotkeys (X11 would need a key grab on
+    the root window and an event connection of its own; a Wayland program
+    cannot take a key from the others). The page says so, the choices are
+    kept. In the demo every hotkey has a "Try" button that does what the
+    key would, on every system.
+  - **Profile copy.** "New character profile…": a name (checkpoint 1's
+    rules), and what it starts from: the main profile, the defaults, or an
+    existing profile. Refused while the target runs (its lease is held, or
+    this host has it starting or running) and when the target exists:
+    **an existing profile is never written into**, so "only while the
+    target is not running" only ever bars a folder that is there (stricter
+    than section 13, which did not say what becomes of an existing
+    profile). Copied, by an allow-list (`copy::part`): `settings.json`
+    through `copy::strip_settings`, `ui_layout.ron`, `skins/` (plain files
+    only, links never followed, bounded depth, count and size). The key
+    bindings are in `settings.json`. Never: `accounts/` (per-account files
+    and transcripts), `login_accounts.json`, `rlva-login.json`, the cache
+    key's file, caches, locks, the other profiles, the host's file, and
+    anything the list does not name. The system's credential store is not
+    read. Stripped from the preferences: the login (`username`,
+    `remember_username`, `last_login`, `remember_password`), the window
+    (`window_*`), `cache_location` (the new profile keeps its own cache
+    folder), `folderstorm_characters` (a named profile's defaults differ),
+    `local_assistant` (granted per profile by the user), the GIF service
+    keys, and **every setting kept per account** (a value that is an
+    account id, a list of them, or an object keyed by them: hover
+    heights, bridge, movements, parcel radio…), whatever it is called. A
+    test in the viewer checks that the names stripped are still the names
+    of Aurora's settings. The copy is made in `profiles/.new-<name>-<random>`
+    (no profile name starts with a dot) and renamed into place; a failure
+    removes it. A source whose `settings.json` does not read is not copied
+    as it is: the profile starts with the defaults and the user is told.
+    The new profile joins the list when a slot is free. Not done: the
+    selective groups (graphics, interface, keys) of Folderstorm (C++),
+    spelling dictionaries and autoreplace (not in section 13's list).
+  - **Voice follows the active character.** The mechanism is checkpoint
+    2's with its review fixes (a viewer reports its voice off only once it
+    is off, and the host gives the voice to the new active character only
+    then). Added here: `Desk::voice(slot)` (allowed here, waits for that
+    other character, giving it up, off) and its tests under hotkey presses
+    faster than the viewers answer (never two characters told they may use
+    voice); in the window the active row says **Voice** once its viewer
+    reports it allowed, the row left says "Releasing voice…", and the line
+    "Voice stays off until … has released it" stays. Live voice with two
+    accounts is the human's test.
+  - **Sound per character:** "Heard in the background" on a row
+    (`BackgroundSound::All`, saved per slot): that character's viewer is
+    not muted while another is active; its voice stays off. Section 10's
+    **"alerts only" is not done**: Aurora's transient mute cuts everything
+    at once, and telling alert sounds from the world's would need a change
+    in upstream's audio paths. Options when wanted: (a) ask upstream for a
+    mute that spares interface sounds; (b) keep the host's own
+    notification sound (checkpoint 3) as the alert, which exists today.
+  - **Demo:** `AURORA_DEMO_SESSION_HOST` as before, with the strip, the
+    hotkeys (real ones on Windows, "Try" everywhere; choices not saved)
+    and "New character profile…" working on the demo's settings folder
+    (`docs/TESTING.md`).
+
 ### Checkpoint 5: monitors (3D becomes Limited)
 
 - Section 12.
