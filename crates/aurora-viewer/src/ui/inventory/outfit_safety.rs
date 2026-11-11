@@ -2,7 +2,7 @@
 //!
 //! Port of Folderstorm's inventory outfit safety (doc/inventory-outfit-safety.md,
 //! Folderstorm contributors, originally LGPL 2.1):
-//! - an item's **Wear** entry is greyed until "Enable Wear in inventory menus"
+//! - an item's **Wear** entry and a folder's **Wear objects** entry are greyed until "Enable Wear in inventory menus"
 //!   is turned on (off by default): a misclick no longer replaces what is worn.
 //!   Add, Attach To, double-click and the Outfits window keep their behaviour;
 //! - a folder's **Replace Current Outfit** and **Add to Current Outfit** always
@@ -38,12 +38,12 @@ impl Ask {
     }
 }
 
-/// Wear greyed unless allowed; the folder outfit entries ask first.
+/// Wear and Wear objects greyed unless allowed; the folder outfit entries ask first.
 pub(super) fn apply(c: &mut Catalog, prefs: &InventoryPreferences) {
     for entry in &mut c.entries {
         let Kind::Action(index) = entry.kind else { continue };
         match entry.id.as_str() {
-            "wear" if !prefs.context_wear => entry.enabled = false,
+            "wear" | "wear-contents" if !prefs.context_wear => entry.enabled = false,
             "replace-outfit" | "append-outfit" => {
                 if let Some(Some(command)) = c.commands.get_mut(index)
                     && let Command::Invoke(InvAction::Appearance(Wear::WearContents { folder, mode })) = command
@@ -191,12 +191,16 @@ mod tests {
 
     #[test]
     fn replace_and_add_ask_first_but_wear_objects_does_not() {
+        let allow = InventoryPreferences {
+            context_wear: true,
+            ..Default::default()
+        };
         let mut c = catalog(vec![
             ("replace-outfit", wear_folder(WearMode::ReplaceOutfit)),
             ("append-outfit", wear_folder(WearMode::Append)),
             ("wear-contents", wear_folder(WearMode::ReplaceItems)),
         ]);
-        apply(&mut c, &InventoryPreferences::default());
+        apply(&mut c, &allow);
         assert!(matches!(
             c.commands[0],
             Some(Command::ConfirmOutfit(Ask { folder, mode: WearMode::ReplaceOutfit })) if folder == Uuid::from_u128(8000)
@@ -207,6 +211,33 @@ mod tests {
         ));
         assert!(matches!(c.commands[2], Some(Command::Invoke(_))));
         assert!(c.entries.iter().all(|e| e.enabled), "asking keeps them available");
+    }
+
+    #[test]
+    fn wear_objects_is_greyed_until_allowed() {
+        let objects = || catalog(vec![("wear-contents", wear_folder(WearMode::ReplaceItems))]);
+        let mut prefs = InventoryPreferences::default();
+        let mut c = objects();
+        apply(&mut c, &prefs);
+        assert!(!c.entries[0].enabled, "greyed by default");
+        assert!(
+            matches!(c.commands[0], Some(Command::Invoke(_))),
+            "it still wears directly once enabled"
+        );
+        prefs.context_wear = true;
+        let mut c = objects();
+        apply(&mut c, &prefs);
+        assert!(c.entries[0].enabled);
+    }
+
+    #[test]
+    fn replace_and_add_stay_available_while_wear_is_off() {
+        let mut c = catalog(vec![
+            ("replace-outfit", wear_folder(WearMode::ReplaceOutfit)),
+            ("append-outfit", wear_folder(WearMode::Append)),
+        ]);
+        apply(&mut c, &InventoryPreferences::default());
+        assert!(c.entries.iter().all(|e| e.enabled));
     }
 
     #[test]
