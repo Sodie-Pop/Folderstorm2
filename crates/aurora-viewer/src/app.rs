@@ -102,6 +102,7 @@ mod joystick;
 mod land_moderation;
 mod land_rights;
 mod link_health;
+mod local_assistant; // Folderstorm: local assistant
 mod login_favorites;
 mod marketplace_listings;
 mod media_pack;
@@ -3183,6 +3184,7 @@ impl App {
     }
 
     fn on_app_event(&mut self, ev: NetEvent) {
+        crate::mcp_bridge::observe(&ev); // Folderstorm: local assistant's changes
         if matches!(&ev, NetEvent::AgentMovementComplete { .. })
             && let Some(recovery) = &mut self.follow_recovery
         {
@@ -8867,7 +8869,7 @@ impl App {
         aurora_render::frame_priority::apply();
         self.world.anti_spam.configure(self.settings.anti_spam);
         self.update_rlva();
-        crate::mcp_bridge::frame(&self.settings.local_assistant, &self.world, self.demo); // Folderstorm: local assistant
+        self.local_assistant_frame(); // Folderstorm: local assistant
         if self.demo && self.frame_count == 700 && std::env::var_os("AURORA_DEMO_ANTI_SPAM").is_some() {
             for event in crate::demo::anti_spam::events(self.world.agent_id) {
                 if let Some(event) = self.world.apply(event) {
@@ -9350,6 +9352,10 @@ impl App {
         }
         // AURORA_DEMO_LINK's lost link, before the frame takes the window
         self.demo_link_lost();
+        // Folderstorm: a remembered previous look lasts one login
+        if !matches!(self.screen, Screen::World) {
+            ui::appearance::previous_look::forget(&self.egui_ctx);
+        }
         let Some(mut gfx) = self.gfx.take() else {
             return;
         };
@@ -17232,6 +17238,7 @@ impl App {
                 for action in ui::inventory::task_drop::confirm(&ctx, &p, &mut self.task_transfer) {
                     self.apply_inventory_action(action);
                 }
+                crate::mcp_bridge::ask::show(&ctx, &p); // Folderstorm: local assistant's Ask dialog
                 if let Some(confirm) = ui::object_actions::confirm_copy(&ctx, &p, &mut self.contents_copies.confirm) {
                     self.contents_copy_confirmed(confirm);
                 }
@@ -19884,6 +19891,9 @@ impl ApplicationHandler for App {
                         | "bulk-permissions"
                         | "bulk-multi"
                         | "bulk-folder"
+                        // Folderstorm: Review bulk changes
+                        | "bulk-review"
+                        | "aurora-bulk-review"
                         | "sort"
                         | "filters"
                         | "preferences"
@@ -19994,6 +20004,9 @@ impl ApplicationHandler for App {
                         if view == "bulk-permissions" {
                             self.inventory_ui.open_bulk_permissions(ids);
                         }
+                    }
+                    if view.ends_with("bulk-review") {
+                        ui::inventory::bulk_review_demo(&mut self.inventory_ui, &self.world.inventory); // Folderstorm
                     }
                     if view == "permissions" {
                         self.inventory_ui.show_next_owner = true;

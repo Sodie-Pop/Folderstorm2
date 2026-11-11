@@ -23,6 +23,8 @@ pub(super) enum Command {
     Batch(Vec<InvAction>),
     Properties(Uuid),
     BulkPermissions(Vec<Uuid>),
+    // Folderstorm: Review bulk changes
+    BulkReview(Vec<Uuid>),
     Rename(Uuid),
     Image(Uuid),
     Protect(Uuid),
@@ -735,6 +737,15 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
                 Command::BulkPermissions(ids.clone()),
             );
         }
+        // Folderstorm: Review bulk changes (bulk_review.rs)
+        c.add(
+            "bulk-review",
+            TEXT,
+            "pencil-filled",
+            aurora_i18n::tr!("inventory-bulk-review-menu"),
+            ready && (1..=super::bulk_review::MAX).contains(&ids.len()),
+            Command::BulkReview(ids.clone()),
+        );
         c.add(
             "rename",
             TEXT,
@@ -1231,6 +1242,7 @@ pub(super) fn execute(
             st.dialog = Some(EditDialog::Properties(id));
         }
         Command::BulkPermissions(ids) => st.open_bulk_permissions(ids),
+        Command::BulkReview(ids) => super::bulk_review::open(st, ids), // Folderstorm: Review bulk changes
         Command::Rename(id) => st.begin_rename(inv, id),
         Command::Image(id) => st.thumbnail.open(id),
         Command::Protect(id) => {

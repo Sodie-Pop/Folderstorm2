@@ -22,6 +22,10 @@ pub const MAX_LINE: usize = 1024 * 1024;
 /// What runs a tool: the viewer, or a fake in the tests.
 pub trait Backend {
     fn call(&mut self, tool: &str, arguments: Value) -> Result<Value, ToolError>;
+
+    /// The name the MCP client gave at `initialize` (`clientInfo.name`),
+    /// which the viewer's Ask dialog shows.
+    fn client_name(&mut self, _name: &str) {}
 }
 
 pub struct Server<B: Backend> {
@@ -73,7 +77,12 @@ impl<B: Backend> Server<B> {
             return None;
         };
         Some(match method {
-            "initialize" => result(id, initialize(&params)),
+            "initialize" => {
+                if let Some(name) = params["clientInfo"]["name"].as_str() {
+                    self.backend.client_name(name);
+                }
+                result(id, initialize(&params))
+            }
             "ping" => result(id, json!({})),
             "tools/list" => result(id, tools_list()),
             "tools/call" => match self.tools_call(&params) {
@@ -88,6 +97,13 @@ impl<B: Backend> Server<B> {
     /// it); a call that names no known tool is a protocol error.
     fn tools_call(&mut self, params: &Value) -> Result<Value, String> {
         let name = params["name"].as_str().ok_or("`name` is missing")?;
+        if folderstorm_mcp_bridge::protocol::NEVER.contains(&name) {
+            let refused = ToolError::new(
+                folderstorm_mcp_bridge::ErrorCode::PermissionDenied,
+                folderstorm_mcp_bridge::protocol::NEVER_MESSAGE,
+            );
+            return Ok(json!({"content": [{"type": "text", "text": refused.to_string()}], "isError": true}));
+        }
         if folderstorm_mcp_bridge::protocol::tool(name).is_none() {
             return Err(format!("unknown tool: {name}"));
         }
@@ -118,7 +134,7 @@ fn initialize(params: &Value) -> Value {
         "capabilities": {"tools": {"listChanged": false}},
         "serverInfo": {"name": "folderstorm-mcp", "title": format!("{} local assistant", folderstorm_brand::PRODUCT), "version": env!("CARGO_PKG_VERSION")},
         "instructions": format!(
-            "Reads the inventory and outfits of the {} viewer running on this computer. Read-only: nothing can be changed. Call viewer_status first. Address items by their id: names are not unique.",
+            "Reads and organises the inventory and outfits of the {} viewer running on this computer. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake.",
             folderstorm_brand::PRODUCT
         )
     })
@@ -132,7 +148,11 @@ fn tools_list() -> Value {
                 "name": t.name,
                 "description": t.description,
                 "inputSchema": (t.schema)(),
-                "annotations": {"readOnlyHint": true, "openWorldHint": false}
+                "annotations": {
+                    "readOnlyHint": !t.changes(),
+                    "destructiveHint": false,
+                    "openWorldHint": false
+                }
             })
         })
         .collect();
@@ -147,6 +167,10 @@ mod tests {
     struct Fake(Vec<String>);
 
     impl Backend for Fake {
+        fn client_name(&mut self, name: &str) {
+            self.0.push(format!("client:{name}"));
+        }
+
         fn call(&mut self, tool: &str, arguments: Value) -> Result<Value, ToolError> {
             self.0.push(tool.to_owned());
             if tool == "worn_items" {
@@ -177,6 +201,26 @@ mod tests {
         );
         assert_eq!(a["id"], "x");
         assert_eq!(a["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
+        assert_eq!(s.backend.0, vec!["client:t".to_owned()], "the client's name goes to the viewer");
+    }
+
+    #[test]
+    fn permanent_deletes_are_refused_without_reaching_the_viewer() {
+        let mut s = Server::new(Fake(Vec::new()));
+        for never in folderstorm_mcp_bridge::protocol::NEVER {
+            let a = ask(
+                &mut s,
+                &format!(r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{never}"}}}}"#),
+            );
+            assert_eq!(a["result"]["isError"], true, "{a}");
+            assert!(
+                a["result"]["content"][0]["text"]
+                    .as_str()
+                    .expect("text")
+                    .starts_with("permission_denied")
+            );
+        }
+        assert!(s.backend.0.is_empty());
     }
 
     #[test]
@@ -198,7 +242,21 @@ mod tests {
             .map(|t| t["name"].clone())
             .collect();
         assert_eq!(names.len(), TOOLS.len());
-        assert!(names.contains(&json!("inventory_search")));
+        for name in [
+            "inventory_search",
+            "inventory_move",
+            "inventory_trash",
+            "outfit_wear",
+            "wait_for_bake",
+        ] {
+            assert!(names.contains(&json!(name)), "{name}");
+        }
+        assert!(!names.contains(&json!("inventory_delete")));
+        let tools = a["result"]["tools"].as_array().expect("tools");
+        let hint = |name: &str| tools.iter().find(|t| t["name"] == name).expect("listed")["annotations"]["readOnlyHint"].clone();
+        assert_eq!(hint("inventory_search"), true);
+        assert_eq!(hint("wait_for_bake"), true);
+        assert_eq!(hint("inventory_rename"), false);
         assert_eq!(a["result"]["tools"][0]["inputSchema"]["type"], "object");
     }
 
@@ -246,7 +304,7 @@ mod tests {
         );
         let a = ask(
             &mut s,
-            r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"inventory_delete"}}"#,
+            r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"inventory_teleport"}}"#,
         );
         assert_eq!(a["error"]["code"], INVALID_PARAMS);
         let a = ask(

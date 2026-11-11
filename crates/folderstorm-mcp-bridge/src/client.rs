@@ -4,7 +4,7 @@
 use crate::discovery::Discovery;
 use crate::http;
 use crate::protocol::{CallRequest, ErrorCode, Health, ToolError};
-use crate::server::PROBE_HEADER;
+use crate::server::{CLIENT_HEADER, PROBE_HEADER};
 use crate::token::Token;
 use serde_json::Value;
 use std::io::Write;
@@ -12,7 +12,8 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 use std::time::Duration;
 
 /// Longer than the bridge's wait for the viewer, so that its own timeout
-/// error arrives first.
+/// error arrives first. A tool that may take longer (a change, the Ask
+/// dialog, `wait_for_bake`) adds its time, as the bridge does.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug)]
@@ -46,6 +47,7 @@ pub struct Client {
     token: Token,
     timeout: Duration,
     probe: bool,
+    client: Option<String>,
 }
 
 impl Client {
@@ -55,6 +57,7 @@ impl Client {
             token,
             timeout: DEFAULT_TIMEOUT,
             probe: false,
+            client: None,
         }
     }
 
@@ -74,12 +77,24 @@ impl Client {
         self
     }
 
+    /// The MCP client's name (`clientInfo.name`), sent with each call for
+    /// the viewer's Ask dialog. Only printable characters are sent.
+    pub fn with_client_name(mut self, name: &str) -> Client {
+        let name: String = name
+            .chars()
+            .filter(|c| c.is_ascii_graphic() || *c == ' ')
+            .take(crate::server::CLIENT_NAME_MAX)
+            .collect();
+        self.client = (!name.trim().is_empty()).then(|| name.trim().to_owned());
+        self
+    }
+
     pub fn port(&self) -> u16 {
         self.port
     }
 
     pub fn health(&self) -> Result<Health, ClientError> {
-        let value = self.request("GET", "/v1/health", None)?;
+        let value = self.request("GET", "/v1/health", None, self.timeout)?;
         serde_json::from_value(value).map_err(|e| ClientError::Protocol(e.to_string()))
     }
 
@@ -89,13 +104,21 @@ impl Client {
             arguments,
         })
         .map_err(|e| ClientError::Protocol(e.to_string()))?;
-        self.request("POST", "/v1/call", Some(&body))
+        let extra = crate::protocol::tool(tool).map_or(Duration::ZERO, |spec| {
+            spec.wait
+                + if spec.changes() {
+                    crate::protocol::ASK_TIMEOUT
+                } else {
+                    Duration::ZERO
+                }
+        });
+        self.request("POST", "/v1/call", Some(&body), self.timeout + extra)
     }
 
-    fn request(&self, method: &str, path: &str, body: Option<&[u8]>) -> Result<Value, ClientError> {
+    fn request(&self, method: &str, path: &str, body: Option<&[u8]>, timeout: Duration) -> Result<Value, ClientError> {
         let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.port);
         let mut stream = TcpStream::connect_timeout(&address.into(), Duration::from_secs(2)).map_err(ClientError::Connect)?;
-        stream.set_read_timeout(Some(self.timeout)).map_err(ClientError::Io)?;
+        stream.set_read_timeout(Some(timeout)).map_err(ClientError::Io)?;
         stream.set_write_timeout(Some(self.timeout)).map_err(ClientError::Io)?;
         let body = body.unwrap_or_default();
         let mut head = format!(
@@ -107,6 +130,12 @@ impl Client {
         if self.probe {
             head.push_str(PROBE_HEADER);
             head.push_str(": 1\r\n");
+        }
+        if let Some(client) = &self.client {
+            head.push_str(CLIENT_HEADER);
+            head.push_str(": ");
+            head.push_str(client);
+            head.push_str("\r\n");
         }
         head.push_str("\r\n");
         stream.write_all(head.as_bytes()).map_err(ClientError::Io)?;
