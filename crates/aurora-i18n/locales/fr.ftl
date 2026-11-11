@@ -4214,6 +4214,7 @@ folderstorm-host-minimised = réduite
 folderstorm-host-closing = Fermeture…
 folderstorm-host-closed = Fermé
 folderstorm-host-crashed = Arrêt inattendu
+folderstorm-host-unmanaged = Tourne seul : non géré par cet hôte
 folderstorm-host-note-spawn = Son viewer n'a pas pu démarrer. Le journal en donne la raison.
 folderstorm-host-note-elsewhere = Ce profil est déjà ouvert dans une fenêtre que cet hôte n'a pas démarrée. Fermez cette fenêtre pour le démarrer d'ici.
 folderstorm-host-note-build = Son viewer n'est pas de la même version que cet hôte : il tourne seul. Fermez tout et recommencez.

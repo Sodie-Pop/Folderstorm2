@@ -4211,6 +4211,7 @@ folderstorm-host-minimised = minimised
 folderstorm-host-closing = Closing…
 folderstorm-host-closed = Closed
 folderstorm-host-crashed = Ended unexpectedly
+folderstorm-host-unmanaged = Running by itself: not managed by this host
 folderstorm-host-note-spawn = Its viewer could not be started. The log has the reason.
 folderstorm-host-note-elsewhere = This profile is already open in a window that this host did not start. Close that window to start it from here.
 folderstorm-host-note-build = Its viewer is not the same version as this host, so it runs by itself. Close everything and start again.

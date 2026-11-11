@@ -4193,6 +4193,7 @@ folderstorm-host-minimised = 最小化
 folderstorm-host-closing = 終了中…
 folderstorm-host-closed = 終了済み
 folderstorm-host-crashed = 予期せず終了しました
+folderstorm-host-unmanaged = 単独で動作中：このホストでは管理されていません
 folderstorm-host-note-spawn = ビューアを起動できませんでした。理由はログに記録されています。
 folderstorm-host-note-elsewhere = このプロファイルは、このホストが起動していないウィンドウですでに開かれています。ここから起動するには、そのウィンドウを閉じてください。
 folderstorm-host-note-build = ビューアのバージョンがこのホストと異なるため、単独で動作しています。すべて閉じてからやり直してください。

@@ -46,7 +46,8 @@ pub enum Kind {
 pub struct Viewer {
     pub launch: u32,
     child: Child,
-    commands: Sender<ToViewer>,
+    /// None once the host let the viewer go (`let_go`).
+    commands: Option<Sender<ToViewer>>,
     endpoint: String,
     /// The reader thread stops waiting for the viewer.
     cancelled: Arc<AtomicBool>,
@@ -62,7 +63,15 @@ impl Viewer {
     /// Queues a command; false when the viewer has not read the earlier
     /// ones (the desk sends an assignment again, a click can be repeated).
     pub fn send(&self, message: ToViewer) -> bool {
-        self.commands.try_send(message).is_ok()
+        self.commands.as_ref().is_some_and(|c| c.try_send(message).is_ok())
+    }
+
+    /// The host lets the viewer go (refused, or it never reached the
+    /// host): its command pipe closes with the writer thread, so the
+    /// viewer learns it is not managed and goes on by itself. The process
+    /// is still watched for its end, and never ended here.
+    pub fn let_go(&mut self) {
+        self.commands = None;
     }
 
     /// Whether the process ended, and cleanly.
@@ -140,7 +149,7 @@ pub fn spawn(slot: usize, launch: u32, profile: &ProfileName, events: &Sender<Ev
     let viewer = Viewer {
         launch,
         child,
-        commands,
+        commands: Some(commands),
         endpoint,
         cancelled: cancelled.clone(),
         arrived: arrived.clone(),
@@ -340,6 +349,46 @@ mod tests {
         assert_eq!(ipc::read_frame::<ToViewer>(&mut read).expect("command"), ToViewer::Minimise);
         assert_eq!(ipc::read_frame::<ToViewer>(&mut read).expect("command"), ToViewer::Quit);
         assert!(read.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn letting_a_viewer_go_closes_its_command_pipe() {
+        let boot = Bootstrap {
+            protocol: ipc::PROTOCOL,
+            slot: 1,
+            host_pid: 9,
+            endpoint: "e".into(),
+            token: token(),
+        };
+        let (tx, rx) = crossbeam_channel::bounded(8);
+        let writer = std::thread::spawn(move || {
+            let mut wire = Vec::new();
+            write_commands(&mut wire, &boot, &rx);
+            wire
+        });
+        let mut viewer = Viewer {
+            launch: 1,
+            child: Command::new("true").spawn().expect("a process"),
+            commands: Some(tx),
+            endpoint: String::new(),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            arrived: Arc::new(AtomicBool::new(true)),
+        };
+        assert!(viewer.send(ToViewer::Minimise));
+        viewer.let_go();
+        assert!(!viewer.send(ToViewer::Quit), "nothing more is sent");
+        // the writer thread ends: the viewer's input ends after what was
+        // queued, which it takes as "nobody manages me"
+        let wire = writer.join().expect("writer ended");
+        let mut read = wire.as_slice();
+        ipc::read_frame::<Bootstrap>(&mut read).expect("bootstrap");
+        assert_eq!(ipc::read_frame::<ToViewer>(&mut read).expect("command"), ToViewer::Minimise);
+        assert!(matches!(ipc::read_frame::<ToViewer>(&mut read), Err(ipc::FrameError::Closed)));
+        // the process is still watched
+        while viewer.exited().is_none() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
     }
 
     #[test]

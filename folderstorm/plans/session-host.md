@@ -640,6 +640,12 @@ May be two small PRs: 1a profiles, 1b behind policy.
     keyboard (a click, Alt-Tab, the taskbar) becomes the active character
     (only a change to focused counts, so a switch from the host is never
     undone by a late report).
+  - **A viewer the host cannot manage is let go:** when its hello is
+    refused, or it never reaches the endpoint (only other clients came),
+    the host closes its command pipe, so the viewer sees the host gone and
+    goes on by itself; the slot shows "not managed" until that process
+    ends. A viewer still starting after a minute is noted and End is
+    offered; nothing ends it by itself.
   - **R2:** only "behind" and "minimised" are used. Commands and reports
     run from `about_to_wait`, not from the frame, so a minimised viewer
     still obeys and reports even if its frames are rare; the main-loop

@@ -205,6 +205,12 @@ impl Host {
                         viewer.kill();
                     }
                 }
+                Effect::LetGo { slot, launch } => {
+                    if let Some(viewer) = self.viewers[slot].as_mut().filter(|v| v.launch == launch) {
+                        log::info!("session host: character {} is not managed: let go", slot + 1);
+                        viewer.let_go();
+                    }
+                }
                 Effect::Save => self.unsaved = self.unsaved.or(Some(now)),
                 Effect::Exit => self.exit = true,
             }

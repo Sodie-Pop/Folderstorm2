@@ -251,7 +251,8 @@ impl Window_ {
                         acts.push(Act::AskEnd(slot));
                     }
                 }
-            } else if !quitting {
+            } else if !quitting && state.phase != Phase::Unmanaged {
+                // (a viewer let go runs by itself: closed there, by the user)
                 let (icon, label) = if matches!(state.phase, Phase::Ended { .. }) {
                     ("refresh", tr!("folderstorm-host-restart"))
                 } else {
@@ -453,6 +454,7 @@ fn status_line(slot: &Slot) -> String {
         Phase::Starting => tr!("folderstorm-host-starting").to_owned(),
         Phase::Ended { crashed: false } => tr!("folderstorm-host-closed").to_owned(),
         Phase::Ended { crashed: true } => tr!("folderstorm-host-crashed").to_owned(),
+        Phase::Unmanaged => tr!("folderstorm-host-unmanaged").to_owned(),
         Phase::Running if slot.closing => tr!("folderstorm-host-closing").to_owned(),
         Phase::Running => match &slot.status {
             None => tr!("folderstorm-host-starting").to_owned(),

@@ -121,6 +121,11 @@ pub enum Phase {
     Starting,
     /// It reports.
     Running,
+    /// Its process runs, but the host does not manage it: its first report
+    /// was refused, or it never reached the host. The host let it go (its
+    /// command pipe is closed: the viewer goes on by itself, as one started
+    /// by hand) and only watches for its end.
+    Unmanaged,
     /// Its process ended: closed (by the user, there or here), or not
     /// cleanly.
     Ended { crashed: bool },
@@ -191,9 +196,14 @@ impl Slot {
         }
     }
 
-    /// Its process is there.
+    /// Its process is there and managed (or on its way to be).
     pub fn live(&self) -> bool {
         matches!(self.phase, Phase::Starting | Phase::Running)
+    }
+
+    /// Its process is there, managed or not.
+    pub fn has_process(&self) -> bool {
+        self.live() || self.phase == Phase::Unmanaged
     }
 
     /// The number of its launch: what the host tags its threads with.
@@ -223,6 +233,9 @@ pub enum Effect {
     AllowForeground { slot: usize },
     /// End that viewer's process: the user confirmed it.
     Kill { slot: usize },
+    /// Let that viewer go: close its command pipe (it then goes on by
+    /// itself), keep watching its process for its end.
+    LetGo { slot: usize, launch: u32 },
     /// The settings changed: write the file.
     Save,
     /// "Quit all" is done: close the host.
@@ -339,7 +352,7 @@ impl Desk {
     /// Removes a character from the desk (its profile stays on disk);
     /// false while its viewer runs.
     pub fn remove(&mut self, slot: usize) -> bool {
-        if self.slot(slot).is_none_or(Slot::live) {
+        if self.slot(slot).is_none_or(Slot::has_process) {
             return false;
         }
         self.slots[slot] = None;
@@ -378,7 +391,7 @@ impl Desk {
         if self.quitting.is_some() {
             return;
         }
-        let Some(s) = self.slot_mut(slot).filter(|s| !s.live()) else {
+        let Some(s) = self.slot_mut(slot).filter(|s| !s.has_process()) else {
             return;
         };
         let launch = s.launch + 1;
@@ -421,9 +434,17 @@ impl Desk {
     /// The viewer's first report was refused: it is not managed (its
     /// process goes on, as a viewer started by hand would).
     pub fn refused(&mut self, slot: usize, launch: u32, refusal: Refusal) {
-        if let Some(s) = self.current(slot, launch) {
-            s.note = Some(Note::Refused(refusal));
-        }
+        self.let_go(slot, launch, Note::Refused(refusal));
+    }
+
+    fn let_go(&mut self, slot: usize, launch: u32, note: Note) {
+        let Some(s) = self.current(slot, launch).filter(|s| s.phase == Phase::Starting) else {
+            return;
+        };
+        s.phase = Phase::Unmanaged;
+        s.note = Some(note);
+        s.activate = false;
+        self.effects.push(Effect::LetGo { slot, launch });
     }
 
     /// A report of a running viewer.
@@ -480,7 +501,7 @@ impl Desk {
 
     /// The process of that launch ended; `clean`: with a success code.
     pub fn exited(&mut self, slot: usize, launch: u32, clean: bool, now: Instant) {
-        let Some(s) = self.current(slot, launch).filter(|s| s.live()) else {
+        let Some(s) = self.current(slot, launch).filter(|s| s.has_process()) else {
             return;
         };
         s.phase = Phase::Ended {
@@ -508,7 +529,7 @@ impl Desk {
                 }
             }
             Some(Phase::Stopped | Phase::Ended { .. }) => self.launch(slot, true),
-            None => {}
+            Some(Phase::Unmanaged) | None => {}
         }
     }
 
@@ -1189,10 +1210,25 @@ mod tests {
     fn a_refused_or_unstarted_viewer_is_told_not_managed() {
         let (mut d, now) = desk(1);
         d.launch(0, true);
+        d.take_effects();
         d.refused(0, 1, Refusal::Token);
         let s = d.slot(0).expect("slot");
-        assert_eq!((s.phase, s.note), (Phase::Starting, Some(Note::Refused(Refusal::Token))));
+        assert_eq!((s.phase, s.note), (Phase::Unmanaged, Some(Note::Refused(Refusal::Token))));
+        // let go: its command pipe closes and it goes on by itself
+        assert!(!s.live() && s.has_process());
+        assert_eq!(d.take_effects(), vec![Effect::LetGo { slot: 0, launch: 1 }]);
+        // nothing is sent to it, it is not started again or removed while
+        // its process runs, and quitting does not wait for it
+        d.switch(0, now);
+        d.close(0);
+        assert!(!d.remove(0));
+        assert!(d.take_effects().is_empty());
+        d.quit_all(now);
+        assert_eq!(d.take_effects(), vec![Effect::Exit]);
+        d.cancel_quit();
+        // its end is still seen
         d.exited(0, 1, true, now);
+        assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: false });
         d.launch(0, true);
         d.spawn_failed(0, 2);
         let s = d.slot(0).expect("slot");
