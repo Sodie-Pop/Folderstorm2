@@ -7,9 +7,15 @@
 //! catalogues. Checkpoint 4's part (quick actions, hotkeys, "New character
 //! profile…") is in `ui/comfort.rs`, checkpoint 5's (the monitors) in
 //! `ui/monitors.rs`, checkpoint 6's (the chat, the characters and the
-//! monitors each in a window of their own) in `ui/panels.rs`.
+//! monitors each in a window of their own) in `ui/panels.rs`, checkpoint
+//! 7's in `ui/inbox.rs` (the attention inbox), `ui/identity.rs` (a
+//! character's alias and colour) and `ui/condensed.rs` (one line per
+//! character).
 
 mod comfort;
+mod condensed;
+mod identity;
+mod inbox;
 mod monitors;
 mod panels;
 
@@ -103,6 +109,11 @@ struct Window_ {
     chat: ChatPanel,
     /// A narrow window shows the chat (true) or the characters.
     chat_page: bool,
+    /// Checkpoint 7: the character whose alias and colour are being
+    /// chosen, and what is typed for it.
+    identity: identity::Editor,
+    /// The count the inbox's own window has in its title.
+    inbox_titled: u32,
 }
 
 impl Window_ {
@@ -130,6 +141,8 @@ impl Window_ {
             closing: false,
             chat: ChatPanel::default(),
             chat_page: false,
+            identity: Default::default(),
+            inbox_titled: 0,
         }
     }
 }
@@ -138,6 +151,18 @@ impl Window_ {
 const WIDE: f32 = 940.0;
 /// The width of the characters' column beside the chat.
 const CHARACTERS_WIDTH: f32 = 500.0;
+/// The same in the condensed layout.
+const CONDENSED_WIDTH: f32 = 380.0;
+/// The smallest inside of the host's own window, in the screen's points:
+/// as it always was, and in the condensed layout.
+const MIN_SIZE: [f32; 2] = [440.0, 360.0];
+const CONDENSED_MIN_SIZE: [f32; 2] = [340.0, 200.0];
+
+/// The smallest the host's own window gets.
+fn min_size(condensed: bool) -> winit::dpi::LogicalSize<f32> {
+    let [width, height] = if condensed { CONDENSED_MIN_SIZE } else { MIN_SIZE };
+    winit::dpi::LogicalSize::new(width, height)
+}
 
 /// What a click in the window asks for; carried out after the frame.
 enum Act {
@@ -162,6 +187,14 @@ enum Act {
     Monitor(usize, Option<::folderstorm_session::monitor::Spec>),
     /// Checkpoint 6: a panel leaves for its own window, or comes back.
     Panel(Panel, bool),
+    /// Checkpoint 7 (`ui/identity.rs`): a character's alias and colour
+    /// are chosen (None: no more), its colour, its alias.
+    EditIdentity(Option<usize>),
+    Colour(usize, ::folderstorm_session::identity::Colour),
+    Alias(usize, String),
+    /// Checkpoint 7 (`ui/condensed.rs`): one line per character, or the
+    /// cards.
+    Condensed(bool),
 }
 
 impl Window_ {
@@ -171,7 +204,10 @@ impl Window_ {
         let now = Instant::now();
         let mut acts = Vec::new();
         self.monitors_begin();
-        let frame = egui::Frame::new().fill(p.panel).inner_margin(18.0);
+        // (checkpoint 7: the window with the condensed characters keeps
+        // less room around what it shows)
+        let tight = self.host.desk.condensed() && self.home(Panel::Controls) == self.drawing;
+        let frame = egui::Frame::new().fill(p.panel).inner_margin(if tight { 8.0 } else { 18.0 });
         let chat_shown = match self.drawing {
             Which::Main => self.main_content(ui, frame, now, &mut acts),
             Which::Pane(panel) => {
@@ -189,6 +225,7 @@ impl Window_ {
                     Panel::Chat => self.chat_part(ui, now, &mut acts),
                     Panel::Controls => self.characters(ui, now, &mut acts),
                     Panel::Monitors => self.monitors_window(ui, &p, now, &mut acts),
+                    Panel::Inbox => self.inbox_window(ui, &p, now, &mut acts),
                 });
                 panel == Panel::Chat
             }
@@ -211,10 +248,28 @@ impl Window_ {
     /// then those that have not. True when the chat is on screen in it.
     fn main_content(&mut self, ui: &mut egui::Ui, frame: egui::Frame, now: Instant, acts: &mut Vec<Act>) -> bool {
         let p = self.palette;
+        let side = if self.host.desk.condensed() && !self.out(Panel::Controls) {
+            8
+        } else {
+            18
+        };
         egui::Panel::top("folderstorm-host-panels")
-            .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(18, 6)))
+            .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(side, 6)))
             .resizable(false)
             .show(ui, |ui| self.panel_strip(ui, &p, acts));
+        // the inbox, docked: a band over the rest while something waits,
+        // whatever the page and whichever panels are out
+        let inbox_here = !self.out(Panel::Inbox) && !self.host.inbox.is_empty();
+        if inbox_here {
+            egui::Panel::top("folderstorm-host-inbox")
+                .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(side, 6)))
+                .resizable(false)
+                .show(ui, |ui| self.inbox_band(ui, &p, now, acts));
+        }
+        if std::mem::replace(&mut self.chat.inbox_beside, inbox_here) != inbox_here {
+            // (the band came or went: the window settles in one more frame)
+            ui.ctx().request_repaint();
+        }
         let (characters, chat) = (!self.out(Panel::Controls), !self.out(Panel::Chat));
         if !characters && (self.closing || self.host.desk.quitting()) {
             // the characters are in their own window: what closing the
@@ -228,7 +283,11 @@ impl Window_ {
         if wide {
             egui::Panel::left("folderstorm-host-characters")
                 .frame(frame)
-                .exact_size(CHARACTERS_WIDTH)
+                .exact_size(if self.host.desk.condensed() {
+                    CONDENSED_WIDTH
+                } else {
+                    CHARACTERS_WIDTH
+                })
                 .resizable(false)
                 .show(ui, |ui| self.characters(ui, now, acts));
         }
@@ -279,7 +338,18 @@ impl Window_ {
         if self.comfort_page(ui, acts) {
             return;
         }
-        ui.label(RichText::new(tr!("folderstorm-host-heading")).size(18.0).strong().color(p.ink));
+        let quitting = self.host.desk.quitting();
+        if self.host.desk.condensed() {
+            // one line per character: `ui/condensed.rs`
+            self.condensed(ui, &p, now, quitting, acts);
+            return;
+        }
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(tr!("folderstorm-host-heading")).size(18.0).strong().color(p.ink));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                self.condensed_button(ui, &p, acts);
+            });
+        });
         ui.add_space(2.0);
         ui.label(RichText::new(tr!("folderstorm-host-intro")).color(p.muted));
         ui.add_space(10.0);
@@ -299,7 +369,6 @@ impl Window_ {
         }
         ui.add_space(10.0);
         self.quick_strip(ui, &p, acts);
-        let quitting = self.host.desk.quitting();
         egui::ScrollArea::vertical()
             .id_salt("folderstorm-host-characters")
             .auto_shrink([false, true])
@@ -320,6 +389,7 @@ impl Window_ {
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 self.character(ui, &p, *slot, state, now, quitting, acts);
+                                self.identity_editor(ui, &p, *slot, state, acts);
                                 self.monitor_panel(ui, &p, *slot, state, now, acts);
                             });
                     });
@@ -366,8 +436,16 @@ impl Window_ {
     #[allow(clippy::too_many_arguments)]
     fn character(&self, ui: &mut egui::Ui, p: &Palette, slot: usize, state: &Slot, now: Instant, quitting: bool, acts: &mut Vec<Act>) {
         let active = self.host.desk.active() == Some(slot);
+        let face = super::faces::face(p, state);
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(shown_name(state)).size(14.5).strong().color(p.ink));
+            if face.tint.is_some() {
+                super::faces::dot(ui, p, face.tint);
+            }
+            ui.label(RichText::new(&face.name).size(14.5).strong().color(p.ink));
+            if let Some(real) = &face.real {
+                // behind an alias, the real name stays in sight on the card
+                ui.label(RichText::new(real).color(p.muted));
+            }
             if state.status.as_ref().is_some_and(|s| !s.name.is_empty()) {
                 ui.label(RichText::new(state.profile.shown()).color(p.muted));
             }
@@ -375,6 +453,8 @@ impl Window_ {
                 ui.label(RichText::new(tr!("folderstorm-host-active")).strong().color(p.violet_light));
             }
             self.voice_badge(ui, p, slot);
+            // (checkpoint 7: its alias and colour)
+            self.identity_button(ui, p, slot, acts);
         });
         ui.label(RichText::new(status_line(state)).color(p.muted));
         for (text, serious) in warnings(&self.host.desk, slot, state, now) {
@@ -519,6 +599,8 @@ impl Window_ {
                     if self.host.desk.remove(slot) {
                         // nothing of it is left for the next character of that slot
                         self.host.chat.forget(slot);
+                        self.host.inbox.clear(slot);
+                        self.identity.close_for(slot);
                     }
                 }
                 Act::Standby(slot, standby) => self.host.desk.set_standby(slot, standby),
@@ -550,6 +632,17 @@ impl Window_ {
                 // (its window opens or closes before the next wait:
                 // `sync_panes`)
                 Act::Panel(panel, out) => self.host.desk.set_panel_out(panel, out),
+                Act::EditIdentity(slot) => self.identity_edit(slot),
+                Act::Colour(slot, colour) => self.host.desk.set_colour(slot, colour),
+                Act::Alias(slot, text) => self.identity_alias(slot, &text),
+                Act::Condensed(condensed) => {
+                    self.host.desk.set_condensed(condensed);
+                    // (the cards' pages have no way back from the lines)
+                    self.identity_edit(None);
+                    if let Some(window) = &self.main.window {
+                        window.set_min_inner_size(Some(min_size(condensed)));
+                    }
+                }
             }
         }
         self.host.tick(now);
@@ -665,12 +758,10 @@ fn capture_path(path: &std::path::Path, which: Which) -> std::path::PathBuf {
     path.with_file_name(name)
 }
 
-/// The avatar's name once logged in, the profile's before.
+/// The name a character is shown by: its alias when it has one, else
+/// the avatar's name once logged in, the profile's before.
 pub(super) fn shown_name(slot: &Slot) -> String {
-    match slot.status.as_ref().filter(|s| !s.name.is_empty()) {
-        Some(status) => status.name.clone(),
-        None => slot.profile.shown().to_owned(),
-    }
+    super::faces::shown_name(slot)
 }
 
 /// Where a character is, in a line.
@@ -763,7 +854,7 @@ impl ApplicationHandler for Window_ {
         let attributes = crate::cli::with_desktop_id(Window::default_attributes())
             .with_title(self.title.clone())
             .with_inner_size(winit::dpi::LogicalSize::new(1120.0, 760.0))
-            .with_min_inner_size(winit::dpi::LogicalSize::new(440.0, 360.0));
+            .with_min_inner_size(min_size(self.host.desk.condensed()));
         let made = event_loop
             .create_window(attributes)
             .map_err(anyhow::Error::from)
@@ -879,6 +970,7 @@ impl ApplicationHandler for Window_ {
         }
         // a panel popped out or docked back gets or loses its window
         self.sync_panes(event_loop);
+        self.inbox_retitle();
         for view in std::iter::once(&mut self.main).chain(self.panes.iter_mut().flatten()) {
             if std::mem::take(&mut view.redraw)
                 && let Some(window) = &view.window

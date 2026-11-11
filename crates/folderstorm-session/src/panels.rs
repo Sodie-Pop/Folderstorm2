@@ -24,19 +24,22 @@ pub enum Panel {
     Controls,
     /// The background characters' pictures.
     Monitors,
+    /// Checkpoint 7: what waits for an answer, across all characters.
+    Inbox,
 }
 
 /// How many panels there are.
-pub const PANELS: usize = 3;
+pub const PANELS: usize = 4;
 
 impl Panel {
-    pub const ALL: [Panel; PANELS] = [Panel::Chat, Panel::Controls, Panel::Monitors];
+    pub const ALL: [Panel; PANELS] = [Panel::Chat, Panel::Controls, Panel::Monitors, Panel::Inbox];
 
     pub fn index(self) -> usize {
         match self {
             Panel::Chat => 0,
             Panel::Controls => 1,
             Panel::Monitors => 2,
+            Panel::Inbox => 3,
         }
     }
 
@@ -46,6 +49,7 @@ impl Panel {
             Panel::Chat => "chat",
             Panel::Controls => "controls",
             Panel::Monitors => "monitors",
+            Panel::Inbox => "inbox",
         }
     }
 
@@ -56,6 +60,7 @@ impl Panel {
             Panel::Chat => [620, 640],
             Panel::Controls => [540, 720],
             Panel::Monitors => [700, 520],
+            Panel::Inbox => [520, 380],
         }
     }
 }
@@ -65,7 +70,7 @@ pub const MIN_SIZE: [u32; 2] = [360, 280];
 
 /// The panels named in a list such as `chat,monitors` (the demo's
 /// variable), each once, in the panels' own order. Unknown names are
-/// dropped; `all` names the three.
+/// dropped; `all` names them all.
 pub fn parse_list(list: &str) -> Vec<Panel> {
     let names: Vec<String> = list.split(',').map(|name| name.trim().to_ascii_lowercase()).collect();
     Panel::ALL
@@ -123,6 +128,8 @@ pub struct Config {
     pub chat: PanelConfig,
     pub controls: PanelConfig,
     pub monitors: PanelConfig,
+    /// (absent from a file of before checkpoint 7: docked)
+    pub inbox: PanelConfig,
 }
 
 impl Config {
@@ -131,6 +138,7 @@ impl Config {
             Panel::Chat => self.chat,
             Panel::Controls => self.controls,
             Panel::Monitors => self.monitors,
+            Panel::Inbox => self.inbox,
         }
     }
 
@@ -139,6 +147,7 @@ impl Config {
             Panel::Chat => &mut self.chat,
             Panel::Controls => &mut self.controls,
             Panel::Monitors => &mut self.monitors,
+            Panel::Inbox => &mut self.inbox,
         }
     }
 

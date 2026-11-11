@@ -259,7 +259,19 @@ impl Window_ {
                 line.push_str(&text);
             }
         }
-        ui.label(RichText::new(line).color(if notice { p.amber } else { p.muted }));
+        let label = RichText::new(line).color(if notice { p.amber } else { p.muted });
+        match super::super::faces::tint(p, state.colour) {
+            // (checkpoint 7: the character's colour before its label)
+            Some(tint) => {
+                ui.horizontal(|ui| {
+                    super::super::faces::dot(ui, p, Some(tint));
+                    ui.label(label);
+                });
+            }
+            None => {
+                ui.label(label);
+            }
+        }
     }
 
     /// The monitors' own window (checkpoint 6): every open monitor's

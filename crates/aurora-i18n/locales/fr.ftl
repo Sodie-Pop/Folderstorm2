@@ -4393,6 +4393,49 @@ folderstorm-panel-out = Dans sa propre fenêtre : { $panel }
 folderstorm-panel-dock = Rattacher
 folderstorm-panel-dock-help = Revient dans la fenêtre de l'hôte. Fermer cette fenêtre fait la même chose.
 folderstorm-panel-monitors-empty = Aucun moniteur n'est ouvert. Cochez « Moniteur » sur un personnage pour voir son image ici.
+folderstorm-inbox = Boîte de réception
+folderstorm-inbox-intro = on répond dans la fenêtre de chaque personnage
+folderstorm-inbox-help = Ce qui attend une réponse dans les fenêtres des personnages : offres, demandes de téléportation et d'amitié, dialogues et demandes de permissions des scripts, appels. Rien n'est accepté, refusé ni écarté d'ici : « Basculer pour répondre » amène ce personnage au premier plan. Une question quitte la liste une fois qu'on y a répondu là-bas, ou qu'elle y a expiré.
+folderstorm-inbox-empty = Rien n'attend de réponse.
+folderstorm-inbox-more = { $count ->
+        [one] 1 autre attend dans la fenêtre de { $name }
+       *[other] { $count } autres attendent dans la fenêtre de { $name }
+    }
+folderstorm-inbox-age-now = à l'instant
+folderstorm-inbox-age-minutes = { $count } min
+folderstorm-inbox-age-hours = { $count } h
+folderstorm-inbox-age-help = Depuis combien de temps l'hôte la voit attendre. La question elle-même peut être plus ancienne.
+folderstorm-identity = Alias et couleur
+folderstorm-identity-help = Alias et couleur : un nom et une couleur de votre choix pour ce personnage, pour distinguer les personnages dans les fenêtres de l'hôte.
+folderstorm-identity-note = Seulement pour les fenêtres de cet hôte. Jamais envoyé à la grille, jamais montré à quelqu'un d'autre.
+folderstorm-alias = Alias
+folderstorm-alias-set = Appliquer
+folderstorm-alias-too-long = Un alias a au plus { $max } caractères.
+folderstorm-alias-character = Un alias est une seule ligne de caractères visibles : ni retour à la ligne, ni tabulation, ni caractère invisible.
+folderstorm-colour = Couleur
+folderstorm-colour-none = Aucune couleur
+folderstorm-colour-red = Rouge
+folderstorm-colour-orange = Orange
+folderstorm-colour-yellow = Jaune
+folderstorm-colour-green = Vert
+folderstorm-colour-teal = Sarcelle
+folderstorm-colour-blue = Bleu
+folderstorm-colour-violet = Violet
+folderstorm-colour-pink = Rose
+folderstorm-condensed-on = Condensé
+folderstorm-condensed-on-help = Une ligne par personnage : sa couleur, son nom, où il en est, ce qui est non lu ou attend une réponse, et son action rapide. Les cartes et leurs réglages sont à un clic.
+folderstorm-condensed-off = Cartes
+folderstorm-condensed-off-help = Retour à une carte par personnage, avec tous les réglages : veille, son, moniteur, alias et couleur, fermer, ajouter ou retirer un personnage, raccourcis.
+folderstorm-condensed-login = Se connecter
+folderstorm-condensed-wait = Démarrage
+folderstorm-condensed-nothing = Pas maintenant
+folderstorm-condensed-empty = Aucun personnage pour l'instant. « Cartes » contient le champ pour en ajouter un.
+folderstorm-condensed-waiting = { $count ->
+        [one] 1 question attend une réponse dans sa fenêtre
+       *[other] { $count } questions attendent une réponse dans sa fenêtre
+    }
+folderstorm-condensed-monitor = Son moniteur est ouvert. Son image est dans les cartes, ou dans la fenêtre Moniteurs ; ici il est en pause.
+folderstorm-condensed-more-in-cards = « Cartes » contient ce qu'on peut y faire.
 busy-pause-window-title = { $title } — En pause
 video-memory-full-notice = La mémoire vidéo est pleine et le monde ne peut pas être affiché. Fermez les programmes qui utilisent la carte graphique : il reviendra tout seul.
 video-memory-full-window-title = { $title } — Mémoire vidéo pleine

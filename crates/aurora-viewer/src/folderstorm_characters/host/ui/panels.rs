@@ -174,6 +174,7 @@ pub(super) fn name(panel: Panel) -> &'static str {
         Panel::Chat => tr!("folderstorm-chat-heading"),
         Panel::Controls => tr!("folderstorm-host-heading"),
         Panel::Monitors => tr!("folderstorm-panel-monitors"),
+        Panel::Inbox => tr!("folderstorm-inbox"),
     }
 }
 
@@ -266,8 +267,16 @@ impl Window_ {
         }
     }
 
+    /// The title of a panel's window; the inbox's says how many wait.
+    pub(super) fn pane_title(&self, panel: Panel) -> String {
+        match (panel, self.host.inbox.count()) {
+            (Panel::Inbox, count @ 1..) => format!("{} ({}) — {}", name(panel), super::inbox::count_text(count), self.title),
+            _ => format!("{} — {}", name(panel), self.title),
+        }
+    }
+
     fn open_pane(&self, event_loop: &ActiveEventLoop, panel: Panel, active: bool) -> anyhow::Result<View> {
-        let title = format!("{} — {}", name(panel), self.title);
+        let title = self.pane_title(panel);
         let [width, height] = panel.default_size();
         let mut attributes = crate::cli::with_desktop_id(Window::default_attributes())
             .with_title(title)
@@ -320,7 +329,14 @@ impl Window_ {
             ui.label(RichText::new(tr!("folderstorm-panel-own-window")).color(p.muted));
             for panel in Panel::ALL {
                 let mut out = self.out(panel);
-                if widgets::checkbox(ui, p, &mut out, name(panel))
+                // the inbox's badge: how many wait, wherever the inbox is
+                let label = match (panel, self.host.inbox.count()) {
+                    (Panel::Inbox, count @ 1..) => RichText::new(format!("{} ({})", name(panel), super::inbox::count_text(count)))
+                        .strong()
+                        .color(p.amber),
+                    _ => RichText::new(name(panel)),
+                };
+                if widgets::checkbox(ui, p, &mut out, label)
                     .on_hover_text(tr!("folderstorm-panel-own-window-help"))
                     .changed()
                 {
