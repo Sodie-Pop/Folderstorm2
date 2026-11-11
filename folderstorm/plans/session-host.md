@@ -644,7 +644,10 @@ May be two small PRs: 1a profiles, 1b behind policy.
     character) replaces `self.focused` at the five sites of section 6.4.
     The GPU rules of checkpoint 1 (R4, R5) still go by the real focus: a
     stall box or a recovery of the active character waits for a click on
-    its own window while the user is in the host's window.
+    its own window while the user is in the host's window. The real focus
+    is the window's own (`gpu::has_keyboard`: a window that exists and has
+    the focus), not the viewer's focus flag, which starts true before any
+    focus event; it is also what the status reports.
   - **Background sound** rides Aurora's "mute when minimised" transient
     mute (never saved); **voice** is `voice_enabled && allowed` where the
     voice session is fed, and the microphone is released by the same mute.

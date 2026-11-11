@@ -33,6 +33,18 @@ pub enum Place {
     Minimised,
 }
 
+/// Whether the window has the keyboard, for these rules and for the
+/// session host: a window exists (`window`: its own focus, None before it
+/// is made) and has the focus. `focus_events`: what the window's focus
+/// events said so far, which a viewer seeds with true before any came: a
+/// character started behind, whose window never got the keyboard, would
+/// otherwise count as in front (a driver reset then takes Aurora's counted
+/// ladder) and claim the focus in its first report (the host would then
+/// bring it forward).
+pub fn has_keyboard(focus_events: bool, window: Option<bool>) -> bool {
+    focus_events && window == Some(true)
+}
+
 /// `forced_behind`: the demo's "another viewer in front"
 /// (`AURORA_DEMO_SESSION_BEHIND`).
 pub fn place(focused: bool, minimised: bool, occluded: bool, forced_behind: bool) -> Place {
@@ -90,6 +102,22 @@ mod tests {
         assert_eq!(place(true, false, false, true), Place::Behind);
         assert_eq!(place(true, true, false, false), Place::Minimised);
         assert_eq!(place(false, true, true, true), Place::Minimised);
+    }
+
+    #[test]
+    fn a_window_that_never_got_the_keyboard_is_behind() {
+        // the viewer's seed says focused; the window never had the keyboard
+        let focused = has_keyboard(true, Some(false));
+        assert!(!focused);
+        assert_eq!(place(focused, false, false, false), Place::Behind);
+        assert_eq!(on_loss(place(focused, false, false, false), false, true), Loss::Wait);
+        assert!(!stall_notice_allowed(place(focused, false, false, false)));
+        // no window yet: never focused (the first report claims nothing)
+        assert!(!has_keyboard(true, None));
+        // a focus event that took the keyboard away wins over the window
+        assert!(!has_keyboard(false, Some(true)));
+        assert!(has_keyboard(true, Some(true)));
+        assert_eq!(place(has_keyboard(true, Some(true)), false, false, false), Place::Front);
     }
 
     #[test]
