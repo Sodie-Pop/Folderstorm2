@@ -467,27 +467,25 @@ grids without AIS).
 | A newer sidecar's fields silently ignored by an older viewer | Tools already refuse unknown arguments; envelope features are used only when the viewer advertises them |
 | Assistants retrying uncertain writes anyway | Tool descriptions and errors say "look first, use `assistant_operation_status`"; `client_request_id` makes an honest retry harmless |
 
-## Open questions for the human
+## Decisions (the human, 2026-11-11)
 
-1. **Names in receipts.** A receipt keeps the Ask dialog's sentence and, for
-   plans, the before and after names: in memory only, cleared at logout,
+1. **Names in receipts:** a receipt keeps the Ask dialog's sentence and, for
+   plans, the before and after names, in memory only, cleared at logout,
    shown in Preferences, given to the assistant only when Read is Allow.
-   Today's rule for Recent activity is "tool and outcome only".
-   *Recommendation: yes*; otherwise Preferences can never say what changed.
-2. **Disk.** Keep receipts in memory only, or also in a per-login file to
-   read after a crash? *Recommendation: memory only*: a crash ends the login,
-   whose receipts the binding makes useless, and the inventory itself shows
-   what landed.
-3. **`client_request_id`.** Optional for today's inventory, outfit and
-   camera tools, **required** for the later tools whose effect cannot be
-   looked at afterwards (teleport, chat send, dialog replies, uploads,
-   script compile)? *Recommendation: yes*, as Folderstorm (C++) does.
-4. **`tools/list`.** List every tool the sidecar knows and refuse per call
-   with `unsupported`, or hide what the running viewer lacks?
-   *Recommendation: list all*: the client may cache the list before the
-   viewer starts, and viewer and sidecar ship together, so a mismatch is
-   rare.
-5. **Plans under Allow.** A plan whose class is on Allow runs without a
-   dialog, like any change (Folderstorm (C++)'s default); no extra "always
-   review 10 entries or more" setting for now. *Recommendation: yes*; the
-   setting can come with FEATURES 2.5.
+   **Yes.**
+2. **Disk:** receipts stay in memory only; no per-login file. **Yes.**
+3. **`client_request_id`:** optional for today's inventory, outfit and
+   camera tools; **required** for later tools whose effect cannot be looked
+   at afterwards (teleport, chat send, dialog replies, uploads, script
+   compile). **Yes.**
+4. **`tools/list`:** the sidecar lists every tool it knows; a tool the
+   running viewer lacks is refused per call with `unsupported` and a message
+   telling the user to update. Permission refusals (Never) stay separate
+   (`permission_denied`), and those tools stay listed too. **Yes (list all).**
+5. **Plans under Allow:** a plan whose class is on Allow runs without a
+   dialog, like any change; no "always review 10 entries or more" setting
+   for now (it can come with FEATURES 2.5). **Yes.**
+
+Related decision (2026-11-11, PR #27): the world observation tools get their
+own **Surroundings** permission class (Never in "Read only", Ask in "Ask
+before changes"), separate from Read, after PR #21 merges.
