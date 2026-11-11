@@ -6165,9 +6165,9 @@ failure. Grid validation and any paid upload are performed by the human.
 - **`AURORA_DEMO_INVENTORY=outfit-ask|aurora-outfit-ask`** (Folderstorm2):
   the confirmation of Replace Current Outfit on "Right-click tests", over the
   Legacy or Aurora inventory. Check Cancel first and focused (Enter and Escape
-  cancel), the folder named in the question, and that an item's Wear entry is
-  greyed in its menu until Preferences › Inventory › Enable "Wear" in inventory
-  menus is on.
+  cancel), the folder named in the question, and that an item's Wear entry and
+  a folder's Wear objects entry are greyed in their menus until Preferences ›
+  Inventory › Enable "Wear" in inventory menus is on.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory
