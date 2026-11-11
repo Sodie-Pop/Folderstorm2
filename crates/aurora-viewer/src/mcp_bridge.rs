@@ -10,12 +10,15 @@
 //! (`app/local_assistant.rs`), which runs them through the inventory
 //! window's and Appearance's own paths. The call waits in [`Desk`] until the
 //! server confirms the change ([`observe`]), all polled once per frame.
+//! The desk decides every waiting call again with the permissions and the
+//! login in force ([`desk`], [`login`]).
 
 pub mod ask;
 #[cfg(test)]
 mod change_tests;
 pub mod changes;
 pub mod desk;
+pub mod login;
 pub mod setup;
 #[cfg(test)]
 mod tests;
@@ -24,7 +27,7 @@ pub mod tools;
 use crate::world::World;
 pub use desk::Desk;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
-use folderstorm_mcp_bridge::{Bridge, LocalAssistant, Preset, ToolError};
+use folderstorm_mcp_bridge::{Bridge, ErrorCode, LocalAssistant, Preset, ToolError};
 use std::collections::HashSet;
 use std::sync::mpsc::Receiver;
 use std::sync::{Mutex, PoisonError};
@@ -44,6 +47,8 @@ struct Runtime {
     running: Option<Running>,
     /// Calls waiting for the user, the server or the avatar.
     desk: Desk,
+    /// The login generation the desk binds its calls to.
+    logins: login::Logins,
     /// "Use these settings for this session only": the settings in force
     /// instead of the saved ones until the viewer quits.
     session: Option<LocalAssistant>,
@@ -167,11 +172,17 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             }
         }
         let wanted = rt.session.unwrap_or(*saved);
+        let generation = rt.logins.observe(view.world.login.as_ref());
         if !wanted.enabled {
             rt.failure = None;
-            rt.running = None;
-            // the waiting calls end with the bridge ("the call was dropped")
-            rt.desk = Desk::default();
+            // the calls waiting, queued or not, are refused, then the
+            // bridge stops
+            if let Some(running) = rt.running.take() {
+                while let Ok(call) = running.calls.try_recv() {
+                    call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
+                }
+            }
+            rt.desk.close();
             return Vec::new();
         }
         if rt.running.is_none() && rt.failure.is_none() {
@@ -194,6 +205,9 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         if running.bridge.permissions() != wanted.permissions {
             running.bridge.set_permissions(wanted.permissions);
         }
+        // before any call: the desk decides again with what is in force
+        rt.desk.set_login(generation);
+        rt.desk.set_permissions(wanted.permissions);
         let now = Instant::now();
         let mut cx = None;
         for _ in 0..PER_FRAME {
@@ -215,10 +229,26 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
     })
 }
 
-/// Plan a change again just before it runs: the inventory may have changed
-/// while the user read the dialog.
-pub fn replan(call: &Pending, view: &View) -> Result<changes::Planned, ToolError> {
-    changes::plan(&call.tool, &call.arguments, &view.context())
+/// Decide and plan a change again just before it is sent: the permissions,
+/// the login or the inventory may have changed while the user read the
+/// dialog. None: the call was answered, or it went back to the dialog.
+pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)> {
+    let cx = view.context();
+    let call = with(|rt| {
+        if rt.running.is_none() {
+            call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
+            return None;
+        }
+        let generation = rt.logins.observe(view.world.login.as_ref());
+        rt.desk.recheck(call, generation, &cx, Instant::now())
+    })?;
+    match changes::plan(&call.tool, &call.arguments, &cx) {
+        Ok(planned) => Some((call, planned)),
+        Err(e) => {
+            call.answer(Err(e));
+            None
+        }
+    }
 }
 
 /// A change starts: what the server answers while the app sends it belongs
@@ -243,7 +273,7 @@ pub fn observe(event: &aurora_net::NetEvent) {
 /// Stop the bridge and delete its discovery file (the viewer quits).
 pub fn shutdown() {
     with(|rt| {
-        rt.desk = Desk::default();
+        rt.desk.close();
         rt.running = None;
     });
 }

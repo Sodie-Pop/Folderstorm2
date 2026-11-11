@@ -198,6 +198,31 @@ socket timeout follows the same table.
 Preferences shows every class under Custom now, with Allow / Ask / Never
 (Read: Allow / Never).
 
+### Permissions in force while a call waits
+
+The listener thread's Allow / Ask / Never is a fast refusal only: the frame
+thread (`mcp_bridge/desk.rs`) decides again with the levels in force when
+it takes a call, on every frame while the call waits, when Allow is
+clicked and in `App::local_assistant_run` just before the send
+(`mcp_bridge::replan` → `Desk::recheck`). For every class the call needs:
+
+- any class on Never: refused at once (`permission_denied`), its dialog
+  closes, a later click does nothing;
+- Ask → Allow while the call is asked or queued as asked: it still asks
+  (an Allow setting never answers an open question);
+- Allow → Ask for a call not asked yet: it goes back to asking;
+- access turned off: every waiting call, queued in the channel or not, is
+  refused (`permission_denied`, "access was turned off") instead of being
+  dropped; a change already sent answers `timeout` (it may still land);
+- another login (logout, login, another character): every waiting call
+  is refused (`permission_denied`, "the viewer's login changed"). The
+  login generation (`mcp_bridge/login.rs`) moves each time the frame sees
+  `World::login` change; checkpoint 2 of `mcp-receipts.md` builds
+  `viewer_session` and `session_changed` on it.
+
+Anything already sent is never undone, but nothing more is sent. An
+approval covers that one call and never changes the saved levels.
+
 ## MCP sidecar: no SDK
 
 The official Rust SDK, `rmcp` 3.9 (Apache-2.0, maintained by the MCP
@@ -222,7 +247,7 @@ success, 1 on failure, 2 on bad arguments.
 |---|---|
 | `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
 | `crates/folderstorm-mcp/` | binary `folderstorm-mcp`: `jsonrpc` (MCP), `diagnose`, `main` |
-| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake), `ask` (the dialog) |
+| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake, decided again with the permissions in force), `login` (the login generation), `ask` (the dialog) |
 | `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id |
 | `crates/aurora-viewer/src/ui/options/pages/local_assistant.rs` | the Preferences group |
 
