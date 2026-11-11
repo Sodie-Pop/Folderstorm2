@@ -114,13 +114,8 @@ pub fn bars_rect(s: &ViewportSettings, world: Option<[u32; 4]>, pixels_per_point
     ))
 }
 
-fn bars_id() -> egui::Id {
-    egui::Id::unique("folderstorm_viewport_bars")
-}
-
 /// Remembers the bars' area for this frame (`bars_screen`, `floater_room`).
 pub fn set_bars_area(ctx: &egui::Context, rect: Option<egui::Rect>) {
-    ctx.data_mut(|d| d.insert_temp::<Option<egui::Rect>>(bars_id(), rect));
     let frame = ctx.cumulative_frame_nr();
     ctx.data_mut(|d| d.insert_temp(bars_frame_id(), BarsArea { frame, rect }));
 }
@@ -193,8 +188,7 @@ pub fn monitors(ctx: &egui::Context) -> Option<MonitorLayout> {
 /// The rectangle the bars are laid out in: the world viewport's when they
 /// stay inside it, the window's otherwise.
 pub fn bars_screen(ctx: &egui::Context) -> egui::Rect {
-    ctx.data(|d| d.get_temp::<egui::Rect>(bars_id()))
-        .unwrap_or_else(|| ctx.content_rect())
+    confined_bars(ctx).unwrap_or_else(|| ctx.content_rect())
 }
 
 #[cfg(test)]
@@ -321,6 +315,33 @@ mod tests {
         // then a screen without bars (login) no longer has one
         assert_eq!(run(None), work);
         assert_eq!(run(Some(None)), work, "bars over the whole window");
+    }
+
+    #[test]
+    fn the_side_bars_are_laid_out_in_the_world_while_confined_to_it() {
+        let ctx = egui::Context::default();
+        let screen = rect(0.0, 0.0, 1200.0, 800.0);
+        let world = rect(800.0, 0.0, 400.0, 800.0);
+        let run = |set: Option<Option<egui::Rect>>| {
+            let mut area = egui::Rect::NOTHING;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ui| {
+                    if let Some(bars) = set {
+                        set_bars_area(ui.ctx(), bars);
+                    }
+                    area = bars_screen(ui.ctx());
+                },
+            );
+            output.textures_delta.clear();
+            area
+        };
+        assert_eq!(run(None), screen, "nothing set yet: the whole window");
+        assert_eq!(run(Some(Some(world))), world);
+        assert_eq!(run(Some(None)), screen, "bars over the whole window");
     }
 
     /// The case of the plan's checkpoint 1 (folderstorm/plans/workspaces.md
