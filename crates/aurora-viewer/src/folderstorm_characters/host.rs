@@ -6,6 +6,10 @@
 //! them out: processes and their links ([`process`]), the settings file,
 //! and the window ([`ui`]).
 //!
+//! Checkpoint 5: a background character's monitor shows the pictures its
+//! viewer sends ([`monitors`]); the host keeps the latest one only, in
+//! memory, for as long as the monitor is open.
+//!
 //! The window is drawn on the processor, like the crash window
 //! (`crash/software.rs`): the host opens no graphics device, so it takes
 //! nothing from the characters' card and no driver trouble reaches it.
@@ -17,6 +21,7 @@
 mod chat_ui;
 mod comfort;
 mod hotkeys;
+mod monitors;
 mod process;
 mod ui;
 
@@ -128,6 +133,8 @@ struct Host {
     /// Checkpoint 4: the global hotkeys.
     comfort: comfort::Comfort,
     viewers: [Option<process::Viewer>; MAX_SLOTS],
+    /// Checkpoint 5: the latest picture of each character's monitor.
+    screens: [monitors::Screen; MAX_SLOTS],
     events: Receiver<process::Event>,
     events_tx: Sender<process::Event>,
     /// The demo's host: its characters are not saved.
@@ -149,6 +156,7 @@ impl Host {
             alert: false,
             comfort: Default::default(),
             viewers: Default::default(),
+            screens: Default::default(),
             events,
             events_tx,
             demo: demo.is_some(),
@@ -159,6 +167,8 @@ impl Host {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
             for slot in slots {
                 host.desk.launch(slot, slot == 0);
+                // the demo shows the monitors without a click
+                host.desk.set_monitor(slot, Some(Default::default()));
             }
         }
         host
@@ -209,6 +219,7 @@ impl Host {
         }
         self.desk.tick(now);
         self.carry_out(now);
+        self.tick_monitors(now);
         self.chat.set_active(self.desk.active());
         self.chat.tick(now);
         self.carry_out_chat();

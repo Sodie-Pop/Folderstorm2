@@ -15,12 +15,19 @@
 //!   viewer from one that does not answer, and never takes either for a
 //!   dead one (rule R6).
 //!
+//! - A **monitor's picture** (checkpoint 5) waits in a place for one
+//!   (`monitor::Latest`): the main thread puts the pixels the renderer
+//!   read back and goes on; the out thread packs them and writes them
+//!   after the reports. A picture not written by the time the next one is
+//!   taken is replaced, never queued: the host only ever gets the latest.
+//!
 //! Nothing read here is trusted before it is checked (`ipc`), and nothing
 //! of it is a credential: the host never logs a character in.
 
 use super::transport;
 use ::folderstorm_session::ipc::{self, Bootstrap, Hello, Status, ToHost, ToViewer};
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, TrySendError};
+use ::folderstorm_session::monitor::{self, FrameHeader, Latest};
+use crossbeam_channel::{Receiver, Sender, TrySendError};
 use std::io::Read;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -38,11 +45,31 @@ pub enum Event {
     Gone,
 }
 
+/// A monitor's picture as the renderer read it back: `width` × `height`
+/// pixels of four bytes, rows from the top.
+#[derive(Debug)]
+pub struct Picture {
+    /// The login it was taken in, and its number.
+    pub generation: u32,
+    pub seq: u64,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
 /// The main thread's side of the link.
 pub struct Link {
     events: Receiver<Event>,
     reports: Sender<ToHost>,
+    /// Wakes the out thread for a picture.
+    wake: Sender<()>,
     shared: &'static Shared,
+}
+
+/// The out thread's side: the reports queued, and the wake for a picture.
+struct Outbox {
+    reports: Receiver<ToHost>,
+    wake: Receiver<()>,
 }
 
 /// What the threads share.
@@ -52,6 +79,8 @@ struct Shared {
     turns: AtomicU64,
     /// The link is over: the out thread stops.
     gone: AtomicBool,
+    /// The monitor's latest picture, not written yet.
+    picture: parking_lot::Mutex<Latest<Picture>>,
 }
 
 static LINK: OnceLock<Link> = OnceLock::new();
@@ -95,13 +124,43 @@ pub fn link() -> Option<&'static Link> {
 }
 
 impl Link {
-    fn new() -> (Self, Sender<Event>, Receiver<ToHost>) {
+    fn new() -> (Self, Sender<Event>, Outbox) {
         // bounded both ways: a main loop that stops reading holds the in
         // thread, then the host's writer, never the memory
         let (to_main, events) = crossbeam_channel::bounded(64);
         let (reports, from_main) = crossbeam_channel::bounded(4);
+        // (one wake is enough for any number of pictures: the place holds one)
+        let (wake, woken) = crossbeam_channel::bounded(1);
         let shared: &'static Shared = Box::leak(Box::default());
-        (Self { events, reports, shared }, to_main, from_main)
+        let link = Self {
+            events,
+            reports,
+            wake,
+            shared,
+        };
+        let outbox = Outbox {
+            reports: from_main,
+            wake: woken,
+        };
+        (link, to_main, outbox)
+    }
+
+    /// Leaves a monitor's picture for the out thread and returns at once;
+    /// true when it took the place of one that was not written yet (the
+    /// host reads slowly: only the latest is sent). Nothing is kept once
+    /// the link is over.
+    pub fn picture(&self, picture: Picture) -> bool {
+        if self.shared.gone.load(Ordering::Acquire) {
+            return false;
+        }
+        let replaced = self.shared.picture.lock().put(picture);
+        let _ = self.wake.try_send(());
+        replaced
+    }
+
+    /// The monitor closed: a picture not written yet is not sent.
+    pub fn drop_picture(&self) {
+        self.shared.picture.lock().clear();
     }
 
     /// The main loop made a turn.
@@ -138,7 +197,7 @@ impl Link {
 fn run<W: std::io::Write + Send + 'static>(
     mut input: impl Read,
     to_main: &Sender<Event>,
-    from_main: Receiver<ToHost>,
+    from_main: Outbox,
     shared: &'static Shared,
     connect: impl FnOnce(&str, u32) -> std::io::Result<W>,
 ) {
@@ -202,20 +261,39 @@ fn bootstrap<W: std::io::Write>(
     Ok((boot, out))
 }
 
-/// The out thread: reports as they come, and the heartbeat.
-fn write_reports(mut out: impl std::io::Write, from_main: &Receiver<ToHost>, shared: &Shared) {
+/// The out thread: reports as they come, the monitor's latest picture,
+/// and the heartbeat.
+fn write_reports(mut out: impl std::io::Write, from_main: &Outbox, shared: &Shared) {
     let mut beat = Instant::now();
+    // (a wake that can come no more is not waited for: the reports queued
+    // are still written)
+    let never = crossbeam_channel::never::<()>();
+    let mut wake = &from_main.wake;
     loop {
         let wait = ipc::HEARTBEAT.saturating_sub(beat.elapsed());
-        let sent = match from_main.recv_timeout(wait) {
-            Ok(report) => ipc::write_frame(&mut out, &report),
-            Err(RecvTimeoutError::Timeout) => Ok(()),
-            Err(RecvTimeoutError::Disconnected) => break,
+        let sent = crossbeam_channel::select! {
+            recv(from_main.reports) -> report => match report {
+                Ok(report) => Some(ipc::write_frame(&mut out, &report)),
+                Err(_) => break,
+            },
+            recv(wake) -> woken => {
+                if woken.is_err() {
+                    // (looked at again at once: a report may be queued)
+                    wake = &never;
+                    None
+                } else {
+                    Some(Ok(()))
+                }
+            },
+            default(wait) => Some(Ok(())),
+        };
+        let Some(sent) = sent else {
+            continue;
         };
         if shared.gone.load(Ordering::Acquire) {
             break;
         }
-        let sent = sent.and_then(|()| {
+        let sent = sent.and_then(|()| write_picture(&mut out, shared)).and_then(|()| {
             if beat.elapsed() < ipc::HEARTBEAT {
                 return Ok(());
             }
@@ -226,6 +304,32 @@ fn write_reports(mut out: impl std::io::Write, from_main: &Receiver<ToHost>, sha
         if let Err(e) = sent {
             log::info!("session host: reports stopped ({e})");
             break;
+        }
+    }
+    // nothing of a monitor outlives the link
+    shared.picture.lock().clear();
+}
+
+/// Writes the monitor's picture that waits, if one does: packed to RGB
+/// here, off the main thread. One that is not a monitor's picture (a size
+/// no monitor shows) is dropped, never written.
+fn write_picture(out: &mut impl std::io::Write, shared: &Shared) -> std::io::Result<()> {
+    let Some(picture) = shared.picture.lock().take() else {
+        return Ok(());
+    };
+    // (the size first: nothing is packed of a picture no monitor shows)
+    let header = FrameHeader::new(picture.generation, picture.seq, picture.width, picture.height);
+    let rgb = header.and_then(|_| monitor::rgb_from_rgba(&picture.rgba, picture.width, picture.height));
+    match (header, rgb) {
+        (Some(header), Some(rgb)) => ipc::write_picture(out, header, &rgb),
+        _ => {
+            log::warn!(
+                "session host: a monitor's picture of {} x {} ({} bytes) is not one, dropped",
+                picture.width,
+                picture.height,
+                picture.rgba.len()
+            );
+            Ok(())
         }
     }
 }
@@ -411,5 +515,99 @@ mod tests {
         let (link, _to_main, _from_main) = Link::new();
         let queued = (0..16).filter(|_| link.report(Status::default())).count();
         assert_eq!(queued, 4);
+    }
+
+    /// What the out thread wrote, read back as the host would.
+    fn read_back(bytes: &[u8]) -> Vec<(ToHost, Option<Vec<u8>>)> {
+        let mut rest = bytes;
+        let mut seen = Vec::new();
+        while let Ok(report) = ipc::read_frame::<ToHost>(&mut rest) {
+            let picture = match &report {
+                ToHost::Frame(header) => Some(ipc::read_picture(&mut rest, header).expect("the picture")),
+                _ => None,
+            };
+            seen.push((report, picture));
+        }
+        seen
+    }
+
+    fn picture(seq: u64, width: u32, height: u32, fill: u8) -> Picture {
+        Picture {
+            generation: 1,
+            seq,
+            width,
+            height,
+            rgba: vec![fill; (width * height * 4) as usize],
+        }
+    }
+
+    #[test]
+    fn only_the_latest_picture_is_written_and_the_reports_stay_in_step() {
+        let (link, _to_main, from_main) = Link::new();
+        let wire = Wire::default();
+        let shared = link.shared;
+        // three pictures before the out thread runs: the host reads slowly
+        assert!(!link.picture(picture(1, 320, 180, 10)));
+        assert!(link.picture(picture(2, 320, 180, 20)), "the first was never written: replaced");
+        assert!(link.picture(picture(3, 480, 270, 30)));
+        assert!(link.report(Status {
+            unread: 1,
+            ..Default::default()
+        }));
+        let out = wire.clone();
+        let writer = std::thread::spawn(move || write_reports(out, &from_main, shared));
+        let deadline = Instant::now() + ipc::HEARTBEAT * 5;
+        let mut seen = Vec::new();
+        while Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+            seen = read_back(&wire.0.lock().expect("wire").clone());
+            if seen.iter().any(|(report, _)| matches!(report, ToHost::Heartbeat { .. })) {
+                break;
+            }
+        }
+        let pictures: Vec<_> = seen.iter().filter_map(|(report, rgb)| rgb.as_ref().map(|rgb| (report, rgb))).collect();
+        assert_eq!(pictures.len(), 1, "one picture, the latest");
+        let (ToHost::Frame(header), rgb) = pictures[0] else {
+            panic!("not a picture");
+        };
+        assert_eq!((header.seq, header.width, header.height), (3, 480, 270));
+        assert_eq!(rgb.len(), 480 * 270 * 3);
+        assert!(rgb.iter().all(|byte| *byte == 30));
+        // the status and the heartbeat around it read as before
+        assert!(seen.iter().any(|(report, _)| matches!(report, ToHost::Status(s) if s.unread == 1)));
+        assert!(seen.iter().any(|(report, _)| matches!(report, ToHost::Heartbeat { .. })));
+        // a picture that is no monitor's is dropped, and the next one passes
+        assert!(!link.picture(picture(4, 4000, 2000, 0)));
+        let before = wire.0.lock().expect("wire").len();
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!link.picture(Picture {
+            rgba: vec![0; 7],
+            ..picture(5, 320, 180, 0)
+        }));
+        std::thread::sleep(Duration::from_millis(100));
+        let after = read_back(&wire.0.lock().expect("wire")[before..]);
+        assert!(after.iter().all(|(_, rgb)| rgb.is_none()), "{after:?}");
+        assert!(!link.picture(picture(6, 320, 180, 60)));
+        let deadline = Instant::now() + ipc::HEARTBEAT * 3;
+        let mut last = None;
+        while last.is_none() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+            last = read_back(&wire.0.lock().expect("wire").clone())
+                .into_iter()
+                .filter_map(|(report, _)| match report {
+                    ToHost::Frame(header) => Some(header.seq),
+                    _ => None,
+                })
+                .next_back();
+        }
+        assert_eq!(last, Some(6));
+        // a closed monitor's picture is not sent; nothing is kept once the
+        // link is over
+        link.picture(picture(7, 320, 180, 0));
+        link.drop_picture();
+        shared.gone.store(true, Ordering::Release);
+        writer.join().expect("the out thread ends with the link");
+        assert!(!link.picture(picture(8, 320, 180, 0)));
+        assert!(shared.picture.lock().take().is_none());
     }
 }

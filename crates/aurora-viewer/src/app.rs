@@ -9384,6 +9384,8 @@ impl App {
         self.viewfinder_frame(&mut gfx.renderer);
         self.photo_isolate_frame(&mut gfx.renderer);
         let photo = self.photo_frame(&mut gfx.renderer);
+        // Folderstorm: a session monitor's picture, when no photo is drawn (app/folderstorm_characters/monitor.rs)
+        let photo = self.folderstorm_monitor_frame(photo, &mut gfx.renderer, gfx.window.is_minimized().unwrap_or(false));
         let (world_w, world_h) = gfx.renderer.world_size(); // Folderstorm: the world's part
         let window_aspect = world_w as f32 / world_h.max(1) as f32;
         let aspect = photo.as_ref().map_or(window_aspect, |f| f.aspect);
@@ -11559,6 +11561,7 @@ impl App {
             gfx.renderer.render(fp, lists, Some(egui_frame))
         };
         self.photo_gpu_time(&stats);
+        self.folderstorm_monitor_drawn(&mut gfx.renderer); // Folderstorm: a session monitor's picture
         self.photo_drawn(&mut gfx.renderer);
         self.last_render = stats;
         self.busy_pause_frame(gfx.renderer.vr_engaged());

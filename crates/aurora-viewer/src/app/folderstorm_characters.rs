@@ -8,6 +8,7 @@
 //! a managed viewer is in `folderstorm_characters/chat.rs`.
 
 mod chat;
+mod monitor;
 
 use super::*;
 use crate::folderstorm_characters::managed::Event as HostEvent;
@@ -33,8 +34,16 @@ impl App {
     /// (`gpu::has_keyboard`). Never `self.focused` alone, which starts true
     /// before any focus event: a character started behind would count as
     /// in front and claim the focus in its first report.
+    ///
+    /// A frame takes the window out of `self.gfx` while it is drawn, and
+    /// most of these rules are asked during the frame: the window's answer
+    /// is remembered (`window_focus`), or every window would count as
+    /// without the keyboard there (the background cap in front, a loss in
+    /// front left to wait).
     fn folderstorm_focused(&self) -> bool {
-        gpu::has_keyboard(self.focused, self.gfx.as_ref().map(|g| g.window.has_focus()))
+        let window = self.gfx.as_ref().map(|g| g.window.has_focus());
+        let window = crate::folderstorm_characters::window_focus(&self.folderstorm_characters.window_focus, window);
+        gpu::has_keyboard(self.focused, window)
     }
 
     /// `AURORA_DEMO_SESSION_BEHIND`: another Folderstorm2 window counts as
@@ -265,6 +274,7 @@ impl App {
                         log::info!("session host: gone, this viewer goes on by itself");
                     }
                     self.folderstorm_characters.managed.release();
+                    self.folderstorm_characters.monitor.state = Default::default();
                     self.sync_minimized_mute();
                 }
             }
@@ -341,6 +351,7 @@ impl App {
         if std::mem::replace(&mut report.logged_in, logged_in) != logged_in {
             report.generation = report.generation.wrapping_add(1);
         }
+        let focused = self.folderstorm_focused();
         let state = &self.folderstorm_characters;
         let (screen, window, gpu) = match &self.gfx {
             None => (ipc::Screen::Starting, ipc::WindowState::default(), ipc::Gpu::Ok),
@@ -400,13 +411,19 @@ impl App {
                 0
             },
             // (no window yet: never focused)
-            focused: self.folderstorm_focused(),
+            focused,
             window,
             gpu,
             paused_3d: state.paused,
             sound_muted: self.minimized_mute.active,
             // given up only once the voice is off too
             voice_allowed: state.managed.voice_report(self.voice.connected),
+            // (frames are rare in a minimised window: said from here)
+            monitor: match state.managed.monitor(focused) {
+                None => ::folderstorm_session::monitor::State::Off,
+                Some(_) if window.minimised => ::folderstorm_session::monitor::State::Minimised,
+                Some(_) => state.monitor.state,
+            },
         }
         .cleaned()
     }

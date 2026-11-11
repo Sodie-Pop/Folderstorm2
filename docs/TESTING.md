@@ -5373,7 +5373,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…" |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6754,9 +6754,50 @@ failure. Grid validation and any paid upload are performed by the human.
     on the grid by the human.) "Heard in the background" on a row keeps
     that character's sounds while another one is active (its log says
     `Background, …, sound on, voice off`).
+  - **monitors** (checkpoint 5): in the demo every character's
+    **Monitor** is open. Under the row of each background character a
+    picture of its own demo scene appears and changes about once a second,
+    with "<name> · just now · live" under it; the active character's
+    says "This is the active character: see its own window". The picture
+    has the proportions of that viewer's window (resize a viewer: bars
+    appear left and right, or above and below, never a stretched picture)
+    and is the right way up. It does not flicker, and clicking or typing
+    on it does nothing. What to try:
+    - **Switch** to a watched character: its window comes forward and its
+      monitor says it is in front; the one left gets its picture within a
+      second or two. Each watched viewer's log says `session monitor: on,
+      pictures within (480, 270) every 1000 ms`, still `3D paused: …
+      (policy Off)`, and never `3D resumed` while it is only watched.
+    - untick **Monitor** on a row: the picture goes at once, and that
+      viewer's log says `session monitor: off, the 3D stays off (n
+      pictures sent, x ms a picture)`: the cost of a picture as that
+      viewer measured it.
+    - the sizes (320 × 180, 480 × 270, 640 × 360) and rates (0.5, 1, 2,
+      5 / s) under a monitor. With `AURORA_DEMO_SESSION_HOST=5`, set the
+      four monitors to 640 × 360 and 5 / s: each says "1.3 pictures a
+      second: the monitors share one budget".
+    - minimise the host, cover it whole with another window (where the
+      system tells: Windows only says so for a minimised window), or
+      scroll a monitor out of sight: within a second that viewer's log
+      says `session monitor: off`; bring the host back: `on` again, and
+      the last picture is still there with its age until the next one.
+    - tick "Minimise in the background" on a row whose monitor is open:
+      that window is no longer minimised when another becomes active. A
+      window minimised by hand shows "Its window is minimised: no
+      picture…" in its monitor.
+    - with `AURORA_DEMO_BUSY_PAUSE=<frame>` (the viewers inherit it): the
+      watched viewers' monitors say "fewer pictures: the graphics card is
+      busy" and change about every 10 seconds; with
+      `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`: "paused: the
+      graphics card does not answer", no picture is asked, and
+      checkpoint 1's rules hold as above (no box, no close).
+    - foreground cost: note the active viewer's frame rate (its
+      statistics) with every monitor closed, then with four open at 1 / s.
+    Nothing of a picture is written anywhere: the host keeps the latest
+    one in memory while its monitor is open.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
-  window's picture at each of its frames.
+  window's picture at each of its frames (its monitors included).
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

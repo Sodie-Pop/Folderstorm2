@@ -24,6 +24,11 @@
 //!   profile made from another one (the host's quick actions and global
 //!   hotkeys are in [`host`]).
 //!
+//! Checkpoint 5, monitors:
+//! - [`Monitoring`]: what a managed viewer keeps of the pictures it takes
+//!   for the host (the `impl App` glue is in
+//!   `app/folderstorm_characters/monitor.rs`; the host's side in [`host`]).
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod chat_export;
@@ -85,6 +90,42 @@ pub struct State {
     pub chat: chat_export::Export,
     /// The session host asked this viewer to quit.
     pub quit_by_host: bool,
+    /// The window's own focus as last read from it. A frame takes the
+    /// window out of the app while it is drawn: the rules asked during the
+    /// frame go by what the window said just before.
+    pub window_focus: std::cell::Cell<Option<bool>>,
+    /// The monitor's pictures taken for the session host (checkpoint 5).
+    pub monitor: Monitoring,
+}
+
+/// What a managed viewer keeps of its monitor (plan section 12): when the
+/// next picture is due, and the one asked of the renderer and not
+/// answered yet. No picture is kept here: it goes to the link at once.
+#[derive(Debug, Default)]
+pub struct Monitoring {
+    pub schedule: ::folderstorm_session::monitor::Schedule,
+    /// The size of the picture asked of the renderer, until its answer.
+    pub asked: Option<(u32, u32)>,
+    /// The host asked for pictures as of the last frame.
+    pub ordered: bool,
+    /// The number of the last picture sent.
+    pub seq: u64,
+    /// What the host was last told of the monitor.
+    pub state: ::folderstorm_session::monitor::State,
+    /// Pictures sent, and the time their frames took in all, for the log.
+    pub sent: u64,
+    pub waited: std::time::Duration,
+}
+
+/// The window's focus for the session's rules: as the window says when it
+/// is there to ask (`window`: None while a frame holds it, or before it is
+/// made), which is then remembered; otherwise as it last said. None: no
+/// window ever said anything.
+pub fn window_focus(remembered: &std::cell::Cell<Option<bool>>, window: Option<bool>) -> Option<bool> {
+    if window.is_some() {
+        remembered.set(window);
+    }
+    remembered.get()
 }
 
 /// What a managed viewer keeps of its reports to the host.
@@ -136,6 +177,19 @@ mod tests {
         assert_eq!(parse_demo("normal"), Some(Some(Behind3d::Normal)));
         assert_eq!(parse_demo("0"), None);
         assert_eq!(parse_demo(""), None);
+    }
+
+    #[test]
+    fn the_window_s_focus_is_remembered_while_a_frame_holds_the_window() {
+        let remembered = std::cell::Cell::new(None);
+        // no window yet: nothing is known, never focused
+        assert_eq!(window_focus(&remembered, None), None);
+        // the window says it has the keyboard, then the frame takes it
+        assert_eq!(window_focus(&remembered, Some(true)), Some(true));
+        assert_eq!(window_focus(&remembered, None), Some(true), "during the frame: as it last said");
+        // it lost the keyboard between two frames
+        assert_eq!(window_focus(&remembered, Some(false)), Some(false));
+        assert_eq!(window_focus(&remembered, None), Some(false));
     }
 
     #[test]

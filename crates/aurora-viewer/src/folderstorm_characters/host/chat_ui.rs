@@ -492,6 +492,7 @@ pub(super) mod tests {
             alert: false,
             comfort: Default::default(),
             viewers: Default::default(),
+            screens: Default::default(),
             events,
             events_tx,
             demo: true,

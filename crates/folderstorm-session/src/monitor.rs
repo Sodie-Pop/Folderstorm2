@@ -415,12 +415,19 @@ impl Schedule {
         if self.asked.is_some() || Self::held(c).is_some() {
             return false;
         }
+        let interval = self.interval(order, c);
         let due = self
             .last
-            .is_none_or(|last| now.saturating_duration_since(last) >= self.interval(order, c));
+            .is_none_or(|last| now.saturating_duration_since(last) >= interval);
         if due {
             self.asked = Some(now);
-            self.last = Some(now);
+            // on the order's own beat while the frames keep up with it (a
+            // frame a little late does not make every later picture late,
+            // and the rate never passes the order's); from now otherwise
+            self.last = Some(match self.last {
+                Some(last) if now.saturating_duration_since(last) < interval * 2 => last + interval,
+                _ => now,
+            });
         }
         due
     }
@@ -435,6 +442,11 @@ impl Schedule {
     pub fn overdue(&self, now: Instant) -> bool {
         self.asked
             .is_some_and(|asked| now.saturating_duration_since(asked) >= PICTURE_TIMEOUT)
+    }
+
+    /// How long the picture awaited has been so (zero: none is).
+    pub fn waited(&self, now: Instant) -> Duration {
+        self.asked.map_or(Duration::ZERO, |asked| now.saturating_duration_since(asked))
     }
 
     /// The picture came back. A slow one lowers the rate a step; enough
@@ -690,6 +702,45 @@ mod tests {
         s.answered(ms(1010));
         assert_eq!(s.state(Some(order()), FINE), State::Live);
         assert_eq!(s.level(), 0);
+    }
+
+    #[test]
+    fn frames_a_little_late_do_not_halve_the_rate_and_never_raise_it() {
+        // a background window draws 5 frames a second: the fastest order
+        // is asked at frames that come a few milliseconds early or late
+        let fast = Order {
+            size: Size::Small,
+            interval_ms: 200,
+        };
+        let mut s = Schedule::default();
+        let t0 = Instant::now();
+        let mut asked = 0;
+        for frame in 0..50u64 {
+            // (frames every 203 ms: always a little late on the order)
+            let now = t0 + Duration::from_millis(frame * 203);
+            if s.poll(Some(fast), FINE, now) {
+                asked += 1;
+                s.answered(now + Duration::from_millis(5));
+            }
+        }
+        assert!(asked >= 49, "nearly every frame: {asked}");
+        // frames faster than the order: never more pictures than ordered
+        let mut s = Schedule::default();
+        let mut asked = 0;
+        for frame in 0..1000u64 {
+            let now = t0 + Duration::from_millis(frame * 10);
+            if s.poll(Some(fast), FINE, now) {
+                asked += 1;
+                s.answered(now + Duration::from_millis(5));
+            }
+        }
+        assert_eq!(asked, 50, "10 seconds at 5 a second");
+        // after a long hold the beat starts again from now: no burst
+        let later = t0 + Duration::from_secs(100);
+        assert!(s.poll(Some(fast), FINE, later));
+        s.answered(later);
+        assert!(!s.poll(Some(fast), FINE, later + Duration::from_millis(100)));
+        assert!(s.poll(Some(fast), FINE, later + Duration::from_millis(200)));
     }
 
     #[test]
