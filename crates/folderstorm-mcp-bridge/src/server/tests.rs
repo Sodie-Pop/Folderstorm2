@@ -1,6 +1,6 @@
 use super::*;
 use crate::client::{Client, ClientError};
-use crate::policy::Preset;
+use crate::policy::{Level, Preset};
 use std::io::{Read, Write};
 
 fn start(timeout: Duration, dir: Option<PathBuf>) -> (Bridge, Receiver<Pending>) {
@@ -147,7 +147,7 @@ fn unknown_tools_are_refused() {
     let (bridge, _calls) = start(VIEWER_TIMEOUT, None);
     let client = Client::new(bridge.port(), bridge.token().clone());
     assert_eq!(
-        code(client.call("inventory_delete", json!({})).expect_err("refused")),
+        code(client.call("inventory_teleport", json!({})).expect_err("refused")),
         ErrorCode::UnknownTool
     );
 }
@@ -211,4 +211,76 @@ fn a_new_start_gets_a_new_token() {
     let (a, _ca) = start(VIEWER_TIMEOUT, None);
     let (b, _cb) = start(VIEWER_TIMEOUT, None);
     assert_ne!(a.token().secret(), b.token().secret());
+}
+
+#[test]
+fn changes_set_to_never_are_refused_and_ask_reaches_the_viewer_flagged() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone()).with_client_name("Claude\r\nCode\u{7}");
+    // read only: every change refused before the viewer
+    assert_eq!(
+        code(client.call("inventory_trash", json!({"ids": []})).expect_err("refused")),
+        ErrorCode::PermissionDenied
+    );
+    assert!(calls.try_recv().is_err());
+    bridge.set_permissions(Preset::AskBeforeChanges.permissions());
+    let viewer = std::thread::spawn(move || {
+        let call = calls.recv().expect("a call");
+        let seen = (call.tool.clone(), call.ask, call.client.clone());
+        call.answer(Ok(json!({"done": true})));
+        let read = calls.recv().expect("a read");
+        let read_ask = read.ask;
+        read.answer(Ok(json!({})));
+        (seen, read_ask)
+    });
+    assert_eq!(
+        client.call("inventory_rename", json!({"id": "x", "name": "y"})).expect("allowed"),
+        json!({"done": true})
+    );
+    client.call("worn_items", json!({})).expect("read");
+    let ((tool, ask, name), read_ask) = viewer.join().expect("viewer");
+    assert_eq!(tool, "inventory_rename");
+    assert!(ask, "Ask level: the viewer asks first");
+    assert!(!read_ask, "reads never ask");
+    assert_eq!(name.as_deref(), Some("ClaudeCode"), "the name is cleaned");
+}
+
+#[test]
+fn permanent_deletes_are_never_allowed() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let mut all = Permissions::default();
+    for class in Class::ALL {
+        all.set(class, Level::Allow);
+    }
+    bridge.set_permissions(all);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    for never in protocol::NEVER {
+        let error = client.call(never, json!({})).expect_err("never");
+        assert_eq!(code(error), ErrorCode::PermissionDenied, "{never}");
+    }
+    assert!(calls.try_recv().is_err(), "nothing reached the viewer");
+    assert!(bridge.activity().iter().all(|a| a.outcome == Outcome::Refused));
+}
+
+#[test]
+fn an_asking_call_may_wait_longer_than_a_read() {
+    let (bridge, calls) = start(Duration::from_millis(100), None);
+    bridge.set_permissions(Preset::AskBeforeChanges.permissions());
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let viewer = std::thread::spawn(move || {
+        let call = calls.recv().expect("a call");
+        // the user takes a moment in the dialog
+        std::thread::sleep(Duration::from_millis(400));
+        call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, "refused by the user")));
+        calls
+    });
+    assert_eq!(
+        code(client.call("inventory_move", json!({"ids": ["x"]})).expect_err("refused")),
+        ErrorCode::PermissionDenied
+    );
+    let calls = viewer.join().expect("viewer");
+    assert_eq!(bridge.activity()[0].outcome, Outcome::Refused);
+    // a read keeps the short wait
+    assert_eq!(code(client.call("worn_items", json!({})).expect_err("late")), ErrorCode::Timeout);
+    drop(calls);
 }
