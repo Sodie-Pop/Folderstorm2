@@ -6,33 +6,35 @@
 //! event loop this follows), with the viewer's theme, fonts, icons and
 //! catalogues. Checkpoint 4's part (quick actions, hotkeys, "New character
 //! profile…") is in `ui/comfort.rs`, checkpoint 5's (the monitors) in
-//! `ui/monitors.rs`.
+//! `ui/monitors.rs`, checkpoint 6's (the chat, the characters and the
+//! monitors each in a window of their own) in `ui/panels.rs`.
 
 mod comfort;
 mod monitors;
+mod panels;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
 use crate::theme::Palette;
 use crate::ui::{
     fonts,
-    icons::Icons,
     widgets::{self, ActionKind},
 };
 use ::folderstorm_session::host::{AddError, Health, Note, Phase, Slot};
 use ::folderstorm_session::ipc::{Gpu, MAX_SLOTS, Refusal, Screen, Standby};
+use ::folderstorm_session::panels::Panel;
 use ::folderstorm_session::profile::{self, NameError};
 use aurora_i18n::tr;
 use egui::{RichText, Vec2};
+use panels::{Look, View, Which};
 use std::{
     num::NonZeroU32,
-    sync::Arc,
     time::{Duration, Instant},
 };
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, OwnedDisplayHandle},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
 
@@ -50,36 +52,15 @@ pub fn run(mut host: Host) -> anyhow::Result<()> {
     host.comfort.hotkeys = super::hotkeys::Registrar::install(&mut builder);
     host.apply_hotkeys();
     let event_loop = builder.build()?;
-    let context = egui::Context::default();
     let settings = crate::settings::Settings::load();
-    let theme = crate::ui::skin::recovery_theme();
-    theme.apply(&context, settings.font_scale);
     // (drawn on events and ticks: the system font scan is waited for here)
     fonts::fallback::wait();
-    fonts::apply(&context, &settings.font);
-    let icons = Icons::load(&context, None);
-    let mut app = Window_ {
-        host,
-        palette: theme.palette(),
-        context,
-        _icons: icons,
-        painter: Default::default(),
-        surface: None,
-        window: None,
-        input: None,
-        error: None,
-        next_tick: Instant::now(),
-        redraw: true,
-        new_profile: String::new(),
-        add_error: None,
-        comfort: Default::default(),
-        monitors: Default::default(),
-        ending: None,
-        closing: false,
-        chat: ChatPanel::default(),
-        chat_page: false,
-        focused: false,
+    let look = Look {
+        theme: crate::ui::skin::recovery_theme(),
+        font_scale: settings.font_scale,
+        font: Some(settings.font.clone()),
     };
+    let mut app = Window_::new(host, look);
     event_loop.run_app(&mut app)?;
     // what was not written yet; the viewers are let go, never ended
     if app.host.unsaved.is_some() {
@@ -91,27 +72,29 @@ pub fn run(mut host: Host) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The host and its window.
+/// The host and its windows: its own, and one for each panel that is out.
 struct Window_ {
     host: Host,
     palette: Palette,
-    context: egui::Context,
-    /// (keeps the icons' textures alive)
-    _icons: Icons,
-    painter: crate::crash::software::Painter,
-    surface: Option<softbuffer::Surface<OwnedDisplayHandle, Arc<Window>>>,
-    window: Option<Arc<Window>>,
-    input: Option<egui_winit::State>,
+    /// What a window's interface is made with.
+    look: Look,
+    /// The host's own window.
+    main: View,
+    /// Checkpoint 6: the windows of the panels that are out.
+    panes: [Option<View>; ::folderstorm_session::panels::PANELS],
+    /// The window being drawn.
+    drawing: Which,
+    /// The panels that were out when the host started have their windows.
+    restored: bool,
+    /// The host's window title; a panel's window adds its name.
+    title: String,
     error: Option<String>,
     next_tick: Instant,
-    redraw: bool,
     /// The name typed for a new character, and why it was not added.
     new_profile: String,
     add_error: Option<String>,
     /// Checkpoint 4: the hotkeys' and the new profile's pages.
     comfort: comfort::Panel,
-    /// Checkpoint 5: the monitors' textures, and which are on screen.
-    monitors: monitors::Panel,
     /// The character whose "End process" waits for its confirmation.
     ending: Option<usize>,
     /// The window's close button was pressed while characters run.
@@ -120,8 +103,35 @@ struct Window_ {
     chat: ChatPanel,
     /// A narrow window shows the chat (true) or the characters.
     chat_page: bool,
-    /// The window has the keyboard: what it shows of the chat is read.
-    focused: bool,
+}
+
+impl Window_ {
+    fn new(host: Host, look: Look) -> Self {
+        let heading = tr!("folderstorm-host-title", product = folderstorm_brand::PRODUCT);
+        let title = match &crate::cli::get().title {
+            Some(title) => format!("{heading} — {title}"),
+            None => heading,
+        };
+        Self {
+            host,
+            palette: look.theme.palette(),
+            main: look.view(),
+            look,
+            panes: panels::no_panes(),
+            drawing: Which::Main,
+            restored: false,
+            title,
+            error: None,
+            next_tick: Instant::now(),
+            new_profile: String::new(),
+            add_error: None,
+            comfort: Default::default(),
+            ending: None,
+            closing: false,
+            chat: ChatPanel::default(),
+            chat_page: false,
+        }
+    }
 }
 
 /// From this width the characters and the chat show side by side.
@@ -150,26 +160,85 @@ enum Act {
     Comfort(comfort::Act),
     /// Checkpoint 5: a character's monitor opened, changed or closed.
     Monitor(usize, Option<::folderstorm_session::monitor::Spec>),
+    /// Checkpoint 6: a panel leaves for its own window, or comes back.
+    Panel(Panel, bool),
 }
 
 impl Window_ {
+    /// What the window being drawn (`self.drawing`) shows.
     fn content(&mut self, ui: &mut egui::Ui) -> Vec<Act> {
         let p = self.palette;
         let now = Instant::now();
         let mut acts = Vec::new();
         self.monitors_begin();
-        let wide = ui.available_width() >= WIDE;
         let frame = egui::Frame::new().fill(p.panel).inner_margin(18.0);
+        let chat_shown = match self.drawing {
+            Which::Main => self.main_content(ui, frame, now, &mut acts),
+            Which::Pane(panel) => {
+                // a panel's own window: the way back, then the panel
+                egui::Panel::top("folderstorm-host-pane-head")
+                    .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(18, 6)))
+                    .resizable(false)
+                    .show_separator_line(false)
+                    .show(ui, |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            self.dock_button(ui, &p, panel, &mut acts);
+                        });
+                    });
+                egui::CentralPanel::default().frame(frame).show(ui, |ui| match panel {
+                    Panel::Chat => self.chat_part(ui, now, &mut acts),
+                    Panel::Controls => self.characters(ui, now, &mut acts),
+                    Panel::Monitors => self.monitors_window(ui, &p, now, &mut acts),
+                });
+                panel == Panel::Chat
+            }
+        };
+        if self.home(Panel::Chat) == self.drawing {
+            // what the chat's window shows is read while that window has
+            // the keyboard; the host's other windows say nothing of it
+            let viewing = if chat_shown {
+                self.chat.viewing(&self.host.chat)
+            } else {
+                ::folderstorm_session::chat::Viewing::Nothing
+            };
+            let focused = self.view(self.drawing).is_some_and(|view| view.focused);
+            self.host.chat.look(viewing, focused);
+        }
+        acts
+    }
+
+    /// The host's own window: which panels have a window of their own,
+    /// then those that have not. True when the chat is on screen in it.
+    fn main_content(&mut self, ui: &mut egui::Ui, frame: egui::Frame, now: Instant, acts: &mut Vec<Act>) -> bool {
+        let p = self.palette;
+        egui::Panel::top("folderstorm-host-panels")
+            .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(18, 6)))
+            .resizable(false)
+            .show(ui, |ui| self.panel_strip(ui, &p, acts));
+        let (characters, chat) = (!self.out(Panel::Controls), !self.out(Panel::Chat));
+        if !characters && (self.closing || self.host.desk.quitting()) {
+            // the characters are in their own window: what closing the
+            // host asks is asked here, in the window that was closed
+            egui::Panel::bottom("folderstorm-host-closing")
+                .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(18, 10)))
+                .resizable(false)
+                .show(ui, |ui| self.footer(ui, &p, now, acts));
+        }
+        let wide = characters && chat && ui.available_width() >= WIDE;
         if wide {
             egui::Panel::left("folderstorm-host-characters")
                 .frame(frame)
                 .exact_size(CHARACTERS_WIDTH)
                 .resizable(false)
-                .show(ui, |ui| self.characters(ui, now, &mut acts));
+                .show(ui, |ui| self.characters(ui, now, acts));
         }
-        let chat_shown = wide || self.chat_page;
+        let chat_shown = chat && (wide || !characters || self.chat_page);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
-            if !wide {
+            if !characters && !chat {
+                self.panels_elsewhere(ui, &p, acts);
+                return;
+            }
+            if characters && chat && !wide {
                 // one page at a time: the characters, or their chat
                 let unread = self.host.chat.total_unread();
                 let chat = match unread {
@@ -183,24 +252,24 @@ impl Window_ {
                 }
                 ui.add_space(8.0);
             }
-            if !chat_shown {
-                self.characters(ui, now, &mut acts);
-                return;
-            }
-            let asked = self.chat.show(ui, &p, &mut self.host, now);
-            if let Some(slot) = asked.switch {
-                acts.push(Act::Switch(slot));
-            } else if asked.acted {
-                acts.push(Act::Refresh);
+            if chat_shown {
+                self.chat_part(ui, now, acts);
+            } else {
+                self.characters(ui, now, acts);
             }
         });
-        let viewing = if chat_shown {
-            self.chat.viewing(&self.host.chat)
-        } else {
-            ::folderstorm_session::chat::Viewing::Nothing
-        };
-        self.host.chat.look(viewing, self.focused);
-        acts
+        chat_shown
+    }
+
+    /// The shared chat, and what a click in it asks for.
+    fn chat_part(&mut self, ui: &mut egui::Ui, now: Instant, acts: &mut Vec<Act>) {
+        let p = self.palette;
+        let asked = self.chat.show(ui, &p, &mut self.host, now);
+        if let Some(slot) = asked.switch {
+            acts.push(Act::Switch(slot));
+        } else if asked.acted {
+            acts.push(Act::Refresh);
+        }
     }
 
     /// The characters' rows, the choices and the footer.
@@ -241,15 +310,19 @@ impl Window_ {
                     ui.label(RichText::new(tr!("folderstorm-host-empty")).color(p.muted));
                 }
                 for (slot, state) in &slots {
-                    egui::Frame::new()
-                        .fill(p.field)
-                        .inner_margin(12.0)
-                        .corner_radius(radius)
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            self.character(ui, &p, *slot, state, now, quitting, acts);
-                            self.monitor_panel(ui, &p, *slot, state, now, acts);
-                        });
+                    // (a scope of its own per card: two cards' choices, the
+                    // monitors' sizes and rates, are not one widget)
+                    ui.push_id(("folderstorm-host-card", *slot), |ui| {
+                        egui::Frame::new()
+                            .fill(p.field)
+                            .inner_margin(12.0)
+                            .corner_radius(radius)
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                self.character(ui, &p, *slot, state, now, quitting, acts);
+                                self.monitor_panel(ui, &p, *slot, state, now, acts);
+                            });
+                    });
                     ui.add_space(8.0);
                 }
             });
@@ -396,7 +469,8 @@ impl Window_ {
                 if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
                     acts.push(Act::CancelQuit);
                 }
-            } else if self.closing {
+            } else if self.closing && self.drawing == Which::Main {
+                // (asked in the host's own window: the one being closed)
                 ui.label(RichText::new(tr!("folderstorm-host-close-question")).color(p.ink));
                 let quit = tr!("folderstorm-host-quit-all");
                 if widgets::action_button(ui, p, "power", quit, ActionKind::Danger, BUTTON).clicked() {
@@ -424,8 +498,7 @@ impl Window_ {
         });
     }
 
-    fn apply(&mut self, acts: Vec<Act>, event_loop: &ActiveEventLoop) {
-        let now = Instant::now();
+    fn apply(&mut self, acts: Vec<Act>, now: Instant) {
         for act in acts {
             match act {
                 Act::Switch(slot) => {
@@ -465,7 +538,7 @@ impl Window_ {
                 Act::CancelQuit => self.host.desk.cancel_quit(),
                 Act::CloseHost => {
                     log::info!("session host: closing; the characters stay open by themselves");
-                    event_loop.exit();
+                    self.host.exit = true;
                 }
                 Act::Dismiss => {
                     self.ending = None;
@@ -474,27 +547,50 @@ impl Window_ {
                 Act::Refresh => {}
                 Act::Comfort(act) => self.comfort_apply(act, now),
                 Act::Monitor(slot, spec) => self.host.desk.set_monitor(slot, spec),
+                // (its window opens or closes before the next wait:
+                // `sync_panes`)
+                Act::Panel(panel, out) => self.host.desk.set_panel_out(panel, out),
             }
         }
         self.host.tick(now);
-        self.redraw = true;
+        self.redraw_all();
     }
 
-    fn render(&mut self, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
-        // the surface leaves `self` for the frame: the pixels are borrowed
-        // from it while the interface, which borrows `self`, is built
-        let mut surface = self.surface.take().ok_or_else(|| anyhow::anyhow!("missing host surface"))?;
-        let result = self.render_on(&mut surface, event_loop);
-        self.surface = Some(surface);
+    /// Draws one of the host's windows, on the processor.
+    fn render(&mut self, which: Which, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
+        // the surface and the painter leave the view for the frame: the
+        // pixels are borrowed from the surface while the interface, which
+        // borrows `self`, is built
+        let Some(view) = self.view_mut(which) else {
+            return Ok(());
+        };
+        let Some(mut surface) = view.surface.take() else {
+            anyhow::bail!("missing host surface");
+        };
+        let mut painter = std::mem::take(&mut view.painter);
+        self.drawing = which;
+        let result = self.render_on(which, &mut surface, &mut painter, event_loop);
+        self.drawing = Which::Main;
+        // (a panel docked by this very frame keeps its window until the
+        // next wait: its view is still there)
+        if let Some(view) = self.view_mut(which) {
+            view.surface = Some(surface);
+            view.painter = painter;
+        }
         result
     }
 
     fn render_on(
         &mut self,
-        surface: &mut softbuffer::Surface<OwnedDisplayHandle, Arc<Window>>,
+        which: Which,
+        surface: &mut softbuffer::Surface<winit::event_loop::OwnedDisplayHandle, std::sync::Arc<Window>>,
+        painter: &mut crate::crash::software::Painter,
         event_loop: &ActiveEventLoop,
     ) -> anyhow::Result<()> {
-        let window = self.window.as_ref().ok_or_else(|| anyhow::anyhow!("missing host window"))?.clone();
+        let Some(view) = self.view_mut(which) else {
+            return Ok(());
+        };
+        let window = view.window.clone().ok_or_else(|| anyhow::anyhow!("missing host window"))?;
         let size = window.inner_size();
         let (Some(width), Some(height)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else {
             return Ok(());
@@ -503,15 +599,15 @@ impl Window_ {
         // they are taken, so nothing may fail between the two
         surface.resize(width, height).map_err(|e| anyhow::anyhow!("{e}"))?;
         let mut buffer = surface.buffer_mut().map_err(|e| anyhow::anyhow!("{e}"))?;
-        let Some(input) = self.input.as_mut() else {
+        let Some(input) = view.input.as_mut() else {
             anyhow::bail!("missing host input");
         };
         let raw = input.take_egui_input(&window);
-        let context = self.context.clone();
+        let context = view.context.clone();
         let mut acts = Vec::new();
         let mut output = context.run_ui(raw, |ui| acts = self.content(ui));
         let primitives = context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
-        self.painter.paint(
+        painter.paint(
             &mut buffer,
             [size.width as usize, size.height as usize],
             &primitives,
@@ -522,13 +618,15 @@ impl Window_ {
         // painted: egui checks, in builds with assertions, that the
         // changes were not dropped unapplied
         output.textures_delta.clear();
-        if let Some(input) = self.input.as_mut() {
+        if let Some(input) = self.view_mut(which).and_then(|view| view.input.as_mut()) {
             input.handle_platform_output_with_event_loop(&window, event_loop, output.platform_output);
         }
         if self.host.demo
             && let Some(path) = std::env::var_os("AURORA_SESSION_HOST_CAPTURE")
         {
-            // (demo only: the window's picture, for the docs and the checks)
+            // (demo only: the window's picture, for the docs and the
+            // checks; a panel's window adds its name to the file's)
+            let path = capture_path(std::path::Path::new(&path), which);
             let rgba: Vec<_> = buffer
                 .iter()
                 .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
@@ -542,12 +640,29 @@ impl Window_ {
             .viewport_output
             .get(&egui::ViewportId::ROOT)
             .is_some_and(|o| o.repaint_delay < TICK);
-        self.redraw = again || !acts.is_empty();
+        if let Some(view) = self.view_mut(which) {
+            view.redraw = again || !acts.is_empty();
+        }
         if !acts.is_empty() {
-            self.apply(acts, event_loop);
+            self.apply(acts, Instant::now());
         }
         Ok(())
     }
+}
+
+/// Where the demo's capture of a window goes: the file named for the
+/// host's own window, `<name>-<panel>.<ext>` for a panel's.
+fn capture_path(path: &std::path::Path, which: Which) -> std::path::PathBuf {
+    let Which::Pane(panel) = which else {
+        return path.to_owned();
+    };
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let mut name = format!("{stem}-{}", panel.key());
+    if let Some(extension) = path.extension() {
+        name.push('.');
+        name.push_str(&extension.to_string_lossy());
+    }
+    path.with_file_name(name)
 }
 
 /// The avatar's name once logged in, the profile's before.
@@ -642,42 +757,21 @@ fn add_error(name: &str, error: AddError) -> String {
 
 impl ApplicationHandler for Window_ {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if self.main.window.is_some() {
             return;
         }
-        let setup = || -> anyhow::Result<_> {
-            let heading = tr!("folderstorm-host-title", product = folderstorm_brand::PRODUCT);
-            let title = match &crate::cli::get().title {
-                Some(title) => format!("{heading} — {title}"),
-                None => heading,
-            };
-            let window = Arc::new(
-                event_loop.create_window(
-                    crate::cli::with_desktop_id(Window::default_attributes())
-                        .with_title(title)
-                        .with_inner_size(winit::dpi::LogicalSize::new(1120.0, 760.0))
-                        .with_min_inner_size(winit::dpi::LogicalSize::new(440.0, 360.0)),
-                )?,
-            );
-            let display = softbuffer::Context::new(event_loop.owned_display_handle()).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let surface = softbuffer::Surface::new(&display, window.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
-            let input = egui_winit::State::new(
-                self.context.clone(),
-                egui::ViewportId::ROOT,
-                &window,
-                Some(window.scale_factor() as f32),
-                None,
-                None,
-            );
-            Ok((window, surface, input))
-        };
-        match setup() {
-            Ok((window, surface, input)) => {
-                window.request_redraw();
-                self.window = Some(window);
-                self.surface = Some(surface);
-                self.input = Some(input);
-            }
+        let attributes = crate::cli::with_desktop_id(Window::default_attributes())
+            .with_title(self.title.clone())
+            .with_inner_size(winit::dpi::LogicalSize::new(1120.0, 760.0))
+            .with_min_inner_size(winit::dpi::LogicalSize::new(440.0, 360.0));
+        let made = event_loop
+            .create_window(attributes)
+            .map_err(anyhow::Error::from)
+            .and_then(|window| self.main.attach(event_loop, window));
+        match made {
+            // the panels that were out when the host closed, after the
+            // host's own window and without taking the keyboard from it
+            Ok(()) => self.sync_panes(event_loop),
             Err(error) => {
                 self.error = Some(error.to_string());
                 event_loop.exit();
@@ -685,42 +779,71 @@ impl ApplicationHandler for Window_ {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        if matches!(event, WindowEvent::CloseRequested) {
-            if self.host.desk.live() == 0 {
-                event_loop.exit();
-            } else {
-                // characters run: the user says what becomes of them
-                self.closing = true;
-                self.redraw = true;
-            }
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        let Some(which) = self.which(id) else {
             return;
+        };
+        match which {
+            Which::Main if matches!(event, WindowEvent::CloseRequested) => {
+                if self.host.desk.live() == 0 {
+                    event_loop.exit();
+                } else {
+                    // characters run: the user says what becomes of them
+                    self.closing = true;
+                    self.redraw_all();
+                }
+                return;
+            }
+            // a panel's window closed docks the panel: the host stays
+            Which::Pane(panel) if self.pane_event(panel, &event) => return,
+            _ => {}
         }
+        if let WindowEvent::Focused(focused) = event
+            && self.home(Panel::Chat) == which
+            && !focused
+        {
+            // nothing is read in a window the user has left, drawn again
+            // or not (a minimised window is not)
+            let viewing = self.chat.viewing(&self.host.chat);
+            self.host.chat.look(viewing, false);
+        }
+        let Some(view) = self.view_mut(which) else {
+            return;
+        };
         if let WindowEvent::Focused(focused) = event {
-            self.focused = focused;
+            view.focused = focused;
         }
         if let WindowEvent::Occluded(occluded) = event {
             // covered whole: its monitors ask nothing until it shows again
-            self.monitors.occluded = occluded;
+            view.occluded = occluded;
         }
-        if let (Some(input), Some(window)) = (&mut self.input, &self.window) {
+        if let (Some(input), Some(window)) = (&mut view.input, &view.window) {
             let response = input.on_window_event(window, &event);
-            self.redraw |= response.repaint;
+            view.redraw |= response.repaint;
         }
         if matches!(event, WindowEvent::RedrawRequested)
-            && let Err(error) = self.render(event_loop)
+            && let Err(error) = self.render(which, event_loop)
         {
-            self.error = Some(error.to_string());
-            event_loop.exit();
+            match which {
+                Which::Main => {
+                    self.error = Some(error.to_string());
+                    event_loop.exit();
+                }
+                Which::Pane(panel) => {
+                    // a panel's window that cannot be drawn is no reason
+                    // to close the host: the panel goes back into it
+                    log::warn!("session host: {}'s window is not drawn ({error}): docked", panel.key());
+                    self.host.desk.panel_closed(panel);
+                }
+            }
         }
     }
 
-    /// As the crash window does: egui-winit's state and the window go
-    /// while the event loop still lives (Wayland).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        self.input = None;
-        self.surface = None;
-        self.window = None;
+        self.main.detach();
+        for pane in self.panes.iter_mut().flatten() {
+            pane.detach();
+        }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -728,21 +851,25 @@ impl ApplicationHandler for Window_ {
         if self.host.pressed_hotkeys(now) {
             // a global hotkey: carried out at once, whatever has the keyboard
             self.host.tick(now);
-            self.redraw = true;
+            self.redraw_all();
         }
         if now >= self.next_tick {
             self.monitors_watch(now);
             self.host.tick(now);
             let tick = if self.host.desk.live() > 0 { TICK } else { IDLE_TICK };
             self.next_tick = now + tick;
-            self.redraw = true;
+            self.redraw_all();
         }
         if std::mem::take(&mut self.host.alert) {
             // a message for a character that is not the active one
             if self.host.desk.chat_sound() {
                 super::message_sound();
             }
-            if let Some(window) = self.window.as_ref().filter(|_| !self.focused) {
+            // (the taskbar's flash, in the chat's window: never the
+            // foreground or the keyboard)
+            if let Some(view) = self.view(self.home(Panel::Chat)).filter(|view| !view.focused)
+                && let Some(window) = &view.window
+            {
                 window.request_user_attention(Some(winit::window::UserAttentionType::Informational));
             }
         }
@@ -750,10 +877,14 @@ impl ApplicationHandler for Window_ {
             event_loop.exit();
             return;
         }
-        if std::mem::take(&mut self.redraw)
-            && let Some(window) = &self.window
-        {
-            window.request_redraw();
+        // a panel popped out or docked back gets or loses its window
+        self.sync_panes(event_loop);
+        for view in std::iter::once(&mut self.main).chain(self.panes.iter_mut().flatten()) {
+            if std::mem::take(&mut view.redraw)
+                && let Some(window) = &view.window
+            {
+                window.request_redraw();
+            }
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_tick));
     }
@@ -765,18 +896,27 @@ mod tests {
     use super::*;
     use ::folderstorm_session::ipc::{Conversation, LineKind};
 
-    /// The whole window drawn as `render_on` draws it, without a window:
-    /// the interface, then the processor's painter into plain pixels.
-    /// `FOLDERSTORM_TEST_CAPTURE=<file.png>` keeps the picture.
+    /// The host's own window drawn as `render_on` draws it, without a
+    /// window: the interface, then the processor's painter into plain
+    /// pixels. `FOLDERSTORM_TEST_CAPTURE=<file.png>` keeps the picture.
     pub(super) fn draw(app: &mut Window_, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
+        draw_in(app, Which::Main, width, height)
+    }
+
+    /// The same for any of the host's windows.
+    pub(super) fn draw_in(app: &mut Window_, which: Which, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32))),
             ..Default::default()
         };
-        let context = app.context.clone();
+        let view = app.view_mut(which).expect("the window's view");
+        let context = view.context.clone();
+        let mut painter = std::mem::take(&mut view.painter);
+        app.drawing = which;
         let mut output = context.run_ui(raw, |ui| {
             app.content(ui);
         });
+        app.drawing = Which::Main;
         fn texts(shape: &egui::Shape, into: &mut Vec<String>) {
             match shape {
                 egui::Shape::Text(text) => into.push(text.galley.text().to_owned()),
@@ -790,7 +930,7 @@ mod tests {
         }
         let primitives = context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
         let mut pixels = vec![0u32; (width * height) as usize];
-        app.painter.paint(
+        painter.paint(
             &mut pixels,
             [width as usize, height as usize],
             &primitives,
@@ -799,6 +939,9 @@ mod tests {
             app.palette.panel,
         );
         output.textures_delta.clear();
+        if let Some(view) = app.view_mut(which) {
+            view.painter = painter;
+        }
         if let Some(path) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE") {
             let rgba: Vec<_> = pixels
                 .iter()
@@ -809,33 +952,31 @@ mod tests {
         (drawn, pixels)
     }
 
+    /// The host's windows without a window: the host's own has the
+    /// keyboard.
     pub(super) fn window(host: Host) -> Window_ {
-        let context = egui::Context::default();
-        let theme = crate::ui::skin::recovery_theme();
-        theme.apply(&context, 1.0);
-        let icons = Icons::load(&context, None);
-        Window_ {
-            host,
-            palette: theme.palette(),
-            context,
-            _icons: icons,
-            painter: Default::default(),
-            surface: None,
-            window: None,
-            input: None,
-            error: None,
-            next_tick: Instant::now(),
-            redraw: true,
-            new_profile: String::new(),
-            add_error: None,
-            comfort: Default::default(),
-            monitors: Default::default(),
-            ending: None,
-            closing: false,
-            chat: ChatPanel::default(),
-            chat_page: false,
-            focused: true,
-        }
+        let look = Look {
+            theme: crate::ui::skin::recovery_theme(),
+            font_scale: 1.0,
+            font: None,
+        };
+        let mut app = Window_::new(host, look);
+        app.main.focused = true;
+        app
+    }
+
+    #[test]
+    fn a_panel_s_capture_has_its_own_file() {
+        let path = std::path::Path::new("shots/host.png");
+        assert_eq!(capture_path(path, Which::Main), path);
+        assert_eq!(
+            capture_path(path, Which::Pane(Panel::Chat)),
+            std::path::Path::new("shots/host-chat.png")
+        );
+        assert_eq!(
+            capture_path(std::path::Path::new("host"), Which::Pane(Panel::Monitors)),
+            std::path::Path::new("host-monitors")
+        );
     }
 
     #[test]

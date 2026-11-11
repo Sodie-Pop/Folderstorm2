@@ -12,8 +12,11 @@
 //! - **Nothing is kept.** The texture is freed when the host drops the
 //!   picture (`monitors.rs`): no file, no copy, no earlier picture.
 //! - **Seen or not.** Each drawing notes which monitors are on screen; a
-//!   minimised or covered window sees none ([`seen_now`]). The desk asks
-//!   pictures only of the viewers whose monitor is seen.
+//!   minimised or covered window sees none (`panels::seen`). The desk
+//!   asks pictures only of the viewers whose monitor is seen.
+//! - **One window draws the pictures** (checkpoint 6): the characters'
+//!   cards, or the monitors' own window when they have one
+//!   ([`Window_::monitors_window`]); the cards then keep the choices.
 
 use super::Window_;
 use crate::theme::Palette;
@@ -25,21 +28,41 @@ use aurora_i18n::tr;
 use egui::{RichText, Vec2};
 use std::time::{Duration, Instant};
 
-/// What the window keeps for the monitors.
+/// What one window keeps for the monitors.
 #[derive(Default)]
 pub(super) struct Panel {
-    /// The pictures' textures.
-    textures: [Option<egui::TextureHandle>; MAX_SLOTS],
-    /// The monitors on screen in the last drawing.
+    /// The pictures' textures in this window, each with the count of the
+    /// picture it holds (`monitors::Screen::serial`).
+    textures: [Option<(u64, egui::TextureHandle)>; MAX_SLOTS],
+    /// The monitors on screen in the window's last drawing.
     pub seen: [bool; MAX_SLOTS],
-    /// The window is covered whole by others, as the system says.
-    pub occluded: bool,
 }
 
-/// The monitors on screen now: those of the last drawing, none while the
-/// window is minimised or covered.
-pub(super) fn seen_now(seen: [bool; MAX_SLOTS], occluded: bool, minimised: bool) -> [bool; MAX_SLOTS] {
-    if occluded || minimised { [false; MAX_SLOTS] } else { seen }
+impl Panel {
+    /// The texture of a character's picture in this window.
+    pub fn texture(&self, slot: usize) -> Option<&egui::TextureHandle> {
+        self.textures.get(slot)?.as_ref().map(|(_, texture)| texture)
+    }
+
+    /// The host's latest picture as this window's texture: the same
+    /// texture, replaced whole when the picture is a new one (never a
+    /// half-drawn picture), made when this window had none.
+    fn show(&mut self, ctx: &egui::Context, slot: usize, serial: u64, picture: Option<std::sync::Arc<egui::ColorImage>>) {
+        let Some(picture) = picture else {
+            return;
+        };
+        match &mut self.textures[slot] {
+            Some((held, _)) if *held == serial => {}
+            Some((held, texture)) => {
+                texture.set(picture, egui::TextureOptions::LINEAR);
+                *held = serial;
+            }
+            none => {
+                let name = format!("folderstorm-monitor-{slot}");
+                *none = Some((serial, ctx.load_texture(name, picture, egui::TextureOptions::LINEAR)));
+            }
+        }
+    }
 }
 
 /// A rate as its choice shows it.
@@ -102,22 +125,31 @@ fn fitted(room: egui::Rect, picture: [usize; 2]) -> egui::Rect {
 }
 
 impl Window_ {
-    /// Before the characters are drawn: no monitor is seen yet, and the
-    /// textures of pictures the host dropped are freed.
+    /// Before a window is drawn: no monitor is seen in it yet, and it
+    /// keeps no texture of a picture the host dropped or that another
+    /// window draws.
     pub(super) fn monitors_begin(&mut self) {
-        self.monitors.seen = [false; MAX_SLOTS];
-        for slot in 0..MAX_SLOTS {
-            if self.host.screens[slot].shown.is_none() {
-                self.monitors.textures[slot] = None;
+        let here = self.pictures_home() == self.drawing;
+        let kept: [bool; MAX_SLOTS] = std::array::from_fn(|slot| here && self.host.screens[slot].shown.is_some());
+        let Some(view) = self.view_mut(self.drawing) else {
+            return;
+        };
+        view.monitors.seen = [false; MAX_SLOTS];
+        for (texture, kept) in view.monitors.textures.iter_mut().zip(kept) {
+            if !kept {
+                *texture = None;
             }
         }
     }
 
-    /// Now and then: the desk learns which monitors are on screen.
+    /// Now and then: the desk learns which monitors are on screen, in
+    /// any of the host's windows that is not minimised or covered.
     pub(super) fn monitors_watch(&mut self, now: Instant) {
-        let minimised = self.window.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false);
-        let seen = seen_now(self.monitors.seen, self.monitors.occluded, minimised);
-        self.host.desk.monitors_seen(seen, now);
+        let sights: Vec<_> = std::iter::once(&self.main)
+            .chain(self.panes.iter().flatten())
+            .map(super::panels::View::sight)
+            .collect();
+        self.host.desk.monitors_seen(::folderstorm_session::panels::seen(&sights), now);
     }
 
     /// In a character's row: its monitor open or not.
@@ -132,7 +164,8 @@ impl Window_ {
     }
 
     /// Under a character's row, while its monitor is open: the size and
-    /// rate, the picture, and its label.
+    /// rate and, unless the monitors have their own window, the picture
+    /// and its label.
     pub(super) fn monitor_panel(
         &mut self,
         ui: &mut egui::Ui,
@@ -169,38 +202,43 @@ impl Window_ {
             }
         });
         ui.add_space(6.0);
-        // the box: the monitor's size in the screen's own pixels when the
-        // card is wide enough, smaller otherwise, always 16:9
+        if self.pictures_home() == self.drawing {
+            self.monitor_picture(ui, p, slot, state, spec, now);
+        } else {
+            ui.label(RichText::new(tr!("folderstorm-monitor-in-window")).color(p.muted));
+        }
+    }
+
+    /// A monitor's picture in its box, and its label under it.
+    fn monitor_picture(&mut self, ui: &mut egui::Ui, p: &Palette, slot: usize, state: &Slot, spec: Spec, now: Instant) {
+        // the box: the monitor's size in the screen's own pixels when
+        // there is room, smaller otherwise, always 16:9
         let (box_width, box_height) = spec.size.dims();
         let width = (box_width as f32 / ui.ctx().pixels_per_point()).min(ui.available_width());
         let size = Vec2::new(width, (width * box_height as f32 / box_width as f32).round());
         // (hover only: no click and no key goes anywhere from here)
         let (room, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-        self.monitors.seen[slot] = ui.is_rect_visible(room);
         let radius = ui.visuals().widgets.inactive.corner_radius;
         ui.painter().rect_filled(room, radius, p.navy);
 
-        let screen = &mut self.host.screens[slot];
-        let texture = &mut self.monitors.textures[slot];
-        if let Some(image) = screen.fresh.take() {
-            // the same texture, replaced whole: never a half-drawn picture
-            match texture {
-                Some(texture) => texture.set(image, egui::TextureOptions::LINEAR),
-                None => {
-                    let name = format!("folderstorm-monitor-{slot}");
-                    *texture = Some(ui.ctx().load_texture(name, image, egui::TextureOptions::LINEAR));
-                }
-            }
-        }
-        let shown = screen.shown;
+        let screen = &self.host.screens[slot];
+        let (serial, picture, shown) = (screen.serial, screen.picture.clone(), screen.shown);
+        let visible = ui.is_rect_visible(room);
+        let drawing = self.drawing;
+        let Some(view) = self.view_mut(drawing) else {
+            return;
+        };
+        view.monitors.seen[slot] = visible;
+        view.monitors.show(ui.ctx(), slot, serial, picture);
+        let texture = view.monitors.texture(slot).map(egui::TextureHandle::id);
         let watch = self.host.desk.watch(slot);
         let viewer = state.status.as_ref().map(|status| status.monitor);
         let health = self.host.desk.health(slot, now);
         let (text, notice) = state_text(watch, viewer, health, shown.is_some());
-        match (texture.as_ref(), shown) {
+        match (texture, shown) {
             (Some(texture), Some(shown)) => {
                 let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                ui.painter().image(texture.id(), fitted(room, shown.size), uv, egui::Color32::WHITE);
+                ui.painter().image(texture, fitted(room, shown.size), uv, egui::Color32::WHITE);
             }
             _ => {
                 // no picture: why, in its place
@@ -223,6 +261,79 @@ impl Window_ {
         }
         ui.label(RichText::new(line).color(if notice { p.amber } else { p.muted }));
     }
+
+    /// The monitors' own window (checkpoint 6): every open monitor's
+    /// picture with its label, side by side while there is room, and
+    /// "Switch to" under each. As in the cards, a picture senses neither
+    /// clicks nor keys.
+    pub(super) fn monitors_window(&mut self, ui: &mut egui::Ui, p: &Palette, now: Instant, acts: &mut Vec<super::Act>) {
+        ui.label(RichText::new(tr!("folderstorm-panel-monitors")).size(18.0).strong().color(p.ink));
+        ui.add_space(8.0);
+        let open: Vec<(usize, Slot, Spec)> = self
+            .host
+            .desk
+            .slots()
+            .filter_map(|(slot, state)| state.monitor.map(|spec| (slot, state.clone(), spec)))
+            .collect();
+        if open.is_empty() {
+            ui.label(RichText::new(tr!("folderstorm-panel-monitors-empty")).color(p.muted));
+            return;
+        }
+        let active = self.host.desk.active();
+        let gap = 12.0;
+        egui::ScrollArea::vertical()
+            .id_salt("folderstorm-host-monitors")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                let room = ui.available_width();
+                let scale = ui.ctx().pixels_per_point();
+                let widths: Vec<f32> = open
+                    .iter()
+                    .map(|(_, _, spec)| (spec.size.dims().0 as f32 / scale).min(room))
+                    .collect();
+                for row in rows(&widths, room, gap) {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = gap;
+                        for index in row {
+                            let (slot, state, spec) = &open[index];
+                            let cell = Vec2::new(widths[index], 0.0);
+                            ui.allocate_ui_with_layout(cell, egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.set_width(widths[index]);
+                                self.monitor_picture(ui, p, *slot, state, *spec, now);
+                                if state.live() && !state.closing && active != Some(*slot) {
+                                    let switch = tr!("folderstorm-host-switch");
+                                    let size = Vec2::new(0.0, 26.0);
+                                    if widgets::action_button(ui, p, "arrows-exchange", switch, widgets::ActionKind::Flat, size).clicked() {
+                                        acts.push(super::Act::Switch(*slot));
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    ui.add_space(gap);
+                }
+            });
+    }
+}
+
+/// The monitors of each row of the monitors' window: as many side by
+/// side as the window's width takes, one at least, in their order.
+fn rows(widths: &[f32], room: f32, gap: f32) -> Vec<Vec<usize>> {
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut used = 0.0;
+    for (index, width) in widths.iter().enumerate() {
+        match rows.last_mut() {
+            Some(row) if used + gap + width <= room + 0.5 => {
+                row.push(index);
+                used += gap + width;
+            }
+            _ => {
+                rows.push(vec![index]);
+                used = *width;
+            }
+        }
+    }
+    rows
 }
 
 #[cfg(test)]
@@ -265,11 +376,12 @@ mod tests {
     }
 
     #[test]
-    fn a_hidden_window_sees_no_monitor() {
-        let seen = [true, false, true, true, false];
-        assert_eq!(seen_now(seen, false, false), seen);
-        assert_eq!(seen_now(seen, true, false), [false; MAX_SLOTS]);
-        assert_eq!(seen_now(seen, false, true), [false; MAX_SLOTS]);
+    fn the_monitors_window_puts_as_many_side_by_side_as_fit() {
+        assert_eq!(rows(&[320.0, 320.0, 320.0], 700.0, 12.0), [vec![0, 1], vec![2]]);
+        assert_eq!(rows(&[320.0, 320.0, 320.0], 1000.0, 12.0), [vec![0, 1, 2]]);
+        assert_eq!(rows(&[480.0, 320.0], 400.0, 12.0), [vec![0], vec![1]], "one at least");
+        assert_eq!(rows(&[640.0, 320.0, 320.0], 700.0, 12.0), [vec![0], vec![1, 2]]);
+        assert!(rows(&[], 700.0, 12.0).is_empty());
     }
 
     #[test]
@@ -366,27 +478,30 @@ mod tests {
         // closed: no picture box, nothing asked
         let (drawn, _) = draw(&mut app, 1120, 1100);
         assert!(shows(&drawn, tr!("folderstorm-monitor")));
-        assert_eq!(app.monitors.seen, [false; MAX_SLOTS]);
+        assert_eq!(app.main.monitors.seen, [false; MAX_SLOTS]);
         app.monitors_watch(now);
         assert_eq!(app.host.desk.watch(1), Watch::Closed);
         // opened: drawn, then seen, then asked of its viewer
         app.host.desk.set_monitor(1, Some(Spec::default()));
         assert_eq!(app.host.desk.watch(1), Watch::Hidden);
         let (drawn, _) = draw(&mut app, 1120, 1100);
-        assert!(app.monitors.seen[1]);
+        assert!(app.main.monitors.seen[1]);
         assert!(shows(&drawn, "480 × 270"));
         app.monitors_watch(now);
         assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
         let (drawn, _) = draw(&mut app, 1120, 1100);
         assert!(shows(&drawn, tr!("folderstorm-monitor-waiting")));
-        assert!(app.monitors.textures[1].is_none());
+        assert!(app.main.monitors.texture(1).is_none());
         // a picture comes: a texture, the character's name and its age
         let red = egui::Color32::from_rgb(200, 30, 30);
         app.host.test_picture(1, [480, 270], red, now);
         report(&mut app, 1, State::Live, now);
         let (drawn, pixels) = draw(&mut app, 1120, 1100);
-        assert!(app.monitors.textures[1].is_some());
-        assert!(app.host.screens[1].fresh.is_none(), "taken for the texture");
+        assert!(app.main.monitors.texture(1).is_some());
+        assert_eq!(
+            app.main.monitors.textures[1].as_ref().map(|(held, _)| *held),
+            Some(app.host.screens[1].serial)
+        );
         assert!(shows(&drawn, "Character 2"));
         // (its age in words is `age_text`'s test: this drawing takes its time)
         assert!(shows(&drawn, "Character 2 · "), "{drawn:?}");
@@ -399,11 +514,11 @@ mod tests {
         );
         // the next one replaces it in the same texture: no second texture,
         // nothing of the first one left on screen
-        let id = app.monitors.textures[1].as_ref().map(egui::TextureHandle::id);
+        let id = app.main.monitors.texture(1).map(egui::TextureHandle::id);
         let green = egui::Color32::from_rgb(20, 180, 60);
         app.host.test_picture(1, [480, 270], green, now);
         let (_, pixels) = draw(&mut app, 1120, 1100);
-        assert_eq!(app.monitors.textures[1].as_ref().map(egui::TextureHandle::id), id);
+        assert_eq!(app.main.monitors.texture(1).map(egui::TextureHandle::id), id);
         assert_eq!(reds(&pixels), 0);
         assert!(pixels.iter().filter(|p| **p == 0x0014_B43C).count() > 480 * 270 / 2);
         // a busy card is said under the picture
@@ -423,10 +538,10 @@ mod tests {
         assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
         app.host.test_picture(1, [480, 270], egui::Color32::WHITE, now);
         draw(&mut app, 1120, 1100);
-        assert!(app.monitors.textures[1].is_some());
+        assert!(app.main.monitors.texture(1).is_some());
         // the window is covered, or minimised: its viewer is told to stop
         app.host.desk.take_effects();
-        app.monitors.occluded = true;
+        app.main.occluded = true;
         app.monitors_watch(now);
         assert_eq!(app.host.desk.watch(1), Watch::Hidden);
         let stopped = app.host.desk.take_effects().iter().any(|effect| {
@@ -441,7 +556,7 @@ mod tests {
         });
         assert!(stopped, "the viewer is a plain background character again");
         // back: asked again, the last picture still there with its age
-        app.monitors.occluded = false;
+        app.main.occluded = false;
         app.monitors_watch(now);
         assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
         app.host.tick_monitors(now);
@@ -449,16 +564,16 @@ mod tests {
         // the chat's page of a narrow window shows no monitor
         app.chat_page = true;
         draw(&mut app, 600, 1100);
-        assert_eq!(app.monitors.seen, [false; MAX_SLOTS]);
+        assert_eq!(app.main.monitors.seen, [false; MAX_SLOTS]);
         app.chat_page = false;
         draw(&mut app, 600, 1100);
-        assert!(app.monitors.seen[1]);
+        assert!(app.main.monitors.seen[1]);
         // closed: the picture and its texture are gone at once
         app.host.desk.set_monitor(1, None);
         app.host.tick_monitors(now);
-        assert!(app.host.screens[1].shown.is_none() && app.host.screens[1].fresh.is_none());
+        assert!(app.host.screens[1].shown.is_none() && app.host.screens[1].picture.is_none());
         draw(&mut app, 1120, 1100);
-        assert!(app.monitors.textures[1].is_none());
+        assert!(app.main.monitors.texture(1).is_none());
         assert_eq!(app.host.desk.watch(1), Watch::Closed);
     }
 
