@@ -279,6 +279,50 @@ fn the_user_s_folder_comes_first_then_the_built_in_one_on_its_host_only() {
 }
 
 #[test]
+fn a_folder_is_only_ever_sent_to_the_host_it_was_entered_for() {
+    let mut s = UploadSettings {
+        host: "https://images.example.org".into(),
+        ..UploadSettings::default()
+    };
+    let first = s.origin().expect("origin");
+    s.set_folder(&first, "folder_1".into());
+    assert_eq!(s.folder_for(&first), Some("folder_1"));
+    // another host: no folder until one is entered for it
+    s.host = "https://other.example".into();
+    let second = s.origin().expect("origin");
+    assert_eq!(s.folder_for(&second), None);
+    assert_eq!(settings::resolve_folder(&second, s.folder_for(&second), None), None);
+    s.set_folder(&second, "folder_2".into());
+    assert_eq!(s.folder_for(&second), Some("folder_2"));
+    assert_eq!(s.folder_for(&first), Some("folder_1"));
+    s.set_folder(&second, String::new());
+    assert!(!s.folders.contains_key(&second));
+    // the map round-trips
+    let json = serde_json::to_string(&s).expect("serialised");
+    let back: UploadSettings = serde_json::from_str(&json).expect("read back");
+    assert_eq!(back, s);
+    assert!(!json.contains("\"folder\""), "{json}");
+}
+
+#[test]
+fn an_old_single_folder_moves_to_the_host_set_with_it() {
+    let old: UploadSettings =
+        serde_json::from_str(r#"{"enabled":true,"host":"https://images.example.org/","folder":" f1 ","max_mib":5}"#).expect("read");
+    assert!(old.enabled);
+    assert_eq!(old.max_mib, 5);
+    assert!(old.confirm);
+    assert_eq!(old.folder_for("https://images.example.org"), Some("f1"));
+    assert_eq!(old.folders.len(), 1);
+    // with an unusable host the old folder goes nowhere
+    let lost: UploadSettings = serde_json::from_str(r#"{"host":"http://h.example","folder":"f1"}"#).expect("read");
+    assert!(lost.folders.is_empty());
+    // a folder already kept for the host wins over the old one
+    let both: UploadSettings =
+        serde_json::from_str(r#"{"host":"https://h.example","folder":"old","folders":{"https://h.example":"new"}}"#).expect("read");
+    assert_eq!(both.folder_for("https://h.example"), Some("new"));
+}
+
+#[test]
 fn host_addresses() {
     assert_eq!(
         settings::origin(" https://images.sodie.online/ ").as_deref(),

@@ -3,6 +3,7 @@
 //! credential store (`token.rs`).
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Largest image the user can allow, in MiB. Zipline's own default limit
 /// is far above it; Folderstorm's host takes 10 MiB.
@@ -11,15 +12,17 @@ pub const MAX_MIB_LIMIT: u32 = 32;
 pub const DEFAULT_MAX_MIB: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(from = "Stored")]
 pub struct UploadSettings {
     /// Off until the user turns it on: nothing leaves the viewer before.
     pub enabled: bool,
     /// The host's address: `https://` and a host name, nothing after it.
     pub host: String,
-    /// A Zipline folder that takes uploads (`x-zipline-folder`); empty:
-    /// none. Needed by a host that takes uploads without a token.
-    pub folder: String,
+    /// The Zipline folder that takes uploads (`x-zipline-folder`) on each
+    /// host, by origin (`https://host[:port]`): a folder entered for one
+    /// host is never sent to another. Needed by a host that takes uploads
+    /// without a token.
+    pub folders: BTreeMap<String, String>,
     /// Largest image sent, in MiB.
     pub max_mib: u32,
     /// Show what will be uploaded and wait for Upload, every time.
@@ -31,7 +34,7 @@ impl Default for UploadSettings {
         UploadSettings {
             enabled: false,
             host: folderstorm_brand::IMAGE_HOST.to_owned(),
-            folder: String::new(),
+            folders: BTreeMap::new(),
             max_mib: DEFAULT_MAX_MIB,
             confirm: true,
         }
@@ -49,10 +52,74 @@ impl UploadSettings {
         origin(&self.host)
     }
 
-    /// The folder the user entered, when one is set and well-formed.
-    pub fn folder_id(&self) -> Option<&str> {
-        let folder = self.folder.trim();
+    /// The folder the user entered for `origin`, when one is set and
+    /// well-formed.
+    pub fn folder_for(&self, origin: &str) -> Option<&str> {
+        let folder = self.folders.get(origin)?.trim();
         valid_folder(folder).then_some(folder)
+    }
+
+    /// What the user typed as the folder of `origin` (empty: none).
+    pub fn folder_text(&self, origin: &str) -> &str {
+        self.folders.get(origin).map_or("", String::as_str)
+    }
+
+    /// Sets (or, empty, removes) the folder of `origin`.
+    pub fn set_folder(&mut self, origin: &str, folder: String) {
+        if folder.is_empty() {
+            self.folders.remove(origin);
+        } else {
+            self.folders.insert(origin.to_owned(), folder);
+        }
+    }
+}
+
+/// The section as it is read: today's, or an older one whose single
+/// `folder` belonged to the host set with it.
+#[derive(Deserialize)]
+#[serde(default)]
+struct Stored {
+    enabled: bool,
+    host: String,
+    folders: BTreeMap<String, String>,
+    /// Before folders were kept by host.
+    folder: String,
+    max_mib: u32,
+    confirm: bool,
+}
+
+impl Default for Stored {
+    fn default() -> Self {
+        let d = UploadSettings::default();
+        Stored {
+            enabled: d.enabled,
+            host: d.host,
+            folders: d.folders,
+            folder: String::new(),
+            max_mib: d.max_mib,
+            confirm: d.confirm,
+        }
+    }
+}
+
+impl From<Stored> for UploadSettings {
+    fn from(s: Stored) -> Self {
+        let mut folders = s.folders;
+        // the old folder goes with the host it was entered with, and with
+        // no other; without a usable host it is dropped
+        let old = s.folder.trim();
+        if !old.is_empty()
+            && let Some(origin) = origin(&s.host)
+        {
+            folders.entry(origin).or_insert_with(|| old.to_owned());
+        }
+        UploadSettings {
+            enabled: s.enabled,
+            host: s.host,
+            folders,
+            max_mib: s.max_mib,
+            confirm: s.confirm,
+        }
     }
 }
 

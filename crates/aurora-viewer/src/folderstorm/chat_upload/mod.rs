@@ -177,7 +177,7 @@ fn destination() -> Option<(String, Option<String>)> {
     if demo::mode().is_some() {
         return Some((origin, None));
     }
-    let folder = settings::resolve_folder(&origin, u.settings.folder_id(), settings::built_in_folder());
+    let folder = settings::resolve_folder(&origin, u.settings.folder_for(&origin), settings::built_in_folder());
     Some((origin, folder))
 }
 

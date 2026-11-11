@@ -46,13 +46,19 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             cx.wide().row(
                 tr!("fs-chat-upload-folder"),
                 tr!("fs-chat-upload-folder-help"),
-                &field!(folderstorm_chat_upload.folder),
+                &field!(folderstorm_chat_upload.folders),
                 |ui, s| {
-                    let folder = &mut s.folderstorm_chat_upload.folder;
+                    let upload = &mut s.folderstorm_chat_upload;
+                    // the folder belongs to the host shown: another host has its own
+                    let Some(origin) = upload.origin() else {
+                        ui.label(egui::RichText::new(tr!("fs-chat-upload-host-invalid")).color(p.muted));
+                        return false;
+                    };
+                    let mut folder = upload.folder_text(&origin).to_owned();
                     // a folder that takes uploads is as good as a key: masked
                     let changed = ui
                         .add(
-                            egui::TextEdit::singleline(folder)
+                            egui::TextEdit::singleline(&mut folder)
                                 .password(true)
                                 .desired_width(super::super::COMBO_W)
                                 .hint_text(tr!("fs-chat-upload-folder-placeholder")),
@@ -60,6 +66,9 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                         .changed();
                     if !folder.trim().is_empty() && !settings::valid_folder(folder.trim()) {
                         ui.label(egui::RichText::new(tr!("fs-chat-upload-folder-invalid")).color(p.danger));
+                    }
+                    if changed {
+                        upload.set_folder(&origin, folder);
                     }
                     changed
                 },
