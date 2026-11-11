@@ -148,6 +148,16 @@ Check live silhouette changes, filtering, Ctrl/Shift selection, changing full
 detail, removing exceptions and adding residents from the shared picker.
 `empty` starts with no exceptions. Both scenarios use only demo settings.
 
+**Custom world viewport (Folderstorm2).** `AURORA_DEMO_VIEWPORT=1` turns the
+viewport on for the run with the left third of the window as a margin;
+`middle` leaves the world in the middle third, as on the middle one of three
+monitors (try it with `AURORA_WINDOW_SIZE=3840,720`); `bars-window` keeps the
+bars over the whole window; `mouselook-full` lets mouselook fill the window.
+Check that the world, its HUDs and its name tags stay in the rectangle, the
+margins are dark, the bars sit inside it (except with `bars-window`), a click
+in a margin selects nothing, windows can be dragged into the margins, and the
+settings are under Preferences › Layout › Bars and windows › World viewport.
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
@@ -5356,6 +5366,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MAP=1`, `mini` or words among `search:<text>`, `drawer:<tab>`, `landmarks`, `friend`, `legacy`, `switch`, `show-on-map`, `show-link`, `coordinates`, `beacon[-click|-offscreen]` | Maps, search, drawer, landmarks, followed friend, side panel layout, layout switched with the map open, Show on map, coordinate entry and clickable 3D beacon |
 | `AURORA_DEMO_NOTIF=1`, `AURORA_DEMO_STATUSMENU=1` or `invisible`, `AURORA_DEMO_MICMENU=1`, `AURORA_DEMO_NAVEDIT=1` | Notification list, status menu, microphone panel, location field |
 | `AURORA_DEMO_PARCEL_NAME=<text>` | Any parcel name in the place island (odd names, line breaks) |
+| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
@@ -6192,6 +6203,12 @@ failure. Grid validation and any paid upload are performed by the human.
   "clo". Check that the Clothing folders come first with their parent paths
   ("In A personal folder"), the best match selected, the count under the list,
   and that Open folder (or Enter) opens a folder window on it.
+- **`AURORA_DEMO_INVENTORY=outfit-ask|aurora-outfit-ask`** (Folderstorm2):
+  the confirmation of Replace Current Outfit on "Right-click tests", over the
+  Legacy or Aurora inventory. Check Cancel first and focused (Enter and Escape
+  cancel), the folder named in the question, and that an item's Wear entry and
+  a folder's Wear objects entry are greyed in their menus until Preferences ›
+  Inventory › Enable "Wear" in inventory menus is on.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory

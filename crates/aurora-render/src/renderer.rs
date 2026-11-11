@@ -1705,6 +1705,9 @@ pub(crate) struct Backend {
     rlva_overlays: Option<crate::rlva::overlay::Overlays>,
     rlva_resolution_divisor: u32,
     rlva_scaled: Option<crate::rlva::resolution::Scaled>,
+    /// Folderstorm: the world's part of the window (x, y, width, height),
+    /// the whole window when None; see `world_extent`.
+    world_rect: Option<[u32; 4]>,
     smaa: Smaa,
     smaa_targets: Option<SmaaTargets>,
     targets: Targets,
@@ -3485,6 +3488,7 @@ impl Backend {
             rlva_overlays: None,
             rlva_resolution_divisor: 1,
             rlva_scaled: None,
+            world_rect: None,
             smaa,
             smaa_targets: None,
             targets,
@@ -5118,6 +5122,22 @@ impl Backend {
         (self.targets.color_tex.width(), self.targets.color_tex.height())
     }
 
+    /// Folderstorm: the size the world is drawn at before any scaling: its
+    /// part of the window (a custom world viewport), or the whole window. A
+    /// photo drawn at its own size uses that size.
+    fn world_extent(&self) -> (u32, u32) {
+        match self.world_rect {
+            Some([_, _, w, h]) if self.snapshot_window.is_none() => (w, h),
+            _ => (self.config.width, self.config.height),
+        }
+    }
+
+    /// Folderstorm: where the world's image goes in the window, when it
+    /// has a part of its own (never for a photo).
+    fn world_viewport(&self) -> Option<[u32; 4]> {
+        self.world_rect.filter(|_| self.snapshot_window.is_none())
+    }
+
     /// With FSR, its upscale ratio: the world drawn smaller than the
     /// window, FSR drawing it at the window's size. None for a photo drawn
     /// at its own size (at its full size) and under RLVa's reduced
@@ -5195,7 +5215,7 @@ impl Backend {
         } else {
             self.settings.render_scale_percent
         };
-        let window = (self.config.width, self.config.height);
+        let window = self.world_extent(); // Folderstorm: the world's part of the window
         let forced = size.is_some();
         let size = size.unwrap_or_else(|| match self.fsr_upscale() {
             Some(ratio) => crate::fsr::render_size(window, ratio),
@@ -5255,8 +5275,17 @@ impl Backend {
     /// Follow the window: size and vsync wanted for the frame being drawn.
     fn apply_surface(&mut self, s: SurfaceState) {
         self.set_vsync(s.vsync);
+        // Folderstorm: a world viewport inside the window (its size decides
+        // the world's targets; its position only where it is copied)
+        let rect = s.world_rect.filter(|&[x, y, w, h]| {
+            w > 0 && h > 0 && x.saturating_add(w) <= s.width && y.saturating_add(h) <= s.height && (w, h) != (s.width, s.height)
+        });
+        let extent = self.world_extent();
+        self.world_rect = rect;
         if (s.width, s.height) != (self.config.width, self.config.height) {
             self.resize(s.width, s.height);
+        } else if self.world_extent() != extent {
+            self.rebuild_targets();
         }
     }
 
@@ -5605,7 +5634,7 @@ impl Backend {
             // (the 1x1 set that frees a refused one shrinks FSR's display
             // size part too, rebuild_targets)
             let display = if self.fsr_upscale().is_some() && !self.targets_shrunk {
-                (self.config.width, self.config.height)
+                self.world_extent() // Folderstorm: the world's part of the window
             } else {
                 self.scene_size()
             };
@@ -5671,7 +5700,8 @@ impl Backend {
         // (the render size is the tile's): cascades fitted to a tile, centred
         // on the view axis and as narrow as the tile, left the receivers of
         // the tiles off that axis outside them
-        let aspect = (self.config.width as f32 * f.photo_tile.x_axis.x) / (self.config.height.max(1) as f32 * f.photo_tile.y_axis.y);
+        let extent = self.world_extent(); // Folderstorm: the world's proportions
+        let aspect = (extent.0 as f32 * f.photo_tile.x_axis.x) / (extent.1.max(1) as f32 * f.photo_tile.y_axis.y);
         let inv_view = f.view.inverse();
         let light_dir = -f.sun_dir.normalize_or(Vec3::Z);
         let mut out = [Mat4::IDENTITY; CASCADES];
@@ -6290,7 +6320,8 @@ impl Backend {
         let picks = picks
             .into_iter()
             .map(|(ticket, x, y)| {
-                let (x, y) = crate::rlva::resolution::pixel((x, y), (self.config.width, self.config.height), previous_scene);
+                // Folderstorm: picks come in the world's own pixels
+                let (x, y) = crate::rlva::resolution::pixel((x, y), self.world_extent(), previous_scene);
                 (ticket, x, y)
             })
             .collect();
@@ -6336,7 +6367,8 @@ impl Backend {
             self.begin_snapshot(s);
         } else if let Some((x, y)) = hover {
             // (window pixels: a photo frame has none of them)
-            let (x, y) = crate::rlva::resolution::pixel((x, y), (self.config.width, self.config.height), self.scene_size());
+            // Folderstorm: in the world's own pixels
+            let (x, y) = crate::rlva::resolution::pixel((x, y), self.world_extent(), self.scene_size());
             self.depth_pick.hover(x, y);
         }
         let world_size = self.scene_size();
@@ -6490,6 +6522,18 @@ impl Backend {
         // what the interface painted for the world comes first: it is drawn
         // before the HUD attachments, the rest after them
         let labels_end = ui.as_mut().map_or(0, |ui| crate::ui_world::take_end(&mut ui.primitives));
+        // Folderstorm: the world's labels (name tags, floating text) stay in
+        // its part of the window
+        if let (Some(ui), Some([x, y, w, h])) = (ui.as_mut(), self.world_viewport()) {
+            let ppp = ui.pixels_per_point.max(0.01);
+            let world = egui::Rect::from_min_size(
+                egui::pos2(x as f32 / ppp, y as f32 / ppp),
+                egui::vec2(w as f32 / ppp, h as f32 / ppp),
+            );
+            for primitive in &mut ui.primitives[..labels_end] {
+                primitive.clip_rect = primitive.clip_rect.intersect(world);
+            }
+        }
         let blur_boundary = ui.as_mut().and_then(|ui| crate::ui_blur::take_boundary(&mut ui.primitives));
         if let Some(ui) = ui.as_ref().filter(|_| blur_boundary.is_some()) {
             let size = [self.config.width, self.config.height];
@@ -6571,8 +6615,9 @@ impl Backend {
             let jx = halton(i, 2) * 2.0 / world_size.0 as f32;
             let jy = halton(i, 3) * 2.0 / world_size.1 as f32;
             depth_jitter = glam::Vec2::new(
-                halton(i, 2) * self.config.width as f32 / world_size.0 as f32,
-                -halton(i, 3) * self.config.height as f32 / world_size.1 as f32,
+                // Folderstorm: the world's part of the window
+                halton(i, 2) * self.world_extent().0 as f32 / world_size.0 as f32,
+                -halton(i, 3) * self.world_extent().1 as f32 / world_size.1 as f32,
             );
             let mut j = f.clone();
             j.proj = Mat4::from_translation(Vec3::new(jx, jy, 0.0)) * f.proj;
@@ -6600,7 +6645,8 @@ impl Backend {
         let above_water_possible = f.camera_pos.z >= camera_water_level - wake_margin;
         // Only the portable path needs late fragment depth at the waterline.
         // Hardware clamp keeps ordinary early depth testing for the same mesh.
-        let aspect = self.config.width as f32 / self.config.height.max(1) as f32;
+        let extent = self.world_extent(); // Folderstorm: the world's proportions
+        let aspect = extent.0 as f32 / extent.1.max(1) as f32;
         let near_radius = f.near * (1.0 + (f.fov_y * 0.5).tan().powi(2) * (1.0 + aspect * aspect)).sqrt();
         let water_near = (f.camera_pos.z - camera_water_level).abs() <= near_radius * 1.3 + wake_margin;
         let do_water_refl = self.targets.water_refl.is_some() && !lists.water.is_empty() && above_water_possible;
@@ -6806,12 +6852,13 @@ impl Backend {
         let main_vp = Mat4::from_cols_array_2d(&main.view_proj);
         // (asked in window pixels: a photo frame answers none of them)
         let drawn_px = if snapshot.is_none() {
-            self.drawn_pick.begin((self.config.width, self.config.height), main_vp.inverse())
+            self.drawn_pick.begin(self.world_extent(), main_vp.inverse()) // Folderstorm: world pixels
         } else {
             None
         };
         if let Some((x, y, _)) = drawn_px {
-            let narrow = crate::drawn_pick::narrow(x, y, self.config.width, self.config.height);
+            let (w, h) = self.world_extent(); // Folderstorm: world pixels
+            let narrow = crate::drawn_pick::narrow(x, y, w, h);
             let mut u = main;
             u.view_proj = (narrow * main_vp).to_cols_array_2d();
             u.eye_view_proj = (narrow * Mat4::from_cols_array_2d(&main.eye_view_proj)).to_cols_array_2d();
@@ -9260,7 +9307,7 @@ impl Backend {
             calls.set(calls.get() + passes as u32);
         }
         if let Some(scaled) = &self.rlva_scaled {
-            scaled.encode(&mut encoder, &surface_view);
+            scaled.encode(&mut encoder, &surface_view, self.world_viewport()); // Folderstorm: into the world's part
             calls.set(calls.get() + 1);
         }
 
@@ -9776,7 +9823,7 @@ impl Backend {
     /// drawn (depth prepass read-back; None for the sky). Blocks on the GPU
     /// for one tiny copy: clicks only.
     pub fn pick_world(&mut self, x: f32, y: f32) -> Option<Vec3> {
-        let (w, h) = (self.config.width, self.config.height);
+        let (w, h) = self.world_extent(); // Folderstorm: world pixels
         if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 {
             return None;
         }
