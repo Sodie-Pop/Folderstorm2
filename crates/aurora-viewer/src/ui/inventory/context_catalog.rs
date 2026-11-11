@@ -7,6 +7,8 @@ pub(super) use extra::FolderCache;
 pub(super) use extra::process_deferred;
 
 pub(super) enum Command {
+    // Folderstorm: a folder outfit change that asks first
+    ConfirmOutfit(super::outfit_safety::Ask),
     Extra(extra::Command),
     Invoke(InvAction),
     Folder(Uuid),
@@ -276,7 +278,9 @@ pub(super) fn lock_entry() -> Entry {
 }
 
 pub(super) fn build(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPreferences, facts: &Facts) -> Catalog {
-    build_mode(inv, id, st, prefs, facts, false)
+    let mut c = build_mode(inv, id, st, prefs, facts, false);
+    super::outfit_safety::apply(&mut c, prefs); // Folderstorm: outfit safety
+    c
 }
 
 /// Reuse the native definitions, independent of inventory contents and selection.
@@ -1185,6 +1189,7 @@ pub(super) fn execute(
     match command {
         Command::Extra(command) => extra::execute(command, ui, inv, st, prefs, facts, actions),
         Command::Invoke(action) => actions.push(action),
+        Command::ConfirmOutfit(ask) => st.outfit_ask = Some(ask), // Folderstorm: outfit safety
         Command::Folder(id) => submit(rules::create_folder(id, aurora_i18n::tr!("common-new-folder"))),
         Command::Upload(slot, id) => prefs.upload_folders[slot] = id,
         Command::Empty(id) => st.dialog = Some(EditDialog::Empty(id)),

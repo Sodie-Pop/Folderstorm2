@@ -8,6 +8,7 @@ pub fn page(cx: &mut Cx, tab: usize) {
     use aurora_i18n::tr;
     match tab {
         0 => {
+            super::folderstorm_viewport::group(cx); // Folderstorm: world viewport
             cx.group(tr!("ui-options-bars"), |cx| {
                 cx.toggle(tr!("bug-toolbar"), tr!("bug-toolbar-help"), &field!(show_bug_report));
                 // the place island of the Aurora bars (also in its right-click menu)

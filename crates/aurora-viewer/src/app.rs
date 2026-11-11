@@ -57,10 +57,12 @@ mod context_menu;
 mod controls;
 mod crash_state;
 mod cursor_hold;
+// Folderstorm: custom world viewport
 mod derender;
 mod describe;
 mod dev_toolbox;
 mod folders;
+mod folderstorm_viewport;
 mod hover_pick;
 mod texture_picker;
 use folders::chat_log_root;
@@ -7294,7 +7296,7 @@ impl App {
     /// viewing angle depend on it).
     fn view_aspect(&self) -> f32 {
         self.gfx.as_ref().map_or(16.0 / 9.0, |g| {
-            let (w, h) = g.renderer.size();
+            let (w, h) = g.renderer.world_size(); // Folderstorm: the world's part
             w as f32 / h.max(1) as f32
         })
     }
@@ -8856,6 +8858,7 @@ impl App {
         aurora_render::frame_priority::apply();
         self.world.anti_spam.configure(self.settings.anti_spam);
         self.update_rlva();
+        crate::mcp_bridge::frame(&self.settings.local_assistant, &self.world, self.demo); // Folderstorm: local assistant
         if self.demo && self.frame_count == 700 && std::env::var_os("AURORA_DEMO_ANTI_SPAM").is_some() {
             for event in crate::demo::anti_spam::events(self.world.agent_id) {
                 if let Some(event) = self.world.apply(event) {
@@ -9352,6 +9355,10 @@ impl App {
         self.local_bakes.apply(&mut self.scene, &mut gfx.renderer);
         self.update_blender_live(&mut gfx.renderer);
         let t_up = Instant::now();
+        // Folderstorm: the world's part of the window (custom world viewport)
+        self.viewport_demo(gfx.renderer.size());
+        gfx.renderer.set_world_rect(self.world_viewport(gfx.renderer.size()));
+        folderstorm_viewport::publish_monitors(&self.egui_ctx, &gfx.window, self.frame_count);
         let (w, h) = gfx.renderer.size();
         // a photo drawn at its own size this frame: its proportions, the
         // part of it this frame draws, the height its details are chosen for
@@ -9359,12 +9366,13 @@ impl App {
         self.viewfinder_frame(&mut gfx.renderer);
         self.photo_isolate_frame(&mut gfx.renderer);
         let photo = self.photo_frame(&mut gfx.renderer);
-        let window_aspect = w as f32 / h.max(1) as f32;
+        let (world_w, world_h) = gfx.renderer.world_size(); // Folderstorm: the world's part
+        let window_aspect = world_w as f32 / world_h.max(1) as f32;
         let aspect = photo.as_ref().map_or(window_aspect, |f| f.aspect);
         let photo_tile = photo.as_ref().map_or(glam::Mat4::IDENTITY, |f| f.tile);
         let photo_scale = photo.as_ref().map_or(1.0, |f| f.scale);
         let photo_context = photo.as_ref().map_or(aurora_render::PhotoContext::None, |f| f.context);
-        let lod_height = photo.as_ref().map_or(h, |f| f.height);
+        let lod_height = photo.as_ref().map_or(world_h, |f| f.height); // Folderstorm: the world's part
         let frame_proj = |camera: &crate::camera::Camera| match &photo {
             Some(f) => photo_tile * camera.photo_proj(f.aspect, window_aspect),
             None => camera.proj(aspect),
@@ -11099,6 +11107,8 @@ impl App {
             // before any field reads its keys: Ctrl+W is the frontmost window's
             ui::close_key::begin(ui.ctx());
             let t = Instant::now();
+            // Folderstorm: labels land in the world's part of the window
+            let vp = folderstorm_viewport::window_view_proj(vp, gfx.renderer.world_rect(), (w, h));
             let projector = ui::hud::Projector::for_ui(ui.ctx(), vp, [w as f32, h as f32]);
             // A discarded pass (`request_discard`) is followed by one that
             // gets no input events: what the first pass clicked must survive
@@ -15806,7 +15816,19 @@ impl App {
                 };
                 // the bars this frame: hidden with the interface (an edge
                 // brings the islands back) and in mouselook, like Firestorm's
-                let screen_rect = ctx.content_rect();
+                // Folderstorm: in a custom world viewport the bars stay inside it
+                let viewport_bars = crate::folderstorm::viewport::bars_rect(
+                    &self.settings.folderstorm_viewport,
+                    renderer.world_rect(),
+                    ctx.pixels_per_point(),
+                );
+                crate::folderstorm::viewport::set_bars_area(&ctx, viewport_bars);
+                let mut bars_child = viewport_bars.map(|r| ui.new_child(egui::UiBuilder::new().max_rect(r)));
+                let ui: &mut egui::Ui = match bars_child.as_mut() {
+                    Some(child) => child,
+                    None => ui,
+                };
+                let screen_rect = viewport_bars.unwrap_or_else(|| ctx.content_rect());
                 let demo_hidden = if self.demo { ui::bars::demo::get().hidden } else { None };
                 let chrome = self.interface.bars(&ui::interface::Frame {
                     classic: classic_bars,
@@ -16091,7 +16113,15 @@ impl App {
                 // the islands leave room between them, above and below: the
                 // windows move over the whole screen; the Legacy Viewer's
                 // bars are full width, the windows stay between them
-                ui::layout::set_move_area(ui.ctx(), if classic_bars { area } else { ui.ctx().content_rect() });
+                // Folderstorm: in a custom world viewport, windows move over the whole window
+                ui::layout::set_move_area(
+                    ui.ctx(),
+                    if classic_bars && viewport_bars.is_none() {
+                        area
+                    } else {
+                        ui.ctx().content_rect()
+                    },
+                );
                 let mut edges = ui::layout::Edges {
                     left: self.settings.windows_stop_left,
                     right: self.settings.windows_stop_right,
@@ -16980,6 +17010,7 @@ impl App {
                 let complexity = self.scene.avatar_complexity.get(&self.world.agent_id).copied().unwrap_or_default();
                 let mut open = self.panels.appearance;
                 self.appearance_ui.fill_previews = self.settings.appearance_fill_previews;
+                self.appearance_ui.gallery_size = self.settings.appearance_gallery_size; // Folderstorm: thumbnail size
                 for action in ui::appearance::show(
                     &ctx,
                     &p,
@@ -16996,6 +17027,12 @@ impl App {
                 }
                 if self.settings.appearance_fill_previews != self.appearance_ui.fill_previews {
                     self.settings.appearance_fill_previews = self.appearance_ui.fill_previews;
+                    self.settings.save();
+                }
+                // Folderstorm: the gallery's thumbnail size
+                let size = ui::appearance::gallery_size::sanitized(self.appearance_ui.gallery_size);
+                if self.settings.appearance_gallery_size != size {
+                    self.settings.appearance_gallery_size = size;
                     self.settings.save();
                 }
                 self.panels.appearance = open;
@@ -19716,6 +19753,11 @@ impl ApplicationHandler for App {
                     ui::appearance::demo_previews(&self.egui_ctx, &mut self.world.inventory, &mut self.ui_images);
                     self.settings.appearance_fill_previews = view == "gallery-fill";
                 }
+                // Folderstorm: the gallery with a chosen thumbnail size
+                if view == "gallery-size" {
+                    ui::appearance::demo_previews(&self.egui_ctx, &mut self.world.inventory, &mut self.ui_images);
+                    self.settings.appearance_gallery_size = 96.0;
+                }
                 let many = crate::world::appearance::demo_outfit_count();
                 if many > 0 {
                     crate::world::appearance::seed_demo_many(&mut self.world.inventory, self.world.agent_id, many);
@@ -19894,6 +19936,9 @@ impl ApplicationHandler for App {
                         // Folderstorm: Go to folder
                         | "folder-jump"
                         | "aurora-folder-jump"
+                        // Folderstorm: outfit safety
+                        | "outfit-ask"
+                        | "aurora-outfit-ask"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
@@ -19912,6 +19957,9 @@ impl ApplicationHandler for App {
                     }
                     if view.ends_with("folder-jump") {
                         ui::inventory::folder_jump_demo(&mut self.inventory_ui); // Folderstorm: Go to folder
+                    }
+                    if view.ends_with("outfit-ask") {
+                        ui::inventory::outfit_ask_demo(&mut self.inventory_ui); // Folderstorm: outfit safety
                     }
                     if view.contains("folder-colors") {
                         ui::inventory::folder_colors_demo(&mut self.inventory_ui, &mut self.settings.inventory);
@@ -20804,6 +20852,7 @@ impl ApplicationHandler for App {
     /// closed connection and every exit ended in a segmentation fault (before
     /// the browsers' private profiles were cleaned up).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        crate::mcp_bridge::shutdown(); // Folderstorm: delete the local assistant's discovery file
         #[cfg(windows)]
         crate::slurl_handoff::release();
         self.gfx = None;

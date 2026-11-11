@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 # Folderstorm: the product identity
 folderstorm-brand = { path = "../folderstorm-brand" }
+# Folderstorm: the local assistant bridge (src/mcp_bridge.rs)
+folderstorm-mcp-bridge = { path = "../folderstorm-mcp-bridge" }
 aurora-updater = { version = "0.1.0", path = "../aurora-updater" }
 aurora-i18n = { version = "0.1.0", path = "../aurora-i18n" }
 anyhow = "1.0.104"
@@ -175,6 +177,11 @@ winresource = { version = "0.1.34", default-features = false }
 # The Khronos OpenXR loader built into the exe (needs CMake): the published
 # Windows viewer (release.yml); local builds load the runtime's loader.
 xr-static-loader = ["aurora-render/xr-static-loader"]
+
+# Folderstorm: the local assistant's end-to-end test (src/mcp_bridge/tests.rs)
+[dev-dependencies]
+folderstorm-mcp = { path = "../folderstorm-mcp" }
+tempfile = "3.27.0"
 
 [lints]
 workspace = true

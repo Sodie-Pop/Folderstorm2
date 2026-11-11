@@ -4,6 +4,10 @@ use uuid::Uuid;
 
 impl App {
     pub(super) fn camera_aspect(&self) -> f32 {
+        // Folderstorm: the world's part of the window
+        if let Some(aspect) = self.world_aspect() {
+            return aspect;
+        }
         self.gfx
             .as_ref()
             .map(|g| g.window.inner_size())

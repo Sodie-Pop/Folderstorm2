@@ -44,6 +44,8 @@ mod folder_colors;
 pub use folder_colors::{demo as folder_colors_demo, demo_frame as folder_colors_demo_frame};
 // Folderstorm: Go to folder demo
 pub use folder_jump::demo as folder_jump_demo;
+// Folderstorm: outfit safety demo
+pub use outfit_safety::demo as outfit_ask_demo;
 mod hover;
 pub use hover::demo_events as hover_demo_events;
 mod keyboard;
@@ -53,6 +55,8 @@ pub use markdown::View as NotecardView;
 mod move_to;
 // Folderstorm: Go to folder (Ctrl+J)
 mod folder_jump;
+// Folderstorm: outfit safety
+mod outfit_safety;
 pub use document::document_demo_events;
 pub(crate) mod permissions;
 mod progress;
@@ -569,6 +573,8 @@ pub struct InventoryUi {
     move_to: Option<move_to::MoveTo>,
     // Folderstorm: Go to folder (Ctrl+J)
     folder_jump: Option<folder_jump::FolderJump>,
+    // Folderstorm: a folder outfit change waiting for its confirmation
+    outfit_ask: Option<outfit_safety::Ask>,
     pub links_filter: Option<Uuid>,
     pub windows: Vec<InventoryWindow>,
     pub thumbnail: thumbnail::ThumbnailUi,
@@ -2260,6 +2266,7 @@ pub fn show(
     dialogs::show(ctx, p, icons, inv, st, prefs, &facts, images, &mut actions);
     move_to::show(ctx, p, icons, inv, st, prefs, &facts, &mut actions);
     folder_jump::show(ctx, p, icons, inv, st, prefs); // Folderstorm: Go to folder
+    outfit_safety::show(ctx, p, inv, st, &facts, &mut actions); // Folderstorm: outfit safety
     dialogs::preview(ctx, p, icons, inv, inv, st, images, prefs, script_settings, &mut actions);
     st.thumbnail.show(
         ctx,
@@ -2400,6 +2407,7 @@ pub fn show(
         dialogs::show(ctx, p, icons, &world.inventory, &mut w.state, prefs, &facts, images, &mut actions);
         move_to::show(ctx, p, icons, &mut world.inventory, &mut w.state, prefs, &facts, &mut actions);
         folder_jump::show(ctx, p, icons, &world.inventory, &mut w.state, prefs); // Folderstorm: Go to folder
+        outfit_safety::show(ctx, p, &world.inventory, &mut w.state, &facts, &mut actions); // Folderstorm: outfit safety
         dialogs::preview(
             ctx,
             p,
@@ -3285,16 +3293,17 @@ mod tests {
         frame(&inv, Vec::new());
         frame(&inv, click(true));
         let (_, actions) = frame(&inv, click(false));
+        // Folderstorm: the unlocked replacement asks first (outfit_safety.rs)
         assert!(
-            actions
-                .iter()
-                .any(|a| matches!(a, InvAction::Appearance(model::Action::WearContents {
-            folder,
-            mode: model::WearMode::ReplaceOutfit,
-        }) if *folder == outfit)),
-            "replacement unlocks when the original arrives"
+            !actions.iter().any(|a| matches!(a, InvAction::Appearance(_))),
+            "nothing is worn before the confirmation"
         );
         assert!(!actions.iter().any(|a| matches!(a, InvAction::PrepareOutfit(_))));
+        assert!(
+            st.outfit_ask
+                .is_some_and(|ask| matches!(ask.target(), (folder, model::WearMode::ReplaceOutfit) if folder == outfit)),
+            "replacement unlocks when the original arrives, behind its confirmation"
+        );
         model::plan(
             &inv,
             model::Action::WearContents {
