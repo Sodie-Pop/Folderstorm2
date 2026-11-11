@@ -20,6 +20,9 @@ pub struct WearCopyGroup {
 mod aurora;
 mod bulk_permissions;
 pub use bulk_permissions::demo_menu as bulk_permissions_demo;
+// Folderstorm: Review bulk changes
+mod bulk_review;
+pub use bulk_review::demo as bulk_review_demo;
 mod clipboard;
 pub use clipboard::demo_events as clipboard_demo_events;
 mod context;
@@ -480,6 +483,8 @@ pub struct InventoryUi {
     was_open: bool,
     focus_search: bool,
     bulk_permissions: bulk_permissions::State,
+    // Folderstorm: Review bulk changes
+    bulk_review: Option<bulk_review::BulkReview>,
     menu_editor: context_customize::State,
     menu_notecards: context_notecards::State,
     /// Library wearables being copied to be worn: copy request → replace.
@@ -2200,6 +2205,7 @@ pub fn show(
     let inv = &mut world.inventory;
     context_catalog::process_deferred(inv, st, prefs, &facts);
     bulk_permissions::show(ctx, p, inv, st, world.agent_id, &mut actions);
+    bulk_review::show(ctx, p, inv, st, prefs, &facts, &mut actions); // Folderstorm: Review bulk changes
     st.visible.clear();
     fetch_whole_inventory(inv, st);
     // Copied folders load their whole tree for the paste; once loaded, they
@@ -2391,6 +2397,7 @@ pub fn show(
             w.state.view = Default::default();
         }
         bulk_permissions::show(ctx, p, &mut world.inventory, &mut w.state, world.agent_id, &mut actions);
+        bulk_review::show(ctx, p, &world.inventory, &mut w.state, prefs, &facts, &mut actions); // Folderstorm: Review bulk changes
         if w.id != listings::PANEL {
             finish_hidden_rename(&world.inventory, &mut w.state, &mut actions);
         }

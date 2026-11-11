@@ -6193,6 +6193,11 @@ failure. Grid validation and any paid upload are performed by the human.
   cancel), the folder named in the question, and that an item's Wear entry is
   greyed in its menu until Preferences › Inventory › Enable "Wear" in inventory
   menus is on.
+- **`AURORA_DEMO_INVENTORY=bulk-review|aurora-bulk-review`** (Folderstorm2):
+  "Review bulk changes…" open on three demo items with the pattern
+  "Sorted {n} - {name}", previewed. Check the before → after rows, the skipped
+  rows and their reason, the counts, that editing the pattern asks for a new
+  preview, and Move with a folder chosen from the search.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory

@@ -12960,6 +12960,27 @@ blender-object-linkset = { $name } — root #1 · { $prims } prims
 blender-object-linked-prim = #{ $number } · { $name }
 
 inventory-bulk-permissions = Permissions par lot
+inventory-bulk-review-menu = Vérifier des changements groupés…
+inventory-bulk-review-title = Vérifier des changements groupés
+inventory-bulk-review-frozen = { $count ->
+    [one] { $count } objet sélectionné. Cette sélection reste fixe pendant la vérification.
+   *[other] { $count } objets sélectionnés. Cette sélection reste fixe pendant la vérification.
+    }
+inventory-bulk-review-move = Déplacer
+inventory-bulk-review-pattern = Modèle de nom :
+inventory-bulk-review-pattern-help = Utilisez {"{"}name{"}"} pour le nom actuel et {"{"}n{"}"} pour le numéro dans la sélection. Exemple : Trié {"{"}n{"}"} - {"{"}name{"}"}
+inventory-bulk-review-preview = Aperçu
+inventory-bulk-review-stale = Les réglages ont changé. Refaites l'aperçu avant d'exécuter.
+inventory-bulk-review-counts = Demandés : { $count } · Admis : { $eligible } · Ignorés : { $skipped }
+inventory-bulk-review-skipped = Ignoré : { $reason }
+inventory-bulk-review-execute = Exécuter
+inventory-bulk-review-changed = L'inventaire a changé depuis l'aperçu. Vérifiez le nouvel aperçu, puis exécutez à nouveau.
+inventory-bulk-review-nothing = Rien à changer.
+inventory-bulk-review-choose = Choisissez un dossier de destination.
+inventory-bulk-review-destination = Destination : { $path }
+inventory-bulk-review-skip-rename = Cet objet ne peut pas être renommé.
+inventory-bulk-review-skip-unchanged = Le nom reste le même.
+inventory-bulk-review-skip-there = Déjà dans ce dossier.
 inventory-bulk-adjust = Modifier les permissions des éléments
 inventory-bulk-reading = Lecture des dossiers et sous-dossiers sélectionnés…
 inventory-bulk-load-failed = Impossible de lire tous les dossiers sélectionnés. Aucune permission n’a été modifiée. Réessayez.
