@@ -535,6 +535,26 @@ May be two small PRs: 1a profiles, 1b behind policy.
   - Heavy load in front never raises a graphics box from a window behind;
     after a driver reset every window stays open and none switches to Potato.
 
+- **As built (branch `claude/session-checkpoint-1`):** pure rules in
+  `crates/folderstorm-session` (`profile`, `behind`, `gpu`); viewer side in
+  `crates/aurora-viewer/src/folderstorm_characters*` and
+  `app/folderstorm_characters.rs` (not under `folderstorm/`, which PR #6
+  creates). Differences from the text above:
+  - R5: a loss on a window that is not in front (not focused, minimised or
+    covered) does not recover there; it **waits**, with no box, no count, no
+    save and no close, while the session goes on, and recovers uncounted
+    when the window comes to the front. A recovery behind would open its new
+    window off screen when minimised, could take the focus from the active
+    character when shown, and closes the viewer if the new device cannot be
+    made during the reset. Cost: the image of a window behind stays frozen
+    until it is clicked.
+  - R4 holds the stall box back behind for every viewer, not only managed
+    ones; the same for R5.
+  - Limited is the low frame-rate cap with the 3D drawn; monitors come later.
+  - Not done: per-profile Blender live-link port, the World menu's "Open
+    another character…", runtime sound mute and voice off behind
+    (decision 5 applies with the host, checkpoint 2).
+
 ### Checkpoint 2: session host, launch and switch
 
 - `aurora-viewer --session-host`: up to 5 slots (profiles), Launch, Switch,
