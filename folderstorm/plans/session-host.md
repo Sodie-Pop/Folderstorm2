@@ -1399,7 +1399,11 @@ May be two small PRs: 1a profiles, 1b behind policy.
     processor's painter without a window (the inbox docked and in its
     own window, the editor and its swatches, the condensed lines in the
     host's window at its least size and in the characters' own window),
-    with the colours looked for in the pixels.
+    with the colours looked for in the pixels; the host's window
+    (condensed, with colours and aliases) and the inbox's own window
+    opened, drawn and captured under X11 (Xvfb). The demo's viewers do
+    not start here (no graphics card), so the inbox with questions in it
+    was only seen in the tests' drawings, not in a real window.
   - **To verify on Windows** (nothing of Win32 runs here): the inbox
     with real offers (a teleport offer, a friendship request, an
     inventory offer and a script's dialog to two characters): each
