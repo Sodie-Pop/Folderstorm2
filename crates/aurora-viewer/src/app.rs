@@ -76,6 +76,7 @@ mod env_apply;
 mod env_day_editor;
 mod env_editor;
 mod external_links;
+mod folderstorm_characters; // Folderstorm: several characters (FEATURES.md 5.1)
 mod follow;
 mod gestures;
 mod give_demo;
@@ -913,6 +914,8 @@ pub struct App {
     busy_pause: busy_pause::BusyPause,
     /// The other viewers on this PC (instances.rs).
     instances: crate::instances::Instances,
+    // Folderstorm: 3D behind another Folderstorm2 window, GPU trouble behind
+    folderstorm_characters: crate::folderstorm_characters::State,
     /// The Down key's latch (FSCrouchToggle).
     crouch_toggle: crate::movement::crouch_toggle::CrouchToggle,
     /// `key2name` chat commands waiting for a name.
@@ -1820,6 +1823,7 @@ impl App {
             gpu_stall: Default::default(),
             busy_pause: Default::default(),
             instances: crate::instances::Instances::new(),
+            folderstorm_characters: Default::default(), // Folderstorm
             crouch_toggle: Default::default(),
             key_to_name: Vec::new(),
             media,
@@ -11613,6 +11617,9 @@ impl App {
             self.instances.peers().in_front(),
             timed || !self.settings.background_fps_cap,
         );
+        // Folderstorm: Off / Limited behind another Folderstorm2 window (app/folderstorm_characters.rs)
+        let minimized = gfx.window.is_minimized().unwrap_or(false);
+        let cap = self.folderstorm_characters_frame(cap, timed, gfx.renderer.vr_engaged(), minimized);
         let paced_by_vsync = gfx.renderer.vsync() && cap >= monitor_hz - 0.5;
         let target = (cap >= 1.0 && !paced_by_vsync).then(|| Duration::from_secs_f32(1.0 / cap));
         // (while Windows holds the window, this thread is left to its loop:
@@ -15316,6 +15323,7 @@ impl App {
             self.interface.set_hidden(&ctx, false);
         }
         self.busy_pause_notice(&ctx, &p);
+        self.folderstorm_characters_notice(&ctx, &p); // Folderstorm: 3D paused behind
         self.video_memory_notice(&ctx, &p);
         self.media_pack_card(&ctx, &p);
         match self.screen {
@@ -21562,6 +21570,7 @@ fn restart_with_vr() {
     if let Some(language) = &cli.language {
         command.arg("--language").arg(language);
     }
+    command.args(crate::folderstorm_characters::profile::restart_args()); // Folderstorm: keep the profile
     command.arg("--vr");
     match command.spawn() {
         Ok(_) => log::info!("restarting into VR"),

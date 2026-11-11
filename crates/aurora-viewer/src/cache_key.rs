@@ -31,7 +31,8 @@ pub fn load() -> Key {
         log::info!("cache key: credential store ({} ms)", started.elapsed().as_millis());
         return key;
     }
-    let file = crate::settings::config_dir().join(FILE);
+    // Folderstorm: one key file for every profile, in the main settings folder
+    let file = crate::folderstorm_characters::profile::main_config_dir().join(FILE);
     if let Some(key) = from_file(&file) {
         log::info!("cache key: key file of the configuration folder");
         return key;

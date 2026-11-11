@@ -30,7 +30,8 @@ impl Scope {
     pub fn current() -> Self {
         Self {
             demo: std::env::var_os("AURORA_DEMO").is_some(),
-            title: crate::cli::title_slug(),
+            // Folderstorm: the profile's own scope (folderstorm_characters/profile.rs)
+            title: crate::folderstorm_characters::profile::scope_slug(crate::cli::title_slug()),
         }
     }
 

@@ -54,6 +54,8 @@ pub fn init() {
     let unchanged = last.as_deref() == Some(now.as_path());
     if let Some(last) = last.filter(|l| !l.as_os_str().is_empty() && *l != now)
         && is_ours(&last)
+        // Folderstorm: a named profile never removes the main cache it shared
+        && crate::folderstorm_characters::profile::may_remove_cache(&last)
     {
         log::info!("cache folder changed: the previous cache is removed");
         let _ = std::thread::Builder::new().name("aurora-cache-purge".into()).spawn(move || {
