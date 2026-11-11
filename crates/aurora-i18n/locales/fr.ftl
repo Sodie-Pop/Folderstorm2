@@ -4252,6 +4252,57 @@ folderstorm-host-close-question = Des personnages sont encore ouverts.
 folderstorm-host-close-host-only = Fermer seulement cette fenêtre
 folderstorm-host-close-host-only-help = Les personnages restent connectés, chacun dans sa fenêtre, sans être gérés : le son, la voix et la 3D suivent de nouveau les réglages de chaque fenêtre.
 folderstorm-host-already-open = L'hôte des personnages est déjà ouvert.
+folderstorm-chat-heading = Chat
+folderstorm-chat-all = Tous
+folderstorm-chat-untitled = Conversation
+folderstorm-chat-sound = Son quand un personnage en arrière-plan reçoit un message
+folderstorm-chat-sound-help = Les sons des personnages en arrière-plan sont coupés. Avec cette option, le son de notification du système est joué quand l'un d'eux reçoit un message privé, une ligne de groupe ou de conférence, ou une offre. Le bouton de la barre des tâches clignote dans tous les cas.
+folderstorm-chat-all-empty = Rien pour l'instant. Ce que vos personnages entendent et lisent apparaît ici.
+folderstorm-chat-empty = Rien pour l'instant pour { $name }.
+folderstorm-chat-nothing-yet = Vous pourrez écrire ici quand ce personnage sera dans le monde et aura entendu quelque chose.
+folderstorm-chat-pick = Cliquez sur une ligne pour répondre dans sa conversation, avec son personnage.
+folderstorm-chat-pick-help = Répondre dans cette conversation, avec ce personnage
+folderstorm-chat-trimmed = Les lignes plus anciennes sont dans la fenêtre du personnage.
+folderstorm-chat-earlier-login = Cette conversation date d'une connexion précédente de ce personnage. Vous pourrez y écrire à nouveau dès que quelque chose y arrivera.
+folderstorm-chat-gap = { $count ->
+        [one] 1 ligne manque ici ; elle est dans la fenêtre du personnage.
+       *[other] { $count } lignes manquent ici ; elles sont dans la fenêtre du personnage.
+    }
+folderstorm-chat-send-as = Envoyer en tant que { $name } — { $place }
+folderstorm-chat-hint = Écrire en tant que { $name }…
+folderstorm-chat-sending = En attente de la visionneuse de { $name }…
+folderstorm-chat-blocked-not-in-world = { $name } n'est pas dans le monde.
+folderstorm-chat-blocked-busy = La visionneuse de { $name } n'a pas encore répondu pour les dernières lignes.
+folderstorm-chat-held = Ce texte a été écrit avant que { $name } se déconnecte, se reconnecte ou soit redémarré. Il n'est pas envoyé tant que vous ne le reprenez pas.
+folderstorm-chat-held-take = L'utiliser en tant que { $name } maintenant
+folderstorm-chat-held-discard = Abandonner
+folderstorm-chat-refused = Non dit ({ $why }) : « { $text } ». Le texte est de retour dans la zone de saisie.
+folderstorm-chat-refused-not-in-world = le personnage n'est pas dans le monde
+folderstorm-chat-refused-stale = le personnage s'est déconnecté ou reconnecté depuis la saisie
+folderstorm-chat-refused-closed = la conversation est fermée dans la fenêtre du personnage
+folderstorm-chat-refused-restricted = une restriction l'interdit
+folderstorm-chat-refused-empty = rien à dire
+folderstorm-chat-refused-repeated = déjà transmis une fois
+folderstorm-chat-uncertain = On ne sait pas si ceci a été dit : « { $text } ». La visionneuse du personnage n'a pas répondu. Le texte n'a pas été renvoyé ; vérifiez dans la fenêtre du personnage avant de le répéter.
+folderstorm-chat-not-sent = Non envoyé, la visionneuse du personnage ne lit pas : « { $text } ». Le texte est de retour dans la zone de saisie.
+folderstorm-chat-attention = Attention : { $name } a quelque chose à répondre
+folderstorm-chat-attention-more = { $count ->
+        [one] et 1 autre
+       *[other] et { $count } autres
+    }
+folderstorm-chat-switch-to-answer = Basculer pour répondre
+folderstorm-chat-switch-to-answer-help = Les offres, les demandes et les dialogues de scripts se répondent dans la fenêtre du personnage. Rien n'est accepté d'ici.
+folderstorm-chat-attention-teleport = Téléportation
+folderstorm-chat-attention-friendship = Amitié
+folderstorm-chat-attention-inventory = Offre d'inventaire
+folderstorm-chat-attention-group = Groupe
+folderstorm-chat-attention-script = Dialogue de script
+folderstorm-chat-attention-permissions = Permissions de script
+folderstorm-chat-attention-link = Lien
+folderstorm-chat-attention-call = Appel
+folderstorm-chat-attention-other = Question
+folderstorm-chat-demo-nearby = Ligne de démo { $n } dans le chat local
+folderstorm-chat-demo-im = Message privé de démo { $n }
 busy-pause-window-title = { $title } — En pause
 video-memory-full-notice = La mémoire vidéo est pleine et le monde ne peut pas être affiché. Fermez les programmes qui utilisent la carte graphique : il reviendra tout seul.
 video-memory-full-window-title = { $title } — Mémoire vidéo pleine

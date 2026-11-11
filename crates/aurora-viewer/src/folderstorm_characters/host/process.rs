@@ -16,7 +16,7 @@
 //! as a viewer is slow, the window's thread only ever tries to queue.
 
 use super::super::{managed, transport};
-use ::folderstorm_session::ipc::{self, Bootstrap, Refusal, Status, ToHost, ToViewer};
+use ::folderstorm_session::ipc::{self, AttentionList, Bootstrap, ChatBatch, Refusal, SendOutcome, Status, ToHost, ToViewer};
 use ::folderstorm_session::profile::ProfileName;
 use crossbeam_channel::{Receiver, Sender};
 use std::io::{self, Read, Write};
@@ -40,6 +40,12 @@ pub enum Kind {
     Refused(Refusal),
     Status(Box<Status>),
     Heartbeat(u64),
+    /// New lines of one of its conversations.
+    Chat(Box<ChatBatch>),
+    /// What waits for an answer in its window.
+    Attention(Box<AttentionList>),
+    /// What became of a line the host asked it to say.
+    SendResult(u64, SendOutcome),
 }
 
 /// A started viewer.
@@ -213,6 +219,9 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
         let kind = match ipc::read_frame::<ToHost>(&mut from_viewer) {
             Ok(ToHost::Status(status)) => Kind::Status(status),
             Ok(ToHost::Heartbeat { loop_count }) => Kind::Heartbeat(loop_count),
+            Ok(ToHost::Chat(batch)) => Kind::Chat(batch),
+            Ok(ToHost::Attention(list)) => Kind::Attention(list),
+            Ok(ToHost::SendResult { id, outcome }) => Kind::SendResult(id, outcome),
             // a second hello is not a report
             Ok(ToHost::Hello(_)) => {
                 log::warn!(
@@ -419,6 +428,7 @@ mod tests {
                 Kind::Status(status) => desk.status(slot, launch, (**status).clone(), now),
                 Kind::Heartbeat(count) => desk.heartbeat(slot, launch, *count, now),
                 Kind::Refused(refusal) => desk.refused(slot, launch, *refusal),
+                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) => {}
             }
             kinds.push(kind);
         }
@@ -462,5 +472,176 @@ mod tests {
         drop(events_tx);
         let kinds: Vec<Kind> = events.iter().map(|e| e.kind).collect();
         assert!(matches!(kinds.as_slice(), [Kind::Refused(Refusal::Token)]), "{kinds:?}");
+    }
+
+    /// The shared chat whole, over the real endpoint and a real pipe for
+    /// the viewer's input: a line heard by the character reaches the
+    /// host's chat, a line typed in the host is said once by that viewer
+    /// and answered, and a line the viewer never answers because the link
+    /// broke is uncertain and never handed again.
+    #[cfg(unix)]
+    #[test]
+    fn a_conversation_goes_both_ways_and_a_broken_link_leaves_an_uncertain_line() {
+        use ::folderstorm_session::chat::{self, Chat, Entry, Note};
+        use ::folderstorm_session::export::Sends;
+        use ::folderstorm_session::ipc::{ChatBatch, ChatLine, Conversation, LineKind, Screen, SendOutcome, SessionKind};
+        use std::os::unix::net::UnixStream;
+        use std::time::{Duration, Instant};
+
+        const SLOT: usize = 2;
+        const LAUNCH: u32 = 1;
+        let listener = transport::Listener::bind(SLOT as u8).expect("bound");
+        let boot = Bootstrap {
+            protocol: ipc::PROTOCOL,
+            slot: SLOT as u8,
+            host_pid: std::process::id(),
+            endpoint: listener.endpoint().to_owned(),
+            token: transport::random_hex(ipc::TOKEN_LEN),
+        };
+        let (events_tx, events) = crossbeam_channel::unbounded();
+        let token = boot.token.clone();
+        let reader = std::thread::spawn(move || {
+            let cancelled = AtomicBool::new(false);
+            let from_viewer = listener.accept(std::process::id(), &cancelled).expect("accepted");
+            read_reports(from_viewer, SLOT, LAUNCH, &token, &managed::build_id(), &events_tx);
+        });
+        // the viewer's standard input: a pipe the host writes
+        let (mut to_viewer, viewer_input) = UnixStream::pair().expect("pipe");
+        let (link, viewer) = managed::start_viewer(viewer_input);
+        ipc::write_frame(&mut to_viewer, &boot).expect("bootstrap");
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        // the viewer's main thread, as the test plays it
+        let viewer_event = || loop {
+            if let Some(event) = link.poll().next() {
+                return event;
+            }
+            assert!(Instant::now() < deadline, "the viewer heard nothing");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        // the host's window thread: reports into the chat, until `done`
+        let mut host_chat = Chat::default();
+        let pump = |chat: &mut Chat, done: &dyn Fn(&Chat) -> bool| {
+            while !done(chat) {
+                let Event { slot, launch, kind } = events.recv_timeout(Duration::from_secs(20)).expect("a report");
+                match kind {
+                    Kind::Status(status) => chat.status(slot, launch, status.generation, status.screen == Screen::World),
+                    Kind::Chat(batch) => chat.batch(slot, launch, *batch),
+                    Kind::Attention(list) => chat.attention_list(slot, launch, *list),
+                    Kind::SendResult(id, outcome) => chat.result(slot, launch, id, outcome),
+                    Kind::Connected | Kind::Heartbeat(_) => {}
+                    Kind::Refused(refusal) => panic!("refused: {refusal:?}"),
+                }
+            }
+        };
+        let said = |number, kind, from: &str, text: &str| ChatBatch {
+            generation: 1,
+            conversation: Conversation::Nearby,
+            kind: SessionKind::Nearby,
+            restart: number == 1,
+            lines: vec![ChatLine {
+                number,
+                time: 0,
+                kind,
+                emote: false,
+                from: from.into(),
+                text: text.into(),
+            }],
+            ..Default::default()
+        };
+        let texts = |chat: &Chat| -> Vec<String> {
+            chat.thread(SLOT, Conversation::Nearby)
+                .map(|t| {
+                    t.entries()
+                        .map(|e| match e {
+                            Entry::Line(l) => format!("{}: {}", l.from, l.text),
+                            Entry::Note(Note::Uncertain { text }) => format!("uncertain: {text}"),
+                            other => format!("{other:?}"),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        // 1. the character hears a neighbour: the host's chat shows it
+        assert_eq!(viewer_event(), managed::Event::Linked { slot: SLOT as u8 });
+        assert!(link.report(Status {
+            generation: 1,
+            screen: Screen::World,
+            ..Default::default()
+        }));
+        assert!(link.send(ToHost::Chat(Box::new(said(1, LineKind::Said, "Jane Doe", "hello")))));
+        pump(&mut host_chat, &|chat| chat.thread(SLOT, Conversation::Nearby).is_some());
+        assert_eq!(texts(&host_chat), ["Jane Doe: hello"]);
+
+        // 2. a line typed in the host: handed to that viewer's input, once
+        let now = Instant::now();
+        assert!(host_chat.set_draft(SLOT, Conversation::Nearby, "hi Jane"));
+        let first = host_chat.submit(SLOT, Conversation::Nearby, now).expect("sent");
+        let mut handed = Vec::new();
+        let mut hand_over = |chat: &mut Chat, to_viewer: &mut UnixStream| {
+            for effect in chat.take_effects() {
+                if let chat::Effect::Send { slot, launch, message } = effect {
+                    assert_eq!((slot, launch), (SLOT, LAUNCH));
+                    ipc::write_frame(to_viewer, &message).expect("written");
+                    handed.push(message);
+                }
+            }
+        };
+        hand_over(&mut host_chat, &mut to_viewer);
+        let mut sends = Sends::default();
+        let managed::Event::Command(ToViewer::SendChat {
+            id,
+            generation,
+            conversation,
+            text,
+        }) = viewer_event()
+        else {
+            panic!("not a line to say");
+        };
+        assert_eq!(
+            (id, generation, conversation, text.as_str()),
+            (first, 1, Conversation::Nearby, "hi Jane")
+        );
+        assert!(sends.fresh(id));
+        // the viewer says it, answers, and its own line comes back as any line
+        assert!(link.send(ToHost::SendResult {
+            id,
+            outcome: SendOutcome::Accepted
+        }));
+        assert!(link.send(ToHost::Chat(Box::new(said(2, LineKind::Own, "Sam", "hi Jane")))));
+        pump(&mut host_chat, &|chat| {
+            chat.thread(SLOT, Conversation::Nearby).is_some_and(|t| t.entries().len() == 2)
+        });
+        assert_eq!(texts(&host_chat), ["Jane Doe: hello", "Sam: hi Jane"]);
+        assert_eq!(host_chat.sending(SLOT, Conversation::Nearby), 0);
+
+        // 3. a second line is handed over, and the link breaks before the
+        // viewer answers (its process died, or the host's pipe did)
+        assert!(host_chat.set_draft(SLOT, Conversation::Nearby, "are you there?"));
+        let second = host_chat.submit(SLOT, Conversation::Nearby, now).expect("sent");
+        hand_over(&mut host_chat, &mut to_viewer);
+        assert!(matches!(
+            viewer_event(),
+            managed::Event::Command(ToViewer::SendChat { id, .. }) if id == second && sends.fresh(id)
+        ));
+        drop(to_viewer);
+        assert_eq!(viewer_event(), managed::Event::Gone);
+        viewer.join().expect("the viewer's link thread ends");
+        // (the host learns it from the process watch)
+        host_chat.ended(SLOT, LAUNCH);
+        host_chat.tick(now + chat::SEND_WAIT * 2);
+        assert_eq!(
+            texts(&host_chat),
+            ["Jane Doe: hello", "Sam: hi Jane", "uncertain: are you there?"],
+            "told as uncertain"
+        );
+        assert_eq!(host_chat.draft(SLOT, Conversation::Nearby), "", "not offered for a second send");
+        assert!(host_chat.take_effects().is_empty(), "never handed again");
+        // each line went down the pipe exactly once, and a frame repeated
+        // by anything would not be said twice
+        assert_eq!(handed.len(), 2);
+        assert!(!sends.fresh(first) && !sends.fresh(second));
+        reader.join().expect("the host's reader ends with the viewer");
     }
 }

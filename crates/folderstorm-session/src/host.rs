@@ -60,6 +60,9 @@ pub struct Config {
     /// takes the place of the one that was active.
     pub stage: bool,
     pub stage_rect: Option<Stage>,
+    /// The host sounds when a character that is not the active one gets a
+    /// message (their own sounds are cut).
+    pub chat_sound: bool,
 }
 
 impl Default for Config {
@@ -68,6 +71,7 @@ impl Default for Config {
             slots: Vec::new(),
             stage: true,
             stage_rect: None,
+            chat_sound: false,
         }
     }
 }
@@ -244,6 +248,7 @@ pub struct Desk {
     active: Option<usize>,
     stage: bool,
     stage_rect: Option<Stage>,
+    chat_sound: bool,
     quitting: Option<Instant>,
     effects: Vec<Effect>,
 }
@@ -262,6 +267,7 @@ impl Desk {
             active: None,
             stage: config.stage,
             stage_rect: config.stage_rect,
+            chat_sound: config.chat_sound,
             quitting: None,
             effects: Vec::new(),
         }
@@ -280,6 +286,7 @@ impl Desk {
                 .collect(),
             stage: self.stage,
             stage_rect: self.stage_rect,
+            chat_sound: self.chat_sound,
         }
     }
 
@@ -360,6 +367,18 @@ impl Desk {
     pub fn set_stage(&mut self, stage: bool) {
         if self.stage != stage {
             self.stage = stage;
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// The host sounds for a message to a background character.
+    pub fn chat_sound(&self) -> bool {
+        self.chat_sound
+    }
+
+    pub fn set_chat_sound(&mut self, on: bool) {
+        if self.chat_sound != on {
+            self.chat_sound = on;
             self.effects.push(Effect::Save);
         }
     }
@@ -743,8 +762,10 @@ mod tests {
                 height: 1,
                 maximised: false,
             }),
+            chat_sound: true,
         }
         .cleaned();
+        assert!(config.chat_sound);
         assert_eq!(config.slots, vec![slot(0, "Main2"), slot(1, "Alt1")]);
         assert_eq!(config.stage_rect, None);
         // a file from a later version or half written still reads

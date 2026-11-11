@@ -4249,6 +4249,57 @@ folderstorm-host-close-question = Characters are still open.
 folderstorm-host-close-host-only = Close only this window
 folderstorm-host-close-host-only-help = The characters stay logged in, each in its own window, no longer managed: sound, voice and 3D follow each window's own settings again.
 folderstorm-host-already-open = The characters' host is already open.
+folderstorm-chat-heading = Chat
+folderstorm-chat-all = All
+folderstorm-chat-untitled = Conversation
+folderstorm-chat-sound = Sound when a background character gets a message
+folderstorm-chat-sound-help = The background characters' own sounds are cut. With this, the system's notification sound plays when one of them gets an instant message, a group or conference line, or an offer. The taskbar button flashes either way.
+folderstorm-chat-all-empty = Nothing yet. What your characters hear and read appears here.
+folderstorm-chat-empty = Nothing yet for { $name }.
+folderstorm-chat-nothing-yet = Lines can be typed here once this character is in the world and has heard something.
+folderstorm-chat-pick = Click a line to reply in its conversation, as its character.
+folderstorm-chat-pick-help = Reply in this conversation, as this character
+folderstorm-chat-trimmed = Older lines are in the character's own window.
+folderstorm-chat-earlier-login = This conversation is from an earlier login of this character. It can be written to again once something arrives in it.
+folderstorm-chat-gap = { $count ->
+        [one] 1 line is missing here; it is in the character's own window.
+       *[other] { $count } lines are missing here; they are in the character's own window.
+    }
+folderstorm-chat-send-as = Send as { $name } — { $place }
+folderstorm-chat-hint = Type as { $name }…
+folderstorm-chat-sending = Waiting for { $name }'s viewer…
+folderstorm-chat-blocked-not-in-world = { $name } is not in the world.
+folderstorm-chat-blocked-busy = { $name }'s viewer has not answered the last lines yet.
+folderstorm-chat-held = This text was typed before { $name } logged out, logged in again or was restarted. It is not sent unless you take it up again.
+folderstorm-chat-held-take = Use it as { $name } now
+folderstorm-chat-held-discard = Discard
+folderstorm-chat-refused = Not said ({ $why }): “{ $text }”. The text is back in the box.
+folderstorm-chat-refused-not-in-world = the character is not in the world
+folderstorm-chat-refused-stale = the character logged out or in since it was typed
+folderstorm-chat-refused-closed = the conversation is closed in the character's window
+folderstorm-chat-refused-restricted = a restriction forbids it
+folderstorm-chat-refused-empty = nothing to say
+folderstorm-chat-refused-repeated = it was already handed over once
+folderstorm-chat-uncertain = It is not known whether this was said: “{ $text }”. The character's viewer did not answer. It was not sent again; check the character's own window before you repeat it.
+folderstorm-chat-not-sent = Not sent, the character's viewer is not reading: “{ $text }”. The text is back in the box.
+folderstorm-chat-attention = Attention: { $name } has something to answer
+folderstorm-chat-attention-more = { $count ->
+        [one] and 1 more
+       *[other] and { $count } more
+    }
+folderstorm-chat-switch-to-answer = Switch to answer
+folderstorm-chat-switch-to-answer-help = Offers, requests and script dialogs are answered in the character's own window. Nothing is accepted from here.
+folderstorm-chat-attention-teleport = Teleport
+folderstorm-chat-attention-friendship = Friendship
+folderstorm-chat-attention-inventory = Inventory offer
+folderstorm-chat-attention-group = Group
+folderstorm-chat-attention-script = Script dialog
+folderstorm-chat-attention-permissions = Script permissions
+folderstorm-chat-attention-link = Link
+folderstorm-chat-attention-call = Call
+folderstorm-chat-attention-other = Question
+folderstorm-chat-demo-nearby = Demo line { $n } in the nearby chat
+folderstorm-chat-demo-im = Demo instant message { $n }
 busy-pause-window-title = { $title } — Paused
 video-memory-full-notice = Video memory is full and the world cannot be drawn. Close programs that use the graphics card: it comes back on its own.
 video-memory-full-window-title = { $title } — Video memory full

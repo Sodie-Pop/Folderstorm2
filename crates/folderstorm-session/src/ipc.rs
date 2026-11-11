@@ -1030,7 +1030,10 @@ mod tests {
             assert!(pushed >= 1, "the first line always fits");
             let mut wire = Vec::new();
             write_frame(&mut wire, &ToHost::Chat(Box::new(batch.clone()))).expect("a full batch is under the frame limit");
-            assert_eq!(read_frame::<ToHost>(&mut wire.as_slice()).expect("read"), ToHost::Chat(Box::new(batch)));
+            assert_eq!(
+                read_frame::<ToHost>(&mut wire.as_slice()).expect("read"),
+                ToHost::Chat(Box::new(batch))
+            );
         }
         // short lines: the count bounds the batch
         let mut batch = ChatBatch::default();

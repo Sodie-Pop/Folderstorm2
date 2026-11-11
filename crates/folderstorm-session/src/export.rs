@@ -122,6 +122,11 @@ impl Cursor {
         });
     }
 
+    /// Something of the list was told.
+    pub fn started(&self) -> bool {
+        self.seen.is_some()
+    }
+
     /// What the viewer shows of lines already told changed: the next plan
     /// tells the conversation again.
     pub fn restart(&mut self) {

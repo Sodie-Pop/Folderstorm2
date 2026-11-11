@@ -1,10 +1,13 @@
 //! The session host's window: one row per character with what its viewer
-//! reports and what can be done with it, the stage choice, and "Quit all".
+//! reports and what can be done with it, the stage choice, and "Quit all";
+//! beside it (or behind a tab when the window is narrow) the shared chat
+//! (`chat_ui.rs`).
 //! Drawn on the processor like the crash window (`crash/window.rs`, whose
 //! event loop this follows), with the viewer's theme, fonts, icons and
 //! catalogues.
 
 use super::Host;
+use super::chat_ui::ChatPanel;
 use crate::theme::Palette;
 use crate::ui::{
     fonts,
@@ -61,6 +64,9 @@ pub fn run(host: Host) -> anyhow::Result<()> {
         add_error: None,
         ending: None,
         closing: false,
+        chat: ChatPanel::default(),
+        chat_page: false,
+        focused: false,
     };
     event_loop.run_app(&mut app)?;
     // what was not written yet; the viewers are let go, never ended
@@ -94,7 +100,18 @@ struct Window_ {
     ending: Option<usize>,
     /// The window's close button was pressed while characters run.
     closing: bool,
+    /// The shared chat's panel.
+    chat: ChatPanel,
+    /// A narrow window shows the chat (true) or the characters.
+    chat_page: bool,
+    /// The window has the keyboard: what it shows of the chat is read.
+    focused: bool,
 }
+
+/// From this width the characters and the chat show side by side.
+const WIDE: f32 = 940.0;
+/// The width of the characters' column beside the chat.
+const CHARACTERS_WIDTH: f32 = 500.0;
 
 /// What a click in the window asks for; carried out after the frame.
 enum Act {
@@ -105,11 +122,14 @@ enum Act {
     Remove(usize),
     Standby(usize, Standby),
     Stage(bool),
+    ChatSound(bool),
     Add,
     QuitAll,
     CancelQuit,
     CloseHost,
     Dismiss,
+    /// Nothing but the host's look at what changed, at once.
+    Refresh,
 }
 
 impl Window_ {
@@ -117,10 +137,59 @@ impl Window_ {
         let p = self.palette;
         let now = Instant::now();
         let mut acts = Vec::new();
+        let wide = ui.available_width() >= WIDE;
+        let frame = egui::Frame::new().fill(p.panel).inner_margin(18.0);
+        if wide {
+            egui::Panel::left("folderstorm-host-characters")
+                .frame(frame)
+                .exact_size(CHARACTERS_WIDTH)
+                .resizable(false)
+                .show(ui, |ui| self.characters(ui, now, &mut acts));
+        }
+        let chat_shown = wide || self.chat_page;
+        egui::CentralPanel::default().frame(frame).show(ui, |ui| {
+            if !wide {
+                // one page at a time: the characters, or their chat
+                let unread = self.host.chat.total_unread();
+                let chat = match unread {
+                    0 => tr!("folderstorm-chat-heading").to_owned(),
+                    n => format!("{} ({})", tr!("folderstorm-chat-heading"), super::chat_ui::count_text(n)),
+                };
+                let mut page = usize::from(self.chat_page);
+                let pages = [(tr!("folderstorm-host-heading"), true), (chat.as_str(), true)];
+                if widgets::segmented(ui, &p, &mut page, &pages) {
+                    self.chat_page = page == 1;
+                }
+                ui.add_space(8.0);
+            }
+            if !chat_shown {
+                self.characters(ui, now, &mut acts);
+                return;
+            }
+            let asked = self.chat.show(ui, &p, &mut self.host, now);
+            if let Some(slot) = asked.switch {
+                acts.push(Act::Switch(slot));
+            } else if asked.acted {
+                acts.push(Act::Refresh);
+            }
+        });
+        let viewing = if chat_shown {
+            self.chat.viewing(&self.host.chat)
+        } else {
+            ::folderstorm_session::chat::Viewing::Nothing
+        };
+        self.host.chat.look(viewing, self.focused);
+        acts
+    }
+
+    /// The characters' rows, the choices and the footer.
+    fn characters(&mut self, ui: &mut egui::Ui, now: Instant, acts: &mut Vec<Act>) {
+        let p = self.palette;
         let radius = ui.visuals().window_corner_radius;
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(p.panel).inner_margin(18.0))
-            .show(ui, |ui| {
+        // (two blocks deeper than needed: the rows keep the indentation
+        // they have in checkpoint 2, whose review fixes merge here)
+        {
+            {
                 ui.label(RichText::new(tr!("folderstorm-host-heading")).size(18.0).strong().color(p.ink));
                 ui.add_space(2.0);
                 ui.label(RichText::new(tr!("folderstorm-host-intro")).color(p.muted));
@@ -131,6 +200,13 @@ impl Window_ {
                     .changed()
                 {
                     acts.push(Act::Stage(stage));
+                }
+                let mut sound = self.host.desk.chat_sound();
+                if widgets::checkbox(ui, &p, &mut sound, tr!("folderstorm-chat-sound"))
+                    .on_hover_text(tr!("folderstorm-chat-sound-help"))
+                    .changed()
+                {
+                    acts.push(Act::ChatSound(sound));
                 }
                 ui.add_space(10.0);
                 let quitting = self.host.desk.quitting();
@@ -150,7 +226,7 @@ impl Window_ {
                                 .corner_radius(radius)
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
-                                    self.character(ui, &p, *slot, state, now, quitting, &mut acts);
+                                    self.character(ui, &p, *slot, state, now, quitting, acts);
                                 });
                             ui.add_space(8.0);
                         }
@@ -181,10 +257,10 @@ impl Window_ {
                     }
                 }
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    self.footer(ui, &p, now, &mut acts);
+                    self.footer(ui, &p, now, acts);
                 });
-            });
-        acts
+            }
+        }
     }
 
     /// The name a character is called by: its avatar's once logged in, its
@@ -338,10 +414,14 @@ impl Window_ {
                     self.host.desk.end(slot);
                 }
                 Act::Remove(slot) => {
-                    self.host.desk.remove(slot);
+                    if self.host.desk.remove(slot) {
+                        // nothing of it is left for the next character of that slot
+                        self.host.chat.forget(slot);
+                    }
                 }
                 Act::Standby(slot, standby) => self.host.desk.set_standby(slot, standby),
                 Act::Stage(stage) => self.host.desk.set_stage(stage),
+                Act::ChatSound(on) => self.host.desk.set_chat_sound(on),
                 Act::Add => match self.host.desk.add(&self.new_profile) {
                     Ok(_) => {
                         self.new_profile.clear();
@@ -362,6 +442,7 @@ impl Window_ {
                     self.ending = None;
                     self.closing = false;
                 }
+                Act::Refresh => {}
             }
         }
         self.host.tick(now);
@@ -439,7 +520,7 @@ impl Window_ {
 }
 
 /// The avatar's name once logged in, the profile's before.
-fn shown_name(slot: &Slot) -> String {
+pub(super) fn shown_name(slot: &Slot) -> String {
     match slot.status.as_ref().filter(|s| !s.name.is_empty()) {
         Some(status) => status.name.clone(),
         None => slot.profile.shown().to_owned(),
@@ -537,7 +618,7 @@ impl ApplicationHandler for Window_ {
                 event_loop.create_window(
                     crate::cli::with_desktop_id(Window::default_attributes())
                         .with_title(title)
-                        .with_inner_size(winit::dpi::LogicalSize::new(540.0, 760.0))
+                        .with_inner_size(winit::dpi::LogicalSize::new(1120.0, 760.0))
                         .with_min_inner_size(winit::dpi::LogicalSize::new(440.0, 360.0)),
                 )?,
             );
@@ -578,6 +659,9 @@ impl ApplicationHandler for Window_ {
             }
             return;
         }
+        if let WindowEvent::Focused(focused) = event {
+            self.focused = focused;
+        }
         if let (Some(input), Some(window)) = (&mut self.input, &self.window) {
             let response = input.on_window_event(window, &event);
             self.redraw |= response.repaint;
@@ -606,6 +690,15 @@ impl ApplicationHandler for Window_ {
             self.next_tick = now + tick;
             self.redraw = true;
         }
+        if std::mem::take(&mut self.host.alert) {
+            // a message for a character that is not the active one
+            if self.host.desk.chat_sound() {
+                super::message_sound();
+            }
+            if let Some(window) = self.window.as_ref().filter(|_| !self.focused) {
+                window.request_user_attention(Some(winit::window::UserAttentionType::Informational));
+            }
+        }
         if self.host.exit {
             event_loop.exit();
             return;
@@ -616,5 +709,141 @@ impl ApplicationHandler for Window_ {
             window.request_redraw();
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_tick));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::chat_ui::tests::{heard, host};
+    use super::*;
+    use ::folderstorm_session::ipc::{Conversation, LineKind};
+
+    /// The whole window drawn as `render_on` draws it, without a window:
+    /// the interface, then the processor's painter into plain pixels.
+    /// `FOLDERSTORM_TEST_CAPTURE=<file.png>` keeps the picture.
+    fn draw(app: &mut Window_, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32))),
+            ..Default::default()
+        };
+        let context = app.context.clone();
+        let mut output = context.run_ui(raw, |ui| {
+            app.content(ui);
+        });
+        fn texts(shape: &egui::Shape, into: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(text) => into.push(text.galley.text().to_owned()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, into)),
+                _ => {}
+            }
+        }
+        let mut drawn = Vec::new();
+        for shape in &output.shapes {
+            texts(&shape.shape, &mut drawn);
+        }
+        let primitives = context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
+        let mut pixels = vec![0u32; (width * height) as usize];
+        app.painter.paint(
+            &mut pixels,
+            [width as usize, height as usize],
+            &primitives,
+            &output.textures_delta,
+            output.pixels_per_point,
+            app.palette.panel,
+        );
+        output.textures_delta.clear();
+        if let Some(path) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE") {
+            let rgba: Vec<_> = pixels
+                .iter()
+                .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+                .collect();
+            image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+        }
+        (drawn, pixels)
+    }
+
+    fn window(host: Host) -> Window_ {
+        let context = egui::Context::default();
+        let theme = crate::ui::skin::recovery_theme();
+        theme.apply(&context, 1.0);
+        let icons = Icons::load(&context, None);
+        Window_ {
+            host,
+            palette: theme.palette(),
+            context,
+            _icons: icons,
+            painter: Default::default(),
+            surface: None,
+            window: None,
+            input: None,
+            error: None,
+            next_tick: Instant::now(),
+            redraw: true,
+            new_profile: String::new(),
+            add_error: None,
+            ending: None,
+            closing: false,
+            chat: ChatPanel::default(),
+            chat_page: false,
+            focused: true,
+        }
+    }
+
+    #[test]
+    fn the_window_draws_the_characters_and_their_chat_on_the_processor() {
+        let mut host = host();
+        heard(
+            &mut host,
+            0,
+            Conversation::Nearby,
+            1,
+            LineKind::Said,
+            "Jane Doe",
+            "hello neighbours",
+        );
+        heard(&mut host, 0, Conversation::Nearby, 2, LineKind::Own, "Sam Resident", "hello Jane");
+        heard(
+            &mut host,
+            1,
+            Conversation::Session(0, 0x4a),
+            1,
+            LineKind::Said,
+            "Jane Doe",
+            "a private word",
+        );
+        heard(
+            &mut host,
+            1,
+            Conversation::Session(0, 0x4a),
+            2,
+            LineKind::Card,
+            "Jane Doe",
+            "offers a teleport",
+        );
+        let mut app = window(host);
+        // wide: both side by side
+        let shows = |drawn: &[String], text: &str| drawn.iter().any(|t| t.contains(text));
+        draw(&mut app, 1120, 760);
+        let (drawn, pixels) = draw(&mut app, 1120, 760);
+        assert!(shows(&drawn, "Characters") && shows(&drawn, "Chat"), "{drawn:?}");
+        assert!(shows(&drawn, "demo-1") && shows(&drawn, "hello neighbours"));
+        assert!(shows(&drawn, "[demo-2 › Jane Doe]"));
+        let background = pixels[0];
+        assert!(
+            pixels.iter().filter(|p| **p != background).count() > 10_000,
+            "something was painted"
+        );
+        // the lines on screen in a window that has the keyboard are read
+        assert_eq!(app.host.chat.total_unread(), 0);
+        // narrow: one page at a time, the characters first
+        let (drawn, _) = draw(&mut app, 460, 760);
+        assert!(shows(&drawn, "demo-1"));
+        assert!(!shows(&drawn, "hello neighbours"), "{drawn:?}");
+        app.chat_page = true;
+        let (drawn, _) = draw(&mut app, 460, 760);
+        assert!(shows(&drawn, "hello neighbours"));
+        assert!(!shows(&drawn, "Each character runs in its own viewer"));
+        // (wide again, for the picture a capture keeps)
+        draw(&mut app, 1120, 760);
     }
 }

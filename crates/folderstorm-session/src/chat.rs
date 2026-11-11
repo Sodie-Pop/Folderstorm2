@@ -574,6 +574,11 @@ impl Chat {
         }
     }
 
+    /// The character's viewer told its login: lines can be typed for it.
+    pub fn logged_in(&self, slot: usize) -> bool {
+        self.characters.get(slot).is_some_and(|c| c.generation.is_some())
+    }
+
     /// What is typed for that character in that conversation.
     pub fn draft(&self, slot: usize, conversation: Conversation) -> &str {
         self.drafts.get(&(slot, conversation)).map_or("", |d| d.text.as_str())
@@ -630,7 +635,11 @@ impl Chat {
         if !c.in_world || c.generation.is_none() {
             return Err(Blocked::NotInWorld);
         }
-        if c.threads.iter().find(|t| t.conversation == conversation).is_none_or(|t| t.earlier_login) {
+        if c.threads
+            .iter()
+            .find(|t| t.conversation == conversation)
+            .is_none_or(|t| t.earlier_login)
+        {
             return Err(Blocked::EarlierLogin);
         }
         if self.draft_held(slot, conversation) {
@@ -649,10 +658,7 @@ impl Chat {
     /// its viewer once, with the login it was typed for.
     pub fn submit(&mut self, slot: usize, conversation: Conversation, now: Instant) -> Result<u64, Blocked> {
         self.can_send(slot, conversation)?;
-        let (Some(draft), Some((launch, generation))) = (
-            self.drafts.remove(&(slot, conversation)),
-            self.characters[slot].login(),
-        ) else {
+        let (Some(draft), Some((launch, generation))) = (self.drafts.remove(&(slot, conversation)), self.characters[slot].login()) else {
             return Err(Blocked::Empty);
         };
         let text = clean_text(&draft.text, MAX_SEND);
@@ -751,7 +757,11 @@ mod tests {
                 c if c == GROUP => SessionKind::Group,
                 _ => SessionKind::Resident,
             },
-            title: if conversation == JANE { "Jane Doe".into() } else { "Somewhere".into() },
+            title: if conversation == JANE {
+                "Jane Doe".into()
+            } else {
+                "Somewhere".into()
+            },
             lines,
             ..Default::default()
         }
@@ -802,7 +812,11 @@ mod tests {
         assert_eq!(kinds, [SessionKind::Nearby, SessionKind::Resident]);
         assert_eq!(c.threads(1).len(), 1);
         assert_eq!(texts(&c, 0, JANE), ["hi Sam"]);
-        assert_eq!(texts(&c, 1, JANE), ["hi Alex"], "the same resident, another character: another conversation");
+        assert_eq!(
+            texts(&c, 1, JANE),
+            ["hi Alex"],
+            "the same resident, another character: another conversation"
+        );
         let all: Vec<_> = c
             .feed()
             .map(|f| (f.slot, matches!(f.entry, Entry::Line(_)), f.conversation))
@@ -825,7 +839,10 @@ mod tests {
         assert_eq!(texts(&c, 0, JANE), ["one", "A resident says two"]);
         assert_eq!(c.thread(0, JANE).expect("thread").title, "A resident");
         assert_eq!(c.feed().count(), 2, "the All tab forgets the replaced lines too");
-        assert!(c.feed().all(|f| !matches!(&f.entry, Entry::Line(l) if l.text == "two" || l.text == "three")));
+        assert!(
+            c.feed()
+                .all(|f| !matches!(&f.entry, Entry::Line(l) if l.text == "two" || l.text == "three"))
+        );
     }
 
     #[test]
@@ -879,7 +896,10 @@ mod tests {
         assert_eq!(c.threads(0).len(), MAX_THREADS);
         assert!(c.thread(0, Conversation::Nearby).is_some());
         assert!(c.thread(0, JANE).is_some(), "the conversation on screen stays");
-        assert!(c.thread(0, Conversation::Session(1, 100)).is_none(), "the one heard of longest ago left");
+        assert!(
+            c.thread(0, Conversation::Session(1, 100)).is_none(),
+            "the one heard of longest ago left"
+        );
         assert!(c.thread(0, Conversation::Session(1, 100 + MAX_THREADS as u64 * 2 - 1)).is_some());
     }
 
@@ -994,7 +1014,11 @@ mod tests {
         assert_eq!(c.sending(0, JANE), 1);
         c.result(0, 1, id, SendOutcome::Accepted);
         assert_eq!(c.sending(0, JANE), 0);
-        assert_eq!(texts(&c, 0, JANE), ["hi"], "what was said comes back from the viewer, not from the host");
+        assert_eq!(
+            texts(&c, 0, JANE),
+            ["hi"],
+            "what was said comes back from the viewer, not from the host"
+        );
     }
 
     #[test]
