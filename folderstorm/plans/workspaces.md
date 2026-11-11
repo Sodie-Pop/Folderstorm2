@@ -24,11 +24,13 @@ inferred.
 - **Layouts must store each window's rectangle.** When the viewer window
   shrinks, Aurora keeps window *positions* recoverable but overwrites window
   *sizes* for good (section 5). A saved layout is the only copy that survives.
-- **Two small fixes first** (checkpoint 1): a viewer window stretched over
-  two monitors is reopened at 80 % of one monitor at the next start (read in
-  code, to confirm on Windows), and floating windows are shrunk to fit the
-  *world* instead of the viewer window when the bars sit inside the world.
-  The second very likely caused the squashed windows the human saw.
+- **One small fix first** (checkpoint 1): floating windows are shrunk to fit
+  the *world* instead of the viewer window when the bars sit inside the
+  world. This very likely caused the squashed windows the human saw.
+  Aurora's start-up rule that reopens a window stretched over two monitors at
+  80 % of one monitor is **kept** (confirmed on Windows; the human likes how
+  it works together with the viewport fallback): a two-monitor layout
+  restores the stretched window in one click instead (checkpoint 4).
 - **One click from 2 monitors to 1.** A toolbar toggle flips between two
   chosen layouts; a switcher (type to filter, Enter) handles the rest.
 - **Lock the window size** per layout, and a "borderless over these
@@ -494,7 +496,6 @@ Every line below is marked `// Folderstorm:`. "CP" is the checkpoint
 
 | File | Hook | CP |
 |---|---|---|
-| `crates/aurora-viewer/src/app.rs`, `resumed()` | Skip the "covers the screen → 80 %" rule when the saved window spans monitors (calls our pure `spans_monitors`) | 1 |
 | `crates/aurora-viewer/src/ui/widgets.rs`, `Floater::show` | The shrink-to-fit room is the whole window while the world viewport is on (opening sizes and positions unchanged) | 1 |
 | `crates/aurora-viewer/src/app.rs` | `mod folderstorm_workspaces;` beside `mod folderstorm_viewport;` | 3 |
 | `crates/aurora-viewer/src/app.rs`, frame | One call after `publish_monitors`, in the existing Folderstorm block (apply steps, lock, monitor changes) | 3 |
@@ -517,8 +518,7 @@ New files (ours): `folderstorm/workspaces/{mod,store,fit,monitors,capture,apply,
 `folderstorm/diagram.rs`, `app/folderstorm_workspaces.rs`,
 `ui/options/pages/folderstorm_workspaces.rs`.
 
-Candidates to send upstream once validated here (the human decides): the
-start-up 80 % fix (any multi-monitor Aurora user hits it) and making
+Candidate to send upstream once validated here (the human decides): making
 `move_floater` work for bare windows.
 
 ## 11. Demo scenarios
@@ -572,15 +572,14 @@ Native checks on Windows by the human are listed per checkpoint.
 Each is one branch and one PR from an up-to-date `main`, with tests, a demo
 scenario and the human's validation.
 
-### Checkpoint 1: a stretched window survives
+### Checkpoint 1: windows in the margins keep their size
 
-- The start-up 80 % rule is skipped when the saved window spans connected
-  monitors. Floaters are no longer shrunk to the world while the viewport is
-  on.
-- **Human checks:** stretch the window over two monitors, restart: same
-  size and place. With the world on the right monitor, shrink the window to
-  one monitor and back: windows keep their sizes (unless wider than the whole
-  window).
+- Floaters are no longer shrunk to the world while the viewport is on; they
+  are kept inside the whole viewer window. The start-up 80 % rule is left
+  as it is (decision 6).
+- **Human checks:** with the world on the right monitor, put Inventory in the
+  left margin; shrink the window to one monitor and back: windows keep their
+  sizes (unless wider than the whole window).
 
 ### Checkpoint 2: interactive viewport diagram (row 1.2)
 
@@ -651,25 +650,26 @@ scenario and the human's validation.
 | Hooks in `widgets.rs` change shared floater behaviour | Kept to the viewport case and bare windows; covered by egui tests; human validation |
 | `settings.json` grows | Bounded: 32 + 32 entries, 64 windows each, a few tens of kB at most |
 
-## 16. Open questions for the human
+## 16. Decisions (the human, 2026-11-11)
 
-1. **Split.** Layouts hold window positions; workspaces hold which windows
+1. **Split:** layouts hold window positions; workspaces hold which windows
    are open (section 6), instead of Folderstorm (C++)'s "layout = viewport
-   and bars, workspace = full snapshot".
-   *Recommended: yes.* It matches the 2 ⇄ 1 monitor need directly and avoids
-   one workspace per monitor setup.
-2. **Scope.** Layouts and workspaces per profile, shared by the accounts
+   and bars, workspace = full snapshot". **Yes.**
+2. **Scope:** layouts and workspaces per profile, shared by the accounts
    logging in on that profile; only Inventory folder references per account.
-   *Recommended: yes* (Folderstorm (C++) stored workspaces per account).
-3. **Window moves after a switch.** Saved only by an explicit *Update*, with
-   the "modified" marker, or remembered automatically in the active layout?
-   *Recommended: explicit Update*, as graphics profiles and Folderstorm (C++)
-   do; an "auto-remember" option can come later.
-4. **Locking.** A per-layout *Lock the window size* box, plus a *Borderless
-   over monitors* mode that also locks the position, Windows first.
-   *Recommended: both*, borderless as an opt-in window mode.
-5. **When the monitors change.** Ask / apply the matching layout
-   automatically / do nothing. *Recommended: Ask by default.*
+   **Yes.**
+3. **Window moves after a switch** are saved only by an explicit *Update*,
+   with the "modified" marker (an "auto-remember" option can come later).
+   **Yes.**
+4. **Locking:** a per-layout *Lock the window size* box, plus an opt-in
+   *Borderless over monitors* mode that also locks the position, Windows
+   first. **Yes.**
+5. **When the monitors change:** ask by default. **Yes.**
+6. **Start-up rule:** tested on Windows with the combined build: a window
+   stretched over two monitors reopens at 80 % of one monitor, the world then
+   fills it (the viewport's quarter-of-the-window fallback), and stretching it
+   back puts the windows where they were. The human likes this: the rule is
+   kept, and no hook is added to `App::resumed`.
 
 ## 17. Verified in code vs inferred
 
@@ -687,8 +687,11 @@ window's fixed id and folder windows' random ids; `publish_monitors` every 60
 frames and no position on Wayland; the toolbar catalogue, `run_command` and
 the keybind `Action` structure; winit 0.30 and egui 0.37 in the tree.
 
-**Inferred, to check on Windows:** that a window stretched over two monitors
-reopens at 80 % of one (the code says so; not run); that the squashed
+**Seen on Windows by the human:** a window stretched over two monitors
+reopens at 80 % of one; with the viewport on, the world then fills it and
+stretching the window back restores the windows' places.
+
+**Inferred, to check on Windows:** that the squashed
 windows the human saw came from the sliver work area; `set_resizable(false)`
 blocking Aero Snap; Win+Shift+arrows on a borderless window; invisible DWM
 borders and outer vs inner positions; how Windows moves the viewer window
