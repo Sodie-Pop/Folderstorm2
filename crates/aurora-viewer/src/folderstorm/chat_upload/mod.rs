@@ -13,8 +13,8 @@
 //! conversation.
 //!
 //! Nothing leaves the viewer before the user turns the feature on, then
-//! pastes, drops or chooses an image, and (by default) confirms it after
-//! seeing what will be sent and where.
+//! pastes, drops or chooses an image, and (by default, and always for a
+//! dropped file) confirms it after seeing what will be sent and where.
 
 pub mod demo;
 pub mod image;
@@ -42,7 +42,10 @@ const MAX_DROPPED: usize = 4;
 /// Where an image comes from.
 enum Source {
     Pasted(Arc<egui::ColorImage>),
+    /// Chosen with the picture button.
     File(PathBuf),
+    /// Dropped on the window: always confirmed (see `Dropped`).
+    Dropped(PathBuf),
 }
 
 #[derive(Clone)]
@@ -73,6 +76,8 @@ struct Job {
     texture: Option<egui::TextureHandle>,
     /// The Stop of its current upload.
     cancel: zipline::Cancel,
+    /// Waits for Upload even when Preferences skip the question.
+    always_confirm: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +106,13 @@ struct Uploads {
 
 /// Files dropped in a frame, given to one field at the next frame: the
 /// field under the pointer, else the focused one.
+///
+/// Where a file was dropped is not knowable for sure: winit 0.30 gives a
+/// drop no position, and during a drag from another program the window
+/// gets no pointer moves (Windows' drag and drop), so the last position
+/// known may be stale. A dropped file therefore always waits for Upload,
+/// shown over the field it would go to, even when Preferences skip the
+/// question: a drop that lands elsewhere uploads nothing by itself.
 struct Dropped {
     ctx: egui::Context,
     frame: u64,
@@ -140,7 +152,7 @@ pub fn frame(settings: &UploadSettings, p: &Palette) {
         drop(u);
         if let Some(field) = dropped.target() {
             for path in dropped.paths.into_iter().take(MAX_DROPPED) {
-                stage(&dropped.ctx, field, Source::File(path));
+                stage(&dropped.ctx, field, Source::Dropped(path));
             }
         }
         u = uploads();
@@ -311,8 +323,9 @@ pub fn button(ctx: &egui::Context, response: &egui::Response, field: egui::Id) {
 fn stage(ctx: &egui::Context, field: egui::Id, source: Source) {
     let label = match &source {
         Source::Pasted(_) => aurora_i18n::tr!("fs-chat-upload-pasted").to_owned(),
-        Source::File(path) => path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        Source::File(path) | Source::Dropped(path) => path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
     };
+    let always_confirm = matches!(source, Source::Dropped(_));
     let Some((origin, folder)) = destination() else { return };
     // a host is reached through an upload folder or a token: without
     // either, say what to set instead of sending a request bound to fail
@@ -350,6 +363,7 @@ fn stage(ctx: &egui::Context, field: egui::Id, source: Source) {
             image: None,
             texture: None,
             cancel: zipline::Cancel::default(),
+            always_confirm,
         });
         if !preparing {
             ctx.request_repaint();
@@ -362,7 +376,7 @@ fn stage(ctx: &egui::Context, field: egui::Id, source: Source) {
     let spawned = std::thread::Builder::new().name("fs-chat-upload-prepare".into()).spawn(move || {
         let result = match &source {
             Source::Pasted(image) => image::prepare_pasted(image, max),
-            Source::File(path) => image::prepare_file(path, max),
+            Source::File(path) | Source::Dropped(path) => image::prepare_file(path, max),
         };
         prepared(&ctx, id, result.map(Arc::new).map_err(|r| refusal_text(&label, &r)));
     });
@@ -377,6 +391,7 @@ fn prepared(ctx: &egui::Context, id: u64, result: Result<Arc<Prepared>, String>)
     let Some(job) = u.jobs.iter_mut().find(|j| j.id == id) else {
         return;
     };
+    let confirm = confirm || job.always_confirm;
     if !matches!(job.state, State::Preparing) {
         return;
     }

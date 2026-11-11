@@ -323,6 +323,7 @@ fn job(id: u64, state: State) -> Job {
         image: Some(Arc::new(prepared_png())),
         texture: None,
         cancel: Cancel::default(),
+        always_confirm: false,
     }
 }
 
@@ -891,6 +892,30 @@ fn the_demo_uploader_answers_like_zipline() {
         &Cancel::default(),
     );
     assert_eq!(token, Err(Failure::Token { had_token: false }));
+}
+
+#[test]
+fn a_dropped_file_always_waits_for_upload() {
+    let ctx = egui::Context::default();
+    let id = u64::MAX - 20;
+    let state = {
+        let mut u = uploads();
+        // the question skipped in Preferences
+        let confirm = std::mem::replace(&mut u.settings.confirm, false);
+        u.jobs.push(Job {
+            always_confirm: true,
+            ..job(id, State::Preparing)
+        });
+        drop(u);
+        prepared(&ctx, id, Ok(Arc::new(prepared_png())));
+        let mut u = uploads();
+        let state = u.jobs.iter().find(|j| j.id == id).map(|j| j.state.clone());
+        u.jobs.retain(|j| j.id != id);
+        u.settings.confirm = confirm;
+        state
+    };
+    // waiting for Upload, shown over its field: nothing was sent
+    assert!(matches!(state, Some(State::Confirm)));
 }
 
 #[test]
