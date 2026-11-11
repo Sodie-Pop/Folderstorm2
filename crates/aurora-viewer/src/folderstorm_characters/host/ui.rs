@@ -4,7 +4,10 @@
 //! (`chat_ui.rs`).
 //! Drawn on the processor like the crash window (`crash/window.rs`, whose
 //! event loop this follows), with the viewer's theme, fonts, icons and
-//! catalogues.
+//! catalogues. Checkpoint 4's part (quick actions, hotkeys, "New character
+//! profile…") is in `ui/comfort.rs`.
+
+mod comfort;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
@@ -38,8 +41,13 @@ const IDLE_TICK: Duration = Duration::from_secs(1);
 
 const BUTTON: Vec2 = Vec2::new(0.0, 26.0);
 
-pub fn run(host: Host) -> anyhow::Result<()> {
-    let event_loop = EventLoop::new()?;
+pub fn run(mut host: Host) -> anyhow::Result<()> {
+    // (the global hotkeys are heard by the loop's message hook, and belong
+    // to the thread that registers them: this one)
+    let mut builder = EventLoop::builder();
+    host.comfort.hotkeys = super::hotkeys::Registrar::install(&mut builder);
+    host.apply_hotkeys();
+    let event_loop = builder.build()?;
     let context = egui::Context::default();
     let settings = crate::settings::Settings::load();
     let theme = crate::ui::skin::recovery_theme();
@@ -62,6 +70,7 @@ pub fn run(host: Host) -> anyhow::Result<()> {
         redraw: true,
         new_profile: String::new(),
         add_error: None,
+        comfort: Default::default(),
         ending: None,
         closing: false,
         chat: ChatPanel::default(),
@@ -96,6 +105,8 @@ struct Window_ {
     /// The name typed for a new character, and why it was not added.
     new_profile: String,
     add_error: Option<String>,
+    /// Checkpoint 4: the hotkeys' and the new profile's pages.
+    comfort: comfort::Panel,
     /// The character whose "End process" waits for its confirmation.
     ending: Option<usize>,
     /// The window's close button was pressed while characters run.
@@ -130,6 +141,8 @@ enum Act {
     Dismiss,
     /// Nothing but the host's look at what changed, at once.
     Refresh,
+    /// Checkpoint 4 (`ui/comfort.rs`).
+    Comfort(comfort::Act),
 }
 
 impl Window_ {
@@ -186,6 +199,9 @@ impl Window_ {
     fn characters(&mut self, ui: &mut egui::Ui, now: Instant, acts: &mut Vec<Act>) {
         let p = self.palette;
         let radius = ui.visuals().window_corner_radius;
+        if self.comfort_page(ui, acts) {
+            return;
+        }
         // (two blocks deeper than needed: the rows keep the indentation
         // they have in checkpoint 2, whose review fixes merge here)
         {
@@ -209,11 +225,12 @@ impl Window_ {
                     acts.push(Act::ChatSound(sound));
                 }
                 ui.add_space(10.0);
+                self.quick_strip(ui, &p, acts);
                 let quitting = self.host.desk.quitting();
                 egui::ScrollArea::vertical()
                     .id_salt("folderstorm-host-characters")
                     .auto_shrink([false, true])
-                    .max_height((ui.available_height() - 96.0).max(120.0))
+                    .max_height((ui.available_height() - 150.0).max(120.0))
                     .show(ui, |ui| {
                         let slots: Vec<(usize, Slot)> = self.host.desk.slots().map(|(i, s)| (i, s.clone())).collect();
                         if slots.is_empty() {
@@ -255,6 +272,7 @@ impl Window_ {
                     if let Some(error) = &self.add_error {
                         ui.label(RichText::new(error).color(p.danger));
                     }
+                    self.comfort_buttons(ui, &p, acts);
                 }
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                     self.footer(ui, &p, now, acts);
@@ -280,6 +298,7 @@ impl Window_ {
             if active {
                 ui.label(RichText::new(tr!("folderstorm-host-active")).strong().color(p.violet_light));
             }
+            self.voice_badge(ui, p, slot);
         });
         ui.label(RichText::new(status_line(state)).color(p.muted));
         for (text, serious) in warnings(&self.host.desk, slot, state, now) {
@@ -351,6 +370,7 @@ impl Window_ {
             {
                 acts.push(Act::Standby(slot, if economy { Standby::Economy } else { Standby::Warm }));
             }
+            self.sound_choice(ui, p, slot, state, acts);
         });
     }
 
@@ -443,6 +463,7 @@ impl Window_ {
                     self.closing = false;
                 }
                 Act::Refresh => {}
+                Act::Comfort(act) => self.comfort_apply(act, now),
             }
         }
         self.host.tick(now);
@@ -684,6 +705,11 @@ impl ApplicationHandler for Window_ {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
+        if self.host.pressed_hotkeys(now) {
+            // a global hotkey: carried out at once, whatever has the keyboard
+            self.host.tick(now);
+            self.redraw = true;
+        }
         if now >= self.next_tick {
             self.host.tick(now);
             let tick = if self.host.desk.live() > 0 { TICK } else { IDLE_TICK };
@@ -721,7 +747,7 @@ mod tests {
     /// The whole window drawn as `render_on` draws it, without a window:
     /// the interface, then the processor's painter into plain pixels.
     /// `FOLDERSTORM_TEST_CAPTURE=<file.png>` keeps the picture.
-    fn draw(app: &mut Window_, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
+    pub(super) fn draw(app: &mut Window_, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32))),
             ..Default::default()
@@ -762,7 +788,7 @@ mod tests {
         (drawn, pixels)
     }
 
-    fn window(host: Host) -> Window_ {
+    pub(super) fn window(host: Host) -> Window_ {
         let context = egui::Context::default();
         let theme = crate::ui::skin::recovery_theme();
         theme.apply(&context, 1.0);
@@ -781,6 +807,7 @@ mod tests {
             redraw: true,
             new_profile: String::new(),
             add_error: None,
+            comfort: Default::default(),
             ending: None,
             closing: false,
             chat: ChatPanel::default(),

@@ -15,6 +15,8 @@
 //! viewer: their command pipes close and they go on by themselves.
 
 mod chat_ui;
+mod comfort;
+mod hotkeys;
 mod process;
 mod ui;
 
@@ -123,6 +125,8 @@ struct Host {
     chat: Chat,
     /// A message came for a background character since the window looked.
     alert: bool,
+    /// Checkpoint 4: the global hotkeys.
+    comfort: comfort::Comfort,
     viewers: [Option<process::Viewer>; MAX_SLOTS],
     events: Receiver<process::Event>,
     events_tx: Sender<process::Event>,
@@ -143,6 +147,7 @@ impl Host {
             desk: Desk::new(config),
             chat: Chat::default(),
             alert: false,
+            comfort: Default::default(),
             viewers: Default::default(),
             events,
             events_tx,
