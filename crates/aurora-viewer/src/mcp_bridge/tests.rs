@@ -60,6 +60,8 @@ fn ctx(inv: &Inventory) -> Ctx<'_> {
         worn,
         attachment_points: HashMap::new(),
         inventory_locked: false,
+        protected: HashSet::new(),
+        outfit_points: HashMap::new(),
     }
 }
 

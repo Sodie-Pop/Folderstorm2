@@ -54,6 +54,10 @@ impl Backend for Live {
     fn call(&mut self, tool: &str, arguments: Value) -> Result<Value, ToolError> {
         self.0.call(tool, arguments)
     }
+
+    fn client_name(&mut self, name: &str) {
+        self.0.set_client_name(name);
+    }
 }
 
 fn main() {

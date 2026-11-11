@@ -77,11 +77,24 @@ pub struct Viewer {
     dir: Option<PathBuf>,
     pid: Option<u32>,
     client: Option<Client>,
+    /// The MCP client's own name, for the viewer's Ask dialog.
+    name: Option<String>,
 }
 
 impl Viewer {
     pub fn new(dir: Option<PathBuf>, pid: Option<u32>) -> Viewer {
-        Viewer { dir, pid, client: None }
+        Viewer {
+            dir,
+            pid,
+            client: None,
+            name: None,
+        }
+    }
+
+    /// Name the calls after the MCP client (`clientInfo.name`).
+    pub fn set_client_name(&mut self, name: &str) {
+        self.name = Some(name.to_owned());
+        self.client = self.client.take().map(|c| c.with_client_name(name));
     }
 
     /// Call a tool; a connection that fails or a refused token makes it
@@ -91,8 +104,11 @@ impl Viewer {
             let client = match &self.client {
                 Some(client) => client.clone(),
                 None => {
-                    let (client, _) =
+                    let (mut client, _) =
                         find(self.dir.as_deref(), self.pid, false).map_err(|e| ToolError::new(ErrorCode::Unavailable, e.to_string()))?;
+                    if let Some(name) = &self.name {
+                        client = client.with_client_name(name);
+                    }
                     self.client = Some(client.clone());
                     client
                 }

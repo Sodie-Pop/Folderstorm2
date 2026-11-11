@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 pub enum Class {
     /// Inventory and outfit reads. Allow or Never only.
     Read,
-    /// Phase 2: rename, describe, create folders.
+    /// Rename, describe, create folders.
     Edit,
-    /// Phase 2: move, copy, link.
+    /// Move, copy, link.
     Move,
-    /// Phase 2: wear, take off, detach.
+    /// Wear, take off, detach.
     Wear,
-    /// Phase 2: move to Trash, restore from it. Permanent delete and Empty
+    /// Move to Trash, restore from it. Permanent delete and Empty
     /// Trash are never a class: always refused.
     Trash,
 }
@@ -101,15 +101,32 @@ impl Permissions {
             .unwrap_or(Preset::Custom)
     }
 
-    /// Whether a call of `class` may run now. Phase 1 has no approval
-    /// dialog: a class set to Ask is refused like Never until phase 2 adds
-    /// the dialog.
+    /// Whether a call of `class` may run without asking (health's "reads
+    /// allowed").
     pub fn check(&self, class: Class) -> Result<(), Level> {
         match self.level(class) {
             Level::Allow => Ok(()),
             level => Err(level),
         }
     }
+
+    /// What the bridge does with a call of `class`: run it, run it once the
+    /// user allows it in the viewer's dialog, or refuse it.
+    pub fn decide(&self, class: Class) -> Decision {
+        match self.level(class) {
+            Level::Allow => Decision::Run,
+            Level::Ask => Decision::Ask,
+            Level::Never => Decision::Refuse,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Decision {
+    Run,
+    /// The viewer asks the user first (60 s, refused on timeout).
+    Ask,
+    Refuse,
 }
 
 /// The main choice of Preferences › Local assistant.
@@ -195,9 +212,15 @@ mod tests {
     }
 
     #[test]
-    fn ask_is_refused_until_there_is_a_dialog() {
+    fn each_level_decides_what_happens() {
         let p = Preset::AskBeforeChanges.permissions();
-        assert_eq!(p.check(Class::Wear), Err(Level::Ask));
+        assert_eq!(p.decide(Class::Read), Decision::Run);
+        assert_eq!(p.decide(Class::Wear), Decision::Ask);
+        assert_eq!(p.check(Class::Wear), Err(Level::Ask), "asking is not running at once");
+        let mut p = Preset::ReadOnly.permissions();
+        assert_eq!(p.decide(Class::Trash), Decision::Refuse);
+        p.set(Class::Move, Level::Allow);
+        assert_eq!(p.decide(Class::Move), Decision::Run);
     }
 
     #[test]
