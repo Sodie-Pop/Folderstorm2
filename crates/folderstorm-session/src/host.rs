@@ -10,8 +10,9 @@
 //!   (Economy), 3D off, sound cut, voice off.
 //! - **Voice is given up before it is given.** The new active character is
 //!   allowed voice only once every other viewer has acknowledged an
-//!   assignment without it, or has ended. A viewer that does not answer
-//!   keeps the voice waiting: it may still be transmitting.
+//!   assignment without it and said its voice is off, or has ended. A
+//!   viewer that does not answer keeps the voice waiting: it may still be
+//!   transmitting.
 //! - **The host follows the user.** A background window that gets the
 //!   keyboard (a click on it, Alt-Tab) becomes the active character.
 //! - **No false deaths (R6).** Healthy, slow (its main loop has not turned
@@ -40,6 +41,10 @@ pub const RESEND_AFTER: Duration = Duration::from_secs(2);
 /// After the host placed a window, how long that window's reported place
 /// is not taken as the stage: it may still be on its way there.
 pub const STAGE_SETTLE: Duration = Duration::from_millis(1500);
+/// A viewer whose process runs but has not reported for this long since
+/// it started is noted, and End is offered (it may be held by a dialog, a
+/// slow disk, or never reach the host).
+pub const START_NOTE_AFTER: Duration = Duration::from_secs(60);
 
 /// One character of the host's settings file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +129,11 @@ pub enum Phase {
     Starting,
     /// It reports.
     Running,
+    /// Its process runs, but the host does not manage it: its first report
+    /// was refused, or it never reached the host. The host let it go (its
+    /// command pipe is closed: the viewer goes on by itself, as one started
+    /// by hand) and only watches for its end.
+    Unmanaged,
     /// Its process ended: closed (by the user, there or here), or not
     /// cleanly.
     Ended { crashed: bool },
@@ -146,6 +156,9 @@ pub enum Note {
     OpenElsewhere,
     /// The viewer's first report was refused.
     Refused(Refusal),
+    /// The viewer never reached the host's endpoint (only other clients
+    /// came, or the endpoint failed).
+    NoLink,
 }
 
 /// One character of the desk.
@@ -159,6 +172,8 @@ pub struct Slot {
     pub note: Option<Note>,
     /// Quit was sent to it.
     pub closing: bool,
+    /// The user confirmed End for this launch: its end is no crash.
+    pub ended: bool,
     launch: u32,
     activate: bool,
     heartbeat: Option<Instant>,
@@ -170,6 +185,8 @@ pub struct Slot {
     voice_out: bool,
     was_focused: bool,
     placed: Option<Instant>,
+    /// When the desk first saw it starting (`tick`).
+    starting_since: Option<Instant>,
 }
 
 impl Slot {
@@ -181,6 +198,7 @@ impl Slot {
             status: None,
             note: None,
             closing: false,
+            ended: false,
             launch: 0,
             activate: false,
             heartbeat: None,
@@ -191,12 +209,18 @@ impl Slot {
             voice_out: false,
             was_focused: false,
             placed: None,
+            starting_since: None,
         }
     }
 
-    /// Its process is there.
+    /// Its process is there and managed (or on its way to be).
     pub fn live(&self) -> bool {
         matches!(self.phase, Phase::Starting | Phase::Running)
+    }
+
+    /// Its process is there, managed or not.
+    pub fn has_process(&self) -> bool {
+        self.live() || self.phase == Phase::Unmanaged
     }
 
     /// The number of its launch: what the host tags its threads with.
@@ -226,6 +250,9 @@ pub enum Effect {
     AllowForeground { slot: usize },
     /// End that viewer's process: the user confirmed it.
     Kill { slot: usize },
+    /// Let that viewer go: close its command pipe (it then goes on by
+    /// itself), keep watching its process for its end.
+    LetGo { slot: usize, launch: u32 },
     /// The settings changed: write the file.
     Save,
     /// "Quit all" is done: close the host.
@@ -345,7 +372,7 @@ impl Desk {
     /// Removes a character from the desk (its profile stays on disk);
     /// false while its viewer runs.
     pub fn remove(&mut self, slot: usize) -> bool {
-        if self.slot(slot).is_none_or(Slot::live) {
+        if self.slot(slot).is_none_or(Slot::has_process) {
             return false;
         }
         self.slots[slot] = None;
@@ -396,7 +423,7 @@ impl Desk {
         if self.quitting.is_some() {
             return;
         }
-        let Some(s) = self.slot_mut(slot).filter(|s| !s.live()) else {
+        let Some(s) = self.slot_mut(slot).filter(|s| !s.has_process()) else {
             return;
         };
         let launch = s.launch + 1;
@@ -439,9 +466,17 @@ impl Desk {
     /// The viewer's first report was refused: it is not managed (its
     /// process goes on, as a viewer started by hand would).
     pub fn refused(&mut self, slot: usize, launch: u32, refusal: Refusal) {
-        if let Some(s) = self.current(slot, launch) {
-            s.note = Some(Note::Refused(refusal));
-        }
+        self.let_go(slot, launch, Note::Refused(refusal));
+    }
+
+    fn let_go(&mut self, slot: usize, launch: u32, note: Note) {
+        let Some(s) = self.current(slot, launch).filter(|s| s.phase == Phase::Starting) else {
+            return;
+        };
+        s.phase = Phase::Unmanaged;
+        s.note = Some(note);
+        s.activate = false;
+        self.effects.push(Effect::LetGo { slot, launch });
     }
 
     /// A report of a running viewer.
@@ -454,8 +489,12 @@ impl Desk {
         let got_focus = status.focused && !std::mem::replace(&mut s.was_focused, status.focused);
         let settled = s.placed.is_none_or(|at| now.duration_since(at) >= STAGE_SETTLE);
         let window = status.window;
+        let voice_reported = status.voice_allowed;
         s.status = Some(status);
-        if s.acknowledged() && s.sent.is_some_and(|(a, _)| !a.voice_allowed) {
+        // given up once the viewer holds an assignment without voice and
+        // says its voice is off: holding the assignment alone is not enough,
+        // its voice may still be connected
+        if s.acknowledged() && s.sent.is_some_and(|(a, _)| !a.voice_allowed) && !voice_reported {
             s.voice_out = false;
         }
         let closing = s.closing;
@@ -479,6 +518,12 @@ impl Desk {
         }
     }
 
+    /// The viewer never reached the endpoint of that launch: it cannot be
+    /// managed (it finds no host and goes on by itself).
+    pub fn unreachable(&mut self, slot: usize, launch: u32) {
+        self.let_go(slot, launch, Note::NoLink);
+    }
+
     /// The viewer's link thread is alive, and its main loop has made
     /// `loop_count` turns.
     pub fn heartbeat(&mut self, slot: usize, launch: u32, loop_count: u64, now: Instant) {
@@ -494,11 +539,11 @@ impl Desk {
 
     /// The process of that launch ended; `clean`: with a success code.
     pub fn exited(&mut self, slot: usize, launch: u32, clean: bool, now: Instant) {
-        let Some(s) = self.current(slot, launch).filter(|s| s.live()) else {
+        let Some(s) = self.current(slot, launch).filter(|s| s.has_process()) else {
             return;
         };
         s.phase = Phase::Ended {
-            crashed: !clean && !s.closing,
+            crashed: !clean && !s.closing && !s.ended,
         };
         s.closing = false;
         s.voice_out = false;
@@ -514,6 +559,13 @@ impl Desk {
     /// The user picks a character: brought forward if it runs, started if
     /// not.
     pub fn switch(&mut self, slot: usize, now: Instant) {
+        // the last character picked is the one that comes forward: one
+        // still starting from an earlier pick does not take over later
+        for (i, s) in self.slots.iter_mut().enumerate() {
+            if let Some(s) = s.as_mut().filter(|_| i != slot) {
+                s.activate = false;
+            }
+        }
         match self.slot(slot).map(|s| s.phase) {
             Some(Phase::Running) => self.activate(slot, true, now),
             Some(Phase::Starting) => {
@@ -522,7 +574,7 @@ impl Desk {
                 }
             }
             Some(Phase::Stopped | Phase::Ended { .. }) => self.launch(slot, true),
-            None => {}
+            Some(Phase::Unmanaged) | None => {}
         }
     }
 
@@ -538,7 +590,8 @@ impl Desk {
 
     /// Ends a viewer's process. Only ever from the user's confirmed choice.
     pub fn end(&mut self, slot: usize) {
-        if self.slot(slot).is_some_and(Slot::live) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.has_process()) {
+            s.ended = true;
             self.effects.push(Effect::Kill { slot });
         }
     }
@@ -578,8 +631,14 @@ impl Desk {
         }
     }
 
-    /// Now and then: assignments not acknowledged are sent again.
+    /// Now and then: assignments not acknowledged are sent again, and how
+    /// long each viewer has been starting is kept.
     pub fn tick(&mut self, now: Instant) {
+        for s in self.slots.iter_mut().flatten() {
+            if s.phase == Phase::Starting {
+                s.starting_since.get_or_insert(now);
+            }
+        }
         for slot in 0..MAX_SLOTS {
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running && !s.acknowledged()) else {
                 continue;
@@ -593,6 +652,15 @@ impl Desk {
                 self.send(slot, message);
             }
         }
+    }
+
+    /// The viewer's process has run for [`START_NOTE_AFTER`] without
+    /// reporting: noted, with End offered. Never ended by itself.
+    pub fn starting_too_long(&self, slot: usize, now: Instant) -> bool {
+        self.slot(slot)
+            .filter(|s| s.phase == Phase::Starting)
+            .and_then(|s| s.starting_since)
+            .is_some_and(|since| now.saturating_duration_since(since) >= START_NOTE_AFTER)
     }
 
     /// How a viewer answers. Never a reason to end it.
@@ -711,13 +779,15 @@ mod tests {
         launch
     }
 
-    /// The viewer's report that it holds the latest assignment sent.
+    /// The viewer's report that it holds the latest assignment sent, its
+    /// voice as that assignment says (off once it gave it up).
     fn ack(d: &mut Desk, slot: usize, now: Instant) {
         let s = d.slot(slot).expect("slot");
-        let (launch, seq) = (s.launch(), s.sent.expect("sent").0.seq);
+        let (launch, sent) = (s.launch(), s.sent.expect("sent").0);
         let status = Status {
-            assign_seq: seq,
+            assign_seq: sent.seq,
             screen: Screen::World,
+            voice_allowed: sent.voice_allowed,
             ..s.status.clone().unwrap_or_default()
         };
         d.status(slot, launch, status, now);
@@ -870,6 +940,54 @@ mod tests {
     }
 
     #[test]
+    fn the_voice_waits_until_the_old_character_says_its_voice_is_off() {
+        let (mut d, now) = desk(2);
+        start(&mut d, 0, true, now);
+        start(&mut d, 1, false, now);
+        ack(&mut d, 0, now);
+        ack(&mut d, 1, now);
+        d.switch(1, now);
+        // slot 0 holds the assignment without voice, but its voice module
+        // is still connected: not given up
+        let s = d.slot(0).expect("slot");
+        let still_on = Status {
+            assign_seq: assigned(&d, 0).seq,
+            screen: Screen::World,
+            voice_allowed: true,
+            ..Default::default()
+        };
+        let launch = s.launch();
+        d.status(0, launch, still_on.clone(), now);
+        assert_eq!(d.voice_waits_for(), Some(0));
+        assert!(!assigned(&d, 1).voice_allowed);
+        // an older assignment's report saying off is not enough either: the
+        // voice-on one may still be in its pipe
+        d.status(
+            0,
+            launch,
+            Status {
+                assign_seq: assigned(&d, 0).seq - 1,
+                voice_allowed: false,
+                ..still_on.clone()
+            },
+            now,
+        );
+        assert_eq!(d.voice_waits_for(), Some(0));
+        // off, holding the assignment: now slot 1 may use voice
+        d.status(
+            0,
+            launch,
+            Status {
+                voice_allowed: false,
+                ..still_on
+            },
+            now,
+        );
+        assert_eq!(d.voice_waits_for(), None);
+        assert!(assigned(&d, 1).voice_allowed);
+    }
+
+    #[test]
     fn a_viewer_that_does_not_answer_keeps_the_voice_waiting_until_it_ends() {
         let (mut d, now) = desk(2);
         let first = start(&mut d, 0, true, now);
@@ -1006,6 +1124,31 @@ mod tests {
     }
 
     #[test]
+    fn the_last_character_picked_comes_forward() {
+        let (mut d, now) = desk(3);
+        start(&mut d, 0, true, now);
+        // two starting characters picked one after the other
+        d.switch(1, now);
+        d.switch(2, now);
+        d.connected(2, 1, now);
+        assert_eq!(d.active(), Some(2));
+        // the first picked reports later: it stays behind
+        d.connected(1, 1, now);
+        assert_eq!(d.active(), Some(2));
+        // picking a running one also cancels a pick still starting
+        let (mut d, now) = desk(2);
+        start(&mut d, 0, true, now);
+        start(&mut d, 1, false, now);
+        d.close(1);
+        let first = d.slot(1).expect("slot").launch();
+        d.exited(1, first, true, now);
+        d.switch(1, now);
+        d.switch(0, now);
+        d.connected(1, first + 1, now);
+        assert_eq!(d.active(), Some(0));
+    }
+
+    #[test]
     fn what_comes_from_an_earlier_launch_is_dropped() {
         let (mut d, now) = desk(1);
         let first = start(&mut d, 0, true, now);
@@ -1055,6 +1198,24 @@ mod tests {
     }
 
     #[test]
+    fn a_process_ended_at_the_user_s_request_did_not_crash() {
+        let (mut d, now) = desk(1);
+        let launch = start(&mut d, 0, true, now);
+        d.end(0);
+        assert!(d.take_effects().contains(&Effect::Kill { slot: 0 }));
+        // killed: not a clean exit, yet no crash
+        d.exited(0, launch, false, now);
+        let s = d.slot(0).expect("slot");
+        assert_eq!(s.phase, Phase::Ended { crashed: false });
+        assert!(s.ended);
+        // started again, a crash of that launch is one
+        let launch = start(&mut d, 0, true, now);
+        assert!(!d.slot(0).expect("slot").ended);
+        d.exited(0, launch, false, now);
+        assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: true });
+    }
+
+    #[test]
     fn slow_is_not_dead_and_nothing_is_ended_by_itself() {
         let (mut d, now) = desk(1);
         let a = start(&mut d, 0, true, now);
@@ -1097,6 +1258,29 @@ mod tests {
         // ending it is the user's choice alone
         d.end(0);
         assert_eq!(d.take_effects(), vec![Effect::Kill { slot: 0 }]);
+    }
+
+    #[test]
+    fn a_viewer_starting_for_a_minute_is_noted_never_ended() {
+        let (mut d, now) = desk(1);
+        d.launch(0, true);
+        d.tick(now);
+        assert!(!d.starting_too_long(0, now + START_NOTE_AFTER - Duration::from_secs(1)));
+        assert!(d.starting_too_long(0, now + START_NOTE_AFTER));
+        d.tick(now + START_NOTE_AFTER);
+        assert!(
+            !d.take_effects().iter().any(|e| matches!(e, Effect::Kill { .. })),
+            "only the user ends it"
+        );
+        // a viewer let go is not starting any more: no note
+        let (mut u, _) = desk(1);
+        u.launch(0, true);
+        u.tick(now);
+        u.refused(0, 1, Refusal::Token);
+        assert!(!u.starting_too_long(0, now + START_NOTE_AFTER));
+        // it reports at last: no note any more
+        d.connected(0, 1, now + START_NOTE_AFTER);
+        assert!(!d.starting_too_long(0, now + START_NOTE_AFTER * 2));
     }
 
     #[test]
@@ -1155,16 +1339,43 @@ mod tests {
     fn a_refused_or_unstarted_viewer_is_told_not_managed() {
         let (mut d, now) = desk(1);
         d.launch(0, true);
+        d.take_effects();
         d.refused(0, 1, Refusal::Token);
         let s = d.slot(0).expect("slot");
-        assert_eq!((s.phase, s.note), (Phase::Starting, Some(Note::Refused(Refusal::Token))));
+        assert_eq!((s.phase, s.note), (Phase::Unmanaged, Some(Note::Refused(Refusal::Token))));
+        // let go: its command pipe closes and it goes on by itself
+        assert!(!s.live() && s.has_process());
+        assert_eq!(d.take_effects(), vec![Effect::LetGo { slot: 0, launch: 1 }]);
+        // nothing is sent to it, it is not started again or removed while
+        // its process runs, and quitting does not wait for it
+        d.switch(0, now);
+        d.close(0);
+        assert!(!d.remove(0));
+        assert!(d.take_effects().is_empty());
+        d.quit_all(now);
+        assert_eq!(d.take_effects(), vec![Effect::Exit]);
+        d.cancel_quit();
+        // its end is still seen
         d.exited(0, 1, true, now);
+        assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: false });
         d.launch(0, true);
         d.spawn_failed(0, 2);
         let s = d.slot(0).expect("slot");
         assert_eq!((s.phase, s.note), (Phase::Stopped, Some(Note::SpawnFailed)));
         d.note(0, Note::OpenElsewhere);
         assert_eq!(d.slot(0).expect("slot").note, Some(Note::OpenElsewhere));
+        // a viewer that never reached the endpoint is let go the same way
+        d.launch(0, true);
+        d.take_effects();
+        d.unreachable(0, 3);
+        let s = d.slot(0).expect("slot");
+        assert_eq!((s.phase, s.note), (Phase::Unmanaged, Some(Note::NoLink)));
+        assert_eq!(d.take_effects(), vec![Effect::LetGo { slot: 0, launch: 3 }]);
+        // a late refusal or report of that launch changes nothing
+        d.refused(0, 3, Refusal::Token);
+        d.connected(0, 3, now);
+        assert_eq!(d.slot(0).expect("slot").phase, Phase::Unmanaged);
+        assert!(d.take_effects().is_empty());
     }
 
     #[test]

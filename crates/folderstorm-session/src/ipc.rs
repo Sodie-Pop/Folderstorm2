@@ -4,8 +4,10 @@
 //! tested on any system.
 //!
 //! Two one-way channels per launched viewer, both local to the PC:
-//! - **host → viewer**: the viewer's standard input, an anonymous pipe that
-//!   only the host and that child hold. Its first frame is the
+//! - **host → viewer**: the viewer's standard input, a pipe that only the
+//!   host and that child hold (anonymous on Linux and macOS; on Windows,
+//!   Rust makes it a randomly named pipe whose two ends are connected as
+//!   it is made, first instance only). Its first frame is the
 //!   [`Bootstrap`], then [`ToViewer`] commands. Its end (the host closed or
 //!   crashed) is how a viewer learns that nobody manages it any more.
 //! - **viewer → host**: a private endpoint the host made for that one

@@ -3,11 +3,12 @@
 //! to the host: two threads that do the blocking reads and writes, and the
 //! queues the main thread polls without ever waiting.
 //!
-//! - The **in** thread reads the viewer's standard input, an anonymous
-//!   pipe that only the host and this process hold: first the bootstrap
-//!   (where to report, and a one-time token), then the host's commands. The
-//!   end of that pipe is the end of the host: the viewer goes on by itself,
-//!   logged in and visible, as one started by hand.
+//! - The **in** thread reads the viewer's standard input, a pipe that
+//!   only the host and this process hold (anonymous on Linux and macOS, a
+//!   randomly named pipe connected at creation on Windows): first the
+//!   bootstrap (where to report, and a one-time token), then the host's
+//!   commands. The end of that pipe is the end of the host: the viewer goes
+//!   on by itself, logged in and visible, as one started by hand.
 //! - The **out** thread writes this viewer's reports to the host's private
 //!   endpoint (`transport.rs`), and a heartbeat every second with the
 //!   number of turns the main loop has made: the host can tell a slow

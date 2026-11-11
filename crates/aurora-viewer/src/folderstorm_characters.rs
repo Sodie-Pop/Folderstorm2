@@ -77,6 +77,8 @@ pub struct State {
     pub report: Report,
     /// What the host is told of this viewer's conversations.
     pub chat: chat_export::Export,
+    /// The session host asked this viewer to quit.
+    pub quit_by_host: bool,
 }
 
 /// What a managed viewer keeps of its reports to the host.

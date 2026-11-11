@@ -29,6 +29,14 @@ impl App {
         }
     }
 
+    /// The window has the keyboard: it exists and has the focus
+    /// (`gpu::has_keyboard`). Never `self.focused` alone, which starts true
+    /// before any focus event: a character started behind would count as
+    /// in front and claim the focus in its first report.
+    fn folderstorm_focused(&self) -> bool {
+        gpu::has_keyboard(self.focused, self.gfx.as_ref().map(|g| g.window.has_focus()))
+    }
+
     /// `AURORA_DEMO_SESSION_BEHIND`: another Folderstorm2 window counts as
     /// in front, until a click in this one.
     fn folderstorm_demo_behind(&self) -> bool {
@@ -46,10 +54,11 @@ impl App {
             self.folderstorm_characters.demo_released = true;
         }
         let demo = self.folderstorm_demo_behind();
-        let focused = self.focused && !demo;
+        let has_keyboard = self.folderstorm_focused();
+        let focused = has_keyboard && !demo;
         // managed, the session host says who is behind and with which
         // policy; otherwise the instances registry and this profile do
-        let (behind, policy) = match self.folderstorm_characters.managed.behind(self.focused) {
+        let (behind, policy) = match self.folderstorm_characters.managed.behind(has_keyboard) {
             Some(managed) if !demo => managed,
             _ => (
                 behind::is_behind(focused, demo || self.instances.peers().in_front()),
@@ -69,7 +78,7 @@ impl App {
         }
         state.behind = behind;
         state.paused = paused;
-        state.place = gpu::place(self.focused, minimized, self.occluded, demo);
+        state.place = gpu::place(has_keyboard, minimized, self.occluded, demo);
         behind::cap(cap, policy, behind, self.settings.folderstorm_characters.behind_fps, exempt)
     }
 
@@ -166,7 +175,7 @@ impl App {
     /// the session host's active character while the user is in the host's
     /// window (rule R3).
     pub(super) fn folderstorm_in_front(&self) -> bool {
-        self.folderstorm_characters.managed.in_front(self.focused)
+        self.folderstorm_characters.managed.in_front(self.folderstorm_focused())
     }
 
     /// `sync_minimized_mute`'s update of the transient mute: Aurora's
@@ -177,6 +186,22 @@ impl App {
         self.minimized_mute.update(self.settings.audio.mute_when_minimized, minimized);
         self.minimized_mute.active |= self.folderstorm_characters.managed.sound_muted();
         self.minimized_mute.active != was
+    }
+
+    /// `shutdown`, with the graphics card holding a frame: false when the
+    /// session host asked this viewer to quit. Its Quit is no close from
+    /// the card's box: the session is not reported as ended in GPU trouble
+    /// and the next start keeps its graphics (rules R4, R5: a character
+    /// behind never lowers them).
+    pub(super) fn folderstorm_gpu_close_counts(&self, stalled: Duration) -> bool {
+        if !gpu::stalled_close_reported(self.folderstorm_characters.quit_by_host) {
+            log::warn!(
+                "quitting at the session host's request while the graphics card holds a frame ({} s): not counted as a close in GPU trouble",
+                stalled.as_secs()
+            );
+            return false;
+        }
+        true
     }
 
     /// Every turn of the event loop, in a viewer the session host started:
@@ -196,7 +221,17 @@ impl App {
                     self.folderstorm_characters.managed.link();
                 }
                 HostEvent::Command(ipc::ToViewer::Assign(assignment)) => {
+                    let revokes_voice = self.folderstorm_characters.managed.revokes_voice(&assignment);
                     if self.folderstorm_characters.managed.assign(assignment) {
+                        if revokes_voice {
+                            // off now, not at the next frame (rare while
+                            // minimised): the session is left and the
+                            // microphone closed, as `update_voice` does
+                            // with voice not enabled; the host hands the
+                            // voice over once the status says it is off
+                            log::info!("session host: voice taken away, leaving the voice channel now");
+                            self.voice.restart();
+                        }
                         log::info!(
                             "session host: {:?}, {:?} standby, sound {}, voice {}",
                             assignment.role,
@@ -221,6 +256,7 @@ impl App {
                 }
                 HostEvent::Command(ipc::ToViewer::Quit) => {
                     log::info!("session host: asked to quit");
+                    self.folderstorm_characters.quit_by_host = true;
                     self.request_exit();
                     self.confirm_exit(ui::exit::Action::Quit);
                 }
@@ -237,7 +273,9 @@ impl App {
             self.folderstorm_characters.report.show = None;
             return;
         }
-        if self.gfx.is_some()
+        // (a window not shown yet would be revealed early, or lose the
+        // placing to its own first show: it waits)
+        if self.gfx.as_ref().is_some_and(|g| g.shown)
             && let Some(stage) = self.folderstorm_characters.report.show.take()
         {
             self.folderstorm_show(stage);
@@ -361,12 +399,14 @@ impl App {
             } else {
                 0
             },
-            focused: self.focused,
+            // (no window yet: never focused)
+            focused: self.folderstorm_focused(),
             window,
             gpu,
             paused_3d: state.paused,
             sound_muted: self.minimized_mute.active,
-            voice_allowed: state.managed.voice_allowed(),
+            // given up only once the voice is off too
+            voice_allowed: state.managed.voice_report(self.voice.connected),
         }
         .cleaned()
     }

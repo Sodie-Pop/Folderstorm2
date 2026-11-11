@@ -19,7 +19,7 @@ mod process;
 mod ui;
 
 use ::folderstorm_session::chat::{self, Chat};
-use ::folderstorm_session::host::{Config, Desk, Effect, Note};
+use ::folderstorm_session::host::{Config, Desk, Effect, Note, Phase};
 use ::folderstorm_session::ipc::{MAX_SLOTS, Screen, ToViewer};
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::OnceLock;
@@ -163,17 +163,27 @@ impl Host {
     fn tick(&mut self, now: Instant) {
         let events: Vec<process::Event> = self.events.try_iter().collect();
         for process::Event { slot, launch, kind } in events {
+            // the chat takes nothing of a viewer the desk does not manage
+            // (let go, ended, or an earlier launch)
+            let managed = self
+                .desk
+                .slot(slot)
+                .is_some_and(|s| s.phase == Phase::Running && s.launch() == launch);
             match kind {
                 process::Kind::Connected => self.desk.connected(slot, launch, now),
                 process::Kind::Refused(refusal) => self.desk.refused(slot, launch, refusal),
                 process::Kind::Status(status) => {
-                    self.chat.status(slot, launch, status.generation, status.screen == Screen::World);
+                    if managed {
+                        self.chat.status(slot, launch, status.generation, status.screen == Screen::World);
+                    }
                     self.desk.status(slot, launch, *status, now);
                 }
                 process::Kind::Heartbeat(count) => self.desk.heartbeat(slot, launch, count, now),
-                process::Kind::Chat(batch) => self.chat.batch(slot, launch, *batch),
-                process::Kind::Attention(list) => self.chat.attention_list(slot, launch, *list),
-                process::Kind::SendResult(id, outcome) => self.chat.result(slot, launch, id, outcome),
+                process::Kind::Chat(batch) if managed => self.chat.batch(slot, launch, *batch),
+                process::Kind::Attention(list) if managed => self.chat.attention_list(slot, launch, *list),
+                process::Kind::SendResult(id, outcome) if managed => self.chat.result(slot, launch, id, outcome),
+                process::Kind::Chat(_) | process::Kind::Attention(_) | process::Kind::SendResult(..) => {}
+                process::Kind::Unreachable => self.desk.unreachable(slot, launch),
             }
         }
         for slot in 0..MAX_SLOTS {
@@ -223,6 +233,14 @@ impl Host {
                         log::warn!("session host: ending character {} at the user's request", slot + 1);
                         viewer.kill();
                     }
+                }
+                Effect::LetGo { slot, launch } => {
+                    if let Some(viewer) = self.viewers[slot].as_mut().filter(|v| v.launch == launch) {
+                        log::info!("session host: character {} is not managed: let go", slot + 1);
+                        viewer.let_go();
+                    }
+                    // nothing is said to, or kept waiting for, a viewer let go
+                    self.chat.ended(slot, launch);
                 }
                 Effect::Save => self.unsaved = self.unsaved.or(Some(now)),
                 Effect::Exit => self.exit = true,

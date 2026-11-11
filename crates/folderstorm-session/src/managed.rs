@@ -86,6 +86,21 @@ impl Managed {
     pub fn voice_allowed(&self) -> bool {
         !self.linked || self.assignment.is_some_and(|a| a.voice_allowed)
     }
+
+    /// What the host is told of the voice: given up only once it is not
+    /// allowed any more **and** the voice module says it is off
+    /// (`voice_on`): until then this viewer may still be transmitting, and
+    /// the host must not give the voice to another character.
+    pub fn voice_report(&self, voice_on: bool) -> bool {
+        self.voice_allowed() || voice_on
+    }
+
+    /// Whether taking `next` takes the voice away: it was allowed, and
+    /// will not be. The voice is then turned off at once, not at the next
+    /// frame (frames are rare in a minimised window).
+    pub fn revokes_voice(&self, next: &Assignment) -> bool {
+        self.linked && self.voice_allowed() && !next.voice_allowed && self.assignment.is_none_or(|held| next.seq > held.seq)
+    }
 }
 
 #[cfg(test)]
@@ -172,6 +187,23 @@ mod tests {
         assert_eq!(m.behind(true), Some((false, Behind3d::Off)));
         assert!(m.sound_muted());
         assert!(!m.voice_allowed());
+    }
+
+    #[test]
+    fn the_voice_is_given_up_only_once_it_is_off() {
+        let mut m = Managed::default();
+        m.link();
+        assert!(!m.revokes_voice(&background(1)), "it never had it");
+        assert!(m.assign(active(1)));
+        assert!(m.voice_report(false));
+        // the background assignment takes it away: turned off at once
+        assert!(m.revokes_voice(&background(2)));
+        assert!(!m.revokes_voice(&active(2)));
+        assert!(!m.revokes_voice(&background(1)), "an old one is dropped anyway");
+        assert!(m.assign(background(2)));
+        // not allowed any more, but still connected: not given up yet
+        assert!(m.voice_report(true));
+        assert!(!m.voice_report(false));
     }
 
     #[test]

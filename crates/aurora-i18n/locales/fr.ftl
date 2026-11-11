@@ -4212,12 +4212,16 @@ folderstorm-host-unread = { $count ->
     }
 folderstorm-host-minimised = réduite
 folderstorm-host-closing = Fermeture…
+folderstorm-host-ended = Arrêté (Arrêter le processus)
 folderstorm-host-closed = Fermé
 folderstorm-host-crashed = Arrêt inattendu
+folderstorm-host-unmanaged = Tourne seul : non géré par cet hôte
 folderstorm-host-note-spawn = Son viewer n'a pas pu démarrer. Le journal en donne la raison.
 folderstorm-host-note-elsewhere = Ce profil est déjà ouvert dans une fenêtre que cet hôte n'a pas démarrée. Fermez cette fenêtre pour le démarrer d'ici.
 folderstorm-host-note-build = Son viewer n'est pas de la même version que cet hôte : il tourne seul. Fermez tout et recommencez.
 folderstorm-host-note-refused = Son viewer ne s'est pas identifié auprès de cet hôte : il tourne seul.
+folderstorm-host-note-no-link = Son viewer n'a jamais joint cet hôte : il tourne seul.
+folderstorm-host-start-slow = Démarré depuis plus d'une minute, sans nouvelles. Il attend peut-être quelque chose (une boîte de dialogue, un disque lent) ; Arrêter le processus l'arrête.
 folderstorm-host-slow = Lent à répondre. Il tourne toujours : laissez-lui du temps.
 folderstorm-host-not-answering = Aucune réponse depuis plus de 30 secondes. Il peut encore se rétablir ; rien n'est fermé automatiquement.
 folderstorm-host-gpu-busy = La carte graphique est occupée : sa 3D est en pause.
