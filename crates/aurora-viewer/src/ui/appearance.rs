@@ -21,6 +21,7 @@ pub(crate) mod json;
 mod layers;
 #[cfg(test)]
 mod perf_tests;
+pub(crate) mod previous_look; // Folderstorm: Restore previous look
 mod selection;
 pub use clipboard::{PasteTo, Request as ClipboardRequest};
 
@@ -1896,6 +1897,10 @@ pub fn show(
                 let restore = aurora_i18n::tr!("ui-appearance-restore-saved-outfit");
                 if menu::item_if(ui, p, "restore", restore, base.is_some() && st.pending.is_none()) {
                     actions.push(Action::Revert);
+                }
+                // Folderstorm: Restore previous look
+                if previous_look::menu_item(ui, p, st.pending.is_none()) {
+                    actions.push(Action::RestoreLook(Vec::new()));
                 }
                 let selected = st.outfit_selection.ordered(&outfits);
                 let export = if !st.editing && st.tab < 2 && !selected.is_empty() {

@@ -53,7 +53,7 @@ Needed before shipping any build. They also keep merges simple.
 | 2.5 | Inventory change history and undo | This session's tracked rename / move operations; Stop, Clear history; undo only confirmed changes that still match their recorded state. | – | same as 2.4 | P2 | ⬜ |
 | 2.6 | Local folder archive | Archive Inventory folders locally (hide them from the normal view) without moving their contents on the server. | – | branch `codex/inventory-archive` | P2 | ⬜ |
 | 2.7 | Outfit safety | Context-menu Wear (items) and Wear objects (folders) disabled by default (option to enable); folder Add To / Replace Current Outfit always ask (Cancel by default, no "don't ask again"). | check | `doc/inventory-outfit-safety.md` | P2 | ✅ #4: Wear and Wear objects greyed until enabled; Replace / Add always ask |
-| 2.8 | Restore previous look | After replacing the outfit with a folder, one action restores the look worn just before. | – | branch `codex/previous-look` | P2 | ⬜ |
+| 2.8 | Restore previous look | After replacing the outfit with a folder, one action restores the look worn just before. | – | branch `codex/previous-look` | P2 | ✅ #8: Appearance ⚙ › Restore previous look |
 | 2.9 | Outfit Gallery thumbnail size | Slider for photo width, 80–256 px. | check | `doc/help.md` "Outfit Gallery" | P3 | ✅ #5 |
 | 2.10 | Landmark folders on the favorites bar | Group favorite landmarks in local folders on the favorites bar, with drag and drop. | check | branch `codex/landmark-folders` | P2 | ⬜ |
 | 2.11 | Folder-preserving bulk upload | Upload a folder of files and recreate its folder tree in Inventory. | check | branch `codex/sl-folder-upload` | P3 | ⬜ |
