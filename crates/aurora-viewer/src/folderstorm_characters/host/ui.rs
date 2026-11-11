@@ -214,12 +214,12 @@ impl Window_ {
             if state.live() {
                 if !active && !state.closing {
                     let switch = tr!("folderstorm-host-switch");
-                    if widgets::action_button(ui, p, "switch-horizontal", switch, ActionKind::Primary, BUTTON).clicked() {
+                    if widgets::action_button(ui, p, "arrows-exchange", switch, ActionKind::Primary, BUTTON).clicked() {
                         acts.push(Act::Switch(slot));
                     }
                 } else if active {
                     let show = tr!("folderstorm-host-show");
-                    if widgets::action_button(ui, p, "switch-horizontal", show, ActionKind::Flat, BUTTON).clicked() {
+                    if widgets::action_button(ui, p, "arrows-exchange", show, ActionKind::Flat, BUTTON).clicked() {
                         acts.push(Act::Switch(slot));
                     }
                 }
@@ -627,5 +627,26 @@ impl ApplicationHandler for Window_ {
             window.request_redraw();
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_tick));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every icon the host's window names is one the viewer embeds: an
+    /// unknown name draws a button without its icon.
+    #[test]
+    fn the_window_s_icons_exist() {
+        let source = include_str!("ui.rs");
+        let mut names: Vec<&str> = source
+            .split("p, \"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .filter(|name| !name.is_empty() && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'))
+            .collect();
+        names.extend(["refresh", "player-play-filled"]);
+        assert!(names.contains(&"arrows-exchange"), "{names:?}");
+        for name in names {
+            assert!(crate::ui::icons::embedded(name), "{name} is not an embedded icon");
+        }
     }
 }
