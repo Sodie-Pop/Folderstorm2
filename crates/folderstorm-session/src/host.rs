@@ -537,6 +537,13 @@ impl Desk {
     /// The user picks a character: brought forward if it runs, started if
     /// not.
     pub fn switch(&mut self, slot: usize, now: Instant) {
+        // the last character picked is the one that comes forward: one
+        // still starting from an earlier pick does not take over later
+        for (i, s) in self.slots.iter_mut().enumerate() {
+            if let Some(s) = s.as_mut().filter(|_| i != slot) {
+                s.activate = false;
+            }
+        }
         match self.slot(slot).map(|s| s.phase) {
             Some(Phase::Running) => self.activate(slot, true, now),
             Some(Phase::Starting) => {
@@ -1088,6 +1095,31 @@ mod tests {
         // has the keyboard: only a change to focused counts, no ping-pong
         d.switch(0, now);
         d.status(1, b, focused, now);
+        assert_eq!(d.active(), Some(0));
+    }
+
+    #[test]
+    fn the_last_character_picked_comes_forward() {
+        let (mut d, now) = desk(3);
+        start(&mut d, 0, true, now);
+        // two starting characters picked one after the other
+        d.switch(1, now);
+        d.switch(2, now);
+        d.connected(2, 1, now);
+        assert_eq!(d.active(), Some(2));
+        // the first picked reports later: it stays behind
+        d.connected(1, 1, now);
+        assert_eq!(d.active(), Some(2));
+        // picking a running one also cancels a pick still starting
+        let (mut d, now) = desk(2);
+        start(&mut d, 0, true, now);
+        start(&mut d, 1, false, now);
+        d.close(1);
+        let first = d.slot(1).expect("slot").launch();
+        d.exited(1, first, true, now);
+        d.switch(1, now);
+        d.switch(0, now);
+        d.connected(1, first + 1, now);
         assert_eq!(d.active(), Some(0));
     }
 
