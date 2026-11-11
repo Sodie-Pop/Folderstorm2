@@ -31,6 +31,11 @@ pub struct Table {
 }
 
 /// The packs' files, by id and creator.
+// Folderstorm: the creators agreed for Aurora; their packs stay out of
+// Folderstorm2's builds until they agree for it too (folderstorm/FOLLOW-UPS.md)
+#[cfg(not(test))]
+const FILES: &[(&str, &str, &[u8])] = &[];
+#[cfg(test)]
 const FILES: &[(&str, &str, &[u8])] = &[
     (
         "czar-fenris",
