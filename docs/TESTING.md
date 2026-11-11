@@ -6203,6 +6203,11 @@ failure. Grid validation and any paid upload are performed by the human.
   "clo". Check that the Clothing folders come first with their parent paths
   ("In A personal folder"), the best match selected, the count under the list,
   and that Open folder (or Enter) opens a folder window on it.
+- **`AURORA_DEMO_INVENTORY=bulk-review|aurora-bulk-review`** (Folderstorm2):
+  "Review bulk changes…" open on three demo items with the pattern
+  "Sorted {n} - {name}", previewed. Check the before → after rows, the skipped
+  rows and their reason, the counts, that editing the pattern asks for a new
+  preview, and Move with a folder chosen from the search.
 - **`AURORA_DEMO_INVENTORY=outfit-ask|aurora-outfit-ask`** (Folderstorm2):
   the confirmation of Replace Current Outfit on "Right-click tests", over the
   Legacy or Aurora inventory. Check Cancel first and focused (Enter and Escape
