@@ -373,6 +373,16 @@ fn a_stopped_upload_says_the_host_may_have_the_image() {
 }
 
 #[test]
+fn the_time_allowed_grows_with_the_image() {
+    use std::time::Duration;
+    assert_eq!(zipline::total_timeout(0), Duration::from_secs(60));
+    assert_eq!(zipline::total_timeout(1 << 20), Duration::from_secs(60 + 32));
+    // the largest image allowed: 32 MiB at 256 kbit/s
+    assert_eq!(zipline::total_timeout(32 << 20), Duration::from_secs(60 + 1024));
+    assert_eq!(zipline::total_timeout(usize::MAX), Duration::from_secs(30 * 60));
+}
+
+#[test]
 fn the_link_stays_on_the_host() {
     let origin = "https://images.example.org";
     assert_eq!(

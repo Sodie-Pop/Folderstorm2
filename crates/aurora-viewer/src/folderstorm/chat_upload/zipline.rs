@@ -248,6 +248,15 @@ pub fn link(origin: &str, name: &str, url: &str) -> Option<String> {
     (same_host && clean && given.as_str().len() <= MAX_LINK).then(|| given.to_string())
 }
 
+/// How long a whole upload may take: a minute, and a second more per
+/// 32 KiB sent (a slow line of 256 kbit/s), at most half an hour.
+pub fn total_timeout(body: usize) -> std::time::Duration {
+    const MIN: u64 = 60;
+    const MAX: u64 = 30 * 60;
+    let per_second = 32 * 1024;
+    std::time::Duration::from_secs((MIN + (body / per_second) as u64).min(MAX))
+}
+
 /// The network, through reqwest: no redirect, no retry, no cookie.
 pub struct Network;
 
@@ -258,7 +267,7 @@ impl Transport for Network {
         let builder = reqwest::Client::builder()
             .user_agent(format!("{} (chat image upload)", aurora_version::user_agent()))
             .connect_timeout(std::time::Duration::from_secs(15))
-            .timeout(std::time::Duration::from_secs(120))
+            .timeout(total_timeout(request.body.len()))
             .retry(reqwest::retry::never())
             .redirect(reqwest::redirect::Policy::none())
             .https_only(!loopback);
