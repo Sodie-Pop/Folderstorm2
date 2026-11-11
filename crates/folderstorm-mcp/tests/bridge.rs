@@ -4,7 +4,7 @@
 use folderstorm_mcp::connect::{NotFound, Viewer, find};
 use folderstorm_mcp::jsonrpc::{Backend, Server};
 use folderstorm_mcp_bridge::server::{Config, Pending, VIEWER_TIMEOUT};
-use folderstorm_mcp_bridge::{Bridge, Class, ErrorCode, Level, Permissions, ToolError, discovery};
+use folderstorm_mcp_bridge::{Bridge, Class, ErrorCode, Level, Permissions, Preset, ToolError, discovery};
 use serde_json::{Value, json};
 use std::sync::mpsc::Receiver;
 
@@ -13,6 +13,10 @@ struct Live(Viewer);
 impl Backend for Live {
     fn call(&mut self, tool: &str, arguments: Value) -> Result<Value, ToolError> {
         self.0.call(tool, arguments)
+    }
+
+    fn client_name(&mut self, name: &str) {
+        self.0.set_client_name(name);
     }
 }
 
@@ -148,4 +152,33 @@ fn a_stale_file_is_skipped() {
     assert!(stale.exists());
     bridge.stop();
     viewer.join().expect("fake viewer");
+}
+
+#[test]
+fn a_change_reaches_the_viewer_with_the_clients_name_and_the_ask_flag() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (bridge, calls) = start(dir.path(), 5151);
+    bridge.set_permissions(Preset::AskBeforeChanges.permissions());
+    let viewer = std::thread::spawn(move || {
+        let call = calls.recv().expect("a call");
+        let seen = (call.tool.clone(), call.ask, call.client.clone());
+        // the user refuses in the dialog
+        call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, "the user refused")));
+        seen
+    });
+    let mut server = Server::new(Live(Viewer::new(Some(dir.path().to_path_buf()), None)));
+    rpc(
+        &mut server,
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"Claude Code","version":"2"}}}"#,
+    );
+    let a = rpc(
+        &mut server,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inventory_trash","arguments":{"ids":["x"]}}}"#,
+    );
+    assert_eq!(a["result"]["isError"], true, "{a}");
+    assert_eq!(
+        viewer.join().expect("viewer"),
+        ("inventory_trash".to_owned(), true, Some("Claude Code".to_owned()))
+    );
+    bridge.stop();
 }

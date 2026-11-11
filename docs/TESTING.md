@@ -5076,7 +5076,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. |
+| `AURORA_DEMO_MCP=1\|ask` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5103,6 +5103,22 @@ sidecar beside the viewer) reaches the demo inventory and reports
 in the copied configuration, that the file disappears when access is turned
 off or the viewer quits, and Read set to Never under Custom (the sidecar's
 calls answer `permission_denied`). Capture in English, French and Japanese.
+
+`AURORA_DEMO_MCP=ask`: the same, with the session's permissions on "Ask
+before changes", and once the demo inventory is there the demo itself asks
+to create a folder "Sorted by the assistant" in My Inventory, as a client
+named "Demo assistant": the Ask dialog opens over the world with the
+program's name, the change in plain words, the countdown, Allow and Refuse.
+Allow creates the folder (open the inventory: it is at the root, not
+selected nor being renamed); Refuse, Escape, a click outside or 60 s
+without an answer leave the inventory as it was. Enter alone does nothing.
+With `AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the Edit,
+Move, Wear and Trash rows with Allow / Ask / Never, and Recent activity
+lists the call. A real client (`folderstorm-mcp` set up with the copied
+configuration and `--discovery <demo settings folder>`) can then move,
+rename, Trash and restore entries of the demo inventory and wear the demo
+outfits; each change asks first. Capture the dialog in English, French and
+Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and
