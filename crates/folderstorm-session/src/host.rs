@@ -32,6 +32,7 @@
 
 use crate::behind::Behind3d;
 use crate::hotkeys;
+use crate::identity::{self, AliasError, Colour};
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
 use crate::monitor::{self, FrameHeader, MAX_MONITORS};
 use crate::panels;
@@ -81,6 +82,13 @@ pub struct SlotConfig {
     /// Checkpoint 5: its monitor is open, with that size and rate.
     #[serde(default)]
     pub monitor: Option<monitor::Spec>,
+    /// Checkpoint 7: its colour in the host's windows.
+    #[serde(default)]
+    pub colour: Colour,
+    /// Checkpoint 7: the name the host shows for it in place of its own.
+    /// Only ever in this file and in the host's windows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
 }
 
 /// The host's settings file (`session-host.json`): the characters, and the
@@ -101,6 +109,8 @@ pub struct Config {
     /// Checkpoint 6: the panels that have a window of their own, and
     /// where.
     pub panels: panels::Config,
+    /// Checkpoint 7: the characters are shown one line each.
+    pub condensed: bool,
 }
 
 impl Default for Config {
@@ -112,6 +122,7 @@ impl Default for Config {
             chat_sound: false,
             hotkeys: hotkeys::Config::default(),
             panels: panels::Config::default(),
+            condensed: false,
         }
     }
 }
@@ -119,10 +130,13 @@ impl Default for Config {
 impl Config {
     /// The file as the desk can use it: profile names that pass
     /// [`ProfileName::parse`], one character per slot and per profile, at
-    /// most [`MAX_SLOTS`], a stage a window can take. The rest is dropped.
+    /// most [`MAX_SLOTS`], a stage a window can take, aliases that pass
+    /// [`identity::alias`]. The rest is dropped.
     pub fn cleaned(mut self) -> Self {
         let mut kept: Vec<SlotConfig> = Vec::new();
-        for slot in self.slots {
+        for mut slot in self.slots {
+            // (an alias that is none is dropped, never cut into another)
+            slot.alias = slot.alias.and_then(|alias| identity::alias(&alias).ok().flatten());
             let Ok(name) = ProfileName::parse(&slot.profile) else {
                 continue;
             };
@@ -152,6 +166,8 @@ impl Config {
                     standby: Standby::Warm,
                     sound: BackgroundSound::Muted,
                     monitor: None,
+                    colour: Colour::None,
+                    alias: None,
                 })
                 .collect(),
             ..Self::default()
@@ -209,6 +225,10 @@ pub struct Slot {
     pub sound: BackgroundSound,
     /// Its monitor is open, with that size and rate.
     pub monitor: Option<monitor::Spec>,
+    /// Its colour in the host's windows.
+    pub colour: Colour,
+    /// The name the host shows for it in place of its own.
+    pub alias: Option<String>,
     /// Its monitor is on screen in the host's window.
     seen: bool,
     pub phase: Phase,
@@ -241,6 +261,8 @@ impl Slot {
             standby,
             sound: BackgroundSound::Muted,
             monitor: None,
+            colour: Colour::None,
+            alias: None,
             seen: false,
             phase: Phase::Stopped,
             status: None,
@@ -332,6 +354,7 @@ pub struct Desk {
     chat_sound: bool,
     hotkeys: hotkeys::Config,
     panels: panels::Config,
+    condensed: bool,
     quitting: Option<Instant>,
     effects: Vec<Effect>,
 }
@@ -399,6 +422,8 @@ mod comfort_tests;
 mod monitor_tests;
 #[cfg(test)]
 mod panel_tests;
+#[cfg(test)]
+mod polish_tests;
 
 impl Desk {
     pub fn new(config: Config) -> Self {
@@ -409,6 +434,8 @@ impl Desk {
                 *place = Some(Slot {
                     sound: s.sound,
                     monitor: s.monitor,
+                    colour: s.colour,
+                    alias: s.alias,
                     ..Slot::new(name, s.standby)
                 });
             }
@@ -421,6 +448,7 @@ impl Desk {
             chat_sound: config.chat_sound,
             hotkeys: config.hotkeys,
             panels: config.panels,
+            condensed: config.condensed,
             quitting: None,
             effects: Vec::new(),
         }
@@ -437,6 +465,8 @@ impl Desk {
                     standby: s.standby,
                     sound: s.sound,
                     monitor: s.monitor,
+                    colour: s.colour,
+                    alias: s.alias.clone(),
                 })
                 .collect(),
             stage: self.stage,
@@ -444,6 +474,7 @@ impl Desk {
             chat_sound: self.chat_sound,
             hotkeys: self.hotkeys.clone(),
             panels: self.panels,
+            condensed: self.condensed,
         }
     }
 
@@ -548,6 +579,40 @@ impl Desk {
         s.sound = sound;
         self.effects.push(Effect::Save);
         self.sync(None);
+    }
+
+    /// Checkpoint 7: a character's colour in the host's windows. Nothing
+    /// is told to its viewer.
+    pub fn set_colour(&mut self, slot: usize, colour: Colour) {
+        let Some(s) = self.slot_mut(slot).filter(|s| s.colour != colour) else {
+            return;
+        };
+        s.colour = colour;
+        self.effects.push(Effect::Save);
+    }
+
+    /// Checkpoint 7: the name the host shows for a character in place of
+    /// its own; an empty text takes the alias away. Nothing is told to
+    /// its viewer. A text that is no alias changes nothing.
+    pub fn set_alias(&mut self, slot: usize, text: &str) -> Result<(), AliasError> {
+        let alias = identity::alias(text)?;
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.alias != alias) {
+            s.alias = alias;
+            self.effects.push(Effect::Save);
+        }
+        Ok(())
+    }
+
+    /// Checkpoint 7: the characters are shown one line each.
+    pub fn condensed(&self) -> bool {
+        self.condensed
+    }
+
+    pub fn set_condensed(&mut self, condensed: bool) {
+        if self.condensed != condensed {
+            self.condensed = condensed;
+            self.effects.push(Effect::Save);
+        }
     }
 
     /// The global hotkeys' settings.
@@ -1182,6 +1247,8 @@ mod tests {
             standby: Standby::Warm,
             sound: BackgroundSound::Muted,
             monitor: None,
+            colour: Colour::None,
+            alias: None,
         };
         let config = Config {
             slots: vec![
@@ -1204,6 +1271,7 @@ mod tests {
             chat_sound: true,
             hotkeys: hotkeys::Config::default(),
             panels: panels::Config::default(),
+            condensed: false,
         }
         .cleaned();
         assert!(config.chat_sound);

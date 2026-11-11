@@ -717,6 +717,13 @@ impl Chat {
         (0..MAX_SLOTS).fold(0, |sum, slot| sum.saturating_add(self.unread(slot)))
     }
 
+    /// The login the character's conversations and questions are of: its
+    /// viewer's launch and that launch's login; None while it is logged
+    /// out, has no viewer, or is not managed.
+    pub fn login(&self, slot: usize) -> Option<(u32, u32)> {
+        self.characters.get(slot)?.login()
+    }
+
     /// What waits for an answer in the character's own window, and how
     /// many more than listed.
     pub fn attention(&self, slot: usize) -> (&[AttentionItem], u32) {
