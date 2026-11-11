@@ -51,6 +51,8 @@ pub(super) enum Purpose {
     Postcard,
     /// An outfit's picture, for the image request (#2716).
     Outfit(Uuid),
+    /// Folderstorm: the local assistant's picture, at its own size and options
+    Assistant(crate::mcp_bridge::picture::Render),
 }
 
 /// The side of an outfit's picture as it is drawn, reduced to 256 afterwards.
@@ -786,6 +788,7 @@ impl App {
                 self.inventory_images.photo = None;
                 self.prepare_inventory_photo(request, job.size.0, job.size.1, job.pixels);
             }
+            Purpose::Assistant(_) => self.local_assistant_photo_drawn(job.size, job.pixels), // Folderstorm
         }
     }
 
@@ -1080,8 +1083,16 @@ impl App {
     /// Start a photo of the destination's size.
     pub(super) fn photo_job(&mut self, purpose: Purpose, renderer: &Renderer) {
         let window = renderer.size();
-        let outfit = matches!(purpose, Purpose::Outfit(_));
-        let full = if outfit {
+        // Folderstorm: the local assistant's picture is drawn as an outfit's
+        // (no looks, no supersampling), at its size and with its options
+        let assistant = match purpose {
+            Purpose::Assistant(render) => Some(render),
+            _ => None,
+        };
+        let outfit = matches!(purpose, Purpose::Outfit(_)) || assistant.is_some();
+        let full = if let Some(render) = assistant {
+            render.size
+        } else if outfit {
             (OUTFIT_PHOTO_SIDE, OUTFIT_PHOTO_SIDE)
         } else {
             self.photo_size(window)
@@ -1130,6 +1141,7 @@ impl App {
         // an outfit's picture shows the outfit: never the interface, the
         // HUDs or the photo's looks, whatever the Photo window has chosen
         let interface = !outfit && s.interface && snapshot::same_proportions(full, window);
+        let interface = interface || assistant.is_some_and(|a| a.interface && snapshot::same_proportions(full, window)); // Folderstorm
         // (with the ambient occlusion on: GTAO may be forced over its method)
         let context = ContextPass::plan(size, tiles.len(), self.settings.ssao > 0);
         self.snapshots.job = Some(Job {
@@ -1142,7 +1154,7 @@ impl App {
             waiting: None,
             pixels: Vec::new(),
             interface,
-            huds: !outfit && s.huds,
+            huds: (!outfit && s.huds) || assistant.is_some_and(|a| a.huds), // Folderstorm
             started: Instant::now(),
             supersample,
             cutout: self.world.photo_isolation.empty_background(),

@@ -353,20 +353,18 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
         return Err(ToolError::new(ErrorCode::PermissionDenied, protocol::NEVER_MESSAGE));
     }
     let spec = protocol::tool(&call.tool).ok_or_else(|| ToolError::new(ErrorCode::UnknownTool, format!("unknown tool `{}`", call.tool)))?;
-    let mut ask = false;
-    if let Some(class) = spec.class {
-        let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
-        match permissions.decide(class) {
-            Decision::Run => {}
-            Decision::Ask => ask = true,
-            Decision::Refuse => {
-                return Err(ToolError::new(
-                    ErrorCode::PermissionDenied,
-                    "the user does not allow this in Preferences › Privacy › Local assistant",
-                ));
-            }
+    let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
+    let ask = match permissions.decide_all(spec.classes()) {
+        // a picture with the interface asks even on Allow
+        Decision::Run => spec.class.is_some() && protocol::always_asks(&call.tool, &call.arguments),
+        Decision::Ask => true,
+        Decision::Refuse => {
+            return Err(ToolError::new(
+                ErrorCode::PermissionDenied,
+                "the user does not allow this in Preferences › Privacy › Local assistant",
+            ));
         }
-    }
+    };
     let (pending, answer) = Pending::detached(&call.tool, call.arguments.clone(), ask, None);
     let pending = Pending { client, ..pending };
     match shared.queue.try_send(pending) {

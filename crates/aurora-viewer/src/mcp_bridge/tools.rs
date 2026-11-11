@@ -49,6 +49,8 @@ pub struct Ctx<'a> {
     /// The worn objects' points, temporary attachments left out
     /// (`World::outfit_attachment_points`), for the outfit rules.
     pub outfit_points: HashMap<Uuid, u8>,
+    /// What the camera tools read (phase 3).
+    pub stage: super::camera::Stage,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

@@ -1,5 +1,5 @@
-//! Folderstorm: Preferences › Privacy › Local assistant (FEATURES.md 4.1
-//! and 4.5; Folderstorm (C++)'s panel_preferences_local_assistant.xml and
+//! Folderstorm: Preferences › Privacy › Local assistant (FEATURES.md 4.1,
+//! 4.4 and 4.5; Folderstorm (C++)'s panel_preferences_local_assistant.xml and
 //! doc/plans/assistant-*.md). Access, "this session only", the permission
 //! presets, the bridge's state and recent activity, and the Setup rows.
 //! The token is never shown nor copied.
@@ -147,6 +147,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-trash"),
                     tr!("fs-mcp-trash-hint"),
                     field!(local_assistant.permissions.trash),
+                ),
+                (
+                    Class::Camera,
+                    tr!("fs-mcp-camera"),
+                    tr!("fs-mcp-camera-hint"),
+                    field!(local_assistant.permissions.camera),
                 ),
             ];
             for (class, label, hint, saved) in rows {

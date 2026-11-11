@@ -11495,6 +11495,7 @@ impl App {
         self.poll_key_to_name();
 
         self.poll_outfit_photo(&gfx.renderer);
+        self.local_assistant_photo(&gfx.renderer); // Folderstorm: the local assistant's pictures
         if let Some(request) = self.inventory_images.capture.take() {
             if self.scene_capture_pending
                 || self.inventory_images.capturing.is_some()
