@@ -785,6 +785,60 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = Chargement des dossiers…
 inventory-move-loading-failed = Certains dossiers n’ont pas pu être chargés.
 inventory-move-confirm = Déplacer
+# Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs)
+fs-mcp-group = Assistant local
+fs-mcp-intro = Permet à un assistant lancé sur cet ordinateur (Claude Code, Cursor, Codex…) de lire votre inventaire et vos tenues par l'intermédiaire de l'outil folderstorm-mcp. Les autres programmes lancés sous votre compte peuvent aussi utiliser cet accès.
+fs-mcp-allow = Autoriser l'accès d'un assistant local
+fs-mcp-allow-hint = Ouvre une connexion sur cet ordinateur uniquement (127.0.0.1), avec une nouvelle clé d'accès à chaque fois. Désactivé par défaut. L'option de ligne de commande --mcp-api l'active pour une session.
+fs-mcp-session-only = Utiliser ces réglages pour cette session uniquement
+fs-mcp-session-only-hint = Les changements faits ici durent jusqu'à ce que vous quittiez. Vos réglages enregistrés reviennent au prochain démarrage.
+fs-mcp-permissions = Ce que l'assistant peut faire
+fs-mcp-permissions-hint = Lecture seule : il peut regarder, jamais rien changer. Demander avant les changements : il vous demande avant chaque changement. Personnalisé : choisissez pour chaque type d'action.
+fs-mcp-preset-read-only = Lecture seule
+fs-mcp-preset-ask = Demander avant les changements
+fs-mcp-preset-custom = Personnalisé
+fs-mcp-read = Lire l'inventaire et les tenues
+fs-mcp-read-hint = Recherche, contenu des dossiers, détails des objets, tenues et objets portés. Les identifiants d'asset ne sont donnés que pour les objets à permissions complètes, comme dans l'inventaire.
+fs-mcp-level-allow = Autoriser
+fs-mcp-level-never = Jamais
+fs-mcp-changes-later = Cette version ne fait que lire. Les changements (renommer, déplacer, porter, Corbeille) viendront dans une version ultérieure, et demanderont toujours ou seront refusés selon ce choix.
+fs-mcp-status = État
+fs-mcp-status-hint = Si la connexion est ouverte. La clé d'accès n'est jamais affichée.
+fs-mcp-status-off = Désactivé
+fs-mcp-status-ready = Prêt sur 127.0.0.1, port { $port }
+fs-mcp-status-failed = Impossible d'ouvrir la connexion ({ $reason })
+fs-mcp-activity = Activité récente
+fs-mcp-activity-hint = Les dernières demandes d'un assistant, sans leur contenu.
+fs-mcp-activity-none = Aucune demande pour l'instant.
+fs-mcp-activity-entry = { $tool } : { $outcome }, { $ago }
+fs-mcp-outcome-done = fait
+fs-mcp-outcome-refused = refusé
+fs-mcp-outcome-failed = échec
+fs-mcp-ago-seconds = { $count ->
+    [one] il y a { $count } seconde
+   *[other] il y a { $count } secondes
+    }
+fs-mcp-ago-minutes = { $count ->
+    [one] il y a { $count } minute
+   *[other] il y a { $count } minutes
+    }
+fs-mcp-setup-client = Assistant
+fs-mcp-setup-client-hint = Le programme à connecter à ce viewer.
+fs-mcp-setup-copy = Copier la configuration
+fs-mcp-setup-copy-hint = Copie l'entrée à ajouter aux réglages MCP de ce programme : l'outil folderstorm-mcp à côté de ce viewer et le dossier de réglages de ce viewer. Elle ne contient aucune clé d'accès. Gardez les autres serveurs déjà présents.
+fs-mcp-setup-copied = Copié. Ajoutez-la aux réglages MCP de l'assistant, puis relancez l'assistant.
+fs-mcp-setup-missing = L'outil folderstorm-mcp n'est pas à côté du viewer. Réinstallez le viewer, ou compilez-le avec cargo build --workspace.
+fs-mcp-check = Vérifier la connexion
+fs-mcp-check-hint = Lance l'outil une fois pour voir s'il atteint ce viewer. Cela ne prouve pas que votre assistant a chargé ses réglages.
+fs-mcp-check-off = Activez d'abord l'accès.
+fs-mcp-check-running = Vérification…
+fs-mcp-check-passed = L'outil a atteint ce viewer.
+fs-mcp-check-passed-logged-out = L'outil a atteint ce viewer. Connectez-vous pour utiliser l'inventaire.
+fs-mcp-check-failed = La vérification a échoué à l'étape « { $stage } ».
+fs-mcp-check-missing = L'outil est absent à côté du viewer.
+fs-mcp-check-launch = L'outil n'a pas pu être lancé.
+fs-mcp-check-timeout = L'outil n'a pas répondu à temps.
+fs-mcp-cli-help = { "  --mcp-api        Autoriser l'accès d'un assistant local pour cette session uniquement, sans l'enregistrer" }
 inventory-folder-jump-menu = Aller au dossier…
 inventory-folder-jump-menu-tip = Trouver un dossier par son nom ou celui de son parent, puis l'ouvrir (Ctrl+J).
 inventory-folder-jump-title = Aller à un dossier de l'inventaire

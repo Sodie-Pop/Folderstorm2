@@ -732,6 +732,8 @@ dependencies = [
  "fancy-regex",
  "flate2",
  "folderstorm-brand",
+ "folderstorm-mcp",
+ "folderstorm-mcp-bridge",
  "foldhash 0.2.0",
  "fontconfig-parser",
  "gilrs-core",
@@ -766,6 +768,7 @@ dependencies = [
  "softbuffer",
  "spellbook",
  "sysinfo",
+ "tempfile",
  "tokio",
  "trash",
  "ttf-parser",
@@ -2201,6 +2204,29 @@ name = "folderstorm-brand"
 version = "0.1.0"
 dependencies = [
  "directories",
+]
+
+[[package]]
+name = "folderstorm-mcp"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "folderstorm-mcp-bridge",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "folderstorm-mcp-bridge"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "getrandom 0.4.3",
+ "log",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tempfile",
 ]
 
 [[package]]

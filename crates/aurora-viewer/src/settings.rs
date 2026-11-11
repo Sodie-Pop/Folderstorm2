@@ -453,6 +453,9 @@ pub struct Settings {
     pub update_grace: Option<crate::updater::GraceStart>,
     pub area_search: area_search::AreaSearch,
     pub crash_reports: CrashReports,
+    /// Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs).
+    #[serde(default)]
+    pub local_assistant: folderstorm_mcp_bridge::LocalAssistant,
     /// Firestorm Language: default follows the OS.
     pub language: String,
     /// Firestorm LanguageIsPublic, exposed through llGetAgentLanguage.
@@ -1898,6 +1901,7 @@ impl Default for Settings {
             update_grace: None,
             area_search: Default::default(),
             crash_reports: CrashReports::Ask,
+            local_assistant: Default::default(), // Folderstorm: local assistant
             language: "default".into(),
             language_is_public: true,
             browser_home_page: crate::ui::web_browser::DEFAULT_HOME.into(),
