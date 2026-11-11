@@ -223,6 +223,9 @@ pub struct Renderer {
     /// The device can draw the GPU lists (and AURORA_CPU_CULL is not set).
     gpu_cull: bool,
     size: (u32, u32),
+    /// Folderstorm: the world's part of the window (x, y, width, height),
+    /// the whole window when None (`set_world_rect`).
+    world_rect: Option<[u32; 4]>,
     vsync: bool,
     settings: RenderSettings,
     msaa_supported: Vec<u32>,
@@ -729,6 +732,7 @@ impl Renderer {
             bind_generation: 0,
             gpu_cull,
             size: (width.max(1), height.max(1)),
+            world_rect: None,
             vsync,
             settings: RenderSettings::default(),
             msaa_supported,
@@ -1017,6 +1021,35 @@ impl Renderer {
             return;
         }
         self.size = (width, height);
+        // Folderstorm: the world's part stays inside the window
+        self.world_rect = self.world_rect.and_then(|r| fit_world_rect(r, self.size));
+    }
+
+    /// Folderstorm: the world drawn in a part of the window only (x, y,
+    /// width, height in window pixels), or in all of it (None). Kept inside
+    /// the window; the world's targets follow its size with the next frame.
+    /// Window pixels given to the picks and rays below are taken relative
+    /// to it, and those outside it hit nothing.
+    pub fn set_world_rect(&mut self, rect: Option<[u32; 4]>) {
+        self.world_rect = rect.and_then(|r| fit_world_rect(r, self.size));
+    }
+
+    /// Folderstorm: the world's part of the window, as set.
+    pub fn world_rect(&self) -> Option<[u32; 4]> {
+        self.world_rect
+    }
+
+    /// Folderstorm: the size the world is drawn at (its part of the window,
+    /// or the window): what its camera's proportions follow.
+    pub fn world_size(&self) -> (u32, u32) {
+        self.world_rect.map_or(self.size, |[_, _, w, h]| (w, h))
+    }
+
+    /// Folderstorm: a window pixel in the world's own pixels, None outside it.
+    fn to_world(&self, x: f32, y: f32) -> Option<(f32, f32)> {
+        let [ox, oy, w, h] = self.world_rect.unwrap_or([0, 0, self.size.0, self.size.1]);
+        let (x, y) = (x - ox as f32, y - oy as f32);
+        (x >= 0.0 && y >= 0.0 && x < w as f32 && y < h as f32).then_some((x, y))
     }
 
     /// The draw lists can be culled on the GPU (`DrawLists::gpu`).
@@ -1339,6 +1372,7 @@ impl Renderer {
         ui: Option<crate::EguiFrame>,
         output: Option<wgpu::Texture>,
     ) -> RenderStats {
+        let has_output = output.is_some(); // Folderstorm: world viewport
         let t0 = Instant::now();
         let mut ui = ui;
         if let Some((frame, queue)) = &self.demo_hang
@@ -1444,6 +1478,9 @@ impl Renderer {
                 width: self.size.0,
                 height: self.size.1,
                 vsync: self.vsync,
+                // Folderstorm: world viewport (a frame drawn into its own
+                // texture, such as a VR eye, fills it)
+                world_rect: if has_output { None } else { self.world_rect },
             },
             settings: self.settings,
             hover: self.hover_request.take(),
@@ -1619,11 +1656,10 @@ impl Renderer {
     pub fn request_pick(&mut self, x: f32, y: f32) -> u64 {
         let ticket = self.pick_ticket;
         self.pick_ticket += 1;
-        let (w, h) = self.size;
-        if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 || self.failed {
-            self.pick_answers.push((ticket, None));
-        } else {
-            self.pick_requests.push((ticket, x as u32, y as u32));
+        // Folderstorm: in the world's own pixels, nothing outside it
+        match self.to_world(x, y).filter(|_| !self.failed) {
+            None => self.pick_answers.push((ticket, None)),
+            Some((x, y)) => self.pick_requests.push((ticket, x as u32, y as u32)),
         }
         ticket
     }
@@ -1671,11 +1707,10 @@ impl Renderer {
     pub fn request_drawn(&mut self, x: f32, y: f32, mode: crate::DrawnMode) -> u64 {
         let ticket = self.pick_ticket;
         self.pick_ticket += 1;
-        let (w, h) = self.size;
-        if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 || self.failed {
-            self.drawn_answers.push((ticket, Default::default()));
-        } else {
-            self.drawn_requests.push((ticket, x as u32, y as u32, mode));
+        // Folderstorm: in the world's own pixels, nothing outside it
+        match self.to_world(x, y).filter(|_| !self.failed) {
+            None => self.drawn_answers.push((ticket, Default::default())),
+            Some((x, y)) => self.drawn_requests.push((ticket, x as u32, y as u32, mode)),
         }
         ticket
     }
@@ -1701,8 +1736,9 @@ impl Renderer {
     /// queue (16 to 20 ms in a region that keeps it busy). What a click did
     /// before; kept to compare the two (AURORA_CLICK_PICK).
     pub fn pick_world(&mut self, x: f32, y: f32) -> Option<Vec3> {
-        let (w, h) = self.size;
-        if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 || self.failed {
+        // Folderstorm: in the world's own pixels, nothing outside it
+        let (x, y) = self.to_world(x, y)?;
+        if self.failed {
             return None;
         }
         let mut frame = None;
@@ -1741,10 +1777,8 @@ impl Renderer {
     /// asks for this pixel in the next frame and returns the last answer
     /// (a few frames old).
     pub fn hover_pick(&mut self, x: f32, y: f32) -> Option<Vec3> {
-        let (w, h) = self.size;
-        if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 {
-            return None;
-        }
+        // Folderstorm: in the world's own pixels, nothing outside it
+        let (x, y) = self.to_world(x, y)?;
         self.hover_request = Some((x as u32, y as u32));
         self.hover_latest
     }
@@ -1752,7 +1786,10 @@ impl Renderer {
     /// World ray under a pixel of the last frame: origin on the near plane,
     /// unit direction.
     pub fn cursor_ray(&self, x: f32, y: f32) -> Option<(Vec3, Vec3)> {
-        let (w, h) = (self.size.0 as f32, self.size.1 as f32);
+        // Folderstorm: in the world's own pixels, nothing outside it
+        let (x, y) = self.to_world(x, y)?;
+        let (w, h) = self.world_size();
+        let (w, h) = (w as f32, h as f32);
         let ndc = |z: f32| Vec4::new(x / w * 2.0 - 1.0, 1.0 - y / h * 2.0, z, 1.0);
         let un = |v: Vec4| {
             let p = self.last_inv_vp * v;
@@ -1783,8 +1820,10 @@ impl Renderer {
             return None;
         }
         let ndc = c.truncate() / c.w;
-        let x = (ndc.x * 0.5 + 0.5) * self.size.0 as f32;
-        let y = (0.5 - ndc.y * 0.5) * self.size.1 as f32;
+        // Folderstorm: back to window pixels from the world's part
+        let [ox, oy, w, h] = self.world_rect.unwrap_or([0, 0, self.size.0, self.size.1]);
+        let x = ox as f32 + (ndc.x * 0.5 + 0.5) * w as f32;
+        let y = oy as f32 + (0.5 - ndc.y * 0.5) * h as f32;
         Some((x, y, c.w))
     }
 
@@ -2201,5 +2240,28 @@ mod tests {
         // never past the list
         assert_eq!(skin_binds_range(200..300, 244), 200..244);
         assert!(skin_binds_range(300..320, 244).is_empty());
+    }
+}
+
+/// Folderstorm: a world rectangle kept inside a window of `size`, None when
+/// it is empty or the whole window (then the world simply fills it).
+fn fit_world_rect([x, y, w, h]: [u32; 4], size: (u32, u32)) -> Option<[u32; 4]> {
+    let x = x.min(size.0.saturating_sub(1));
+    let y = y.min(size.1.saturating_sub(1));
+    let w = w.min(size.0 - x);
+    let h = h.min(size.1 - y);
+    (w > 0 && h > 0 && (w, h) != size).then_some([x, y, w, h])
+}
+
+#[cfg(test)]
+mod folderstorm_world_rect_tests {
+    use super::fit_world_rect;
+
+    #[test]
+    fn world_rects_stay_inside_the_window() {
+        assert_eq!(fit_world_rect([1920, 0, 1920, 1080], (5760, 1080)), Some([1920, 0, 1920, 1080]));
+        assert_eq!(fit_world_rect([5000, 0, 1920, 1080], (5760, 1080)), Some([5000, 0, 760, 1080]));
+        assert_eq!(fit_world_rect([0, 0, 1920, 1080], (1920, 1080)), None, "the whole window");
+        assert_eq!(fit_world_rect([10, 10, 0, 50], (1920, 1080)), None, "empty");
     }
 }
