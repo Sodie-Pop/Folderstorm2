@@ -202,7 +202,17 @@ impl App {
                     self.folderstorm_characters.managed.link();
                 }
                 HostEvent::Command(ipc::ToViewer::Assign(assignment)) => {
+                    let revokes_voice = self.folderstorm_characters.managed.revokes_voice(&assignment);
                     if self.folderstorm_characters.managed.assign(assignment) {
+                        if revokes_voice {
+                            // off now, not at the next frame (rare while
+                            // minimised): the session is left and the
+                            // microphone closed, as `update_voice` does
+                            // with voice not enabled; the host hands the
+                            // voice over once the status says it is off
+                            log::info!("session host: voice taken away, leaving the voice channel now");
+                            self.voice.restart();
+                        }
                         log::info!(
                             "session host: {:?}, {:?} standby, sound {}, voice {}",
                             assignment.role,
@@ -369,7 +379,8 @@ impl App {
             gpu,
             paused_3d: state.paused,
             sound_muted: self.minimized_mute.active,
-            voice_allowed: state.managed.voice_allowed(),
+            // given up only once the voice is off too
+            voice_allowed: state.managed.voice_report(self.voice.connected),
         }
         .cleaned()
     }

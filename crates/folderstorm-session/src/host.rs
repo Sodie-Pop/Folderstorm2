@@ -10,8 +10,9 @@
 //!   (Economy), 3D off, sound cut, voice off.
 //! - **Voice is given up before it is given.** The new active character is
 //!   allowed voice only once every other viewer has acknowledged an
-//!   assignment without it, or has ended. A viewer that does not answer
-//!   keeps the voice waiting: it may still be transmitting.
+//!   assignment without it and said its voice is off, or has ended. A
+//!   viewer that does not answer keeps the voice waiting: it may still be
+//!   transmitting.
 //! - **The host follows the user.** A background window that gets the
 //!   keyboard (a click on it, Alt-Tab) becomes the active character.
 //! - **No false deaths (R6).** Healthy, slow (its main loop has not turned
@@ -435,8 +436,12 @@ impl Desk {
         let got_focus = status.focused && !std::mem::replace(&mut s.was_focused, status.focused);
         let settled = s.placed.is_none_or(|at| now.duration_since(at) >= STAGE_SETTLE);
         let window = status.window;
+        let voice_reported = status.voice_allowed;
         s.status = Some(status);
-        if s.acknowledged() && s.sent.is_some_and(|(a, _)| !a.voice_allowed) {
+        // given up once the viewer holds an assignment without voice and
+        // says its voice is off: holding the assignment alone is not enough,
+        // its voice may still be connected
+        if s.acknowledged() && s.sent.is_some_and(|(a, _)| !a.voice_allowed) && !voice_reported {
             s.voice_out = false;
         }
         let closing = s.closing;
@@ -692,13 +697,15 @@ mod tests {
         launch
     }
 
-    /// The viewer's report that it holds the latest assignment sent.
+    /// The viewer's report that it holds the latest assignment sent, its
+    /// voice as that assignment says (off once it gave it up).
     fn ack(d: &mut Desk, slot: usize, now: Instant) {
         let s = d.slot(slot).expect("slot");
-        let (launch, seq) = (s.launch(), s.sent.expect("sent").0.seq);
+        let (launch, sent) = (s.launch(), s.sent.expect("sent").0);
         let status = Status {
-            assign_seq: seq,
+            assign_seq: sent.seq,
             screen: Screen::World,
+            voice_allowed: sent.voice_allowed,
             ..s.status.clone().unwrap_or_default()
         };
         d.status(slot, launch, status, now);
@@ -846,6 +853,54 @@ mod tests {
         assert!(assigned(&d, 1).voice_allowed);
         assert_eq!(d.voice_waits_for(), None);
         assert!(assigned(&d, 1).seq > new.seq);
+    }
+
+    #[test]
+    fn the_voice_waits_until_the_old_character_says_its_voice_is_off() {
+        let (mut d, now) = desk(2);
+        start(&mut d, 0, true, now);
+        start(&mut d, 1, false, now);
+        ack(&mut d, 0, now);
+        ack(&mut d, 1, now);
+        d.switch(1, now);
+        // slot 0 holds the assignment without voice, but its voice module
+        // is still connected: not given up
+        let s = d.slot(0).expect("slot");
+        let still_on = Status {
+            assign_seq: assigned(&d, 0).seq,
+            screen: Screen::World,
+            voice_allowed: true,
+            ..Default::default()
+        };
+        let launch = s.launch();
+        d.status(0, launch, still_on.clone(), now);
+        assert_eq!(d.voice_waits_for(), Some(0));
+        assert!(!assigned(&d, 1).voice_allowed);
+        // an older assignment's report saying off is not enough either: the
+        // voice-on one may still be in its pipe
+        d.status(
+            0,
+            launch,
+            Status {
+                assign_seq: assigned(&d, 0).seq - 1,
+                voice_allowed: false,
+                ..still_on.clone()
+            },
+            now,
+        );
+        assert_eq!(d.voice_waits_for(), Some(0));
+        // off, holding the assignment: now slot 1 may use voice
+        d.status(
+            0,
+            launch,
+            Status {
+                voice_allowed: false,
+                ..still_on
+            },
+            now,
+        );
+        assert_eq!(d.voice_waits_for(), None);
+        assert!(assigned(&d, 1).voice_allowed);
     }
 
     #[test]

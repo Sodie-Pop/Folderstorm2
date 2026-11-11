@@ -619,8 +619,12 @@ May be two small PRs: 1a profiles, 1b behind policy.
     `MarkRead`, `ChatLine`, monitor frames: later checkpoints.
   - **Voice hand-over is strict:** the new active character is allowed
     voice only when every other viewer has reported an assignment without
-    it, or has ended. A viewer that does not answer keeps the voice waiting
-    (it may still be transmitting); the host says whom it waits for.
+    it **and** that its voice is off, or has ended. A viewer turns its voice
+    off as soon as its link reads such an assignment (not at its next
+    frame, which may be far off while minimised), and reports it given up
+    only once its voice module is disconnected. A viewer that does not
+    answer keeps the voice waiting (it may still be transmitting); the host
+    says whom it waits for.
   - **The viewer moves its own window.** The host never touches another
     process's window: `Show` and `Minimise` are carried out by the viewer
     with winit (the host only calls `AllowSetForegroundWindow` for it
