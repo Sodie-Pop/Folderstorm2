@@ -30,8 +30,16 @@ impl App {
     /// (`gpu::has_keyboard`). Never `self.focused` alone, which starts true
     /// before any focus event: a character started behind would count as
     /// in front and claim the focus in its first report.
+    ///
+    /// A frame takes the window out of `self.gfx` while it is drawn, and
+    /// most of these rules are asked during the frame: the window's answer
+    /// is remembered (`window_focus`), or every window would count as
+    /// without the keyboard there (the background cap in front, a loss in
+    /// front left to wait).
     fn folderstorm_focused(&self) -> bool {
-        gpu::has_keyboard(self.focused, self.gfx.as_ref().map(|g| g.window.has_focus()))
+        let window = self.gfx.as_ref().map(|g| g.window.has_focus());
+        let window = crate::folderstorm_characters::window_focus(&self.folderstorm_characters.window_focus, window);
+        gpu::has_keyboard(self.focused, window)
     }
 
     /// `AURORA_DEMO_SESSION_BEHIND`: another Folderstorm2 window counts as
