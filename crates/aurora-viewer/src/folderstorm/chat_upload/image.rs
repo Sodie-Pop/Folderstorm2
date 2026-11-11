@@ -5,8 +5,10 @@
 //! - At most the size limit of Preferences, checked before the file is read.
 //! - A file keeps its own bytes (animation, quality), without the metadata
 //!   that can tell where and with what a picture was taken: JPEG's EXIF
-//!   (except its orientation), XMP, IPTC and comments; PNG's text, EXIF and
-//!   time chunks; WebP's EXIF and XMP chunks. GIF is sent as it is.
+//!   (except its orientation), XMP, IPTC, comments and thumbnails; PNG's and
+//!   WebP's chunks other than those needed to show the picture; GIF's
+//!   comments and application blocks other than the loop count; and in
+//!   every format whatever follows the end of the picture.
 //! - A pasted picture becomes a new PNG, with nothing but its pixels.
 
 use std::io::Read;
@@ -145,7 +147,7 @@ pub fn prepare_bytes(bytes: Vec<u8>, max: u64) -> Result<Prepared, Refusal> {
         Format::Jpeg => strip_jpeg(&bytes)?,
         Format::Png => strip_png(&bytes)?,
         Format::Webp => strip_webp(&bytes)?,
-        Format::Gif => (bytes, false),
+        Format::Gif => strip_gif(&bytes)?,
     };
     let thumb = Some(thumbnail(&bytes, format).ok_or(Refusal::Corrupt)?);
     Ok(Prepared {
@@ -429,12 +431,24 @@ pub fn exif_orientation(tiff: &[u8]) -> Option<u16> {
 
 // ---- PNG
 
-/// Chunks that only describe the picture: text, EXIF, time.
-const PNG_DROPPED: [&[u8; 4]; 5] = [b"tEXt", b"zTXt", b"iTXt", b"eXIf", b"tIME"];
+/// The PNG chunks kept: what decoding and showing the picture as it looks
+/// needs. Everything else goes, known or not (text, EXIF, time, physical
+/// size, background, histogram, editors' private chunks).
+///
+/// - IHDR, PLTE, IDAT, IEND: the picture itself; tRNS: its transparency;
+/// - gAMA, cHRM, sRGB, iCCP, cICP, sBIT: how its colours are meant to look.
+///   The colour profile (iCCP) stays, as JPEG's does: without it a
+///   wide-gamut picture (a Mac's Display P3 screenshot) is shown with
+///   wrong colours, and a profile describes a colour space (its name may
+///   name a display model), never a place, a time or a person;
+/// - acTL, fcTL, fdAT: an animated PNG's frames.
+const PNG_KEPT: [&[u8; 4]; 14] = [
+    b"IHDR", b"PLTE", b"IDAT", b"IEND", b"tRNS", b"gAMA", b"cHRM", b"sRGB", b"iCCP", b"cICP", b"sBIT", b"acTL", b"fcTL", b"fdAT",
+];
 
 pub fn strip_png(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
     let mut out = Vec::with_capacity(bytes.len());
-    out.extend_from_slice(&bytes[..8]);
+    out.extend_from_slice(bytes.get(..8).ok_or(Refusal::Corrupt)?);
     let mut at = 8;
     let mut stripped = false;
     loop {
@@ -445,13 +459,18 @@ pub fn strip_png(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
         if end > bytes.len() {
             return Err(Refusal::Corrupt);
         }
-        if PNG_DROPPED.iter().any(|d| d.as_slice() == kind) {
-            stripped = true;
-        } else {
+        if PNG_KEPT.iter().any(|k| k.as_slice() == kind) {
             out.extend_from_slice(&bytes[at..end]);
+        } else if kind[0].is_ascii_uppercase() {
+            // an unknown critical chunk: no decoder may show the picture
+            return Err(Refusal::Unsupported);
+        } else {
+            stripped = true;
         }
         at = end;
         if kind == b"IEND" {
+            // nothing after the end
+            stripped |= at < bytes.len();
             return Ok((out, stripped));
         }
     }
@@ -459,36 +478,70 @@ pub fn strip_png(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
 
 // ---- WebP
 
-pub fn strip_webp(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
-    let mut chunks = Vec::with_capacity(bytes.len());
-    let mut at = 12;
+/// The WebP chunks kept: the picture (VP8, VP8L, its alpha ALPH), its
+/// header (VP8X), its animation (ANIM, ANMF) and colour profile (ICCP, as
+/// for PNG and JPEG). EXIF, XMP and any other chunk go.
+const WEBP_KEPT: [&[u8; 4]; 7] = [b"VP8 ", b"VP8L", b"VP8X", b"ALPH", b"ANIM", b"ANMF", b"ICCP"];
+/// What an animation frame (ANMF) holds after its 16-byte header.
+const WEBP_FRAME_KEPT: [&[u8; 4]; 3] = [b"VP8 ", b"VP8L", b"ALPH"];
+
+/// The chunks of `data` (a RIFF body) with only those of `kept`; whether
+/// any went.
+fn webp_chunks(data: &[u8], kept: &[&[u8; 4]], out: &mut Vec<u8>) -> Result<bool, Refusal> {
+    let mut at = 0;
     let mut stripped = false;
-    let declared = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
-    let end_of_file = declared.checked_add(8).ok_or(Refusal::Corrupt)?.min(bytes.len());
-    while at + 8 <= end_of_file {
-        let kind = &bytes[at..at + 4];
-        let len = u32::from_le_bytes([bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]]) as usize;
-        let padded = len.checked_add(len & 1).ok_or(Refusal::Corrupt)?;
-        let end = (at + 8).checked_add(padded).ok_or(Refusal::Corrupt)?;
-        if at + 8 + len > end_of_file {
+    while at + 8 <= data.len() {
+        let kind = &data[at..at + 4];
+        let len = u32::from_le_bytes([data[at + 4], data[at + 5], data[at + 6], data[at + 7]]) as usize;
+        let body_end = (at + 8).checked_add(len).ok_or(Refusal::Corrupt)?;
+        if body_end > data.len() {
             return Err(Refusal::Corrupt);
         }
-        let end = end.min(end_of_file);
-        if kind == b"EXIF" || kind == b"XMP " {
+        let body = &data[at + 8..body_end];
+        // a chunk is padded to an even size (the last one's pad may be missing)
+        let end = body_end.saturating_add(len & 1).min(data.len());
+        if !kept.iter().any(|k| k.as_slice() == kind) {
             stripped = true;
+        } else if kind == b"ANMF" {
+            let header = body.get(..16).ok_or(Refusal::Corrupt)?;
+            let mut frame = header.to_vec();
+            stripped |= webp_chunks(&body[16..], &WEBP_FRAME_KEPT, &mut frame)?;
+            put_webp_chunk(out, kind, &frame)?;
         } else {
-            let from = chunks.len();
-            chunks.extend_from_slice(&bytes[at..end]);
-            if kind == b"VP8X" && len >= 1 {
+            let from = out.len();
+            put_webp_chunk(out, kind, body)?;
+            if kind == b"VP8X" && !body.is_empty() {
                 // the flags no longer announce what was left out
-                chunks[from + 8] &= !(0x08 | 0x04);
-            }
-            if len & 1 == 1 && end - at < 8 + padded {
-                chunks.push(0);
+                out[from + 8] &= !(0x08 | 0x04);
             }
         }
         at = end;
     }
+    if at < data.len() {
+        // a few stray bytes that are not a chunk
+        stripped = true;
+    }
+    Ok(stripped)
+}
+
+fn put_webp_chunk(out: &mut Vec<u8>, kind: &[u8], body: &[u8]) -> Result<(), Refusal> {
+    out.extend_from_slice(kind);
+    out.extend_from_slice(&u32::try_from(body.len()).map_err(|_| Refusal::Corrupt)?.to_le_bytes());
+    out.extend_from_slice(body);
+    if body.len() & 1 == 1 {
+        out.push(0);
+    }
+    Ok(())
+}
+
+pub fn strip_webp(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
+    let header = bytes.get(..12).ok_or(Refusal::Corrupt)?;
+    let declared = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+    let end_of_file = declared.checked_add(8).ok_or(Refusal::Corrupt)?.min(bytes.len());
+    let mut chunks = Vec::with_capacity(bytes.len());
+    let mut stripped = webp_chunks(&bytes[12..end_of_file.max(12)], &WEBP_KEPT, &mut chunks)?;
+    // what follows the RIFF is not part of the picture
+    stripped |= end_of_file < bytes.len();
     if chunks.is_empty() {
         return Err(Refusal::Corrupt);
     }
@@ -498,4 +551,80 @@ pub fn strip_webp(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
     out.extend_from_slice(b"WEBP");
     out.extend_from_slice(&chunks);
     Ok((out, stripped))
+}
+
+// ---- GIF
+
+/// A GIF without its comments, its application blocks other than the
+/// loop count (NETSCAPE2.0, ANIMEXTS1.0; XMP and others go) and anything
+/// after its end. Frames, palettes, graphic controls and plain text (drawn
+/// as part of the picture) stay.
+pub fn strip_gif(bytes: &[u8]) -> Result<(Vec<u8>, bool), Refusal> {
+    // header and logical screen descriptor
+    let screen = bytes.get(..13).ok_or(Refusal::Corrupt)?;
+    let mut at = 13 + color_table(screen[10]);
+    let mut out = Vec::with_capacity(bytes.len());
+    out.extend_from_slice(bytes.get(..at).ok_or(Refusal::Corrupt)?);
+    let mut stripped = false;
+    loop {
+        let Some(&block) = bytes.get(at) else {
+            // ends between two blocks without its trailer: closed here
+            out.push(0x3b);
+            return Ok((out, stripped));
+        };
+        match block {
+            0x3b => {
+                out.push(0x3b);
+                stripped |= at + 1 < bytes.len();
+                return Ok((out, stripped));
+            }
+            0x2c => {
+                // image descriptor, local palette, LZW code size, data
+                let descriptor = bytes.get(at..at + 10).ok_or(Refusal::Corrupt)?;
+                let data = at + 10 + color_table(descriptor[9]) + 1;
+                let end = sub_blocks(bytes, data)?;
+                out.extend_from_slice(&bytes[at..end]);
+                at = end;
+            }
+            0x21 => {
+                let label = *bytes.get(at + 1).ok_or(Refusal::Corrupt)?;
+                let end = sub_blocks(bytes, at + 2)?;
+                let keep = match label {
+                    0xfe => false,
+                    0xff => {
+                        // the first sub-block: application id and code
+                        let id = bytes.get(at + 2..at + 14);
+                        matches!(id, Some([11, rest @ ..]) if rest == b"NETSCAPE2.0" || rest == b"ANIMEXTS1.0")
+                    }
+                    _ => true,
+                };
+                if keep {
+                    out.extend_from_slice(&bytes[at..end]);
+                } else {
+                    stripped = true;
+                }
+                at = end;
+            }
+            _ => return Err(Refusal::Corrupt),
+        }
+    }
+}
+
+/// The size of the colour table a GIF's packed field announces.
+fn color_table(packed: u8) -> usize {
+    if packed & 0x80 == 0 { 0 } else { 3 << ((packed & 0x07) + 1) }
+}
+
+/// The end of the sub-blocks starting at `at` (after their empty one).
+fn sub_blocks(bytes: &[u8], mut at: usize) -> Result<usize, Refusal> {
+    loop {
+        let size = usize::from(*bytes.get(at).ok_or(Refusal::Corrupt)?);
+        at += 1 + size;
+        if size == 0 {
+            return Ok(at);
+        }
+        if at > bytes.len() {
+            return Err(Refusal::Corrupt);
+        }
+    }
 }

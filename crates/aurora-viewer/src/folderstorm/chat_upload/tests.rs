@@ -820,6 +820,109 @@ fn a_webp_loses_its_exif_chunk() {
     assert_eq!(prepared.bytes, encoded);
 }
 
+/// A PNG chunk with its checksum.
+fn png_chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+    let mut chunk = (data.len() as u32).to_be_bytes().to_vec();
+    chunk.extend_from_slice(kind);
+    chunk.extend_from_slice(data);
+    let crc = crc32(&chunk[4..]);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    chunk
+}
+
+#[test]
+fn a_png_keeps_only_what_shows_the_picture() {
+    let plain = png(5, 5);
+    // after the signature and IHDR (8 + 25 bytes): a colour profile, which
+    // stays, then a physical size, an editor's private chunk and a
+    // background, which go
+    let gamma = png_chunk(b"gAMA", &45455u32.to_be_bytes());
+    let mut kept = plain[..33].to_vec();
+    kept.extend_from_slice(&gamma);
+    kept.extend_from_slice(&plain[33..]);
+    let mut tagged = plain[..33].to_vec();
+    tagged.extend_from_slice(&gamma);
+    tagged.extend_from_slice(&png_chunk(b"pHYs", &[0, 0, 11, 19, 0, 0, 11, 19, 1]));
+    tagged.extend_from_slice(&png_chunk(b"prVt", b"Jane's laptop, /home/jane"));
+    tagged.extend_from_slice(&png_chunk(b"bKGD", &[0, 0, 0, 0, 0, 0]));
+    tagged.extend_from_slice(&plain[33..]);
+    // and after the end
+    tagged.extend_from_slice(b"GPS 48.8566N");
+    let prepared = img::prepare_bytes(tagged, 1 << 20).expect("prepared");
+    assert!(prepared.stripped);
+    assert_eq!(prepared.bytes, kept);
+    // an unknown critical chunk: no decoder could show it
+    let mut critical = plain[..33].to_vec();
+    critical.extend_from_slice(&png_chunk(b"QUUX", b"?"));
+    critical.extend_from_slice(&plain[33..]);
+    assert_eq!(img::strip_png(&critical).err(), Some(Refusal::Unsupported));
+}
+
+#[test]
+fn a_webp_keeps_only_its_picture_chunks() {
+    let picture = ::image::RgbaImage::from_fn(6, 4, |x, _| ::image::Rgba([x as u8 * 40, 10, 10, 255]));
+    let mut encoded = Vec::new();
+    ::image::codecs::webp::WebPEncoder::new_lossless(&mut encoded)
+        .encode(picture.as_raw(), 6, 4, ::image::ExtendedColorType::Rgba8)
+        .expect("webp");
+    let mut chunks = encoded[12..].to_vec();
+    chunks.extend_from_slice(b"XYZW");
+    chunks.extend_from_slice(&7u32.to_le_bytes());
+    chunks.extend_from_slice(b"Jane P.\0");
+    let mut tagged = b"RIFF".to_vec();
+    tagged.extend_from_slice(&((chunks.len() + 4) as u32).to_le_bytes());
+    tagged.extend_from_slice(b"WEBP");
+    tagged.extend_from_slice(&chunks);
+    tagged.extend_from_slice(b"trailing");
+    let prepared = img::prepare_bytes(tagged, 1 << 20).expect("prepared");
+    assert!(prepared.stripped);
+    assert_eq!(prepared.bytes, encoded);
+}
+
+fn gif() -> Vec<u8> {
+    let frame = ::image::Frame::new(::image::RgbaImage::from_fn(4, 4, |x, y| {
+        ::image::Rgba([x as u8 * 60, y as u8 * 60, 0, 255])
+    }));
+    let mut out = Vec::new();
+    {
+        let mut encoder = ::image::codecs::gif::GifEncoder::new(&mut out);
+        encoder.set_repeat(::image::codecs::gif::Repeat::Infinite).expect("repeat");
+        encoder.encode_frames([frame.clone(), frame]).expect("gif");
+    }
+    out
+}
+
+#[test]
+fn a_gif_loses_its_comments_and_foreign_blocks() {
+    let plain = gif();
+    assert!(plain.windows(11).any(|w| w == b"NETSCAPE2.0"), "the encoder's loop block");
+    let table = if plain[10] & 0x80 == 0 { 0 } else { 3 << ((plain[10] & 7) + 1) };
+    let at = 13 + table;
+    let mut tagged = plain[..at].to_vec();
+    // a comment, then XMP in an application block
+    tagged.extend_from_slice(&[0x21, 0xfe, 9]);
+    tagged.extend_from_slice(b"Jane's PC");
+    tagged.push(0);
+    tagged.extend_from_slice(&[0x21, 0xff, 11]);
+    tagged.extend_from_slice(b"XMP DataXMP");
+    tagged.push(14);
+    tagged.extend_from_slice(b"<x:GPS>48.85<");
+    tagged.extend_from_slice(&[b'/', 0]);
+    tagged.extend_from_slice(&plain[at..]);
+    tagged.extend_from_slice(b"after the trailer");
+    let prepared = img::prepare_bytes(tagged.clone(), 1 << 20).expect("prepared");
+    assert!(prepared.stripped);
+    assert_eq!(prepared.bytes, plain);
+    let clean = img::prepare_bytes(plain.clone(), 1 << 20).expect("prepared");
+    assert!(!clean.stripped);
+    assert_eq!(clean.bytes, plain);
+    // cut anywhere: refused or closed, never a panic
+    for cut in 0..tagged.len() {
+        let _ = img::strip_gif(&tagged[..cut]);
+        let _ = img::prepare_bytes(tagged[..cut].to_vec(), 1 << 20);
+    }
+}
+
 #[test]
 fn a_pasted_picture_becomes_a_new_png() {
     let picture = demo::picture();
