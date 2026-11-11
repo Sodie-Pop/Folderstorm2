@@ -86,7 +86,7 @@ impl Host {
     pub(super) fn new_profile(&mut self, name: &str, source: &Source) -> Result<NewProfile, NewProfileError> {
         let name = ProfileName::parse(name).map_err(NewProfileError::Name)?;
         // (a viewer the host is starting may not hold its lease yet)
-        let on_the_desk = |profile: &ProfileName| self.desk.slots().any(|(_, s)| s.live() && s.profile.key() == profile.key());
+        let on_the_desk = |profile: &ProfileName| self.desk.slots().any(|(_, s)| s.has_process() && s.profile.key() == profile.key());
         let running = |profile: &ProfileName| on_the_desk(profile) || profile::lease_held(profile);
         let created = profile_copy::create(&profile::main_config_dir(), source, &name, &running).map_err(|error| {
             if let profile_copy::CopyError::Io(e) = &error {

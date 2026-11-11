@@ -284,15 +284,35 @@ mod imp {
         }
     }
 
+    /// How long a client waits, once, for the pipe's one instance to be
+    /// free (another client is being turned away).
+    const BUSY_WAIT_MS: u32 = 2000;
+
     pub fn open(endpoint: &str) -> io::Result<std::fs::File> {
         use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Foundation::ERROR_PIPE_BUSY;
         use windows_sys::Win32::Storage::FileSystem::{FILE_READ_ATTRIBUTES, FILE_WRITE_DATA, SECURITY_IDENTIFICATION, SYNCHRONIZE};
-        std::fs::OpenOptions::new()
-            // what the pipe's security gives this logon, no more
-            .access_mode(FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
-            // whoever serves the pipe cannot act as this process
-            .security_qos_flags(SECURITY_IDENTIFICATION)
-            .open(endpoint)
+        use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
+        let open = || {
+            std::fs::OpenOptions::new()
+                // what the pipe's security gives this logon, no more
+                .access_mode(FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+                // whoever serves the pipe cannot act as this process
+                .security_qos_flags(SECURITY_IDENTIFICATION)
+                .open(endpoint)
+        };
+        match open() {
+            // the one instance is connected to another client (one the
+            // host is turning away): wait for it once, then try again
+            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY as i32) => {
+                let name: Vec<u16> = endpoint.encode_utf16().chain(std::iter::once(0)).collect();
+                // SAFETY: `name` is a NUL-terminated UTF-16 string that
+                // lives through the call; the call keeps no pointer.
+                let free = unsafe { WaitNamedPipeW(name.as_ptr(), BUSY_WAIT_MS) } != 0;
+                if free { open() } else { Err(e) }
+            }
+            other => other,
+        }
     }
 
     /// `\\.\pipe\folderstorm2-session-…`, a local pipe and nothing else (no

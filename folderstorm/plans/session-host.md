@@ -318,8 +318,9 @@ available.
 - **Launch.** The host spawns `current_exe --profile <name> --managed`. It
   never passes `--login` and never sees passwords: each character logs in on
   its own viewer's login screen, which may use its remembered password.
-- **Bootstrap.** The child's **stdin is an anonymous pipe** held only by the
-  host and that child. The host writes one bounded line (control pipe name
+- **Bootstrap.** The child's **stdin is a pipe** held only by the host and
+  that child (anonymous on Linux and macOS; on Windows Rust makes a randomly
+  named pipe whose ends are connected as it is made). The host writes one bounded line (control pipe name
   and a one-time 128-bit token) and closes it; the viewer reads it in the CLI
   hook and drops stdin. Nothing on the command line or in the environment.
   Std's `Command` passes stdin to GUI-subsystem processes through
@@ -588,9 +589,14 @@ May be two small PRs: 1a profiles, 1b behind policy.
     to that painter or move the host to wgpu then.
   - **IPC: two one-way channels instead of one two-way pipe.** Host to
     viewer is the viewer's standard input for the whole session, not only
-    for the bootstrap: an anonymous pipe has no name to find or squat, only
-    the host and that child hold it, and its end is exactly "the host is
-    gone" (unmanaged fallback) on every system, with no Windows-only code.
+    for the bootstrap: only the host and that child hold it, and its end
+    is exactly "the host is gone" (unmanaged fallback) on every system,
+    with no Windows-only code. On Linux and macOS it is an anonymous pipe.
+    On Windows, Rust's piped standard input is a named pipe with a random
+    name (`\\.\pipe\__rust_anonymous_pipe1__.<pid>.<random>`, first
+    instance only, remote clients rejected) whose other end is opened as
+    soon as it is made, so there is no moment when another process could
+    join it, but it does have a name.
     Viewer to host is the private endpoint of section 8, inbound only. A
     blocking two-way named pipe would also have needed overlapped I/O (a
     blocked read holds a write on the same synchronous handle). The
@@ -620,8 +626,12 @@ May be two small PRs: 1a profiles, 1b behind policy.
     `MarkRead`, `ChatLine`, monitor frames: later checkpoints.
   - **Voice hand-over is strict:** the new active character is allowed
     voice only when every other viewer has reported an assignment without
-    it, or has ended. A viewer that does not answer keeps the voice waiting
-    (it may still be transmitting); the host says whom it waits for.
+    it **and** that its voice is off, or has ended. A viewer turns its voice
+    off as soon as its link reads such an assignment (not at its next
+    frame, which may be far off while minimised), and reports it given up
+    only once its voice module is disconnected. A viewer that does not
+    answer keeps the voice waiting (it may still be transmitting); the host
+    says whom it waits for.
   - **The viewer moves its own window.** The host never touches another
     process's window: `Show` and `Minimise` are carried out by the viewer
     with winit (the host only calls `AllowSetForegroundWindow` for it
@@ -637,6 +647,12 @@ May be two small PRs: 1a profiles, 1b behind policy.
     keyboard (a click, Alt-Tab, the taskbar) becomes the active character
     (only a change to focused counts, so a switch from the host is never
     undone by a late report).
+  - **A viewer the host cannot manage is let go:** when its hello is
+    refused, or it never reaches the endpoint (only other clients came),
+    the host closes its command pipe, so the viewer sees the host gone and
+    goes on by itself; the slot shows "not managed" until that process
+    ends. A viewer still starting after a minute is noted and End is
+    offered; nothing ends it by itself.
   - **R2:** only "behind" and "minimised" are used. Commands and reports
     run from `about_to_wait`, not from the frame, so a minimised viewer
     still obeys and reports even if its frames are rare; the main-loop
@@ -645,10 +661,15 @@ May be two small PRs: 1a profiles, 1b behind policy.
     character) replaces `self.focused` at the five sites of section 6.4.
     The GPU rules of checkpoint 1 (R4, R5) still go by the real focus: a
     stall box or a recovery of the active character waits for a click on
-    its own window while the user is in the host's window.
+    its own window while the user is in the host's window. The real focus
+    is the window's own (`gpu::has_keyboard`: a window that exists and has
+    the focus), not the viewer's focus flag, which starts true before any
+    focus event; it is also what the status reports.
   - **Background sound** rides Aurora's "mute when minimised" transient
     mute (never saved); **voice** is `voice_enabled && allowed` where the
     voice session is fed, and the microphone is released by the same mute.
+  - **A host's Quit while the card holds a frame** is not recorded as a
+    close in GPU trouble: the next start keeps its graphics (R4, R5).
   - Not done here: the host does not adopt viewers already running
     (section 11), the per-character sound choice "alerts only / all"
     (section 10), the same-account refusal (the host only warns: the login

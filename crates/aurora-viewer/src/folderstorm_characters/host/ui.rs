@@ -202,83 +202,77 @@ impl Window_ {
         if self.comfort_page(ui, acts) {
             return;
         }
-        // (two blocks deeper than needed: the rows keep the indentation
-        // they have in checkpoint 2, whose review fixes merge here)
+        ui.label(RichText::new(tr!("folderstorm-host-heading")).size(18.0).strong().color(p.ink));
+        ui.add_space(2.0);
+        ui.label(RichText::new(tr!("folderstorm-host-intro")).color(p.muted));
+        ui.add_space(10.0);
+        let mut stage = self.host.desk.stage();
+        if widgets::checkbox(ui, &p, &mut stage, tr!("folderstorm-host-stage"))
+            .on_hover_text(tr!("folderstorm-host-stage-help"))
+            .changed()
         {
-            {
-                ui.label(RichText::new(tr!("folderstorm-host-heading")).size(18.0).strong().color(p.ink));
-                ui.add_space(2.0);
-                ui.label(RichText::new(tr!("folderstorm-host-intro")).color(p.muted));
-                ui.add_space(10.0);
-                let mut stage = self.host.desk.stage();
-                if widgets::checkbox(ui, &p, &mut stage, tr!("folderstorm-host-stage"))
-                    .on_hover_text(tr!("folderstorm-host-stage-help"))
-                    .changed()
-                {
-                    acts.push(Act::Stage(stage));
-                }
-                let mut sound = self.host.desk.chat_sound();
-                if widgets::checkbox(ui, &p, &mut sound, tr!("folderstorm-chat-sound"))
-                    .on_hover_text(tr!("folderstorm-chat-sound-help"))
-                    .changed()
-                {
-                    acts.push(Act::ChatSound(sound));
-                }
-                ui.add_space(10.0);
-                self.quick_strip(ui, &p, acts);
-                let quitting = self.host.desk.quitting();
-                egui::ScrollArea::vertical()
-                    .id_salt("folderstorm-host-characters")
-                    .auto_shrink([false, true])
-                    .max_height((ui.available_height() - 150.0).max(120.0))
-                    .show(ui, |ui| {
-                        let slots: Vec<(usize, Slot)> = self.host.desk.slots().map(|(i, s)| (i, s.clone())).collect();
-                        if slots.is_empty() {
-                            ui.label(RichText::new(tr!("folderstorm-host-empty")).color(p.muted));
-                        }
-                        for (slot, state) in &slots {
-                            egui::Frame::new()
-                                .fill(p.field)
-                                .inner_margin(12.0)
-                                .corner_radius(radius)
-                                .show(ui, |ui| {
-                                    ui.set_width(ui.available_width());
-                                    self.character(ui, &p, *slot, state, now, quitting, acts);
-                                });
-                            ui.add_space(8.0);
-                        }
-                    });
-                ui.add_space(6.0);
-                if let Some(waits) = self.host.desk.voice_waits_for() {
-                    let name = self.name(waits);
-                    ui.label(RichText::new(tr!("folderstorm-host-voice-waits", name = name)).color(p.amber));
-                    ui.add_space(4.0);
-                }
-                if !quitting && !self.host.desk.full() {
-                    ui.horizontal(|ui| {
-                        let width = (ui.available_width() - 190.0).max(120.0);
-                        let field = widgets::text_field(ui, true, &mut self.new_profile, |b, _| {
-                            egui::TextEdit::singleline(b)
-                                .char_limit(profile::MAX_LEN)
-                                .hint_text(tr!("folderstorm-host-add-hint"))
-                                .desired_width(width)
-                        });
-                        let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                        let add = tr!("folderstorm-host-add");
-                        if widgets::action_button(ui, &p, "plus", add, ActionKind::Flat, BUTTON).clicked() || entered {
-                            acts.push(Act::Add);
-                        }
-                    });
-                    if let Some(error) = &self.add_error {
-                        ui.label(RichText::new(error).color(p.danger));
-                    }
-                    self.comfort_buttons(ui, &p, acts);
-                }
-                ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    self.footer(ui, &p, now, acts);
-                });
-            }
+            acts.push(Act::Stage(stage));
         }
+        let mut sound = self.host.desk.chat_sound();
+        if widgets::checkbox(ui, &p, &mut sound, tr!("folderstorm-chat-sound"))
+            .on_hover_text(tr!("folderstorm-chat-sound-help"))
+            .changed()
+        {
+            acts.push(Act::ChatSound(sound));
+        }
+        ui.add_space(10.0);
+        self.quick_strip(ui, &p, acts);
+        let quitting = self.host.desk.quitting();
+        egui::ScrollArea::vertical()
+            .id_salt("folderstorm-host-characters")
+            .auto_shrink([false, true])
+            .max_height((ui.available_height() - 150.0).max(120.0))
+            .show(ui, |ui| {
+                let slots: Vec<(usize, Slot)> = self.host.desk.slots().map(|(i, s)| (i, s.clone())).collect();
+                if slots.is_empty() {
+                    ui.label(RichText::new(tr!("folderstorm-host-empty")).color(p.muted));
+                }
+                for (slot, state) in &slots {
+                    egui::Frame::new()
+                        .fill(p.field)
+                        .inner_margin(12.0)
+                        .corner_radius(radius)
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            self.character(ui, &p, *slot, state, now, quitting, acts);
+                        });
+                    ui.add_space(8.0);
+                }
+            });
+        ui.add_space(6.0);
+        if let Some(waits) = self.host.desk.voice_waits_for() {
+            let name = self.name(waits);
+            ui.label(RichText::new(tr!("folderstorm-host-voice-waits", name = name)).color(p.amber));
+            ui.add_space(4.0);
+        }
+        if !quitting && !self.host.desk.full() {
+            ui.horizontal(|ui| {
+                let width = (ui.available_width() - 190.0).max(120.0);
+                let field = widgets::text_field(ui, true, &mut self.new_profile, |b, _| {
+                    egui::TextEdit::singleline(b)
+                        .char_limit(profile::MAX_LEN)
+                        .hint_text(tr!("folderstorm-host-add-hint"))
+                        .desired_width(width)
+                });
+                let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let add = tr!("folderstorm-host-add");
+                if widgets::action_button(ui, &p, "plus", add, ActionKind::Flat, BUTTON).clicked() || entered {
+                    acts.push(Act::Add);
+                }
+            });
+            if let Some(error) = &self.add_error {
+                ui.label(RichText::new(error).color(p.danger));
+            }
+            self.comfort_buttons(ui, &p, acts);
+        }
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            self.footer(ui, &p, now, acts);
+        });
     }
 
     /// The name a character is called by: its avatar's once logged in, its
@@ -309,12 +303,12 @@ impl Window_ {
             if state.live() {
                 if !active && !state.closing {
                     let switch = tr!("folderstorm-host-switch");
-                    if widgets::action_button(ui, p, "switch-horizontal", switch, ActionKind::Primary, BUTTON).clicked() {
+                    if widgets::action_button(ui, p, "arrows-exchange", switch, ActionKind::Primary, BUTTON).clicked() {
                         acts.push(Act::Switch(slot));
                     }
                 } else if active {
                     let show = tr!("folderstorm-host-show");
-                    if widgets::action_button(ui, p, "switch-horizontal", show, ActionKind::Flat, BUTTON).clicked() {
+                    if widgets::action_button(ui, p, "arrows-exchange", show, ActionKind::Flat, BUTTON).clicked() {
                         acts.push(Act::Switch(slot));
                     }
                 }
@@ -336,7 +330,11 @@ impl Window_ {
                     if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
                         acts.push(Act::Dismiss);
                     }
-                } else if state.closing || self.host.desk.health(slot, now) != Health::Healthy || state.note.is_some() {
+                } else if state.closing
+                    || self.host.desk.health(slot, now) != Health::Healthy
+                    || state.note.is_some()
+                    || self.host.desk.starting_too_long(slot, now)
+                {
                     // offered only when something is wrong: never the usual way out
                     let end = tr!("folderstorm-host-end");
                     if widgets::action_button(ui, p, "player-stop-filled", end, ActionKind::FlatDanger, BUTTON)
@@ -346,7 +344,8 @@ impl Window_ {
                         acts.push(Act::AskEnd(slot));
                     }
                 }
-            } else if !quitting {
+            } else if !quitting && state.phase != Phase::Unmanaged {
+                // (a viewer let go runs by itself: closed there, by the user)
                 let (icon, label) = if matches!(state.phase, Phase::Ended { .. }) {
                     ("refresh", tr!("folderstorm-host-restart"))
                 } else {
@@ -553,8 +552,10 @@ fn status_line(slot: &Slot) -> String {
     match slot.phase {
         Phase::Stopped => tr!("folderstorm-host-stopped").to_owned(),
         Phase::Starting => tr!("folderstorm-host-starting").to_owned(),
+        Phase::Ended { crashed: false } if slot.ended => tr!("folderstorm-host-ended").to_owned(),
         Phase::Ended { crashed: false } => tr!("folderstorm-host-closed").to_owned(),
         Phase::Ended { crashed: true } => tr!("folderstorm-host-crashed").to_owned(),
+        Phase::Unmanaged => tr!("folderstorm-host-unmanaged").to_owned(),
         Phase::Running if slot.closing => tr!("folderstorm-host-closing").to_owned(),
         Phase::Running => match &slot.status {
             None => tr!("folderstorm-host-starting").to_owned(),
@@ -591,7 +592,11 @@ fn warnings(desk: &::folderstorm_session::host::Desk, slot: usize, state: &Slot,
         Some(Note::OpenElsewhere) => lines.push((tr!("folderstorm-host-note-elsewhere").to_owned(), false)),
         Some(Note::Refused(Refusal::Build)) => lines.push((tr!("folderstorm-host-note-build").to_owned(), true)),
         Some(Note::Refused(_)) => lines.push((tr!("folderstorm-host-note-refused").to_owned(), true)),
+        Some(Note::NoLink) => lines.push((tr!("folderstorm-host-note-no-link").to_owned(), true)),
         None => {}
+    }
+    if desk.starting_too_long(slot, now) {
+        lines.push((tr!("folderstorm-host-start-slow").to_owned(), false));
     }
     match desk.health(slot, now) {
         Health::Healthy => {}
@@ -872,5 +877,23 @@ mod tests {
         assert!(!shows(&drawn, "Each character runs in its own viewer"));
         // (wide again, for the picture a capture keeps)
         draw(&mut app, 1120, 760);
+    }
+
+    /// Every icon the host's window names is one the viewer embeds: an
+    /// unknown name draws a button without its icon.
+    #[test]
+    fn the_window_s_icons_exist() {
+        let source = include_str!("ui.rs");
+        let mut names: Vec<&str> = source
+            .split("p, \"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .filter(|name| !name.is_empty() && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'))
+            .collect();
+        names.extend(["refresh", "player-play-filled"]);
+        assert!(names.contains(&"arrows-exchange"), "{names:?}");
+        for name in names {
+            assert!(crate::ui::icons::embedded(name), "{name} is not an embedded icon");
+        }
     }
 }

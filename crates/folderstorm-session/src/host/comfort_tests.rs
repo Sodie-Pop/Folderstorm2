@@ -101,6 +101,15 @@ fn the_quick_action_follows_where_the_viewer_is() {
     d.launch(2, false);
     d.spawn_failed(2, 1);
     assert_eq!(d.quick(2), Quick::Launch, "could not start: try again");
+    // a viewer the host let go still runs: no second process for its slot
+    let (mut u, _) = desk(1);
+    u.launch(0, true);
+    u.refused(0, 1, Refusal::Token);
+    u.take_effects();
+    assert_eq!(u.quick(0), Quick::Nothing, "unmanaged");
+    assert_eq!(u.quick_act(0, now), Quick::Nothing);
+    assert_eq!(u.hotkey(Action::Character(0), now), None);
+    assert!(u.take_effects().is_empty());
     // "Quit all": nothing is started, the closing ones are left alone
     d.quit_all(now);
     assert_eq!(d.quick(0), Quick::Nothing);
