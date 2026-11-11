@@ -230,7 +230,7 @@ impl App {
             return;
         };
         let size = g.window.inner_size();
-        let center = (size.width as f32 / 2.0, size.height as f32 / 2.0);
+        let center = self.world_center((size.width, size.height)); // Folderstorm: world viewport
         if (self.cursor_pos.0 - center.0).abs() > 0.5 || (self.cursor_pos.1 - center.1).abs() > 0.5 {
             self.move_cursor(center);
         }
@@ -277,7 +277,7 @@ impl App {
             return;
         };
         let size = g.window.inner_size();
-        self.move_cursor((size.width as f32 / 2.0, size.height as f32 / 2.0));
+        self.move_cursor(self.world_center((size.width, size.height))); // Folderstorm: world viewport
     }
 
     fn move_cursor(&mut self, (x, y): (f32, f32)) {

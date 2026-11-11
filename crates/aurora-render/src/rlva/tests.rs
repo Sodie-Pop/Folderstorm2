@@ -324,7 +324,7 @@ fn rlva_gpu_spheres_preserve_uniform_images_and_compose_black_masks_without_glow
             },
         );
         let mut encoder = device.create_command_encoder(&Default::default());
-        scaled.encode(&mut encoder, &out);
+        scaled.encode(&mut encoder, &out, None);
         overlays.encode(
             &queue,
             &mut encoder,

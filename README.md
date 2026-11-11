@@ -1156,6 +1156,7 @@ exe before publishing; the local build also writes it to `version.txt`.
 | `-V`, `--version` | Prints the built version then exits, with no window, log or network |
 | `--uninstall` | Removes what Aurora registered on this computer, prints it and the folders left, then exits, with no window |
 | `--profile <name>` (Folderstorm2) | Runs a separate character profile: its own settings, cache, log and window title; one window per profile |
+| `--mcp-api` | Folderstorm2: allows local assistant access (the MCP bridge) for this session only, without saving it |
 
 - `--title`: the build profile ends the title (Dev, Release, Debug); the log
   file is `aurora-<text>.log` (`aurora-demo-<text>.log` in demo mode).
@@ -1188,6 +1189,12 @@ exe before publishing; the local build also writes it to `version.txt`.
   removed. On Windows, run it as `aurora-viewer.exe --uninstall | more` so
   the terminal waits for its text. With `AURORA_DEMO=1` it is a dry run that
   removes nothing.
+- `--mcp-api`: as "Allow local assistant access" with "Use these settings
+  for this session only" in Preferences › Privacy › Local assistant: the
+  bridge listens on 127.0.0.1 and writes `folderstorm2-mcp-<pid>.json` in
+  the settings folder for the `folderstorm-mcp` sidecar, until the viewer
+  quits; the saved setting is unchanged. See
+  [folderstorm/plans/mcp.md](folderstorm/plans/mcp.md).
 - `--login`: the account follows the usual "remember" choices; a single
   user name is written `<name> Resident`. `--grid` alone selects the grid of
   a new account's form.

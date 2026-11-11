@@ -453,6 +453,9 @@ pub struct Settings {
     pub update_grace: Option<crate::updater::GraceStart>,
     pub area_search: area_search::AreaSearch,
     pub crash_reports: CrashReports,
+    /// Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs).
+    #[serde(default)]
+    pub local_assistant: folderstorm_mcp_bridge::LocalAssistant,
     /// Firestorm Language: default follows the OS.
     pub language: String,
     /// Firestorm LanguageIsPublic, exposed through llGetAgentLanguage.
@@ -485,6 +488,8 @@ pub struct Settings {
     pub build: crate::build::BuildSettings,
     /// Camera (Firestorm "Move & View › View").
     pub camera: crate::camera::CameraSettings,
+    // Folderstorm: custom world viewport (folderstorm/viewport.rs)
+    pub folderstorm_viewport: crate::folderstorm::viewport::ViewportSettings,
     /// The crosshair in mouselook (ShowCrosshairs; #1166).
     pub crosshair: crate::ui::crosshair::Settings,
     /// LLViewerJoystick: device, axis mapping and separate avatar/flycam tuning.
@@ -753,6 +758,8 @@ pub struct Settings {
     pub show_appearance: bool,
     /// Crop outfit gallery previews to fill their frames (off: fit the whole image).
     pub appearance_fill_previews: bool,
+    // Folderstorm: the Outfit Gallery's photo width in points, 0 = automatic
+    pub appearance_gallery_size: f32,
     pub show_ao: bool,
     /// Loading / teleport screens show the last view, blurred.
     pub loading_backdrop: bool,
@@ -1898,6 +1905,7 @@ impl Default for Settings {
             update_grace: None,
             area_search: Default::default(),
             crash_reports: CrashReports::Ask,
+            local_assistant: Default::default(), // Folderstorm: local assistant
             language: "default".into(),
             language_is_public: true,
             browser_home_page: crate::ui::web_browser::DEFAULT_HOME.into(),
@@ -1911,6 +1919,7 @@ impl Default for Settings {
             dev_toolbox: None,
             build: Default::default(),
             camera: Default::default(),
+            folderstorm_viewport: Default::default(), // Folderstorm: world viewport
             crosshair: Default::default(),
             joystick: Default::default(),
             auto_hover_height: false,
@@ -2025,6 +2034,7 @@ impl Default for Settings {
             show_inventory: false,
             show_appearance: false,
             appearance_fill_previews: false,
+            appearance_gallery_size: 0.0, // Folderstorm: thumbnail size
             show_ao: false,
             ao: Default::default(),
             bridge: Default::default(),
