@@ -117,6 +117,10 @@ pub enum Action {
     /// closest to the body (LLAppearanceMgr::reorderWearable).
     PlaceLayer(Uuid, usize),
     Revert,
+    /// Folderstorm: the Current Outfit folder's links as they were before
+    /// the last outfit replacement (ui/appearance/previous_look.rs); empty
+    /// from the menu, filled with the remembered look before it is planned.
+    RestoreLook(Vec<aurora_net::outfits::OutfitLink>),
 }
 
 /// The picture of an outfit (LLOutfitGallery::refreshOutfit): the folder's
@@ -777,6 +781,8 @@ pub fn plan(inv: &Inventory, action: Action, worn: &HashMap<Uuid, u8>) -> Result
             }
             change.links = next;
         }
+        // Folderstorm: the remembered look, checked when it was filled in
+        Action::RestoreLook(links) => change.links = links,
         Action::Revert => {
             return plan(
                 inv,
