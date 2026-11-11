@@ -22,10 +22,18 @@
 //!   its process has ended, and then it can be started again.
 //! - **Nothing stale.** Every launch of a slot has a number; what comes
 //!   from an earlier launch of that slot is dropped.
+//! - **Monitors (checkpoint 5).** A background character whose monitor is
+//!   open **and on screen in the host's window** is asked for pictures
+//!   ([`Role::Monitor`]), within the budget all monitors share; closed,
+//!   scrolled away, or with the host's window hidden or minimised, it is a
+//!   plain background character again, its 3D off. The active character
+//!   has no monitor: it is in front. A character whose monitor is open is
+//!   not minimised behind (a minimised window has no picture).
 
 use crate::behind::Behind3d;
 use crate::hotkeys;
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
+use crate::monitor::{self, FrameHeader, MAX_MONITORS};
 use crate::profile::ProfileName;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -69,6 +77,9 @@ pub struct SlotConfig {
     /// Checkpoint 4: heard in the background or not.
     #[serde(default)]
     pub sound: BackgroundSound,
+    /// Checkpoint 5: its monitor is open, with that size and rate.
+    #[serde(default)]
+    pub monitor: Option<monitor::Spec>,
 }
 
 /// The host's settings file (`session-host.json`): the characters, and the
@@ -134,6 +145,7 @@ impl Config {
                     profile: format!("demo-{}", i + 1),
                     standby: Standby::Warm,
                     sound: BackgroundSound::Muted,
+                    monitor: None,
                 })
                 .collect(),
             ..Self::default()
@@ -189,6 +201,10 @@ pub struct Slot {
     pub standby: Standby,
     /// What is heard of it while another character is active.
     pub sound: BackgroundSound,
+    /// Its monitor is open, with that size and rate.
+    pub monitor: Option<monitor::Spec>,
+    /// Its monitor is on screen in the host's window.
+    seen: bool,
     pub phase: Phase,
     /// The viewer's last report.
     pub status: Option<Status>,
@@ -218,6 +234,8 @@ impl Slot {
             profile,
             standby,
             sound: BackgroundSound::Muted,
+            monitor: None,
+            seen: false,
             phase: Phase::Stopped,
             status: None,
             note: None,
@@ -250,6 +268,12 @@ impl Slot {
     /// The number of its launch: what the host tags its threads with.
     pub fn launch(&self) -> u32 {
         self.launch
+    }
+
+    /// How it waits behind: as chosen, but never minimised while its
+    /// monitor is open (a minimised window has no picture to show).
+    pub fn waits(&self) -> Standby {
+        if self.monitor.is_some() { Standby::Warm } else { self.standby }
     }
 
     /// The viewer holds the latest assignment sent to it.
@@ -305,6 +329,25 @@ pub struct Desk {
     effects: Vec<Effect>,
 }
 
+/// Where a character's monitor is (plan section 12).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Watch {
+    /// No monitor is open for it.
+    Closed,
+    /// Its viewer does not run, is closing, or is not managed.
+    NoViewer,
+    /// It is the active character: in front, nothing to watch.
+    InFront,
+    /// Its monitor is not on screen in the host's window (scrolled away,
+    /// another page, the window minimised or hidden): nothing is asked.
+    Hidden,
+    /// More monitors are on screen than run at once.
+    TooMany,
+    /// Its viewer is asked for pictures. `lowered`: less often than
+    /// chosen, to fit the budget all monitors share.
+    Asked { order: monitor::Order, lowered: bool },
+}
+
 /// What a character's quick action does now (plan section 13): the one
 /// button, and the one hotkey, that does the right thing for where its
 /// viewer is. Whatever it is, a slot never gets a second process.
@@ -345,6 +388,8 @@ pub enum Voice {
 
 #[cfg(test)]
 mod comfort_tests;
+#[cfg(test)]
+mod monitor_tests;
 
 impl Desk {
     pub fn new(config: Config) -> Self {
@@ -354,6 +399,7 @@ impl Desk {
             if let (Some(place), Ok(name)) = (slots.get_mut(usize::from(s.slot)), ProfileName::parse(&s.profile)) {
                 *place = Some(Slot {
                     sound: s.sound,
+                    monitor: s.monitor,
                     ..Slot::new(name, s.standby)
                 });
             }
@@ -380,6 +426,7 @@ impl Desk {
                     profile: s.profile.shown().to_owned(),
                     standby: s.standby,
                     sound: s.sound,
+                    monitor: s.monitor,
                 })
                 .collect(),
             stage: self.stage,
@@ -596,6 +643,95 @@ impl Desk {
         }
     }
 
+    /// Opens (with that size and rate), changes or closes (None) a
+    /// character's monitor. Closing it returns its viewer to a plain
+    /// background character: 3D off.
+    pub fn set_monitor(&mut self, slot: usize, monitor: Option<monitor::Spec>) {
+        let Some(s) = self.slot_mut(slot).filter(|s| s.monitor != monitor) else {
+            return;
+        };
+        s.monitor = monitor;
+        if monitor.is_none() {
+            s.seen = false;
+        }
+        self.effects.push(Effect::Save);
+        self.sync(None);
+    }
+
+    /// Which monitors are on screen in the host's window now: all false
+    /// while the window is minimised or hidden. A monitor nobody can see
+    /// asks nothing of its viewer.
+    pub fn monitors_seen(&mut self, seen: [bool; MAX_SLOTS], now: Instant) {
+        let mut changed = false;
+        for (slot, seen) in seen.into_iter().enumerate() {
+            if let Some(s) = self.slot_mut(slot) {
+                let seen = seen && s.monitor.is_some();
+                changed |= std::mem::replace(&mut s.seen, seen) != seen;
+            }
+        }
+        if changed {
+            self.sync(Some(now));
+        }
+    }
+
+    /// The characters watched now, in slot order: running in the
+    /// background, not closing, their monitor open and on screen. The
+    /// first [`MAX_MONITORS`] only.
+    fn watched(&self) -> Vec<(usize, monitor::Spec)> {
+        self.slots()
+            .filter(|(i, s)| Some(*i) != self.active && s.phase == Phase::Running && !s.closing && s.seen)
+            .filter_map(|(i, s)| s.monitor.map(|spec| (i, spec)))
+            .take(MAX_MONITORS)
+            .collect()
+    }
+
+    /// What each slot's viewer is asked for its monitor, within the budget
+    /// all monitors share.
+    fn orders(&self) -> [Option<monitor::Order>; MAX_SLOTS] {
+        let watched = self.watched();
+        let specs: Vec<monitor::Spec> = watched.iter().map(|(_, spec)| *spec).collect();
+        let mut orders = [None; MAX_SLOTS];
+        for ((slot, _), order) in watched.iter().zip(monitor::grant(&specs)) {
+            orders[*slot] = Some(order);
+        }
+        orders
+    }
+
+    /// Where a character's monitor is.
+    pub fn watch(&self, slot: usize) -> Watch {
+        let Some((s, spec)) = self.slot(slot).and_then(|s| s.monitor.map(|spec| (s, spec))) else {
+            return Watch::Closed;
+        };
+        if s.phase != Phase::Running || s.closing {
+            Watch::NoViewer
+        } else if self.active == Some(slot) {
+            Watch::InFront
+        } else if !s.seen {
+            Watch::Hidden
+        } else {
+            match self.orders()[slot] {
+                Some(order) => Watch::Asked {
+                    order,
+                    lowered: order.interval_ms > spec.rate.interval_ms(),
+                },
+                None => Watch::TooMany,
+            }
+        }
+    }
+
+    /// Whether a picture that came from a viewer is shown: its launch is
+    /// the slot's current one, its monitor is being asked for pictures,
+    /// and the picture fits the size asked. Anything else (a picture on
+    /// its way when the monitor closed, the character came to the front,
+    /// or the size changed) is dropped.
+    pub fn frame_wanted(&self, slot: usize, launch: u32, header: &FrameHeader) -> bool {
+        self.slot(slot)
+            .filter(|s| s.launch == launch && s.phase == Phase::Running)
+            .and_then(|s| s.sent)
+            .and_then(|(sent, _)| sent.role.monitor())
+            .is_some_and(|order| header.fits(order.size))
+    }
+
     /// Tells the user why a slot did not start.
     pub fn note(&mut self, slot: usize, note: Note) {
         if let Some(s) = self.slot_mut(slot) {
@@ -617,6 +753,8 @@ impl Desk {
             launch,
             activate,
             sound: s.sound,
+            monitor: s.monitor,
+            seen: s.seen,
             phase: Phase::Starting,
             ..Slot::new(s.profile.clone(), s.standby)
         };
@@ -644,7 +782,7 @@ impl Desk {
             self.activate(slot, true, now);
         } else {
             self.sync(Some(now));
-            if self.slot(slot).is_some_and(|s| s.standby == Standby::Economy) {
+            if self.slot(slot).is_some_and(|s| s.waits() == Standby::Economy) {
                 self.send(slot, ToViewer::Minimise);
             }
         }
@@ -909,7 +1047,7 @@ impl Desk {
         if let Some(before) = before.filter(|b| *b != slot)
             && self
                 .slot(before)
-                .is_some_and(|s| s.phase == Phase::Running && s.standby == Standby::Economy)
+                .is_some_and(|s| s.phase == Phase::Running && s.waits() == Standby::Economy)
         {
             self.send(before, ToViewer::Minimise);
         }
@@ -919,6 +1057,7 @@ impl Desk {
     /// when it is sent (None: nothing can have changed but the standby).
     fn sync(&mut self, now: Option<Instant>) {
         let active = self.active;
+        let orders = self.orders();
         for slot in 0..MAX_SLOTS {
             let voice_held_elsewhere = self.slots().any(|(i, s)| i != slot && s.voice_out);
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running) else {
@@ -927,9 +1066,13 @@ impl Desk {
             let is_active = active == Some(slot);
             let mut wanted = Assignment {
                 seq: 0,
-                role: if is_active { Role::Active } else { Role::Background },
+                role: match orders[slot] {
+                    _ if is_active => Role::Active,
+                    Some(order) => Role::Monitor(order),
+                    None => Role::Background,
+                },
                 behind: Behind3d::Off,
-                standby: s.standby,
+                standby: s.waits(),
                 sound_muted: !is_active && s.sound == BackgroundSound::Muted,
                 voice_allowed: is_active && !voice_held_elsewhere,
             };
@@ -1001,6 +1144,7 @@ mod tests {
             profile: profile.into(),
             standby: Standby::Warm,
             sound: BackgroundSound::Muted,
+            monitor: None,
         };
         let config = Config {
             slots: vec![

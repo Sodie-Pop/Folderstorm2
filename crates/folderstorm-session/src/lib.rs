@@ -37,6 +37,12 @@
 //! - [`copy`]: "New character profile…": what a new profile takes from
 //!   the one it is made from, and what it never takes;
 //! - [`host`]: quick actions, next and previous, who holds the voice.
+//!
+//! Checkpoint 5 (monitors, section 12):
+//! - [`monitor`]: sizes, rates and the budget all monitors share, when a
+//!   viewer takes a picture and how it lowers its rate on a busy card,
+//!   the picture's size and its header's checks, "latest only";
+//! - [`host`]: which characters are watched, and what each is asked.
 
 pub mod behind;
 pub mod chat;
@@ -47,4 +53,5 @@ pub mod host;
 pub mod hotkeys;
 pub mod ipc;
 pub mod managed;
+pub mod monitor;
 pub mod profile;

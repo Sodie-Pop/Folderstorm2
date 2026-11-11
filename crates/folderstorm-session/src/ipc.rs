@@ -27,17 +27,35 @@
 //! of the one viewer it is for, with that viewer's login generation: no
 //! message names another character, so none can be sent as another.
 //!
+//! Since protocol 3 (checkpoint 5, plan section 12) a background viewer
+//! may be asked for its monitor's pictures ([`Role::Monitor`]) and sends
+//! them ([`ToHost::Frame`]).
+//!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
 //! and bounded before anything shows it ([`Status::cleaned`]).
+//!
+//! **A monitor's picture** is the one thing that is not JSON: a 640 × 360
+//! picture is 691 200 bytes of RGB, ten times [`MAX_FRAME`]. It travels on
+//! the viewer's own endpoint, right after the [`ToHost::Frame`] message
+//! that announces it, as exactly the bytes that message's
+//! [`FrameHeader`] says ([`write_picture`], [`read_picture`]). The header
+//! is checked first: a size no monitor shows, or a byte count that is not
+//! that size's, and nothing more is read of that viewer
+//! ([`FrameError::Picture`]); the most that is ever allocated for one is
+//! [`crate::monitor::MAX_FRAME_BYTES`]. No encoder or decoder is involved,
+//! and no other pipe, socket or shared memory than the endpoint the
+//! viewer already reports on, with its checks (this logon only, the
+//! launch's process and one-time token).
 
 use crate::behind::Behind3d;
+use crate::monitor::{self, FrameHeader};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -106,6 +124,27 @@ pub enum Role {
     Active,
     #[default]
     Background,
+    /// A background character whose monitor is watched in the host's
+    /// window: as [`Role::Background`] in everything (3D off, sound,
+    /// voice, standby), but it takes a small picture of its own view now
+    /// and then, as the order says.
+    Monitor(monitor::Order),
+}
+
+impl Role {
+    /// Not the active character: behind, whether watched or not.
+    pub fn background(self) -> bool {
+        self != Self::Active
+    }
+
+    /// The pictures asked of this viewer, if any, never faster than a
+    /// monitor's fastest rate.
+    pub fn monitor(self) -> Option<monitor::Order> {
+        match self {
+            Self::Monitor(order) => Some(order.cleaned()),
+            Self::Active | Self::Background => None,
+        }
+    }
 }
 
 /// How a background character waits.
@@ -520,6 +559,10 @@ pub struct Status {
     pub paused_3d: bool,
     pub sound_muted: bool,
     pub voice_allowed: bool,
+    /// Its monitor: off, live, slowed by a busy card, or why it has no
+    /// picture.
+    #[serde(default)]
+    pub monitor: monitor::State,
 }
 
 /// The longest texts a status may carry, in characters.
@@ -580,6 +623,9 @@ pub enum ToHost {
         id: u64,
         outcome: SendOutcome,
     },
+    /// A monitor's picture follows: exactly the header's bytes, raw, right
+    /// after this message ([`write_picture`], [`read_picture`]).
+    Frame(FrameHeader),
 }
 
 /// Why a frame was not read.
@@ -592,6 +638,9 @@ pub enum FrameError {
     TooLong(usize),
     /// Not the JSON of the expected message.
     Invalid(serde_json::Error),
+    /// A picture's header that is not one a monitor shows: nothing of what
+    /// follows is read.
+    Picture(FrameHeader),
 }
 
 impl std::fmt::Display for FrameError {
@@ -601,6 +650,7 @@ impl std::fmt::Display for FrameError {
             Self::Io(e) => write!(f, "{e}"),
             Self::TooLong(n) => write!(f, "a frame of {n} bytes is over the limit"),
             Self::Invalid(e) => write!(f, "not a message ({e})"),
+            Self::Picture(h) => write!(f, "not a monitor's picture ({} x {}, {} bytes)", h.width, h.height, h.bytes),
         }
     }
 }
@@ -639,6 +689,32 @@ pub fn read_frame<T: DeserializeOwned>(from: &mut impl Read) -> Result<T, FrameE
     let mut body = vec![0u8; length];
     from.read_exact(&mut body).map_err(FrameError::Io)?;
     serde_json::from_slice(&body).map_err(FrameError::Invalid)
+}
+
+/// Writes a monitor's picture: the [`ToHost::Frame`] message, then `rgb`,
+/// in a single write. Refused before anything is written when `rgb` is not
+/// what the header says or the header is not a monitor's.
+pub fn write_picture(to: &mut impl Write, header: FrameHeader, rgb: &[u8]) -> io::Result<()> {
+    if header.payload() != Some(rgb.len()) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a monitor's picture"));
+    }
+    let body = serde_json::to_vec(&ToHost::Frame(header)).map_err(io::Error::other)?;
+    let mut frame = Vec::with_capacity(4 + body.len() + rgb.len());
+    frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    frame.extend_from_slice(&body);
+    frame.extend_from_slice(rgb);
+    to.write_all(&frame)?;
+    to.flush()
+}
+
+/// Reads the picture a [`ToHost::Frame`] message announced. The header is
+/// checked before anything is allocated or read; after any error the
+/// stream is out of step and the caller stops reading it.
+pub fn read_picture(from: &mut impl Read, header: &FrameHeader) -> Result<Vec<u8>, FrameError> {
+    let bytes = header.payload().ok_or(FrameError::Picture(*header))?;
+    let mut rgb = vec![0u8; bytes];
+    from.read_exact(&mut rgb).map_err(FrameError::Io)?;
+    Ok(rgb)
 }
 
 /// The name of a launch's endpoint, without its folder or pipe prefix:
@@ -1063,5 +1139,118 @@ mod tests {
         let mut wire = Vec::new();
         write_frame(&mut wire, &serde_json::json!({"SendChatAs": {"slot": 2, "text": "x"}})).expect("written");
         assert!(matches!(read_frame::<ToViewer>(&mut wire.as_slice()), Err(FrameError::Invalid(_))));
+    }
+
+    #[test]
+    fn a_monitor_s_picture_follows_its_header_and_the_reports_go_on_after_it() {
+        let header = FrameHeader::new(2, 41, 320, 180).expect("a header");
+        let rgb: Vec<u8> = (0..320 * 180 * 3).map(|i| (i % 251) as u8).collect();
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToHost::Heartbeat { loop_count: 1 }).expect("written");
+        write_picture(&mut wire, header, &rgb).expect("written");
+        write_frame(&mut wire, &ToHost::Heartbeat { loop_count: 2 }).expect("written");
+        let mut read = wire.as_slice();
+        assert_eq!(read_frame::<ToHost>(&mut read).expect("read"), ToHost::Heartbeat { loop_count: 1 });
+        let ToHost::Frame(told) = read_frame::<ToHost>(&mut read).expect("read") else {
+            panic!("not a picture's header");
+        };
+        assert_eq!(told, header);
+        assert_eq!(read_picture(&mut read, &told).expect("the picture"), rgb);
+        // the stream is in step after the picture
+        assert_eq!(read_frame::<ToHost>(&mut read).expect("read"), ToHost::Heartbeat { loop_count: 2 });
+        // the largest picture passes, cut anywhere by the pipe
+        let header = FrameHeader::new(0, 1, 640, 360).expect("a header");
+        let rgb = vec![9u8; monitor::MAX_FRAME_BYTES];
+        let mut wire = Vec::new();
+        write_picture(&mut wire, header, &rgb).expect("written");
+        let mut trickle = Trickle(&wire);
+        assert_eq!(read_frame::<ToHost>(&mut trickle).expect("read"), ToHost::Frame(header));
+        assert_eq!(
+            read_picture(&mut trickle, &header).expect("the picture").len(),
+            monitor::MAX_FRAME_BYTES
+        );
+    }
+
+    #[test]
+    fn a_picture_that_is_not_a_monitor_s_is_neither_written_nor_read() {
+        let header = FrameHeader::new(0, 1, 320, 180).expect("a header");
+        let rgb = vec![0u8; 320 * 180 * 3];
+        // written whole or not at all
+        let mut wire = Vec::new();
+        assert!(write_picture(&mut wire, header, &rgb[1..]).is_err());
+        assert!(write_picture(&mut wire, FrameHeader { width: 4000, ..header }, &rgb).is_err());
+        assert!(wire.is_empty());
+        // a header that lies is refused before a byte of what follows is
+        // read or any room is made for it
+        struct Never;
+        impl Read for Never {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                panic!("nothing is read after a refused header");
+            }
+        }
+        for lying in [
+            FrameHeader { bytes: u32::MAX, ..header },
+            FrameHeader {
+                bytes: header.bytes + 1,
+                ..header
+            },
+            FrameHeader { bytes: 0, ..header },
+            FrameHeader {
+                width: u16::MAX,
+                height: u16::MAX,
+                bytes: u32::MAX,
+                ..header
+            },
+            FrameHeader {
+                width: 0,
+                height: 0,
+                bytes: 0,
+                ..header
+            },
+        ] {
+            assert!(matches!(read_picture(&mut Never, &lying), Err(FrameError::Picture(_))), "{lying:?}");
+        }
+        // a picture cut short is an error, not a short picture
+        let mut wire = Vec::new();
+        write_picture(&mut wire, header, &rgb).expect("written");
+        wire.truncate(wire.len() - 10);
+        let mut read = wire.as_slice();
+        let ToHost::Frame(told) = read_frame::<ToHost>(&mut read).expect("read") else {
+            panic!("not a picture's header");
+        };
+        assert!(matches!(read_picture(&mut read, &told), Err(FrameError::Io(_))));
+    }
+
+    #[test]
+    fn a_monitor_s_order_and_state_travel_with_the_assignment_and_the_status() {
+        let order = monitor::Order {
+            size: monitor::Size::Medium,
+            interval_ms: 768,
+        };
+        let watched = Assignment {
+            role: Role::Monitor(order),
+            ..assignment(9)
+        };
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToViewer::Assign(watched)).expect("written");
+        assert_eq!(
+            read_frame::<ToViewer>(&mut wire.as_slice()).expect("read"),
+            ToViewer::Assign(watched)
+        );
+        assert_eq!(watched.role.monitor(), Some(order));
+        assert!(watched.role.background());
+        assert_eq!(Role::Background.monitor(), None);
+        assert_eq!(Role::Active.monitor(), None);
+        assert!(!Role::Active.background());
+        let status = Status {
+            monitor: monitor::State::Slowed,
+            ..Default::default()
+        };
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToHost::Status(Box::new(status.clone()))).expect("written");
+        assert_eq!(
+            read_frame::<ToHost>(&mut wire.as_slice()).expect("read"),
+            ToHost::Status(Box::new(status))
+        );
     }
 }
