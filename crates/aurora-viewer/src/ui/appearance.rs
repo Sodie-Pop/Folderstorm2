@@ -1964,7 +1964,9 @@ pub fn show(
                         aurora_i18n::tr!("ui-appearance-fill-previews"),
                         &mut st.fill_previews,
                     );
-                    gallery_size::menu_rows(ui, p, &mut st.gallery_size); // Folderstorm: thumbnail size
+                    if !st.showcase {
+                        gallery_size::menu_rows(ui, p, &mut st.gallery_size); // Folderstorm: the tiles' thumbnail size
+                    }
                     menu::separator(ui, p);
                 }
                 if !st.editing && st.tab < 2 {

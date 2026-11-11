@@ -19987,6 +19987,7 @@ impl ApplicationHandler for App {
                 if view == "gallery-size" {
                     ui::appearance::demo_previews(&self.egui_ctx, &mut self.world.inventory, &mut self.ui_images);
                     self.settings.appearance_gallery_size = 96.0;
+                    self.settings.classic_outfit_gallery = true; // the size applies to the tiles, not the showcase
                 }
                 let many = crate::world::appearance::demo_outfit_count();
                 if many > 0 {

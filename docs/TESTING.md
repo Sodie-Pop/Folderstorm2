@@ -9253,8 +9253,10 @@ gallery's double-click continues to open the outfit's contents.
   L$ 10 each, the outfit's previous HD picture goes to the Trash); the
   window counts "HD pictures saved: n (L$ …)", those still being sent and
   those not sent. The log says `outfit HD picture: …` for each.
-- `gallery-size` (Folderstorm2): the gallery with 96-pixel thumbnails, as many
-  columns as fit; ⚙ › "Choose the thumbnail size" shows the slider (80–256).
+- `gallery-size` (Folderstorm2): the gallery as tiles (Preferences › Aurora ›
+  Outfit gallery › Tiles (Legacy)) with 96-pixel thumbnails, as many columns
+  as fit; ⚙ › "Choose the thumbnail size" shows the slider (80–256). The
+  showcase has its own layout: the option is hidden there.
 - `gallery-fit` / `gallery-fill`: local portrait, landscape and square preview
   cards. Fit shows the whole image; Fill uses a centred crop without stretching.
   The discs stay round, the images stay inside their frames and the names and
