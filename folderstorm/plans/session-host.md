@@ -734,8 +734,9 @@ May be two small PRs: 1a profiles, 1b behind policy.
     (a conflict at each upstream change of those lines).
   - **RLVa.** Receive restrictions are applied by Aurora before a line is
     stored, so a refused line never reaches the export (tested with
-    `@recvchat`, `@recvim`). Names and places are replaced at display in
-    Aurora; the export uses the same functions at export time, and while
+    `@recvchat`, `@recvim`). Names and places are replaced by Aurora
+    partly when a line is stored and partly when it is drawn; the export
+    uses the drawing's own functions at export time, and while
     RLVa is on it checks every 2 s that the last 200 lines told per
     conversation still read as the window shows them: when one does not (a
     restriction came, a hidden resident's name was learnt) the conversation
