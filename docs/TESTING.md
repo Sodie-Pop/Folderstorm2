@@ -5373,7 +5373,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view); with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors` (or `all`), those panels start in windows of their own |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view); with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6843,11 +6843,60 @@ failure. Grid validation and any paid upload are performed by the human.
     - nothing here touches the characters' windows: popping a panel out
       or back never brings a viewer forward, moves it or changes which
       one is active.
+  - **inbox, colours and aliases, condensed layout** (checkpoint 7).
+    `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (any of the
+    three, or `all`; with `AURORA_DEMO_SESSION_HOST`):
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_POLISH=all cargo run -p aurora-viewer -- --title "Test host"`.
+    `AURORA_DEMO_SESSION_HOST_PANELS` also knows `inbox`.
+    What to look at:
+    - **inbox** (`inbox`: sample questions, the host's own, for each demo
+      character once it is in the world; no viewer has them). At the top
+      of the host's window, "Inbox (4)" in the warning colour beside the
+      other panels' boxes, and under it a band: one row per question, the
+      oldest first, each with its character, the question, its age
+      ("just now", then minutes) and **Switch to answer**. The button
+      brings that character's window forward and does nothing else:
+      nothing is accepted from the host, and the row stays (a real
+      question leaves once it is answered or expires in its own window;
+      the demo's samples stay). Tick **Inbox** under "In a window of its
+      own": the band leaves for a window whose title says how many wait;
+      the chat's "All" tab then lists what waits itself, as before.
+      Closing that window docks the inbox back. Without `inbox`, the
+      demo's own teleport offer is the only question, when a demo viewer
+      lists it.
+    - **colours and aliases** (`colours`: the demo's characters have a
+      colour each and the first two the aliases "Main" and "Shop
+      keeper"). On a card, the palette button beside the name ("Alias
+      and colour" on hover): type an alias (24 characters at most, one
+      line) and **Set** or Enter; click a swatch, or the struck-through
+      ring for no colour. The alias replaces the
+      name on the card (the real name stays beside it, in grey), on the
+      quick-action button, on the chat's tab and in "All"
+      (`[Main › Nearby chat]`, in the colour), under a monitor's picture,
+      in the inbox and in the condensed lines; the colour is a dot or a
+      line beside it. Above the chat's box, "Send as Main (demo-1) — …"
+      always says the real name too. Hover a tab or a quick-action button
+      for the real name. Outside the demo both are in
+      `session-host.json` (`colour`, `alias` per slot); no viewer's
+      window, title or log shows either.
+    - **condensed** (`condensed`: the host starts in it). "Condensed" at
+      the top of the characters' panel: one line per character (colour,
+      number and alias or name, where its viewer is, what is wrong,
+      voice, monitor, unread lines, what waits for an answer, and its
+      quick action: Switch, Show, Log in, Start, Restart). Hover the
+      signs and the name. "Cards" turns back. Tick **Chat** under "In a
+      window of its own": the host's window is the lines alone and can
+      be made small (down to 340 × 200 points) beside the characters'
+      windows. With a monitor open and the monitors docked, the watched
+      viewer's log says `session monitor: off` in this layout (its
+      picture is in the cards); with the monitors in their own window it
+      goes on. Outside the demo the choice is `condensed` in
+      `session-host.json`.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames (its monitors included), and
-  each panel's own window to `<file>-chat.png`, `<file>-controls.png`
-  or `<file>-monitors.png`.
+  each panel's own window to `<file>-chat.png`, `<file>-controls.png`,
+  `<file>-monitors.png` or `<file>-inbox.png`.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

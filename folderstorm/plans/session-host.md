@@ -470,6 +470,9 @@ available.
   list and New IM in the host, session sets (launch several profiles
   together, with no auto-login), the bird's-eye switch effect,
   condensed or minimal host modes, MCP session routing (FEATURES 4.6).
+  (Checkpoint 7 built the colours and aliases, the attention inbox and
+  the condensed mode, and decided against the bird's-eye effect as C++
+  had it: see its "As built".)
 - **Creators' permissions:** none of this shows, copies or exports assets or
   asset ids. Monitors show what that character's viewer shows and are never
   saved. Profile copy moves the user's own settings files only.
@@ -1232,7 +1235,253 @@ May be two small PRs: 1a profiles, 1b behind policy.
 
 ### Checkpoint 7: polish picked by the human
 
-- See section 13.
+- **The human's picks (2026-11-11)** from section 13 and from what
+  checkpoint 6 left: an attention inbox, character colours and aliases, a
+  condensed host mode, and the bird's-eye switch effect *if it can be done
+  without risk for the viewers' graphics*. MCP session routing (FEATURES
+  4.6) is not part of it: it waits for the MCP receipts plan's login
+  binding.
+- **Acceptance:** nothing is answered from the host; an alias and a colour
+  never leave the host (not to a viewer, not to a grid); a colour is
+  readable on any skin; the condensed layout works with panels popped out;
+  no viewer draws more than its policy allows, and checkpoint 1's rules
+  (R4, R5) are untouched.
+
+- **As built (branch `claude/session-checkpoint-7`, on top of checkpoint
+  6):** the rules are pure and tested in `crates/folderstorm-session`
+  (`inbox`: one list across characters, its order, its bounds, one entry
+  per question, what leaves it; `identity`: the colours, how one is fitted
+  to a theme's contrast, what an alias may be; `host`: colour, alias and
+  the condensed choice among the settings, checked when the file is read,
+  in `host/polish_tests.rs`; `panels`: the inbox is a fourth panel). In
+  the viewer: `host/faces.rs` (how a character is shown: alias, real
+  name, colour as this theme draws it), `host/ui/inbox.rs`,
+  `host/ui/identity.rs`, `host/ui/condensed.rs`.
+  - **Upstream hooks (new): none.** Everything is in the fork's own
+    files; the locales and `docs/TESTING.md` get lines, as before. The
+    viewer's side of the link is unchanged: no new message, the protocol
+    number stays.
+  - **Attention inbox.** One list of what waits for an answer in the
+    characters' own windows: whatever a viewer lists as attention items
+    since checkpoint 3: the notifications of its list that ask for an
+    answer (teleport, friendship, inventory, group, scripts' dialogs and
+    permission questions, links, calls, and the rest as "Other"). What
+    only informs, such as a payment's notice, asks nothing and is not
+    listed, there or here. Each row: the character (colour,
+    alias or name), the question in a line, its age, **Switch to
+    answer**.
+    - **Nothing is answered from the host**, as in checkpoint 3: the
+      inbox has no accept, decline or dismiss, and its only act is the
+      desk's switch. Nothing about a question is ever written to a
+      viewer (tested: drawing and switching leave the chat's effects
+      empty).
+    - **The viewers' lists are the truth** (`inbox::Inbox::set`, fed
+      from what the chat keeps of each viewer's list, which already
+      drops another launch's or login's): a question is listed while its
+      viewer lists it; it leaves when the viewer's next list does not
+      have it (answered or expired there), when the character logs out
+      or in again, when its viewer ends or is let go, when the character
+      is removed. The host expires nothing by itself: what is shown
+      still waits there. A viewer that stops answering keeps its last
+      list, with ages that grow, and its card says it does not answer.
+    - **Age** counts from when the host first saw the question listed
+      (the link carries no time): "just now", minutes, hours; the hover
+      says so. **Order:** oldest first (the nearest to expiring in its
+      viewer), then by character, then by the viewer's number.
+      **One entry per question:** a question is one login's number in
+      one viewer; listed twice it is one row, and the same number after
+      another login is another question with a new age.
+      **Bounded:** 16 per character (the link's own bound), 80 in all;
+      what a viewer has beyond that is counted ("3 more wait in …'s own
+      window"), not listed. Counts saturate.
+    - **A panel of its own, the fourth** (decision). Docked, it is a
+      band at the top of the host's window, drawn only while something
+      waits, above whichever page the window shows (characters, chat, or
+      "these panels are elsewhere"), so a question is in sight whatever
+      else is popped out; it scrolls within about four rows. "In a
+      window of its own: Inbox" gives it a window (remembered and
+      brought back on screen like the others; closing it docks it),
+      whose title says how many wait. Why not a section of the chat or
+      of the characters: either of those can be out, on another page of
+      a narrow window, or (the characters) condensed; a list whose point
+      is to be seen must not depend on them. Why not only a window: with
+      nothing popped out the host is one window, and stays so.
+    - **Count badge:** beside "Inbox" in the host's window's top strip
+      ("Inbox (3)", in the warning colour), wherever the inbox is; in the
+      inbox's heading; in its own window's title; and per character in
+      the condensed lines (a bell and a count).
+    - **The chat keeps its own lists** (checkpoint 3): a character's tab
+      still shows what waits for it. "All" leaves it to the inbox when
+      the inbox is drawn in the same window, and lists it itself, as
+      before, when the inbox is in its own window or the chat is.
+  - **Character colours and aliases.**
+    - **Colour:** none, or one of eight (red, orange, yellow, green,
+      teal, blue, violet, pink). What is drawn is the colour **fitted to
+      the theme** (`identity::Colour::fitted`): the palette's own when it
+      has a contrast of 4.5 : 1 (WCAG AA for text) with the panel, the
+      field and the raised backgrounds of the skin in use; otherwise
+      moved towards white (dark skins) or black (light ones) just as far
+      as needed. Tested on the default skin, a light one, the high
+      contrast palette and the worst background there is; the eight stay
+      apart from one another after the move. Colour is never the only
+      cue: the alias or name is always beside it.
+    - **Alias:** at most 24 characters, on one line, nothing invisible
+      (control characters, direction overrides, zero-width characters
+      are refused, so an alias cannot pass for another name); the spaces
+      around it go; empty takes it away. The editor refuses a text that
+      is no alias and says why; a file's alias that is none is dropped,
+      never cut into another.
+    - **Where:** the cards (dot, alias, then the real name and the
+      profile in grey), the quick-action buttons (alias, a line in the
+      colour, the real name in the hover), the chat's tabs (alias, a
+      line in the colour, the real name on hover) and its "All" lines
+      (`[alias › conversation]` in the colour), the monitors' labels
+      (dot, alias), the inbox's rows, the condensed lines.
+      **"Send as" always says the real name too**: `Send as Main (Jane
+      Doe) — Nearby chat`. Not on the title of a panel's window: those
+      are named after the panel, not after a character (the inbox's
+      title has its count). Not on the viewers' own windows or taskbar
+      buttons: they are the viewers', and nothing of this is told to
+      them.
+    - **Kept** in `session-host.json`, per slot: `colour` (a name; one
+      this build does not know reads as none, so a later build's file
+      still reads) and `alias` (absent when there is none). An older file
+      has neither. Removing a character from the desk takes both with
+      it.
+    - **Never sent anywhere:** `Desk::set_colour` and `set_alias` ask
+      for a save and nothing else (tested: no message for a viewer); no
+      message of the link carries either; the host has no connection to
+      a grid at all.
+    - Chosen in a card: the palette button beside the name ("Alias and
+      colour") opens a field and the swatches (each drawn as this theme
+      draws it, named on hover).
+  - **Condensed host mode.** "Condensed" at the top of the characters'
+    panel turns the cards into one line per character; "Cards" turns
+    back. Remembered (`condensed` in `session-host.json`).
+    - **A line:** the colour (a ring without one), the slot's number and
+      the alias or name (the active character's in the accent; hover:
+      real name, profile, where it is), then on the right its **quick
+      action** (checkpoint 4's `Desk::quick`, worded: Switch, Show, Log
+      in, Starting, Start, Restart), what waits for an answer (bell and
+      count), its unread lines in the shared chat (count), its monitor
+      (open), the voice (held, or being given up), what is wrong (one
+      warning sign, everything said on hover) and where its viewer is
+      (in the world, at its login screen, starting, stopped, crashed,
+      not managed).
+    - **What the cards alone have** (standby, sound, monitor, alias and
+      colour, Close, End process, Remove, adding a character, the
+      hotkeys' and the new profile's pages, the two host choices) is one
+      click away; the lines only switch. The host's own questions
+      (closing it while characters run, "Quit all" under way, the voice
+      waiting) are asked in this layout as in the other.
+    - **With panels popped out:** it is the characters' panel drawn
+      another way, so it is condensed wherever that panel is (the host's
+      window, or its own). With the chat out, the host's window is the
+      lines alone and can be made small: its least size goes from
+      440 × 360 to 340 × 200 points while condensed. Beside the chat,
+      the characters' column is 380 points wide instead of 500, and
+      the window that shows the lines keeps 8 points around them instead
+      of 18.
+    - **Monitors:** the pictures are in the cards or in the monitors'
+      own window. Condensed with the monitors docked, no window draws
+      them, so by checkpoint 5's rule ("asked only while on screen") the
+      watched viewers go back to 3D Off; the line's monitor sign says
+      so. With the monitors in their own window nothing changes for
+      them. (Tested.)
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox`
+    (or `all`), with `AURORA_DEMO_SESSION_HOST`: the demo's characters
+    get colours and the first two an alias; the host starts condensed;
+    the inbox lists sample questions for the characters in the world
+    (the host's own samples, demo only: no viewer has them).
+    `AURORA_DEMO_SESSION_HOST_PANELS` knows `inbox`
+    (`docs/TESTING.md`).
+  - **Checked here:** the rules' tests; each new view drawn by the
+    processor's painter without a window (the inbox docked and in its
+    own window, the editor and its swatches, the condensed lines in the
+    host's window at its least size and in the characters' own window),
+    with the colours looked for in the pixels.
+  - **To verify on Windows** (nothing of Win32 runs here): the inbox
+    with real offers (a teleport offer, a friendship request, an
+    inventory offer and a script's dialog to two characters): each
+    appears within a second, oldest first, with its character; "Switch
+    to answer" brings that character's window forward and nothing is
+    accepted; answering or letting it expire there takes the row away;
+    the inbox's own window's title follows the count in the taskbar.
+    Colours on the skin in use and with Preferences › Accessibility's
+    high contrast; an alias typed with the IME (Japanese) in the card's
+    field; `session-host.json` after a change, and that no viewer's log
+    or window shows an alias. The condensed host's window made small
+    beside the stage, with the chat in its own window; the global
+    hotkeys with it.
+  - Not done: no sound or taskbar flash for a new question (the chat's
+    alert for a message is unchanged); no dismiss or "seen" in the inbox
+    (it would be a second truth beside the viewer's); a colour is one of
+    the eight, not a free one; no automatic colour for a new character;
+    the condensed lines have no End process (it is in the cards, where
+    its confirmation is); the host's own window's place is still not
+    remembered.
+
+- **Bird's-eye switch effect: not built (decision), design note.**
+  - **What Folderstorm (C++) meant** (its `doc/plans/
+    multi-character-sessions.md` section 7, `multi-character-
+    usability.md` section 5, PR #17): off by default; on a switch the
+    outgoing character's camera rises to a bounded bird's-eye view, the
+    hand-over happens, and the incoming character's camera comes down
+    from its own bird's-eye view to its saved camera, about a second per
+    leg (later 250–2000 ms, 16–96 m, and an optional fade instead). A
+    renderer-only camera override: the avatar never moves, nothing is
+    sent to the simulator, the exact camera is restored on completion,
+    Escape, restriction, disconnect or region change; mouselook, scripted
+    and follow cameras, camera restrictions and reduced motion fall back
+    to an instant switch.
+  - **Why it is not built here.**
+    1. *It lives in the viewer's renderer, in upstream's files.* The
+       effect is a camera override inside the frame: the camera's
+       controller, the frustum and what follows it (culling, level of
+       detail, interest list, the minimap's and the sound's listener
+       position, mouselook, the RLVa camera restrictions) are upstream
+       code with no extension point for "draw from another eye for this
+       frame only". That is a deep change to upstream code, which the
+       fork's rules stop at: propose first.
+    2. *It would hold the outgoing viewer in front past the user's
+       click.* Today a switch is one assignment: the old character goes
+       behind (3D Off, voice given up) at once. The rising leg needs it
+       drawn at full rate for a second more, and it then draws *more*
+       than usual: from above, the whole draw distance is in the frustum
+       while the incoming viewer is being woken up at the same moment
+       (textures back from Economy, a full first frame). Two viewers at
+       full load on one card is the very moment the busy pause and the
+       device-loss rules (section 6.2, R4, R5, R7) exist for; widening
+       it for decoration is the wrong trade.
+    3. *It would have to reorder the voice hand-over or run beside it*
+       ("given up before it is given", section 10): either the effect
+       delays the switch the user asked for, or the outgoing character
+       is animated while no longer active, which is drawing beyond its
+       policy.
+    4. *A host-side effect cannot stand in for it.* The host draws its
+       own windows on the processor and never draws over a viewer's (no
+       overlay, no hidden or layered window: R2). A flourish inside the
+       host's window would not be what was asked.
+  - **Options for the human, if it is wanted later** (a checkpoint of
+    its own, off by default, with "instant" always the fallback):
+    - **A. Incoming leg only, viewer-side.** After the role change, the
+      new active viewer comes down from above for under a second. No
+      viewer draws beyond its role (it is Active by then), nothing
+      delays the switch or the voice. Still needs the camera extension
+      point in upstream (best sent upstream as a generic "presentation
+      camera offset" that honours mouselook, scripted cameras and RLVa),
+      and must be skipped when that viewer reports a busy, stalled or
+      lost card, in its first seconds after Economy, and with reduced
+      motion.
+    - **B. A fade instead** (C++'s later alternative): the incoming
+      viewer draws a full-window veil in its interface layer that clears
+      over a few hundred milliseconds once it is Active. No camera, no
+      extra 3D, one small hook where the managed role is applied. The
+      cheapest and the safest; it is not a bird's-eye view.
+    - **C. Both legs, as in C++.** Needs a hand-over in two steps in the
+      desk (announce, then assign), a bound on the outgoing leg, and the
+      measurements of section 4.3 on a real card first. Not recommended
+      before A has been lived with.
 
 ## 16. Verified in code vs inferred
 
