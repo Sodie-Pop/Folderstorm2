@@ -168,6 +168,8 @@ pub struct Slot {
     pub note: Option<Note>,
     /// Quit was sent to it.
     pub closing: bool,
+    /// The user confirmed End for this launch: its end is no crash.
+    pub ended: bool,
     launch: u32,
     activate: bool,
     heartbeat: Option<Instant>,
@@ -192,6 +194,7 @@ impl Slot {
             status: None,
             note: None,
             closing: false,
+            ended: false,
             launch: 0,
             activate: false,
             heartbeat: None,
@@ -521,7 +524,7 @@ impl Desk {
             return;
         };
         s.phase = Phase::Ended {
-            crashed: !clean && !s.closing,
+            crashed: !clean && !s.closing && !s.ended,
         };
         s.closing = false;
         s.voice_out = false;
@@ -568,7 +571,8 @@ impl Desk {
 
     /// Ends a viewer's process. Only ever from the user's confirmed choice.
     pub fn end(&mut self, slot: usize) {
-        if self.slot(slot).is_some_and(Slot::live) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.has_process()) {
+            s.ended = true;
             self.effects.push(Effect::Kill { slot });
         }
     }
@@ -1170,6 +1174,24 @@ mod tests {
         assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: false });
         d.exited(1, 1, true, now);
         assert_eq!(d.slot(1).expect("slot").phase, Phase::Ended { crashed: false });
+    }
+
+    #[test]
+    fn a_process_ended_at_the_user_s_request_did_not_crash() {
+        let (mut d, now) = desk(1);
+        let launch = start(&mut d, 0, true, now);
+        d.end(0);
+        assert!(d.take_effects().contains(&Effect::Kill { slot: 0 }));
+        // killed: not a clean exit, yet no crash
+        d.exited(0, launch, false, now);
+        let s = d.slot(0).expect("slot");
+        assert_eq!(s.phase, Phase::Ended { crashed: false });
+        assert!(s.ended);
+        // started again, a crash of that launch is one
+        let launch = start(&mut d, 0, true, now);
+        assert!(!d.slot(0).expect("slot").ended);
+        d.exited(0, launch, false, now);
+        assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: true });
     }
 
     #[test]

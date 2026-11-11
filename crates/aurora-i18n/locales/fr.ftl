@@ -4212,6 +4212,7 @@ folderstorm-host-unread = { $count ->
     }
 folderstorm-host-minimised = réduite
 folderstorm-host-closing = Fermeture…
+folderstorm-host-ended = Arrêté (Arrêter le processus)
 folderstorm-host-closed = Fermé
 folderstorm-host-crashed = Arrêt inattendu
 folderstorm-host-unmanaged = Tourne seul : non géré par cet hôte

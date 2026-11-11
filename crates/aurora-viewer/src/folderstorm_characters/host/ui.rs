@@ -456,6 +456,7 @@ fn status_line(slot: &Slot) -> String {
     match slot.phase {
         Phase::Stopped => tr!("folderstorm-host-stopped").to_owned(),
         Phase::Starting => tr!("folderstorm-host-starting").to_owned(),
+        Phase::Ended { crashed: false } if slot.ended => tr!("folderstorm-host-ended").to_owned(),
         Phase::Ended { crashed: false } => tr!("folderstorm-host-closed").to_owned(),
         Phase::Ended { crashed: true } => tr!("folderstorm-host-crashed").to_owned(),
         Phase::Unmanaged => tr!("folderstorm-host-unmanaged").to_owned(),
