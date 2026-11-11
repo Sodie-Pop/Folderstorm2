@@ -20,6 +20,8 @@
 use super::image::Prepared;
 use super::token::Auth;
 use serde::Deserialize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::task::Poll;
 
 /// Largest answer read.
 pub const MAX_ANSWER: usize = 256 * 1024;
@@ -51,9 +53,69 @@ pub struct HttpReply {
 }
 
 /// What carries the request: the network, or a stand-in in tests and in
-/// the demo.
+/// the demo. A transport gives up with `Failure::Cancelled` as soon as
+/// `cancel` is set, dropping the request on its way.
 pub trait Transport: Send + Sync {
-    fn send(&self, request: HttpRequest) -> Result<HttpReply, Failure>;
+    fn send(&self, request: HttpRequest, cancel: &Cancel) -> Result<HttpReply, Failure>;
+}
+
+/// The user's Stop for one upload, shared by the interface (which sets
+/// it) and the thread sending the request (which gives up on it).
+#[derive(Clone, Default)]
+pub struct Cancel(std::sync::Arc<CancelInner>);
+
+#[derive(Default)]
+struct CancelInner {
+    cancelled: AtomicBool,
+    /// The request was about to leave: the host may get the image.
+    started: AtomicBool,
+    waker: std::sync::Mutex<Option<std::task::Waker>>,
+}
+
+impl Cancel {
+    /// Stops the upload. Returns whether its request had started (the
+    /// host may then have the image anyway).
+    pub fn cancel(&self) -> bool {
+        self.0.cancelled.store(true, Ordering::SeqCst);
+        if let Some(waker) = self.lock_waker().take() {
+            waker.wake();
+        }
+        self.0.started.load(Ordering::SeqCst)
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.cancelled.load(Ordering::SeqCst)
+    }
+
+    /// Marks the request as leaving. Returns false when the upload was
+    /// stopped first: then nothing is sent. (With `cancel`'s order, one of
+    /// the two always sees the other.)
+    pub fn start(&self) -> bool {
+        self.0.started.store(true, Ordering::SeqCst);
+        !self.is_cancelled()
+    }
+
+    fn lock_waker(&self) -> std::sync::MutexGuard<'_, Option<std::task::Waker>> {
+        self.0.waker.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// `work`, unless the upload is stopped first: then `work` is dropped
+    /// (with it the connection) and the answer is `Failure::Cancelled`.
+    pub async fn or_cancelled<T>(&self, work: impl Future<Output = Result<T, Failure>>) -> Result<T, Failure> {
+        let mut work = std::pin::pin!(work);
+        std::future::poll_fn(|cx| {
+            if self.is_cancelled() {
+                return Poll::Ready(Err(Failure::Cancelled));
+            }
+            *self.lock_waker() = Some(cx.waker().clone());
+            // set between the first look and the waker's registration
+            if self.is_cancelled() {
+                return Poll::Ready(Err(Failure::Cancelled));
+            }
+            work.as_mut().poll(cx)
+        })
+        .await
+    }
 }
 
 /// Why an upload did not give a link.
@@ -77,6 +139,8 @@ pub enum Failure {
     Refused(u16),
     /// An answer that is not Zipline's, or a link that cannot be trusted.
     Malformed,
+    /// The user stopped it.
+    Cancelled,
 }
 
 /// The multipart boundary: random, and checked against the image.
@@ -188,7 +252,7 @@ pub fn link(origin: &str, name: &str, url: &str) -> Option<String> {
 pub struct Network;
 
 impl Transport for Network {
-    fn send(&self, request: HttpRequest) -> Result<HttpReply, Failure> {
+    fn send(&self, request: HttpRequest, cancel: &Cancel) -> Result<HttpReply, Failure> {
         let url = reqwest::Url::parse(&request.url).map_err(|_| Failure::Network)?;
         let loopback = url.scheme() == "http" && url.host_str().is_some_and(super::settings::is_loopback);
         let builder = reqwest::Client::builder()
@@ -206,7 +270,7 @@ impl Transport for Network {
             .enable_all()
             .build()
             .map_err(|_| Failure::Network)?;
-        runtime.block_on(async move {
+        runtime.block_on(cancel.or_cancelled(async move {
             let mut post = client.post(url).body(request.body);
             for (name, value) in request.headers {
                 post = post.header(name, value);
@@ -225,6 +289,6 @@ impl Transport for Network {
                 }
             }
             Ok(HttpReply { status, body })
-        })
+        }))
     }
 }

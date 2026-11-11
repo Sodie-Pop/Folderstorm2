@@ -71,6 +71,8 @@ struct Job {
     state: State,
     image: Option<Arc<Prepared>>,
     texture: Option<egui::TextureHandle>,
+    /// The Stop of its current upload.
+    cancel: zipline::Cancel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -347,6 +349,7 @@ fn stage(ctx: &egui::Context, field: egui::Id, source: Source) {
             state,
             image: None,
             texture: None,
+            cancel: zipline::Cancel::default(),
         });
         if !preparing {
             ctx.request_repaint();
@@ -401,37 +404,24 @@ fn fail(id: u64, message: String, retry: bool) {
 fn start_upload(ctx: &egui::Context, job: &mut Job) {
     let Some(image) = job.image.clone() else { return };
     job.state = State::Uploading;
-    let (id, origin) = (job.id, job.origin.clone());
+    job.cancel = zipline::Cancel::default();
+    let (id, origin, cancel) = (job.id, job.origin.clone(), job.cancel.clone());
     let folder = job.folder.clone();
     let ctx = ctx.clone();
     let spawned = std::thread::Builder::new().name("fs-chat-upload".into()).spawn(move || {
         let _lane = LANE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        // cancelled while waiting for the lane
-        if !uploads().jobs.iter().any(|j| j.id == id) {
+        // dismissed or stopped while waiting for the lane: nothing is sent
+        if !uploads().jobs.iter().any(|j| j.id == id) || !cancel.start() {
             return;
         }
         let result = match demo::mode() {
-            Some(mode) => upload(&demo::Fake(mode), &origin, token::Auth::None, folder.as_deref(), &image),
+            Some(mode) => upload(&demo::Fake(mode), &origin, token::Auth::None, folder.as_deref(), &image, &cancel),
             None => {
                 let auth = token::resolve(token::SystemStore.read(&origin));
-                upload(&zipline::Network, &origin, auth, folder.as_deref(), &image)
+                upload(&zipline::Network, &origin, auth, folder.as_deref(), &image, &cancel)
             }
         };
-        let mut u = uploads();
-        if let Some(job) = u.jobs.iter_mut().find(|j| j.id == id) {
-            job.state = match result {
-                Ok(link) => {
-                    job.image = None;
-                    job.texture = None;
-                    State::Ready(link)
-                }
-                Err(failure) => State::Failed {
-                    message: failure_text(&failure),
-                    retry: !matches!(failure, zipline::Failure::Malformed),
-                },
-            };
-        }
-        drop(u);
+        finish(id, &cancel, result);
         ctx.request_repaint();
     });
     if spawned.is_err() {
@@ -442,6 +432,45 @@ fn start_upload(ctx: &egui::Context, job: &mut Job) {
     }
 }
 
+/// An upload's outcome into its job; a stopped upload's chip already says
+/// so, whatever came back.
+fn finish(id: u64, cancel: &zipline::Cancel, result: Result<String, zipline::Failure>) {
+    if cancel.is_cancelled() {
+        return;
+    }
+    let mut u = uploads();
+    if let Some(job) = u.jobs.iter_mut().find(|j| j.id == id) {
+        job.state = match result {
+            Ok(link) => {
+                job.image = None;
+                job.texture = None;
+                State::Ready(link)
+            }
+            Err(failure) => State::Failed {
+                message: failure_text(&failure),
+                retry: !matches!(failure, zipline::Failure::Malformed | zipline::Failure::Cancelled),
+            },
+        };
+    }
+}
+
+/// The user's Stop, Cancel or Dismiss on a job. Returns whether the job
+/// stays: an upload whose request had left is aborted and its chip says
+/// the host may have the image anyway; anything else goes.
+fn stop(job: &mut Job) -> bool {
+    let started = job.cancel.cancel();
+    if !(matches!(job.state, State::Uploading) && started) {
+        return false;
+    }
+    job.state = State::Failed {
+        message: aurora_i18n::tr!("fs-chat-upload-stopped").to_owned(),
+        retry: false,
+    };
+    job.image = None;
+    job.texture = None;
+    true
+}
+
 /// One upload, from the request to the link.
 pub fn upload(
     transport: &dyn zipline::Transport,
@@ -449,11 +478,12 @@ pub fn upload(
     auth: token::Auth,
     folder: Option<&str>,
     image: &Prepared,
+    cancel: &zipline::Cancel,
 ) -> Result<String, zipline::Failure> {
     let had_token = auth.header().is_some();
     let request = zipline::request(origin, &auth, folder, image);
     drop(auth);
-    let reply = transport.send(request)?;
+    let reply = transport.send(request, cancel)?;
     zipline::parse(origin, &reply, had_token)
 }
 
@@ -545,6 +575,7 @@ fn failure_text(failure: &zipline::Failure) -> String {
         Failure::RateLimited => tr!("fs-chat-upload-error-rate").to_owned(),
         Failure::Refused(status) => tr!("fs-chat-upload-error-refused", status = i64::from(*status)),
         Failure::Malformed => tr!("fs-chat-upload-error-malformed").to_owned(),
+        Failure::Cancelled => tr!("fs-chat-upload-stopped").to_owned(),
     }
 }
 
@@ -679,7 +710,12 @@ fn show_jobs(ctx: &egui::Context, p: &Palette, field: egui::Id, rect: egui::Rect
                     start_upload(ctx, job);
                 }
             }
-            Choice::Cancel(id) => u.jobs.retain(|j| j.id != id),
+            Choice::Cancel(id) => {
+                let keep = u.jobs.iter_mut().find(|j| j.id == id).is_some_and(stop);
+                if !keep {
+                    u.jobs.retain(|j| j.id != id);
+                }
+            }
         }
     }
     ctx.request_repaint();

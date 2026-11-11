@@ -1,6 +1,6 @@
 use super::image::{self as img, Format, Refusal};
 use super::token::{Auth, TokenStore, resolve};
-use super::zipline::{self, Failure, HttpReply};
+use super::zipline::{self, Cancel, Failure, HttpReply};
 use super::*;
 use std::io::{Read, Write};
 use std::sync::mpsc;
@@ -94,7 +94,15 @@ const OK: &str = r#"{"files":[{"id":"cm1","name":"Ab12Cd.png","type":"image/png"
 fn the_upload_request_is_zipline_s_and_the_link_is_the_raw_one() {
     let (origin, received) = serve("200 OK", OK);
     let image = prepared_png();
-    let link = upload(&zipline::Network, &origin, Auth::User("tok-123".into()), Some("folder_1"), &image).expect("a link");
+    let link = upload(
+        &zipline::Network,
+        &origin,
+        Auth::User("tok-123".into()),
+        Some("folder_1"),
+        &image,
+        &Cancel::default(),
+    )
+    .expect("a link");
     assert_eq!(link, format!("{origin}/raw/Ab12Cd.png"));
     let r = received.recv().expect("a request");
     assert!(r.head.starts_with("POST /api/upload HTTP/1.1"), "{}", r.head);
@@ -118,7 +126,15 @@ fn the_upload_request_is_zipline_s_and_the_link_is_the_raw_one() {
 #[test]
 fn without_a_token_no_authorization_header_is_sent() {
     let (origin, received) = serve("200 OK", OK);
-    upload(&zipline::Network, &origin, Auth::None, Some("anon"), &prepared_png()).expect("a link");
+    upload(
+        &zipline::Network,
+        &origin,
+        Auth::None,
+        Some("anon"),
+        &prepared_png(),
+        &Cancel::default(),
+    )
+    .expect("a link");
     let r = received.recv().expect("a request");
     assert!(r.header("authorization").is_none());
     assert_eq!(r.header("x-zipline-folder").as_deref(), Some("anon"));
@@ -128,10 +144,17 @@ fn without_a_token_no_authorization_header_is_sent() {
 fn a_refused_token_and_a_missing_one_are_told_apart() {
     let refusal = r#"{"error":"E2001: Invalid token","code":2001,"statusCode":401}"#;
     let (origin, _r) = serve("401 Unauthorized", refusal);
-    let got = upload(&zipline::Network, &origin, Auth::User("bad".into()), None, &prepared_png());
+    let got = upload(
+        &zipline::Network,
+        &origin,
+        Auth::User("bad".into()),
+        None,
+        &prepared_png(),
+        &Cancel::default(),
+    );
     assert_eq!(got, Err(Failure::Token { had_token: true }));
     let (origin, _r) = serve("401 Unauthorized", refusal);
-    let got = upload(&zipline::Network, &origin, Auth::None, None, &prepared_png());
+    let got = upload(&zipline::Network, &origin, Auth::None, None, &prepared_png(), &Cancel::default());
     assert_eq!(got, Err(Failure::Token { had_token: false }));
 }
 
@@ -141,11 +164,25 @@ fn too_large_for_the_host() {
         "413 Payload Too Large",
         r#"{"error":"E5001: File is too large","code":5001,"statusCode":413}"#,
     );
-    let got = upload(&zipline::Network, &origin, Auth::None, Some("f"), &prepared_png());
+    let got = upload(
+        &zipline::Network,
+        &origin,
+        Auth::None,
+        Some("f"),
+        &prepared_png(),
+        &Cancel::default(),
+    );
     assert_eq!(got, Err(Failure::TooLarge));
     // a proxy's bare 413
     let (origin, _r) = serve("413 Payload Too Large", "<html>too big</html>");
-    let got = upload(&zipline::Network, &origin, Auth::None, Some("f"), &prepared_png());
+    let got = upload(
+        &zipline::Network,
+        &origin,
+        Auth::None,
+        Some("f"),
+        &prepared_png(),
+        &Cancel::default(),
+    );
     assert_eq!(got, Err(Failure::TooLarge));
 }
 
@@ -155,13 +192,27 @@ fn a_full_host_and_a_closed_folder() {
         "413 Payload Too Large",
         r#"{"error":"E5002: Storage quota exceeded","code":5002,"statusCode":413}"#,
     );
-    let got = upload(&zipline::Network, &origin, Auth::None, Some("f"), &prepared_png());
+    let got = upload(
+        &zipline::Network,
+        &origin,
+        Auth::None,
+        Some("f"),
+        &prepared_png(),
+        &Cancel::default(),
+    );
     assert_eq!(got, Err(Failure::Quota));
     let (origin, _r) = serve(
         "403 Forbidden",
         r#"{"error":"E3002: Folder is not open","code":3002,"statusCode":403}"#,
     );
-    let got = upload(&zipline::Network, &origin, Auth::None, Some("f"), &prepared_png());
+    let got = upload(
+        &zipline::Network,
+        &origin,
+        Auth::None,
+        Some("f"),
+        &prepared_png(),
+        &Cancel::default(),
+    );
     assert_eq!(got, Err(Failure::Folder));
 }
 
@@ -173,7 +224,14 @@ fn a_malformed_answer_gives_no_link() {
         r#"{"files":[{"name":"../x","url":"https://evil.example/x.png"}]}"#,
     ] {
         let (origin, _r) = serve("200 OK", body);
-        let got = upload(&zipline::Network, &origin, Auth::None, Some("f"), &prepared_png());
+        let got = upload(
+            &zipline::Network,
+            &origin,
+            Auth::None,
+            Some("f"),
+            &prepared_png(),
+            &Cancel::default(),
+        );
         assert_eq!(got, Err(Failure::Malformed), "{body}");
     }
 }
@@ -181,7 +239,14 @@ fn a_malformed_answer_gives_no_link() {
 #[test]
 fn a_redirect_is_never_followed() {
     let (origin, _r) = serve("302 Found", "");
-    let got = upload(&zipline::Network, &origin, Auth::User("tok".into()), None, &prepared_png());
+    let got = upload(
+        &zipline::Network,
+        &origin,
+        Auth::User("tok".into()),
+        None,
+        &prepared_png(),
+        &Cancel::default(),
+    );
     assert_eq!(got, Err(Failure::Refused(302)));
 }
 
@@ -198,8 +263,112 @@ fn an_unreachable_host_is_a_network_failure() {
         Auth::None,
         None,
         &prepared_png(),
+        &Cancel::default(),
     );
     assert_eq!(got, Err(Failure::Network));
+}
+
+/// A host that takes the request and never answers.
+fn silent_host() -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback port");
+    let origin = format!("http://{}", listener.local_addr().expect("address"));
+    std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else { return };
+        let mut buf = [0u8; 8192];
+        // read until the client goes away
+        while stream.read(&mut buf).is_ok_and(|n| n > 0) {}
+    });
+    origin
+}
+
+#[test]
+fn stopping_an_upload_aborts_its_request() {
+    let origin = silent_host();
+    let cancel = Cancel::default();
+    let (tx, rx) = mpsc::channel();
+    let stop = cancel.clone();
+    std::thread::spawn(move || {
+        assert!(stop.start());
+        let _ = tx.send(upload(&zipline::Network, &origin, Auth::None, Some("f"), &prepared_png(), &stop));
+    });
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(cancel.cancel(), "the request had left");
+    let got = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("the request was dropped, not left to time out");
+    assert_eq!(got, Err(Failure::Cancelled));
+}
+
+/// A transport that waits for the Stop.
+struct Hang(std::sync::atomic::AtomicBool);
+
+impl zipline::Transport for Hang {
+    fn send(&self, _: zipline::HttpRequest, cancel: &Cancel) -> Result<HttpReply, Failure> {
+        self.0.store(true, Ordering::SeqCst);
+        while !cancel.is_cancelled() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Err(Failure::Cancelled)
+    }
+}
+
+fn job(id: u64, state: State) -> Job {
+    Job {
+        id,
+        field: egui::Id::unique(("test-job", id)),
+        label: "a.png".into(),
+        origin: "https://h.example".into(),
+        folder: None,
+        state,
+        image: Some(Arc::new(prepared_png())),
+        texture: None,
+        cancel: Cancel::default(),
+    }
+}
+
+#[test]
+fn a_stopped_upload_says_the_host_may_have_the_image() {
+    // the request had left: the job stays, saying so, and nothing else
+    let mut sending = job(1, State::Uploading);
+    let transport = Arc::new(Hang(AtomicBool::new(false)));
+    let (tx, rx) = mpsc::channel();
+    let (cancel, t) = (sending.cancel.clone(), transport.clone());
+    std::thread::spawn(move || {
+        assert!(cancel.start());
+        let _ = tx.send(upload(&*t, "https://h.example", Auth::None, None, &prepared_png(), &cancel));
+    });
+    while !transport.0.load(Ordering::SeqCst) {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(stop(&mut sending));
+    assert!(matches!(&sending.state, State::Failed { retry: false, message } if !message.is_empty()));
+    assert!(sending.image.is_none());
+    assert_eq!(
+        rx.recv_timeout(std::time::Duration::from_secs(5)).expect("stopped"),
+        Err(Failure::Cancelled)
+    );
+    // a link coming back after the Stop goes nowhere
+    let id = u64::MAX - 7;
+    uploads().jobs.push(job(id, State::Uploading));
+    let cancel = uploads().jobs.last().map(|j| j.cancel.clone()).expect("the job");
+    cancel.cancel();
+    finish(id, &cancel, Ok("https://h.example/raw/x.png".into()));
+    let state = uploads().jobs.iter().find(|j| j.id == id).map(|j| j.state.clone());
+    uploads().jobs.retain(|j| j.id != id);
+    assert!(matches!(state, Some(State::Uploading)));
+    // still waiting for its turn: dropped, and its thread sends nothing
+    let mut waiting = job(2, State::Uploading);
+    assert!(!stop(&mut waiting));
+    assert!(!waiting.cancel.start());
+    // a confirmation or a failure is simply dismissed
+    assert!(!stop(&mut job(3, State::Confirm)));
+    assert!(!stop(&mut job(
+        4,
+        State::Failed {
+            message: String::new(),
+            retry: true
+        }
+    )));
 }
 
 #[test]
@@ -694,11 +863,33 @@ fn the_link_follows_the_field_s_cursor() {
 #[test]
 fn the_demo_uploader_answers_like_zipline() {
     let image = prepared_png();
-    let link = upload(&demo::Fake(demo::Mode::On), demo::HOST, Auth::None, None, &image).expect("a link");
+    let link = upload(
+        &demo::Fake(demo::Mode::On),
+        demo::HOST,
+        Auth::None,
+        None,
+        &image,
+        &Cancel::default(),
+    )
+    .expect("a link");
     assert!(link.starts_with(&format!("{}/raw/demo", demo::HOST)), "{link}");
-    let failed = upload(&demo::Fake(demo::Mode::Fail), demo::HOST, Auth::None, None, &image);
+    let failed = upload(
+        &demo::Fake(demo::Mode::Fail),
+        demo::HOST,
+        Auth::None,
+        None,
+        &image,
+        &Cancel::default(),
+    );
     assert_eq!(failed, Err(Failure::TooLarge));
-    let token = upload(&demo::Fake(demo::Mode::Token), demo::HOST, Auth::None, None, &image);
+    let token = upload(
+        &demo::Fake(demo::Mode::Token),
+        demo::HOST,
+        Auth::None,
+        None,
+        &image,
+        &Cancel::default(),
+    );
     assert_eq!(token, Err(Failure::Token { had_token: false }));
 }
 

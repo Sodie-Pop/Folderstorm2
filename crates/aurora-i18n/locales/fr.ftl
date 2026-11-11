@@ -1236,6 +1236,7 @@ fs-chat-upload-pasted = Image collée
 fs-chat-upload-preparing = Préparation de { $name }…
 fs-chat-upload-uploading = Envoi de { $name } ({ $size })…
 fs-chat-upload-cancel-tip = Arrêter. Si l'image a déjà atteint l'hébergeur, elle peut y rester.
+fs-chat-upload-stopped = Envoi arrêté. L'envoi a pu se terminer sur l'hébergeur : dans ce cas, l'image y reste, et aucun lien n'a été mis dans votre message.
 fs-chat-upload-dismiss = Fermer
 fs-chat-upload-retry = Réessayer
 fs-chat-upload-confirm-title = Envoyer cette image ?

@@ -1218,6 +1218,7 @@ fs-chat-upload-pasted = 貼り付けた画像
 fs-chat-upload-preparing = { $name } を準備中…
 fs-chat-upload-uploading = { $name }（{ $size }）をアップロード中…
 fs-chat-upload-cancel-tip = 中止します。画像がすでにホストに届いている場合は、そこに残ることがあります。
+fs-chat-upload-stopped = アップロードを中止しました。ホスト側でアップロードが完了している可能性があります。その場合、画像はホストに残り、メッセージにはリンクが入っていません。
 fs-chat-upload-dismiss = 閉じる
 fs-chat-upload-retry = 再試行
 fs-chat-upload-confirm-title = この画像をアップロードしますか？

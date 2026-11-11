@@ -1233,6 +1233,7 @@ fs-chat-upload-pasted = Pasted image
 fs-chat-upload-preparing = Preparing { $name }…
 fs-chat-upload-uploading = Uploading { $name } ({ $size })…
 fs-chat-upload-cancel-tip = Stop. If the image already reached the host, it may stay there.
+fs-chat-upload-stopped = Upload stopped. The upload may have finished on the host: if so, the image stays there, and no link was put in your message.
 fs-chat-upload-dismiss = Dismiss
 fs-chat-upload-retry = Try again
 fs-chat-upload-confirm-title = Upload this image?

@@ -9,7 +9,7 @@
 //! - `fail`: the uploader refuses every image as too large;
 //! - `token`: the uploader refuses as a host that needs a token.
 
-use super::zipline::{Failure, HttpReply, HttpRequest, Transport};
+use super::zipline::{Cancel, Failure, HttpReply, HttpRequest, Transport};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,10 +44,15 @@ pub const HOST: &str = "https://images.example.invalid";
 pub struct Fake(pub Mode);
 
 impl Transport for Fake {
-    fn send(&self, request: HttpRequest) -> Result<HttpReply, Failure> {
+    fn send(&self, request: HttpRequest, cancel: &Cancel) -> Result<HttpReply, Failure> {
         static COUNT: AtomicU64 = AtomicU64::new(0);
-        // long enough to see the chip
-        std::thread::sleep(std::time::Duration::from_millis(1500));
+        // long enough to see the chip, and to stop it
+        for _ in 0..30 {
+            if cancel.is_cancelled() {
+                return Err(Failure::Cancelled);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
         let n = COUNT.fetch_add(1, Ordering::Relaxed) + 1;
         let extension = if request.body.windows(9).any(|w| w == b"image.gif") {
             "gif"
