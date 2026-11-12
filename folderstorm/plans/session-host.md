@@ -1821,6 +1821,24 @@ May be two small PRs: 1a profiles, 1b behind policy.
       winit's window level. A row with no room even for its two ends
       (a very narrow viewer) scrolls as a whole instead of laying one
       end over the other.
+    - **Fixed after review: its menus and hovers had no room.** egui
+      draws a menu inside the window that opens it and keeps it in that
+      window: one row high (38 points), the characters' list, the
+      monitors' and the settings' menus and the hovers were cut to a
+      strip (confirmed by a drawing: the list's area was taller than the
+      window). Now, while a menu or a hover is open, the window grows
+      under its row to hold it, and goes back to one row once it
+      closes: the first frame grows it to the most (420 points under
+      the row, never past the bottom of its screen), the next measures
+      what is open and fits it with 6 points to spare. The row stays at
+      the top, the width, the place and the pin are not touched, and the
+      place it remembers is the row's, never the grown window's. A menu
+      closes when the window loses the keyboard, so a window the user
+      left is never left grown. Tested: the list opened by a click is
+      painted whole under the row in a grown window, and the window is
+      one row again once it is closed (Escape). A window at the very
+      bottom of a screen has no room under it: its menus are cut there
+      (to move it up while a menu is open is a follow-up if asked).
     - *A click is heard at once*: the reader thread of the viewer that
       was clicked wakes the host's loop (an event-loop proxy), instead
       of waiting for the window's next look (200 ms). The viewer that
@@ -1874,7 +1892,11 @@ May be two small PRs: 1a profiles, 1b behind policy.
        viewer closed it is back by itself;
     4. popped out: the compact window, its pin above a full-screen-size
        viewer, its place remembered across a restart and brought back
-       after a screen is unplugged; closing it docks the bar;
+       after a screen is unplugged; closing it docks the bar; each menu
+       (the list, "Open a login"'s right click, the monitors, the
+       settings) and the hovers open whole under the row, the window
+       grows for them and is one row again when they close, also after
+       a click in another window;
     5. **one taskbar button**: only the active character on the taskbar
        and in Alt-Tab; a switch (button, bar, hotkey) swaps them at
        once; a Warm background window keeps its usual title bar (no
@@ -2133,18 +2155,13 @@ May be two small PRs: 1a profiles, 1b behind policy.
       nearby chat's chip named icons the viewer does not embed (`send`,
       `message-circle`) and showed none; they are `send-filled` and
       `message-circle-filled`.
-  - **Suspected, not confirmed and not changed: the compact "Character
-    controls" window (checkpoint 8) is one row high, and its menus may
-    have no room.** The characters' list, the monitors' and the
-    settings' menus open under their buttons, inside the window that
-    draws them, and a window cannot paint outside itself. A drawing of
-    that window here at 1100 × 38, clicked along its row, never painted
-    a text of the monitors' menu; that is a sign, not a proof (it was
-    not drawn taller to see the menu appear). The same would hold for
-    its hovers. Docked in a viewer the menus have the viewer's window.
-    To check on Windows first; if it is so, the compact window should
-    grow while one of its menus or hovers is open, its row kept at the
-    top: checkpoint 8's to fix, not done here.
+  - **Found here, fixed in checkpoint 8: the compact "Character
+    controls" window was one row high and its menus had no room.** A
+    drawing of it at 1100 × 38, clicked along its row, never painted a
+    text of the monitors' menu. Confirmed with a drawing in checkpoint
+    8's branch (the list's area was taller than the window) and fixed
+    there: the window grows under its row while a menu or a hover is
+    open (checkpoint 8, "Decisions taken while building"); merged here.
   - **Not built, by decision:** New IM and Friends (above); a pin that
     lasts beyond a login (a conversation's number is its viewer's, per
     login); a menu for the options (above); a monitor of the character

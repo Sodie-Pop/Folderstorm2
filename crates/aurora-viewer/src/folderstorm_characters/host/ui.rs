@@ -834,6 +834,10 @@ impl Window_ {
         if let Some(view) = self.view_mut(which) {
             view.redraw = again || !acts.is_empty();
         }
+        if which == Which::Bar {
+            // the compact window makes room for its menus and hovers
+            self.bar_fit(&context, &window);
+        }
         if !acts.is_empty() {
             self.apply(acts, Instant::now());
         }
