@@ -127,7 +127,7 @@ impl App {
         log::info!("profile: launched again, the window comes forward");
         if let Some(g) = &self.gfx {
             g.window.set_minimized(false);
-            g.window.focus_window();
+            crate::folderstorm_characters::foreground::bring_forward(&g.window);
         }
         true
     }
@@ -341,7 +341,8 @@ impl App {
             }
             self.geom_changed = Some(Instant::now());
         }
-        window.focus_window();
+        // (a held Alt stays held: the next hotkey works without letting go)
+        crate::folderstorm_characters::foreground::bring_forward(window);
     }
 
     /// What the host is told of this viewer.

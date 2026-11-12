@@ -29,9 +29,14 @@
 //!   for the host (the `impl App` glue is in
 //!   `app/folderstorm_characters/monitor.rs`; the host's side in [`host`]).
 //!
+//! Follow-ups to checkpoint 7:
+//! - [`foreground`]: the window brought to the front without releasing an
+//!   Alt key the user holds (the global hotkeys).
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod chat_export;
+pub mod foreground;
 pub mod host;
 pub mod managed;
 pub mod profile;
