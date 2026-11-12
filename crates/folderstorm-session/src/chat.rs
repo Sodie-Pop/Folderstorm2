@@ -28,6 +28,13 @@
 //! - **Nothing is answered here.** Offers, requests and script dialogs are
 //!   listed for each character ([`Chat::attention`]); the answer is given
 //!   in the viewer's own window.
+//! - **Read in either window is read in both.** A conversation read in
+//!   the host is marked read in its viewer ([`ToViewer::MarkRead`]); one
+//!   read in the viewer (its unread count falls to zero there) is read in
+//!   the host too (follow-ups to checkpoint 7). Only that fall counts: a
+//!   viewer that shows a conversation as its lines come, behind the
+//!   others, has nothing unread there, and the host still counts them for
+//!   the user who has not seen them.
 
 use crate::ipc::{
     AttentionItem, AttentionList, ChatBatch, ChatLine, Conversation, LineKind, MAX_SEND, MAX_SLOTS, SendOutcome, SendRefusal, SessionKind,
@@ -433,6 +440,8 @@ impl Chat {
         t.order = order;
         t.kind = batch.kind;
         t.title = batch.title;
+        // the viewer had unread lines and has none now: read there
+        let read_there = t.viewer_unread > 0 && batch.unread == 0 && !batch.restart;
         t.viewer_unread = batch.unread;
         if batch.unread == 0 {
             t.read_asked = false;
@@ -460,8 +469,12 @@ impl Chat {
             alert |= conversation != Conversation::Nearby && matches!(line.kind, LineKind::Said | LineKind::Card);
             self.push(slot, conversation, Entry::Line(line));
         }
-        if !viewed && let Some(t) = self.thread_mut(slot, conversation) {
-            t.unread = t.unread.saturating_add(unread);
+        if let Some(t) = self.thread_mut(slot, conversation) {
+            if read_there {
+                t.unread = 0;
+            } else if !viewed {
+                t.unread = t.unread.saturating_add(unread);
+            }
         }
         if alert && self.active != Some(slot) && !batch.restart {
             self.effects.push(Effect::Alert { slot });
@@ -965,6 +978,40 @@ mod tests {
         b.unread = 1;
         c.batch(0, 1, b);
         assert_eq!(sends(&mut c), vec![(0, 1, read)]);
+    }
+
+    #[test]
+    fn a_conversation_read_in_its_viewer_is_read_in_the_host() {
+        let (mut c, _) = chat(1);
+        let mut b = batch(1, JANE, vec![said(1, "hi"), said(2, "there?")]);
+        b.unread = 2;
+        c.batch(0, 1, b);
+        assert_eq!(c.unread(0), 2);
+        // a line more, still unread there
+        let mut b = batch(1, JANE, vec![said(3, "hello?")]);
+        b.unread = 3;
+        c.batch(0, 1, b);
+        assert_eq!(c.unread(0), 3);
+        // read in the viewer's own window: nothing new, its count falls
+        c.batch(0, 1, batch(1, JANE, vec![]));
+        assert_eq!(c.unread(0), 0);
+        assert!(sends(&mut c).is_empty(), "nothing to tell the viewer back");
+        // a viewer that has the conversation on screen as lines come
+        // (behind, the user elsewhere): nothing unread there, still
+        // unread in the host
+        c.batch(0, 1, batch(1, JANE, vec![said(4, "are you there?")]));
+        assert_eq!(c.unread(0), 1);
+        // the lines and the fall in one look: read there, read here
+        let mut b = batch(1, JANE, vec![said(5, "one")]);
+        b.unread = 1;
+        c.batch(0, 1, b);
+        assert_eq!(c.unread(0), 2);
+        c.batch(0, 1, batch(1, JANE, vec![said(6, "two")]));
+        assert_eq!(c.unread(0), 0);
+        // the nearby chat has no count in the viewer: the host's stays
+        c.batch(0, 1, batch(1, Conversation::Nearby, vec![said(1, "near")]));
+        c.batch(0, 1, batch(1, Conversation::Nearby, vec![]));
+        assert_eq!(c.unread(0), 1);
     }
 
     #[test]
