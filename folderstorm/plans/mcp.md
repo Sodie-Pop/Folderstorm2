@@ -225,6 +225,25 @@ clicked and in `App::local_assistant_run` just before the send
 Anything already sent is never undone, but nothing more is sent. An
 approval covers that one call and never changes the saved levels.
 
+The camera calls that wait in `mcp_bridge/studio.rs` after the desk let
+them run follow the same rules (`Studio::review` with `Desk::review`), each
+bound to the login generation it was queued under. They are decided again
+on every frame, just before a picture's photo starts
+(`mcp_bridge::photo_step`, which reads the login itself) and just before the
+gallery's snapshot is sent as a thumbnail (`mcp_bridge::thumbnail_send`):
+
+| Waiting in the studio | Another login | A class on Never | Allow → Ask, not asked yet | Access off |
+|---|---|---|---|---|
+| a picture waiting for the camera to stop | `session_changed`, nothing captured | refused, nothing captured | back to the dialog | refused |
+| a picture drawn or being encoded | `session_changed`, no image given | refused, no image given | goes on | refused, no image given |
+| a camera move waiting for the camera to stop (already made) | `session_changed`, no position given | refused, no position given | goes on | refused, no position given |
+| a thumbnail waiting for its picture | `session_changed`, the gallery's snapshot stopped before it is sent | refused, snapshot stopped | back to the dialog, snapshot stopped | refused, snapshot stopped |
+| a thumbnail sent | waits for the server | waits | goes on | `timeout` (it may still be set) |
+
+A camera move itself is checked by `replan` just before the camera moves,
+as any change; a picture saved with `save: true` and refused while it is
+being encoded may already be in the photo folder (the refusal says so).
+
 ### Login binding and capability versions
 
 Checkpoint 2 of [mcp-receipts.md](mcp-receipts.md) (its "As built" has the
@@ -454,7 +473,10 @@ workspace uses them; `tempfile` for tests (already in the lock).
   `poll_outfit_photo`; `app/snapshot.rs`: the `Purpose::Assistant` photo
   (its size and options in `photo_job`, its pixels to `mcp_bridge`);
   `app/inventory_thumbnail.rs`: one `mcp_bridge::thumbnail_done` where the
-  gallery's snapshot ends.
+  gallery's snapshot ends, and one `local_assistant_thumbnail_stopped`
+  just before the gallery's snapshot is sent (the assistant's thumbnail
+  decided again); `aurora-i18n/locales/{en,fr,ja}.ftl`:
+  `fs-mcp-thumbnail-stopped` (Appearance's note for a stopped snapshot).
 
 ## Tests
 

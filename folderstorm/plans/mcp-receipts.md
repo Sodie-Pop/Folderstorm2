@@ -544,6 +544,34 @@ login-change tests with the new code, and end to end (sidecar → socket →
 bridge → desk) a relog while the dialog is open: `session_changed`, nothing
 sent, never resent, the next call runs.
 
+### The studio follows the desk's rules (integration of #21 with #28 and #32)
+
+Branch `claude/mcp-integrated` (every MCP PR merged, then `main`). #21's
+`Studio` held camera calls after the desk had let them run: camera moves
+waiting for the camera to stop, pictures waiting for it or for their photo
+and encoding, the thumbnail waiting for the gallery's snapshot. Access off
+dropped them, but neither a login change nor a class set to Never reached
+them. Now:
+
+| Where | What |
+|---|---|
+| `mcp_bridge/desk.rs` | `Desk::login` (the generation in force) and `Desk::review(tool, login)`: under another generation → the desk's own `session_changed` refusal; a class on Never → `PERMISSIONS_CHANGED`; else Run or Ask. `Desk::recheck` now uses it too |
+| `mcp_bridge/studio.rs` | every wait keeps the generation it was queued under; `Studio::review(&desk)` applies `Desk::review` to each (section 1's table: what has not acted refuses or goes back to the dialog, what has acted — the camera moved, the photo taken — answers nothing more, a thumbnail sent waits for the server); `Studio::close` refuses as `Desk::close` does; `Studio::thumbnail_send` stops the gallery's snapshot of a refused thumbnail |
+| `mcp_bridge.rs` | the studio reviewed each frame after the desk's levels and login; `photo_step` and `thumbnail_send` read the login in force and review just before acting; the calls that ask again go to `Desk::take` |
+| `app/local_assistant.rs`, `app/inventory_thumbnail.rs` (one hook) | the check just before the gallery's snapshot is sent; a stopped snapshot ends as a failed one, with Appearance's note `fs-mcp-thumbnail-stopped` |
+
+Tests (`mcp_bridge/camera_tests/recheck.rs`): a queued picture refused
+after a relog (nothing captured) and when its photo is being drawn (its
+pixels never become an image); a queued picture refused after Camera →
+Never; Camera → Ask sends a picture not asked yet back to the dialog while
+one already asked keeps its place; a move waiting for the camera to stop
+refused after a logout and after Never, but not after Ask; a thumbnail
+waiting for its picture refused after a relog and after Never (the
+snapshot stopped), one sent left to the server; a thumbnail not sent going
+back to the dialog; access off; and end to end over a real socket (sidecar
+→ bridge → desk → studio) a relog between the frame and the photo:
+`session_changed`, nothing captured, never resent, the next call runs.
+
 ## Tests
 
 | Checkpoint | Tests |
