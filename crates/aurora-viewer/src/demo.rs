@@ -232,6 +232,10 @@ pub mod search;
 /// A seat deleted under the resident sitting on it (AURORA_DEMO_SEAT_KILL).
 #[path = "demo_seat_kill.rs"]
 pub mod seat_kill;
+/// A contact set's own online notices and automatic responses
+/// (AURORA_DEMO_SET_NOTICES).
+#[path = "demo_set_notices.rs"]
+pub mod set_notices;
 /// Freeze, region console and voice moderation (AURORA_DEMO_FREEZE,
 /// AURORA_DEMO_SIM_CONSOLE, AURORA_DEMO_VOICE_MODERATION).
 #[path = "demo_sim_extras.rs"]
@@ -5950,7 +5954,7 @@ pub fn events() -> Vec<NetEvent> {
         // AURORA_DEMO_MUSIC=<url>|1: parcel music, started by the radio toggle
         let music_url = match std::env::var("AURORA_DEMO_MUSIC").unwrap_or_default().trim() {
             "" | "0" => String::new(),
-            "1" => land::MUSIC_URL.into(),
+            "1" | "fade" => land::MUSIC_URL.into(),
             url => url.to_owned(),
         };
         // the parcel's cells: the 128 m square around the plaza (x and y

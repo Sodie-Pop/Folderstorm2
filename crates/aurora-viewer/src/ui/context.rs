@@ -126,6 +126,9 @@ pub struct ObjectFacts {
     pub delete: bool,
     /// LLSelectMgr::enableUnlinkObjects: a linkset we can modify.
     pub unlink: bool,
+    /// enable_save_into_task_inventory: Build › Save back to object
+    /// contents applies to the menu's selection.
+    pub save_to_contents: bool,
     /// Blocked (LLMuteList), for "Ignore" / "Stop ignoring".
     pub blocked: bool,
     /// Name from ObjectProperties (block list entry).
@@ -193,6 +196,9 @@ pub struct Facts {
     pub ground_sit_blocked: bool,
     pub stand_blocked: bool,
     pub object_sit_blocked: bool,
+    /// RLVa is on for the session: Derender is greyed on our own
+    /// attachments (enable_derender_object, indra/newview/llviewermenu.cpp).
+    pub rlva_enabled: bool,
     pub hover_height: bool,
     pub worn_shape: Option<Uuid>,
     /// Appearance > Export shape XML: the worn shape may be written to a
@@ -451,6 +457,9 @@ pub enum CtxAction {
     Open(Uuid),
     /// Unlink the linkset (Tools.Unlink).
     Unlink(Uuid),
+    /// "Save back to object contents" (Tools.SaveToObjectInventory), on
+    /// the menu's selection.
+    SaveToObjectContents,
     /// Link the selected objects (Tools.Link).
     Link(Uuid),
     /// "Take as separate items" / "Take copies as separate items"
