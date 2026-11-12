@@ -181,8 +181,10 @@ impl Splash {
                     ui.add(egui::Image::new(logo).fit_to_exact_size(Vec2::splat(LOGO)));
                 }
                 ui.add_space(8.0);
-                // Folderstorm: the product name (folderstorm-brand)
-                ui.label(RichText::new(folderstorm_brand::PRODUCT).size(19.0).strong().color(p.ink));
+                // Folderstorm: the product name (folderstorm-brand), and the
+                // character's, cut short if long (folderstorm_characters/splash.rs)
+                let title = crate::folderstorm_characters::splash::title();
+                ui.add(egui::Label::new(RichText::new(title).size(19.0).strong().color(p.ink)).truncate());
                 ui.label(RichText::new(&self.version).size(11.0).color(p.muted_dim));
                 ui.add_space(18.0);
                 ui.allocate_ui(Vec2::new(BAR, 30.0), |ui| {
@@ -306,9 +308,11 @@ fn centred(event_loop: &ActiveEventLoop) -> Option<winit::dpi::PhysicalPosition<
     let monitor = event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next())?;
     let (pos, size, scale) = (monitor.position(), monitor.size(), monitor.scale_factor());
     let (w, h) = ((SIZE.x as f64 * scale) as i32, (SIZE.y as f64 * scale) as i32);
+    // Folderstorm: a character's splash moved by its slot (folderstorm_characters/splash.rs)
+    let (dx, dy) = crate::folderstorm_characters::splash::offset(scale);
     Some(winit::dpi::PhysicalPosition::new(
-        pos.x + (size.width as i32 - w) / 2,
-        pos.y + (size.height as i32 - h) / 2,
+        pos.x + (size.width as i32 - w) / 2 + dx,
+        pos.y + (size.height as i32 - h) / 2 + dy,
     ))
 }
 

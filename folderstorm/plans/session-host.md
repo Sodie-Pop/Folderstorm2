@@ -1519,6 +1519,38 @@ May be two small PRs: 1a profiles, 1b behind policy.
     viewer, dimmed in the host) would need a field on the attention items
     and a protocol change: not done.
 
+- **A splash per character (branch `claude/splash-characters`,
+  2026-11-12, after the upstream sync that brought the startup splash,
+  PR #35).** Every viewer the host starts shows upstream's startup splash
+  (the human wants it: a start takes a while and looked broken without
+  it); the host has none. No new message on the link.
+  - The viewer passes its splash process `--profile=<name>` (named
+    profiles only; `folderstorm_characters/splash.rs`): the splash reads
+    that profile's settings, so it speaks the character's language, and
+    its label and window title name it ("Folderstorm2 — Alt1"). The alias
+    is a host-only name (kept in `session-host.json`, never passed to the
+    viewer), so the splash shows the profile's name, as the viewer's own
+    window title does.
+  - The host passes each viewer `--folderstorm-slot=<n>`, which a managed
+    viewer passes on to its splash: each splash is moved right and down
+    by 36 points per slot from the centre of the screen, so that three
+    characters started at once show three splashes, not one. The viewer's
+    link still takes its slot from the bootstrap only. Both arguments are
+    single `--name=value` words, which the command-line parser skips.
+  - The main profile's splash and the updater's window get nothing more
+    and are drawn as upstream draws them.
+  - The host's card and condensed line already said "Starting…" (with
+    the hourglass and "Wait") from the click on; they now count the
+    seconds until the viewer's first frame ("Starting… · 12 s"), without
+    a spinner, which would redraw the host on the processor every frame
+    while the viewers compile their shaders.
+  - Upstream hooks: `splash/mod.rs` (`spawn` takes the extra arguments),
+    `splash/window.rs` (the label, the offset).
+  - **(verify on Windows)**: the host starting three characters shows
+    three splashes, each naming its character, not stacked; a plain
+    `--profile Alt1` launch's splash names Alt1 in Alt1's language; the
+    updater's window over a restart is unchanged.
+
 - **Bird's-eye switch effect: not built (decision), design note.**
   - **What Folderstorm (C++) meant** (its `doc/plans/
     multi-character-sessions.md` section 7, `multi-character-

@@ -7141,6 +7141,12 @@ failure. Grid validation and any paid upload are performed by the human.
   (`config\demo\profiles\demo-<i>`).
   `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 cargo run -p aurora-viewer -- --title "Test host"`.
   What to look at:
+  - each viewer shows its own startup splash, named after its character
+    ("Folderstorm2 — demo-2", in that profile's language), each moved
+    right and down by its slot so that none hides another
+    (`AURORA_DEMO_SPLASH_HOLD=5` keeps them open longer; the viewers
+    inherit it); the host has none. Meanwhile each row says
+    "Starting… · <n> s", counting until that viewer's first frame.
   - each row shows its character's state ("Starting…", then "In Aurora
     Démo" or the like), and one row says **Active**. The active viewer's log
     (`aurora-demo-demo-1-test-host.log`) says `session host: Active, Warm
@@ -8217,6 +8223,10 @@ failure. Grid validation and any paid upload are performed by the human.
   `AURORA_DEMO=1 AURORA_DEMO_SPLASH=shaders:23/61
   AURORA_DEMO_SPLASH_HOLD=2 AURORA_SPLASH_CAPTURE=splash-en.png
   aurora-viewer --splash --language en < /dev/null` (Git Bash).
+  Folderstorm2: a named profile's splash names it and reads that
+  profile's language (`aurora-viewer --splash --profile=Alt1
+  --folderstorm-slot=2 < /dev/null` shows "Folderstorm2 — Alt1" moved by
+  slot 2's offset); the session host's viewers pass both on.
 - **`AURORA_DEMO_BUG_REPORT=1|details|image|image-ui|direct`**: no effect
   while the built-in bug report form is disabled ("Report a bug" opens
   GitHub's issue chooser, see [BUG_REPORTING.md](BUG_REPORTING.md)); what
