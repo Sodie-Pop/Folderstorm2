@@ -19,7 +19,18 @@
 //!   beside the hotkey.
 //!
 //! The settings ([`Config`]) hold the texts as the user sees them
-//! ("Ctrl+Alt+1"), in `session-host.json`. Never a credential.
+//! ("Ctrl+Shift+F1"), in `session-host.json`. Never a credential.
+//!
+//! **The defaults** are Ctrl+Shift+F1 to F5 for the characters, F6 for
+//! the previous one and F7 for the next (follow-ups to checkpoint 7). They
+//! were Ctrl+Alt+1 to 5, PageDown and PageUp: Ctrl+Alt is AltGr, so on
+//! many European layouts those keys type a character and were refused,
+//! and Alt+PageUp and Alt+PageDown turn the camera in the viewer. Ctrl+
+//! Shift with a function key is no key of the viewer's default bindings
+//! (the viewer's tests check it), types nothing on any layout, and cannot
+//! be a gesture's key (a gesture takes Ctrl or Shift, not both). A file
+//! that still holds the old defaults, all of them unchanged, gets the new
+//! ones ([`Config::cleaned`]); any choice of the user's is kept.
 
 use crate::ipc::MAX_SLOTS;
 use serde::{Deserialize, Serialize};
@@ -271,6 +282,10 @@ impl fmt::Display for Chord {
     }
 }
 
+/// Which defaults a settings file was written with: 1 for checkpoint 4's
+/// (Ctrl+Alt+1 to 5, PageDown, PageUp), [`DEFAULTS`] for today's.
+pub const DEFAULTS: u32 = 2;
+
 /// The hotkeys of the host's settings file, as texts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -281,15 +296,24 @@ pub struct Config {
     pub characters: Vec<String>,
     pub next: String,
     pub previous: String,
+    /// The defaults of the host that wrote the file ([`DEFAULTS`]); a file
+    /// without it was written with the first ones.
+    #[serde(default = "first_defaults")]
+    pub defaults: u32,
+}
+
+fn first_defaults() -> u32 {
+    1
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: true,
-            characters: (1..=MAX_SLOTS).map(|n| format!("Ctrl+Alt+{n}")).collect(),
-            next: "Ctrl+Alt+PageDown".to_owned(),
-            previous: "Ctrl+Alt+PageUp".to_owned(),
+            characters: (1..=MAX_SLOTS).map(|n| format!("Ctrl+Shift+F{n}")).collect(),
+            next: "Ctrl+Shift+F7".to_owned(),
+            previous: "Ctrl+Shift+F6".to_owned(),
+            defaults: DEFAULTS,
         }
     }
 }
@@ -305,14 +329,39 @@ fn clean(text: &str) -> String {
 }
 
 impl Config {
-    /// The file as the host can use it: one bounded text per action.
+    /// The file as the host can use it: one bounded text per action, and
+    /// the first defaults moved to today's when the file still holds them
+    /// all, unchanged (the user never chose them: they were there).
     pub fn cleaned(mut self) -> Self {
+        if self.defaults < DEFAULTS {
+            if self.holds_the_first_defaults() {
+                let enabled = self.enabled;
+                self = Self {
+                    enabled,
+                    ..Self::default()
+                };
+            }
+            self.defaults = DEFAULTS;
+        }
         self.characters.truncate(MAX_SLOTS);
         self.characters.resize(MAX_SLOTS, String::new());
         for text in self.characters.iter_mut().chain([&mut self.next, &mut self.previous]) {
             *text = clean(text);
         }
         self
+    }
+
+    /// Every text is checkpoint 4's default (Ctrl+Alt+1 to 5, PageDown,
+    /// PageUp), as the host wrote it.
+    fn holds_the_first_defaults(&self) -> bool {
+        self.characters.len() == MAX_SLOTS
+            && self
+                .characters
+                .iter()
+                .enumerate()
+                .all(|(i, text)| *text == format!("Ctrl+Alt+{}", i + 1))
+            && self.next == "Ctrl+Alt+PageDown"
+            && self.previous == "Ctrl+Alt+PageUp"
     }
 
     /// The text of an action's hotkey; empty: none.
@@ -579,22 +628,81 @@ mod tests {
     }
 
     #[test]
-    fn the_defaults_are_ctrl_alt_one_to_five_next_and_previous() {
+    fn the_defaults_are_ctrl_shift_f1_to_f5_then_f6_and_f7() {
         let config = Config::default();
         assert!(config.enabled);
+        assert_eq!(config.defaults, DEFAULTS);
         let bindings = config.bindings();
         assert_eq!(bindings.len(), ACTIONS);
         for (slot, (action, chord)) in bindings.iter().take(MAX_SLOTS).enumerate() {
             assert_eq!(*action, Action::Character(slot));
-            assert_eq!(chord.to_string(), format!("Ctrl+Alt+{}", slot + 1));
+            assert_eq!(chord.to_string(), format!("Ctrl+Shift+F{}", slot + 1));
         }
-        assert_eq!(config.text(Action::Next), "Ctrl+Alt+PageDown");
-        assert_eq!(config.text(Action::Previous), "Ctrl+Alt+PageUp");
+        assert_eq!(config.text(Action::Previous), "Ctrl+Shift+F6");
+        assert_eq!(config.text(Action::Next), "Ctrl+Shift+F7");
+        // none of them is what an AltGr key sends
+        assert!(bindings.iter().all(|(_, chord)| !chord.may_be_altgr()));
         assert_eq!(config.clone().cleaned(), config);
         // disabled: nothing is registered, the choices stay
         let off = Config { enabled: false, ..config };
         assert!(off.bindings().is_empty());
         assert!(matches!(off.plan()[0], Wanted::Chord(_)));
+    }
+
+    /// The settings file of checkpoint 4's host, as it wrote it.
+    fn first_file(enabled: bool, characters: [&str; MAX_SLOTS], next: &str, previous: &str) -> Config {
+        let text = serde_json::json!({
+            "enabled": enabled,
+            "characters": characters,
+            "next": next,
+            "previous": previous,
+        });
+        serde_json::from_value(text).expect("read")
+    }
+
+    const FIRST: [&str; MAX_SLOTS] = ["Ctrl+Alt+1", "Ctrl+Alt+2", "Ctrl+Alt+3", "Ctrl+Alt+4", "Ctrl+Alt+5"];
+
+    #[test]
+    fn a_file_with_the_first_defaults_unchanged_gets_today_s() {
+        let old = first_file(true, FIRST, "Ctrl+Alt+PageDown", "Ctrl+Alt+PageUp");
+        assert_eq!(old.defaults, 1, "a file without the number has the first defaults");
+        assert_eq!(old.cleaned(), Config::default());
+        // turned off, they stay off
+        let off = first_file(false, FIRST, "Ctrl+Alt+PageDown", "Ctrl+Alt+PageUp").cleaned();
+        assert_eq!(
+            off,
+            Config {
+                enabled: false,
+                ..Config::default()
+            }
+        );
+        // (a file of the host before checkpoint 4 has no hotkeys: today's)
+        let host: crate::host::Config = serde_json::from_str("{}").expect("read");
+        assert_eq!(host.cleaned().hotkeys, Config::default());
+    }
+
+    #[test]
+    fn a_choice_of_the_user_s_is_never_changed() {
+        // one hotkey changed: all are kept as they are
+        let mut chosen = FIRST;
+        chosen[2] = "Ctrl+Shift+3";
+        let kept = first_file(true, chosen, "Ctrl+Alt+PageDown", "Ctrl+Alt+PageUp").cleaned();
+        assert_eq!(kept.text(Action::Character(0)), "Ctrl+Alt+1");
+        assert_eq!(kept.text(Action::Character(2)), "Ctrl+Shift+3");
+        assert_eq!(kept.text(Action::Next), "Ctrl+Alt+PageDown");
+        assert_eq!(kept.defaults, DEFAULTS);
+        let kept = first_file(true, FIRST, "", "Ctrl+Alt+PageUp").cleaned();
+        assert_eq!((kept.text(Action::Character(4)), kept.text(Action::Next)), ("Ctrl+Alt+5", ""));
+        // the first defaults chosen again today are a choice, kept
+        let mut today = Config::default();
+        for (slot, text) in FIRST.iter().enumerate() {
+            assert!(today.set(Action::Character(slot), text));
+        }
+        assert!(today.set(Action::Next, "Ctrl+Alt+PageDown"));
+        assert!(today.set(Action::Previous, "Ctrl+Alt+PageUp"));
+        let written = serde_json::to_string(&today).expect("written");
+        let read: Config = serde_json::from_str(&written).expect("read");
+        assert_eq!(read.cleaned(), today);
     }
 
     #[test]
@@ -606,7 +714,7 @@ mod tests {
         assert_eq!(read.characters[0], "ctrl+alt+7");
         assert_eq!(read.characters[1], "");
         assert_eq!(read.next, "xy");
-        assert_eq!(read.previous, "Ctrl+Alt+PageUp");
+        assert_eq!(read.previous, "Ctrl+Shift+F6");
         let long = Config {
             characters: vec!["k".repeat(500); 9],
             ..Config::default()
@@ -618,15 +726,15 @@ mod tests {
         let written = serde_json::to_value(Config::default()).expect("written");
         let mut keys: Vec<&str> = written.as_object().expect("object").keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["characters", "enabled", "next", "previous"]);
+        assert_eq!(keys, ["characters", "defaults", "enabled", "next", "previous"]);
     }
 
     #[test]
     fn a_choice_is_written_the_usual_way_or_kept_to_be_corrected() {
         let mut config = Config::default();
-        assert!(config.set(Action::Character(1), " ctrl + shift+f2 "));
-        assert_eq!(config.text(Action::Character(1)), "Ctrl+Shift+F2");
-        assert!(!config.set(Action::Character(1), "CTRL+SHIFT+F2"), "the same hotkey");
+        assert!(config.set(Action::Character(1), " ctrl + alt+f12 "));
+        assert_eq!(config.text(Action::Character(1)), "Ctrl+Alt+F12");
+        assert!(!config.set(Action::Character(1), "ALT+CTRL+F12"), "the same hotkey");
         assert!(config.set(Action::Next, "ctrl+banana"));
         assert_eq!(config.text(Action::Next), "ctrl+banana");
         assert_eq!(
@@ -648,8 +756,8 @@ mod tests {
     #[test]
     fn two_actions_on_one_key_the_first_keeps_it_and_the_other_is_told() {
         let mut config = Config::default();
-        assert!(config.set(Action::Character(3), "alt+ctrl+1"));
-        assert!(config.set(Action::Previous, "Ctrl+Alt+1"));
+        assert!(config.set(Action::Character(3), "shift+ctrl+f1"));
+        assert!(config.set(Action::Previous, "Ctrl+Shift+F1"));
         let plan = config.plan();
         assert!(matches!(plan[0], Wanted::Chord(_)));
         assert_eq!(plan[3], Wanted::Duplicate(Action::Character(0)));

@@ -4,9 +4,13 @@
 //! "Switch to answer". What is in it and in which order is the
 //! `folderstorm-session` crate's (`inbox`); this file shows it.
 //!
-//! **Nothing is answered here.** The only thing a row does is bring that
-//! character forward: there is no accept, no decline and no dismiss, and
-//! nothing is said to a viewer about a question.
+//! **Nothing is answered here.** A row brings that character forward, or
+//! is dismissed: there is no accept and no decline, and nothing is said to
+//! a viewer about a question. **Dismiss** (a row), **Dismiss all** and
+//! **Dismiss all for** a character (the heading's menu) only take
+//! questions out of the host's inbox, its counts with them (follow-ups to
+//! checkpoint 7; the rules are the crate's `Inbox::dismiss`): they still
+//! wait, unanswered, in the character's own window.
 //!
 //! The inbox is a panel like the chat or the monitors (checkpoint 6):
 //! docked, it is a band at the top of the host's window, there only while
@@ -18,6 +22,7 @@ use super::super::chat_ui::attention_kind;
 use super::super::faces::{self, Face};
 use super::{Act, Window_};
 use crate::theme::Palette;
+use crate::ui::menu;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::inbox::{Age, Waiting};
 use ::folderstorm_session::ipc::{AttentionItem, MAX_SLOTS};
@@ -28,6 +33,18 @@ use std::time::Instant;
 
 /// The docked band's rows scroll within this height.
 const BAND_ROWS: f32 = 112.0;
+
+/// The height of a row's buttons and of the heading's menu.
+const ROW_BUTTON: Vec2 = Vec2::new(0.0, 22.0);
+
+/// Below this width a row's Dismiss is its icon alone.
+const NARROW_ROW: f32 = 560.0;
+
+/// What a click in a row asks for.
+enum RowAct {
+    Switch,
+    Dismiss,
+}
 
 /// A count as the host's other counters write it.
 pub(super) fn count_text(n: u32) -> String {
@@ -58,7 +75,7 @@ impl Window_ {
         std::array::from_fn(|slot| self.host.desk.slot(slot).map(|state| faces::face(&p, state)))
     }
 
-    fn inbox_heading(&self, ui: &mut egui::Ui, p: &Palette, size: f32) {
+    fn inbox_heading(&self, ui: &mut egui::Ui, p: &Palette, size: f32, acts: &mut Vec<Act>) {
         ui.horizontal_wrapped(|ui| {
             let count = self.host.inbox.count();
             let heading = match count {
@@ -71,18 +88,48 @@ impl Window_ {
             ui.label(RichText::new(heading).size(size).strong().color(p.ink));
             ui.label(RichText::new(tr!("folderstorm-inbox-intro")).color(p.muted))
                 .on_hover_text(tr!("folderstorm-inbox-help"));
+            if count > 0 {
+                self.dismiss_menu(ui, p, acts);
+            }
+        });
+    }
+
+    /// "Dismiss…": everything, or everything of one character.
+    fn dismiss_menu(&self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<Act>) {
+        let shown = self.faces();
+        let inbox = &self.host.inbox;
+        let label = tr!("folderstorm-inbox-dismiss-menu");
+        let button =
+            widgets::action_menu_button(ui, p, "bell-off", label, false, ROW_BUTTON.y).on_hover_text(tr!("folderstorm-inbox-dismiss-help"));
+        menu::dropdown(&button, p, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+            let all = tr!("folderstorm-inbox-dismiss-all", count = inbox.count());
+            if menu::item(ui, p, "bell-off", &all) {
+                acts.push(Act::InboxDismissAll);
+            }
+            menu::separator(ui, p);
+            for (slot, face) in shown.iter().enumerate() {
+                let (count, Some(face)) = (inbox.count_for(slot), face) else {
+                    continue;
+                };
+                if count > 0 {
+                    let text = tr!("folderstorm-inbox-dismiss-for", name = face.name.clone(), count = count);
+                    if menu::item(ui, p, "bell-off", &text) {
+                        acts.push(Act::InboxDismissSlot(slot));
+                    }
+                }
+            }
         });
     }
 
     /// The inbox docked: a band at the top of the host's window.
     pub(super) fn inbox_band(&mut self, ui: &mut egui::Ui, p: &Palette, now: Instant, acts: &mut Vec<Act>) {
-        self.inbox_heading(ui, p, 14.5);
+        self.inbox_heading(ui, p, 14.5, acts);
         self.inbox_list(ui, p, now, BAND_ROWS, acts);
     }
 
     /// The inbox in its own window.
     pub(super) fn inbox_window(&mut self, ui: &mut egui::Ui, p: &Palette, now: Instant, acts: &mut Vec<Act>) {
-        self.inbox_heading(ui, p, 18.0);
+        self.inbox_heading(ui, p, 18.0, acts);
         ui.add_space(8.0);
         if self.host.inbox.is_empty() {
             ui.label(RichText::new(tr!("folderstorm-inbox-empty")).color(p.muted));
@@ -108,10 +155,12 @@ impl Window_ {
                     };
                     // (a row of its own per question: two rows' buttons are
                     // not one widget)
-                    ui.push_id(("folderstorm-host-inbox-row", waiting.slot, waiting.item.id), |ui| {
-                        if inbox_row(ui, p, face, waiting, now) {
-                            acts.push(Act::Switch(waiting.slot));
-                        }
+                    ui.push_id(("folderstorm-host-inbox-row", waiting.slot, waiting.item.id), |ui| match inbox_row(
+                        ui, p, face, waiting, now,
+                    ) {
+                        Some(RowAct::Switch) => acts.push(Act::Switch(waiting.slot)),
+                        Some(RowAct::Dismiss) => acts.push(Act::InboxDismiss(waiting.slot, waiting.item.id)),
+                        None => {}
                     });
                 }
                 for (slot, face) in shown.iter().enumerate() {
@@ -139,9 +188,9 @@ impl Window_ {
     }
 }
 
-/// One question's row; true when "Switch to answer" was clicked.
-fn inbox_row(ui: &mut egui::Ui, p: &Palette, face: &Face, waiting: &Waiting, now: Instant) -> bool {
-    let mut switch = false;
+/// One question's row, and what a click in it asks for.
+fn inbox_row(ui: &mut egui::Ui, p: &Palette, face: &Face, waiting: &Waiting, now: Instant) -> Option<RowAct> {
+    let mut asked = None;
     ui.horizontal(|ui| {
         faces::dot(ui, p, face.tint);
         let name = ui.label(RichText::new(&face.name).strong().color(face.tint.unwrap_or(p.ink)));
@@ -149,10 +198,26 @@ fn inbox_row(ui: &mut egui::Ui, p: &Palette, face: &Face, waiting: &Waiting, now
             name.on_hover_text(real);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // (narrow, Dismiss is its icon: the question keeps some room)
+            let dismissed = if ui.available_width() < NARROW_ROW {
+                let tip = format!("{}: {}", tr!("folderstorm-inbox-dismiss"), tr!("folderstorm-inbox-dismiss-help"));
+                widgets::icon_button(ui, p, "bell-off", &tip, true)
+            } else {
+                let dismiss = tr!("folderstorm-inbox-dismiss");
+                widgets::action_button(ui, p, "bell-off", dismiss, ActionKind::Flat, ROW_BUTTON)
+                    .on_hover_text(tr!("folderstorm-inbox-dismiss-help"))
+                    .clicked()
+            };
+            if dismissed {
+                asked = Some(RowAct::Dismiss);
+            }
             let answer = tr!("folderstorm-chat-switch-to-answer");
-            switch = widgets::action_button(ui, p, "arrows-exchange", answer, ActionKind::Flat, Vec2::new(0.0, 22.0))
+            if widgets::action_button(ui, p, "arrows-exchange", answer, ActionKind::Flat, ROW_BUTTON)
                 .on_hover_text(tr!("folderstorm-chat-switch-to-answer-help"))
-                .clicked();
+                .clicked()
+            {
+                asked = Some(RowAct::Switch);
+            }
             ui.label(RichText::new(age_text(Age::of(waiting.age(now)))).color(p.muted))
                 .on_hover_text(tr!("folderstorm-inbox-age-help"));
             // the question takes what is left, cut short when it is long
@@ -163,7 +228,7 @@ fn inbox_row(ui: &mut egui::Ui, p: &Palette, face: &Face, waiting: &Waiting, now
             });
         });
     });
-    switch
+    asked
 }
 
 #[cfg(test)]
@@ -359,6 +424,53 @@ mod tests {
     }
 
     #[test]
+    fn dismissing_takes_questions_out_of_the_host_only() {
+        let now = Instant::now();
+        let mut app = window(host());
+        for slot in 0..2 {
+            app.host.desk.launch(slot, slot == 0);
+            app.host.desk.connected(slot, 1, now);
+        }
+        app.host.desk.take_effects();
+        asks(&mut app, 0, 3, AttentionKind::Script, "Door", "Open?", now);
+        asks(&mut app, 1, 7, AttentionKind::Teleport, "Jane Doe", "Join me", now);
+        asks(&mut app, 1, 8, AttentionKind::Friendship, "Kim", "Friends?", now);
+        draw(&mut app, 1120, 760);
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(shows(&drawn, tr!("folderstorm-inbox-dismiss-menu")), "{drawn:?}");
+        assert!(
+            drawn.iter().filter(|t| t.contains(tr!("folderstorm-inbox-dismiss"))).count() >= 4,
+            "a Dismiss per row"
+        );
+        // one row: gone from the inbox and its counts, nothing for a viewer
+        app.apply(vec![Act::InboxDismiss(1, 7)], now);
+        assert_eq!(app.host.inbox.count(), 2);
+        assert!(app.host.chat.take_effects().is_empty(), "nothing is said to a viewer");
+        assert!(app.host.desk.take_effects().is_empty());
+        // its viewer lists it still: it stays out
+        app.host.sync_inbox(now);
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(!shows(&drawn, "Join me") && shows(&drawn, "Friends?"), "{drawn:?}");
+        assert!(shows(&drawn, &format!("{} (2)", tr!("folderstorm-inbox"))));
+        // the chat's own box, beside no inbox, leaves it out too
+        app.host.desk.set_panel_out(Panel::Inbox, true);
+        app.panes[Panel::Inbox.index()] = Some(app.look.view());
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(shows(&drawn, "Friends?") && !shows(&drawn, "Join me"), "{drawn:?}");
+        // all of one character's, then all
+        app.apply(vec![Act::InboxDismissSlot(1)], now);
+        assert_eq!((app.host.inbox.count_for(1), app.host.inbox.count()), (0, 1));
+        app.apply(vec![Act::InboxDismissAll], now);
+        assert!(app.host.inbox.is_empty());
+        let (drawn, _) = draw_in(&mut app, Which::Pane(Panel::Inbox), 520, 380);
+        assert!(shows(&drawn, tr!("folderstorm-inbox-empty")), "{drawn:?}");
+        // a new question comes in as usual
+        asks(&mut app, 1, 9, AttentionKind::Teleport, "Lee", "Come over", now);
+        assert_eq!(app.host.inbox.count(), 1);
+        assert!(app.host.chat.take_effects().is_empty());
+    }
+
+    #[test]
     fn a_removed_character_leaves_nothing_in_the_inbox() {
         let now = Instant::now();
         let mut app = window(host());
@@ -373,7 +485,7 @@ mod tests {
     /// Every icon this file names is one the viewer embeds.
     #[test]
     fn the_inbox_s_icons_exist() {
-        for name in ["bell-filled", "arrows-exchange"] {
+        for name in ["bell-filled", "arrows-exchange", "bell-off"] {
             assert!(crate::ui::icons::embedded(name), "{name} is not an embedded icon");
         }
     }
