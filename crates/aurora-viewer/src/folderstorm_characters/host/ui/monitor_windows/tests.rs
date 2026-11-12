@@ -213,6 +213,9 @@ fn a_monitor_s_window_shows_the_latest_picture_and_pauses_with_it() {
     // the header names the character (its alias); nothing says "read-only"
     assert!(shows(&drawn, "Shop keeper"), "{drawn:?}");
     assert!(!drawn.iter().any(|t| t.to_lowercase().contains("read-only")), "{drawn:?}");
+    // (reported now: the drawings above can take seconds on a slow
+    // machine, and a status that old would read as a viewer not answering)
+    report(&mut app, 1, State::Off, Instant::now());
     let (drawn, pixels) = draw_in(&mut app, Which::Monitor(1), 480, 300);
     assert!(shows(&drawn, tr!("folderstorm-monitor-waiting")), "{drawn:?}");
     keep("monitor-480-waiting", &pixels, 480, 300);

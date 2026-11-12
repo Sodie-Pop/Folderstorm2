@@ -261,6 +261,7 @@ pub fn page(cx: &mut Cx, tab: usize) {
             });
             link_previews(cx);
             gifs(cx);
+            super::folderstorm_chat_upload::group(cx); // Folderstorm: chat image upload
         }
         1 => notifications(cx),
         2 => keyword_alerts(cx),
