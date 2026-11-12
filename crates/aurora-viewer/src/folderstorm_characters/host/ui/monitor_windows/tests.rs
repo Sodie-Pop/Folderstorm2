@@ -313,7 +313,13 @@ fn switch_swaps_the_window_to_the_character_that_was_in_front() {
     assert!(moved.monitor_window.pinned && moved.monitor_window.chat);
     assert_eq!(moved.monitor_window.place.map(|place| place.position), Some(Some([900, 40])));
     assert!(app.host.desk.slot(1).is_some_and(|s| s.monitor.is_none()));
-    // it shows who it shows now, and asks that viewer
+    // it goes on asking, without a look in between that asks nothing:
+    // the window is on screen as it was
+    app.host.desk.take_effects();
+    app.monitors_watch(now);
+    assert!(matches!(app.host.desk.watch(0), Watch::Asked { .. }));
+    assert!(!sent_to_the_background(&mut app, 0));
+    // it shows who it shows now
     let (drawn, pixels) = draw_in(&mut app, Which::Monitor(0), 480, 490);
     assert!(shows(&drawn, "Main") && !shows(&drawn, "Shop keeper"), "{drawn:?}");
     assert_eq!(count(&pixels, RED), 0, "nothing of the other character's picture");
@@ -787,6 +793,14 @@ fn the_cycling_monitor_waits_while_the_user_types_in_its_chat() {
     app.monitors_watch(now + Duration::from_secs(60));
     assert_eq!(app.monitors.cycle.shown(), Some(1));
     focus(&mut app, seat, true);
+    // "next" is the user's to press: the text no longer holds the turn,
+    // and stays the draft of the character it was typed for
+    act(&mut app, Act::Step(true), now + Duration::from_secs(60));
+    assert_eq!(app.monitors.cycle.shown(), Some(2));
+    assert_eq!(app.host.chat.draft(1, Conversation::Nearby), "wait for");
+    act(&mut app, Act::Step(false), now + Duration::from_secs(60));
+    assert_eq!(app.monitors.cycle.shown(), Some(1));
+    draw_in(&mut app, which, size.0, size.1);
     // more text, then Enter: said by the character it was typed for
     type_text(&mut app, which, size, " me");
     let sending = now + Duration::from_secs(61);

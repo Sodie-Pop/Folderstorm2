@@ -153,6 +153,9 @@ impl Window_ {
     /// which monitors are on screen, in any of their windows that is not
     /// minimised or covered, and whom the cycling monitor shows.
     pub(super) fn monitors_watch(&mut self, now: Instant) {
+        // (a monitor that changed character since the last look has its
+        // window first: what is seen is said for the right one)
+        self.follow_moves();
         self.cycling_tick(now);
         let sights: Vec<_> = self
             .monitors

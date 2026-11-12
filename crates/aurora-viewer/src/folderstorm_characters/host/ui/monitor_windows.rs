@@ -327,6 +327,9 @@ impl Window_ {
             pane.typing = false;
             if let Some(view) = &mut pane.view {
                 view.redraw = true;
+                // (it shows that character from now on: on screen, as it
+                // was, until its next drawing says otherwise)
+                view.monitors.seen = std::array::from_fn(|slot| slot == to);
             }
         }
     }
@@ -556,6 +559,9 @@ impl Window_ {
             Act::Step(forward) => {
                 let candidates = self.host.desk.cycling_candidates();
                 self.monitors.cycle.step(&candidates, forward, now);
+                // the user moved on: a text left unsent no longer holds
+                // the turn (it stays its character's draft)
+                self.monitors.typed = None;
             }
             Act::Pause(paused) => self.monitors.cycle.set_paused(paused, now),
             Act::Cycling(open) => self.host.desk.set_cycling(open),
