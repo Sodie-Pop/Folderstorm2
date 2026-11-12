@@ -272,6 +272,8 @@ impl Desk {
         for wait in std::mem::take(&mut self.bakes) {
             wait.call.answer(Err(refusal.clone()));
         }
+        // Folderstorm: phase 3's landmark reads wait too
+        landmark::refuse_all(&mut self.landmarks, refusal);
     }
 
     /// Access is turned off: every call still waiting is refused, the

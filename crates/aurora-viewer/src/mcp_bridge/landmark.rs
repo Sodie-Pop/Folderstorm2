@@ -69,6 +69,14 @@ pub fn wanted(waits: &[Wait]) -> Vec<Uuid> {
     waits.iter().map(|w| w.asset).collect()
 }
 
+/// Every waiting call refused with `refusal` (a login change, access
+/// turned off: `Desk::refuse_waiting`).
+pub fn refuse_all(waits: &mut Vec<Wait>, refusal: &ToolError) {
+    for wait in std::mem::take(waits) {
+        wait.call.answer(Err(refusal.clone()));
+    }
+}
+
 /// Once per frame: answer the calls whose landmark is known, failed or out
 /// of time.
 pub fn tick(waits: &mut Vec<Wait>, world: &World, now: Instant) {

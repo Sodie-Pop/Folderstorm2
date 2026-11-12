@@ -520,6 +520,35 @@ fn a_landmark_answers_its_location_once_known() {
     assert_eq!(answered(&answer).expect_err("unknown").code, ErrorCode::NotFound);
 }
 
+/// Folderstorm: a landmark read waits in the desk like a bake, so a login
+/// change refuses it too (`Desk::refuse_waiting`, #32).
+#[test]
+fn a_login_change_refuses_a_waiting_landmark() {
+    let mut world = landmark_world();
+    let landmark = Uuid::from_u128(99_720);
+    world.inventory.add_items(vec![InvItem {
+        id: landmark,
+        parent: DEMO_FOLDER,
+        name: "Plaza".into(),
+        asset_type: 3,
+        inv_type: 3,
+        asset_id: Uuid::from_u128(99_721),
+        owner: AGENT,
+        owner_mask: actions::MOVE | actions::TRANSFER,
+        ..Default::default()
+    }]);
+    let now = Instant::now();
+    let mut desk = Desk::default();
+    desk.set_login(1, Some("vs-11111111111111111111111111111111".to_owned()));
+    let (a, answer) = call("inventory_landmark", json!({"item_id": landmark.to_string()}), false);
+    desk.take(a, &ctx(&world.inventory), now);
+    desk.tick_reads(&world, now);
+    assert!(answer.try_recv().is_err(), "waits for the asset");
+    desk.set_login(2, None);
+    assert_eq!(answered(&answer).expect_err("refused").code, ErrorCode::SessionChanged);
+    assert!(desk.wanted_landmarks().is_empty());
+}
+
 #[test]
 fn rlva_showloc_hides_a_landmarks_location() {
     let mut world = landmark_world();
