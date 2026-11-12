@@ -287,7 +287,7 @@ mod tests {
             assert!(names.insert(t.name), "{} twice", t.name);
             assert_eq!((t.schema)()["type"], "object", "{}", t.name);
         }
-        assert_eq!(names.len(), TOOLS.len() + INVENTORY_TOOLS.len());
+        assert_eq!(names.len(), TOOLS.len() + INVENTORY_TOOLS.len() + super::super::world::WORLD_TOOLS.len());
         for read in [
             "inventory_get_many",
             "inventory_system_folder",
