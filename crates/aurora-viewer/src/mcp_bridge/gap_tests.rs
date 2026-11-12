@@ -959,6 +959,8 @@ fn the_new_changes_ask_first_and_reads_never_do() {
     let inv = demo_inventory();
     let now = Instant::now();
     let mut desk = Desk::default();
+    // the levels the calls were asked under (the desk decides again with them)
+    desk.set_permissions(folderstorm_mcp_bridge::Preset::AskBeforeChanges.permissions());
     let (a, answer) = call(
         "inventory_set_favorite",
         json!({"ids": [TEXTURE.to_string()], "favorite": true}),

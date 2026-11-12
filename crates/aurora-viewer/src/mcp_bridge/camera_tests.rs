@@ -520,6 +520,8 @@ fn a_camera_move_asks_in_plain_words_then_runs() {
     cx.stage = stage();
     let now = Instant::now();
     let mut desk = Desk::default();
+    // the levels the calls were asked under (the desk decides again with them)
+    desk.set_permissions(folderstorm_mcp_bridge::Preset::AskBeforeChanges.permissions());
     let (c, answer) = call("camera_preset", json!({"preset": "full_body"}), true);
     desk.take(c, &cx, now);
     let q = desk.question(now).expect("a question");
