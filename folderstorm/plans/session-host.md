@@ -369,7 +369,8 @@ available.
   (`world.social.ims`). Their `LineClock` numbers lines (`first`, `revision`,
   `token`, in `world/transcripts.rs`), so the adapter sends only new lines and
   restarts cleanly when `token` changes. No change to upstream chat code.
-  Group chat and conference coverage is to be checked during checkpoint 3.
+  Group chats and conferences are sessions of `world.social.ims` too, so
+  they are covered the same way (checkpoint 3, "As built").
 - **Restrictions.** Export only what the viewer's own window would show
   (RLVa names and text redaction, receive restrictions), rechecked at export
   time.
@@ -683,6 +684,127 @@ May be two small PRs: 1a profiles, 1b behind policy.
   relogins; a send during a broken pipe is reported "uncertain" and never
   doubled; RLVa receive and send restrictions hold; offers show as "Switch to
   answer".
+
+- **As built (branch `claude/session-checkpoint-3`, on top of checkpoint
+  2):** the rules are pure and tested in `crates/folderstorm-session`
+  (`ipc`: protocol 2 and its new messages; `export`: which lines are new by
+  the viewer's `LineClock`, and "said at most once"; `chat`: the host's
+  model). In the viewer: `folderstorm_characters/chat_export.rs` (what a
+  managed viewer tells), `app/folderstorm_characters/chat.rs` (the `impl
+  App` glue: saying a line, the demo), `folderstorm_characters/host/chat_ui.rs`
+  (the panel). **No new upstream hook**: the export only reads
+  `World::chat`, `World::social.ims`, their clocks and
+  `World::notifications`, and runs from checkpoint 2's
+  `folderstorm_managed_pump` call in `about_to_wait`.
+  - **Coverage.** Nearby chat, instant messages, group chats and
+    conferences: Aurora keeps all three kinds of session in
+    `World::social.ims`, so they are told and written to the same way. A
+    line is told with the sender's name and the text the conversation shows
+    (`ui::chat::sender_name`, `line_body`, `resolved_text`). Only lines of
+    this session are told (`Origin::Live`): the transcript's history and a
+    group's server history stay in the viewer. An instant message that the
+    viewer also repeats in its nearby chat is told once, in its
+    conversation. The host starts no conversation: it writes to those a
+    viewer has open (a closed one answers "closed in the character's
+    window"). No typing notices, no chat volume choice (a nearby line is
+    said at normal volume; "/5 text" goes to channel 5 as in the chat bar).
+  - **IPC, protocol 2** (a host and a viewer of different protocols refuse
+    each other, as for builds). Viewer to host: `Chat(ChatBatch{generation,
+    conversation, kind, title, restart, missed, unread, lines})`,
+    `Attention(AttentionList)` (whole, latest replaces),
+    `SendResult{id, Accepted | Refused(reason)}`. Host to viewer:
+    `SendChat{id, generation, conversation, text}`,
+    `MarkRead{generation, conversation}`. `ChatGap` is the batch's `missed`
+    count; "uncertain" is never on the wire: it is what the host concludes
+    when no answer comes. Every text is bounded and stripped of control
+    characters on arrival, on both sides (line 2048 characters, text to say
+    1024, title 80, 32 lines a batch, 16 attention items); a full batch is
+    proven under the 64 KiB frame. A message that is not one ends the link
+    (viewer) or the reading of that viewer (host), as in checkpoint 2.
+  - **Never as another character.** A line to say travels only on the
+    standard input of the one viewer it was typed for (the effect names the
+    slot and its launch; the host writes to that launch's pipe or not at
+    all), carries that viewer's login generation, and names no character:
+    there is nothing in a message that could make viewer B speak for A. In
+    the host a draft is bound to (slot, launch, login generation,
+    conversation). The launch is part of it because a restarted viewer
+    counts its logins from 1 again. After a logout, a login or a restart
+    the draft is **held**: shown, not sent, until the user presses "Use it
+    as <name> now" or discards it. A character removed from the desk leaves
+    nothing behind for the next profile in its slot.
+  - **Never twice.** The host hands a line to a pipe once and never again.
+    Not queued (the viewer does not read, its queue is full): "not sent",
+    text back in the box. Queued and no answer (the process ended, or 15 s
+    of silence): "uncertain", with the text, **not** put back in the box.
+    The viewer says each `id` at most once (ids grow; an id not above the
+    last is refused as repeated) and keeps its answers until the link takes
+    them. A refusal is noted in its own conversation and the text goes back
+    to that draft.
+  - **Sending uses the viewer's own paths.** Nearby: `App::send_local_chat`
+    (channel prefix, gestures, chat bar commands, then `App::send` with
+    RLVa's `outgoing_chat`). Conversations: **deviation**: the
+    conversations window's send is not a function but a loop inside
+    `App::handle_actions` (`for (to, text) in a.ims`), which runs once per
+    frame with the whole frame's actions; the pump runs outside frames
+    (a minimised character has few). Its steps are repeated in
+    `App::folderstorm_send_im` (":" emote, emoji shortcodes, group or
+    conference session, unblock notice, `World::own_im`, `App::send` with
+    RLVa's `sendim` rules), with a comment to keep both alike at upstream
+    merges. Options if this drifts: (a) ask upstream to make that loop body
+    a method (the clean fix, about 20 moved lines); (b) do it in the fork
+    (a conflict at each upstream change of those lines).
+  - **RLVa.** Receive restrictions are applied by Aurora before a line is
+    stored, so a refused line never reaches the export (tested with
+    `@recvchat`, `@recvim`). Names and places are replaced by Aurora
+    partly when a line is stored and partly when it is drawn; the export
+    uses the drawing's own functions at export time, and while
+    RLVa is on it checks every 2 s that the last 200 lines told per
+    conversation still read as the window shows them: when one does not (a
+    restriction came, a hidden resident's name was learnt) the conversation
+    is told again (`restart`) and the host **replaces** its copy, in the
+    conversation and in "All" (tested with `@shownames`). Send restrictions
+    hold because the viewer's own send path applies them; what RLVa makes
+    of the line (redirected, replaced, dropped) shows in the viewer's
+    conversation and comes back from there. `Refused(Restricted)` exists in
+    the protocol but nothing sends it yet: Aurora's paths do not report a
+    refusal to their caller.
+  - **Host model:** a tab per character and "All"; in a character's tab
+    its conversations (nearby chat first); "Send as <name> — <place>" above
+    the box; in "All" the box writes to the conversation of the line that was
+    clicked (each line starts with "[character › conversation]"), never to
+    "the latest";
+    500 lines and 50 host notices per conversation, 64 conversations per
+    character (the one heard of longest ago leaves; never the nearby chat
+    or the one on screen), 1000 entries in "All"; gap markers for lines the
+    viewer dropped first, and "older lines are in the character's own
+    window" for what the host dropped; unread per conversation and
+    character, cleared when on screen in a focused host window, and the
+    viewer is told (`MarkRead`) so its own counter and bell follow.
+  - **Attention:** the viewer's notifications that need an answer
+    (`Notification::interactive`: teleport offers and requests, friendship,
+    inventory offers, group invitations, script dialogs, permissions,
+    links, calls) are listed per character with **Switch to answer**; the
+    cards of offers inside a conversation have the same button. The host
+    has no message that answers anything. A payment received is a plain
+    line (nothing to answer).
+  - **Sound:** the viewers' interface sounds are grid assets and the host
+    never logs in, so it cannot play them. "Sound when a background
+    character gets a message" (off by default, saved in
+    `session-host.json`) plays the system's notification sound
+    (`MessageBeep`, Windows only) for an instant message, a group or
+    conference line or an offer to a character that is not the active one;
+    the host's taskbar button flashes either way. The per-character
+    "alerts only / all" of section 10 is still open.
+  - **Window:** still drawn on the processor (egui through the crash
+    window's software painter, no graphics device); the chat is the same
+    egui with the shared widgets, beside the characters (side by side from
+    about 940 points of width, two pages below).
+  - **Demo:** each demo character hears a neighbour, gets an instant
+    message and one teleport offer (`AURORA_DEMO_SESSION_HOST`,
+    `docs/TESTING.md`).
+  - Not done: starting a conversation from the host, typing notices,
+    shout / whisper, a line's links as links (plain text), names coloured
+    per character, the chat as its own window (checkpoint 6).
 
 ### Checkpoint 4: comfort
 

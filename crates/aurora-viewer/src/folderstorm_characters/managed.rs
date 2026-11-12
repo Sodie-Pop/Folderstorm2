@@ -118,7 +118,14 @@ impl Link {
     /// host reads slowly: the next report replaces this one) or the link
     /// is over.
     pub fn report(&self, status: Status) -> bool {
-        match self.reports.try_send(ToHost::Status(Box::new(status))) {
+        self.send(ToHost::Status(Box::new(status)))
+    }
+
+    /// Queues anything for the host (chat lines, the answer to a line it
+    /// asked for); false when the queue is full or the link is over: the
+    /// caller keeps it and tries again, nothing is dropped here.
+    pub fn send(&self, message: ToHost) -> bool {
+        match self.reports.try_send(message) {
             Ok(()) => true,
             Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => false,
         }
@@ -157,7 +164,8 @@ fn run<W: std::io::Write + Send + 'static>(
     loop {
         match ipc::read_frame::<ToViewer>(&mut input) {
             Ok(command) => {
-                if to_main.send(Event::Command(command)).is_err() {
+                // (its text bounded and cleaned before anything acts on it)
+                if to_main.send(Event::Command(command.cleaned())).is_err() {
                     break;
                 }
             }
@@ -231,6 +239,18 @@ pub(super) fn play_viewer(input: &[u8], report: Status) -> Vec<Event> {
     assert!(link.report(report));
     run(input, &to_main, from_main, link.shared, transport::connect);
     link.poll().collect()
+}
+
+/// A viewer's link on the real transport that stays up for as long as
+/// `input` does, for the host's tests of a conversation both ways: the
+/// test plays the viewer's main thread on the link it is given.
+#[cfg(all(test, unix))]
+pub(super) fn start_viewer(input: impl Read + Send + 'static) -> (&'static Link, std::thread::JoinHandle<()>) {
+    let (link, to_main, from_main) = Link::new();
+    let link: &'static Link = Box::leak(Box::new(link));
+    let shared = link.shared;
+    let thread = std::thread::spawn(move || run(input, &to_main, from_main, shared, transport::connect));
+    (link, thread)
 }
 
 #[cfg(test)]

@@ -14,11 +14,13 @@
 //! viewer shows its own login screen. Closing or losing the host ends no
 //! viewer: their command pipes close and they go on by themselves.
 
+mod chat_ui;
 mod process;
 mod ui;
 
-use ::folderstorm_session::host::{Config, Desk, Effect, Note};
-use ::folderstorm_session::ipc::MAX_SLOTS;
+use ::folderstorm_session::chat::{self, Chat};
+use ::folderstorm_session::host::{Config, Desk, Effect, Note, Phase};
+use ::folderstorm_session::ipc::{MAX_SLOTS, Screen, ToViewer};
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -117,6 +119,10 @@ fn save_config(config: &Config) {
 /// what they report.
 struct Host {
     desk: Desk,
+    /// The characters' conversations and what is typed for them here.
+    chat: Chat,
+    /// A message came for a background character since the window looked.
+    alert: bool,
     viewers: [Option<process::Viewer>; MAX_SLOTS],
     events: Receiver<process::Event>,
     events_tx: Sender<process::Event>,
@@ -135,6 +141,8 @@ impl Host {
         let (events_tx, events) = crossbeam_channel::unbounded();
         let mut host = Self {
             desk: Desk::new(config),
+            chat: Chat::default(),
+            alert: false,
             viewers: Default::default(),
             events,
             events_tx,
@@ -155,11 +163,26 @@ impl Host {
     fn tick(&mut self, now: Instant) {
         let events: Vec<process::Event> = self.events.try_iter().collect();
         for process::Event { slot, launch, kind } in events {
+            // the chat takes nothing of a viewer the desk does not manage
+            // (let go, ended, or an earlier launch)
+            let managed = self
+                .desk
+                .slot(slot)
+                .is_some_and(|s| s.phase == Phase::Running && s.launch() == launch);
             match kind {
                 process::Kind::Connected => self.desk.connected(slot, launch, now),
                 process::Kind::Refused(refusal) => self.desk.refused(slot, launch, refusal),
-                process::Kind::Status(status) => self.desk.status(slot, launch, *status, now),
+                process::Kind::Status(status) => {
+                    if managed {
+                        self.chat.status(slot, launch, status.generation, status.screen == Screen::World);
+                    }
+                    self.desk.status(slot, launch, *status, now);
+                }
                 process::Kind::Heartbeat(count) => self.desk.heartbeat(slot, launch, count, now),
+                process::Kind::Chat(batch) if managed => self.chat.batch(slot, launch, *batch),
+                process::Kind::Attention(list) if managed => self.chat.attention_list(slot, launch, *list),
+                process::Kind::SendResult(id, outcome) if managed => self.chat.result(slot, launch, id, outcome),
+                process::Kind::Chat(_) | process::Kind::Attention(_) | process::Kind::SendResult(..) => {}
                 process::Kind::Unreachable => self.desk.unreachable(slot, launch),
             }
         }
@@ -174,11 +197,16 @@ impl Host {
                     if clean { "cleanly" } else { "not cleanly" }
                 );
                 self.desk.exited(slot, viewer.launch, clean, now);
+                // what it was asked to say and did not answer is uncertain
+                self.chat.ended(slot, viewer.launch);
                 self.viewers[slot] = None;
             }
         }
         self.desk.tick(now);
         self.carry_out(now);
+        self.chat.set_active(self.desk.active());
+        self.chat.tick(now);
+        self.carry_out_chat();
         if self.unsaved.is_some_and(|since| now.duration_since(since) >= SAVE_AFTER) {
             self.save();
         }
@@ -211,9 +239,36 @@ impl Host {
                         log::info!("session host: character {} is not managed: let go", slot + 1);
                         viewer.let_go();
                     }
+                    // nothing is said to, or kept waiting for, a viewer let go
+                    self.chat.ended(slot, launch);
                 }
                 Effect::Save => self.unsaved = self.unsaved.or(Some(now)),
                 Effect::Exit => self.exit = true,
+            }
+        }
+    }
+
+    /// What the chat asks for: a line or a "read" for one viewer, on that
+    /// viewer's own pipe and no other.
+    fn carry_out_chat(&mut self) {
+        for effect in self.chat.take_effects() {
+            match effect {
+                chat::Effect::Send { slot, launch, message } => {
+                    let line = match &message {
+                        ToViewer::SendChat { id, .. } => Some(*id),
+                        _ => None,
+                    };
+                    let queued = self.viewers[slot]
+                        .as_ref()
+                        .filter(|v| v.launch == launch)
+                        .is_some_and(|viewer| viewer.send(message));
+                    if !queued && let Some(id) = line {
+                        // never reached the pipe: not sent, for certain
+                        log::warn!("session host: a line for character {} was not handed to it", slot + 1);
+                        self.chat.not_written(id);
+                    }
+                }
+                chat::Effect::Alert { .. } => self.alert = true,
             }
         }
     }
@@ -259,6 +314,21 @@ fn allow_foreground(pid: u32) {
 
 #[cfg(not(windows))]
 fn allow_foreground(_pid: u32) {}
+
+/// The system's own notification sound, for a message to a background
+/// character (the viewers' sounds are grid assets the host cannot fetch:
+/// it never logs in).
+#[cfg(windows)]
+fn message_sound() {
+    use windows_sys::Win32::{System::Diagnostics::Debug::MessageBeep, UI::WindowsAndMessaging::MB_ICONASTERISK};
+    // SAFETY: no pointer; the sound is queued and the call returns at once.
+    unsafe {
+        MessageBeep(MB_ICONASTERISK);
+    }
+}
+
+#[cfg(not(windows))]
+fn message_sound() {}
 
 /// The host's whole run: its window until it closes.
 pub fn run() -> anyhow::Result<()> {

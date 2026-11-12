@@ -4,7 +4,10 @@
 //! notice, a profile's raise request, and the GPU rules that keep a window
 //! behind from showing a box over the active character, lowering its
 //! graphics or closing (R4, R5). The decisions themselves are the
-//! `folderstorm-session` crate's pure functions.
+//! `folderstorm-session` crate's pure functions. The shared chat's side of
+//! a managed viewer is in `folderstorm_characters/chat.rs`.
+
+mod chat;
 
 use super::*;
 use crate::folderstorm_characters::managed::Event as HostEvent;
@@ -256,6 +259,9 @@ impl App {
                         g.window.set_minimized(true);
                     }
                 }
+                HostEvent::Command(command @ (ipc::ToViewer::SendChat { .. } | ipc::ToViewer::MarkRead { .. })) => {
+                    self.folderstorm_chat_command(command);
+                }
                 HostEvent::Command(ipc::ToViewer::Quit) => {
                     log::info!("session host: asked to quit");
                     self.folderstorm_characters.quit_by_host = true;
@@ -283,6 +289,7 @@ impl App {
             self.folderstorm_show(stage);
         }
         let now = Instant::now();
+        self.folderstorm_chat_pump(link, now);
         let report = &self.folderstorm_characters.report;
         if report.checked.is_some_and(|at| now.duration_since(at) < REPORT_CHECK) {
             return;

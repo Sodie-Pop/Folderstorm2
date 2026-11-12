@@ -15,8 +15,13 @@
 //! - [`managed`]: `--managed`, a viewer's link to the host that started it;
 //! - [`transport`]: the private local endpoint between the two.
 //!
+//! Checkpoint 3, the shared chat:
+//! - [`chat_export`]: what a managed viewer tells the host of its
+//!   conversations, read from the world as its own window shows it.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
+pub mod chat_export;
 pub mod host;
 pub mod managed;
 pub mod profile;
@@ -70,6 +75,8 @@ pub struct State {
     pub managed: ::folderstorm_session::managed::Managed,
     /// What the host is told of this viewer.
     pub report: Report,
+    /// What the host is told of this viewer's conversations.
+    pub chat: chat_export::Export,
     /// The session host asked this viewer to quit.
     pub quit_by_host: bool,
     /// The window's own focus as last read from it. A frame takes the

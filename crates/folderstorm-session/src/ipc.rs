@@ -15,8 +15,17 @@
 //!   user can open elsewhere), named in the bootstrap. Its first frame is
 //!   [`Hello`] with the bootstrap's one-time token, then [`ToHost`] reports.
 //!
-//! Neither channel ever carries a password, a login token or a chat line
-//! in this checkpoint: each character logs in on its own login screen.
+//! Neither channel ever carries a password or a login token: each
+//! character logs in on its own login screen.
+//!
+//! Since protocol 2 (checkpoint 3, plan section 9) the channels carry the
+//! shared chat: a viewer tells the lines its own window shows
+//! ([`ChatBatch`]) and what waits for an answer there ([`AttentionList`]);
+//! the host asks a viewer to say a line the user typed for that character
+//! ([`ToViewer::SendChat`]) and hears whether the viewer took it
+//! ([`ToHost::SendResult`]). A line to say travels on the standard input
+//! of the one viewer it is for, with that viewer's login generation: no
+//! message names another character, so none can be sent as another.
 //!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
@@ -28,7 +37,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -164,6 +173,252 @@ pub enum ToViewer {
     /// Quit as if the user had chosen Quit: log out, save, exit. Unsaved
     /// work in an editor still asks its question in the viewer.
     Quit,
+    /// Say `text` in `conversation`, as the chat bar or the conversation's
+    /// field would. `id` grows with every line the host asks this viewer
+    /// to say: one that is not above the last is never said again.
+    /// `generation`: the login the user typed it for; another login
+    /// refuses it.
+    SendChat {
+        id: u64,
+        generation: u32,
+        conversation: Conversation,
+        text: String,
+    },
+    /// The user read that conversation in the host's window.
+    MarkRead {
+        generation: u32,
+        conversation: Conversation,
+    },
+}
+
+impl ToViewer {
+    /// The command with its text bounded and cleaned: what a viewer acts
+    /// on of what came down its pipe.
+    pub fn cleaned(self) -> Self {
+        match self {
+            Self::SendChat {
+                id,
+                generation,
+                conversation,
+                text,
+            } => Self::SendChat {
+                id,
+                generation,
+                conversation,
+                text: clean_text(&text, MAX_SEND),
+            },
+            other => other,
+        }
+    }
+}
+
+/// A conversation of one character. It names nothing by itself: the viewer
+/// that receives it looks the session up in its own world.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Conversation {
+    /// The nearby chat.
+    #[default]
+    Nearby,
+    /// A session of the viewer's conversations, by the two halves of its
+    /// id: a resident's, a group's or a conference's.
+    Session(u64, u64),
+}
+
+impl Conversation {
+    pub fn session(id: u128) -> Self {
+        Self::Session((id >> 64) as u64, id as u64)
+    }
+
+    /// The session's id; None for the nearby chat.
+    pub fn id(self) -> Option<u128> {
+        match self {
+            Self::Nearby => None,
+            Self::Session(high, low) => Some((u128::from(high) << 64) | u128::from(low)),
+        }
+    }
+}
+
+/// What a conversation is, as its viewer says.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SessionKind {
+    #[default]
+    Nearby,
+    Resident,
+    Group,
+    Conference,
+}
+
+/// Who a line is from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LineKind {
+    /// Someone else.
+    #[default]
+    Said,
+    /// The character itself.
+    Own,
+    /// The viewer or the grid.
+    System,
+    /// A scripted object.
+    Object,
+    /// An offer shown as a card in the conversation: answered in the
+    /// viewer's own window, never in the host.
+    Card,
+}
+
+/// One line of a conversation, as the viewer's own window shows it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatLine {
+    /// The viewer's number of the line in its conversation: grows by one
+    /// per line, whatever is exported of them.
+    pub number: u64,
+    /// Seconds since the Unix epoch.
+    pub time: u64,
+    pub kind: LineKind,
+    /// The line is an emote: `text` starts with the sender's name.
+    pub emote: bool,
+    pub from: String,
+    pub text: String,
+}
+
+/// The longest texts of the chat, in characters.
+pub const MAX_CHAT_TEXT: usize = 2048;
+pub const MAX_SEND: usize = 1024;
+pub const MAX_TITLE: usize = 80;
+/// The most lines in a batch, and attention items in a list.
+pub const MAX_BATCH_LINES: usize = 32;
+pub const MAX_ATTENTION: usize = 16;
+/// What a batch's lines may weigh before it is sent, well under
+/// [`MAX_FRAME`] whatever their text.
+const BATCH_BUDGET: usize = 40 * 1024;
+
+/// New lines of one conversation.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatBatch {
+    /// The login these lines belong to ([`Status::generation`]).
+    pub generation: u32,
+    pub conversation: Conversation,
+    pub kind: SessionKind,
+    /// The conversation's name, as the viewer shows it.
+    pub title: String,
+    /// What the host holds of this conversation is replaced by `lines`:
+    /// the viewer's numbers changed, or what it shows of earlier lines did
+    /// (a restriction hides a name or a place now).
+    pub restart: bool,
+    /// Lines the viewer dropped before they could be told, just before
+    /// `lines`: the host marks a gap.
+    pub missed: u32,
+    /// The viewer's own unread count of the conversation.
+    pub unread: u32,
+    pub lines: Vec<ChatLine>,
+}
+
+impl ChatBatch {
+    /// Adds a line if the batch still fits a frame with it; false: the
+    /// batch is full, the line goes in the next one. The first line always
+    /// fits.
+    pub fn push(&mut self, line: ChatLine) -> bool {
+        // (JSON writes a character in at most twice its bytes once the
+        // control characters are gone)
+        let weight = |l: &ChatLine| 2 * (l.from.len() + l.text.len()) + 96;
+        let held: usize = self.lines.iter().map(weight).sum();
+        if !self.lines.is_empty() && (self.lines.len() >= MAX_BATCH_LINES || held + weight(&line) > BATCH_BUDGET) {
+            return false;
+        }
+        self.lines.push(line);
+        true
+    }
+
+    /// The batch with every text bounded and cleaned: what the host keeps
+    /// and shows of what a viewer sent.
+    pub fn cleaned(mut self) -> Self {
+        self.title = clean(&self.title, MAX_TITLE);
+        self.lines.truncate(MAX_BATCH_LINES);
+        for line in &mut self.lines {
+            line.from = clean(&line.from, MAX_NAME);
+            line.text = clean_text(&line.text, MAX_CHAT_TEXT);
+        }
+        self
+    }
+}
+
+/// What waits for the user's answer in a viewer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttentionKind {
+    Teleport,
+    Friendship,
+    Inventory,
+    Group,
+    /// A script's dialog or text box.
+    Script,
+    /// A script asks for permissions.
+    Permissions,
+    Link,
+    Call,
+    #[default]
+    Other,
+}
+
+/// One question waiting in a viewer. The host only shows it: the answer
+/// is given in the viewer's own window.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttentionItem {
+    /// The viewer's number of the question.
+    pub id: u64,
+    pub kind: AttentionKind,
+    pub title: String,
+    pub text: String,
+}
+
+/// The longest text of an attention item, in characters.
+pub const MAX_ATTENTION_TEXT: usize = 240;
+
+/// Everything that waits for an answer in a viewer, whole: the latest
+/// list replaces the others.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttentionList {
+    pub generation: u32,
+    pub items: Vec<AttentionItem>,
+    /// How many more wait than `items` tells.
+    pub more: u32,
+}
+
+impl AttentionList {
+    pub fn cleaned(mut self) -> Self {
+        let over = self.items.len().saturating_sub(MAX_ATTENTION);
+        self.items.truncate(MAX_ATTENTION);
+        self.more = self.more.saturating_add(u32::try_from(over).unwrap_or(u32::MAX));
+        for item in &mut self.items {
+            item.title = clean(&item.title, MAX_TITLE);
+            item.text = clean(&item.text, MAX_ATTENTION_TEXT);
+        }
+        self
+    }
+}
+
+/// Why a viewer did not say a line the host asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SendRefusal {
+    /// The character is not in the world.
+    NotInWorld,
+    /// It logged out or in since the line was typed.
+    Stale,
+    /// The conversation is closed, or not one of this character's.
+    Closed,
+    /// A restriction (RLVa) forbids it.
+    Restricted,
+    /// Nothing to say once cleaned.
+    Empty,
+    /// The line's number was already seen: never said twice.
+    Repeated,
+}
+
+/// What became of a line the host asked a viewer to say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SendOutcome {
+    /// Handed to the viewer's own sending, with its rules: what was said
+    /// comes back as a line of the conversation.
+    Accepted,
+    Refused(SendRefusal),
 }
 
 /// The first frame a viewer sends.
@@ -285,6 +540,17 @@ impl Status {
     }
 }
 
+/// A chat text bounded and without control characters, its line breaks
+/// kept.
+pub fn clean_text(text: &str, max: usize) -> String {
+    text.chars()
+        .filter(|c| *c == '\n' || !c.is_control())
+        .take(max)
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
 fn clean(text: &str, max: usize) -> String {
     text.chars()
         .filter(|c| !c.is_control())
@@ -304,6 +570,15 @@ pub enum ToHost {
     /// a thread that stopped writing is not answering (rule R6).
     Heartbeat {
         loop_count: u64,
+    },
+    /// New lines of a conversation.
+    Chat(Box<ChatBatch>),
+    /// What waits for an answer in the viewer, whole.
+    Attention(Box<AttentionList>),
+    /// What became of [`ToViewer::SendChat`] number `id`.
+    SendResult {
+        id: u64,
+        outcome: SendOutcome,
     },
 }
 
@@ -612,5 +887,181 @@ mod tests {
         assert_eq!(endpoint_name(1, 1, 0, ""), None);
         assert_eq!(endpoint_name(1, 1, 0, r"..\x"), None);
         assert_eq!(endpoint_name(1, 1, 0, "a/b"), None);
+    }
+
+    #[test]
+    fn the_chat_messages_come_back_as_they_were_sent() {
+        let conversation = Conversation::session(u128::MAX - 5);
+        assert_eq!(conversation.id(), Some(u128::MAX - 5));
+        assert_eq!(Conversation::session(7).id(), Some(7));
+        assert_eq!(Conversation::Nearby.id(), None);
+        let batch = ChatBatch {
+            generation: 3,
+            conversation,
+            kind: SessionKind::Group,
+            title: "Builders".into(),
+            restart: true,
+            missed: 2,
+            unread: 1,
+            lines: vec![ChatLine {
+                number: 1 << 40,
+                time: 1_800_000_000,
+                kind: LineKind::Said,
+                emote: false,
+                from: "Jane Doe".into(),
+                text: "hello \"there\"\nsecond line \u{1F600}".into(),
+            }],
+        };
+        let attention = AttentionList {
+            generation: 3,
+            items: vec![AttentionItem {
+                id: 9,
+                kind: AttentionKind::Teleport,
+                title: "Jane Doe".into(),
+                text: "offers a teleport".into(),
+            }],
+            more: 0,
+        };
+        for message in [
+            ToHost::Chat(Box::new(batch)),
+            ToHost::Attention(Box::new(attention)),
+            ToHost::SendResult {
+                id: 4,
+                outcome: SendOutcome::Accepted,
+            },
+            ToHost::SendResult {
+                id: 5,
+                outcome: SendOutcome::Refused(SendRefusal::Stale),
+            },
+        ] {
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &message).expect("written");
+            assert_eq!(read_frame::<ToHost>(&mut wire.as_slice()).expect("read"), message);
+        }
+        for message in [
+            ToViewer::SendChat {
+                id: 1,
+                generation: 3,
+                conversation,
+                text: "hi".into(),
+            },
+            ToViewer::MarkRead {
+                generation: 3,
+                conversation: Conversation::Nearby,
+            },
+        ] {
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &message).expect("written");
+            assert_eq!(read_frame::<ToViewer>(&mut wire.as_slice()).expect("read"), message);
+        }
+    }
+
+    #[test]
+    fn chat_from_a_viewer_is_bounded_and_cleaned_before_it_is_kept() {
+        let line = |text: &str| ChatLine {
+            from: format!("Jane\u{7}{}", "x".repeat(200)),
+            text: text.to_owned(),
+            ..Default::default()
+        };
+        let batch = ChatBatch {
+            title: format!("Group\r\n{}", "t".repeat(300)),
+            lines: std::iter::repeat_n(line(&format!("a\u{1b}[31mb\nc\0{}", "z".repeat(5000))), 100).collect(),
+            ..Default::default()
+        }
+        .cleaned();
+        assert_eq!(batch.title.chars().count(), MAX_TITLE);
+        assert_eq!(batch.lines.len(), MAX_BATCH_LINES);
+        let first = &batch.lines[0];
+        assert_eq!(first.from.chars().count(), MAX_NAME);
+        assert_eq!(first.text.chars().count(), MAX_CHAT_TEXT);
+        assert!(first.text.starts_with("a[31mb\nc"), "line breaks stay, control characters go");
+        let list = AttentionList {
+            items: std::iter::repeat_n(
+                AttentionItem {
+                    title: "T\n".repeat(100),
+                    text: "x".repeat(1000),
+                    ..Default::default()
+                },
+                20,
+            )
+            .collect(),
+            more: 1,
+            ..Default::default()
+        }
+        .cleaned();
+        assert_eq!((list.items.len(), list.more), (MAX_ATTENTION, 5));
+        assert_eq!(list.items[0].text.len(), MAX_ATTENTION_TEXT);
+        assert!(!list.items[0].title.contains('\n'));
+        // what the host asks a viewer to say is bounded there too
+        let send = ToViewer::SendChat {
+            id: 1,
+            generation: 1,
+            conversation: Conversation::Nearby,
+            text: format!("  hi\u{0}\u{8} {}", "y".repeat(3000)),
+        }
+        .cleaned();
+        let ToViewer::SendChat { text, .. } = send else {
+            panic!("another command");
+        };
+        assert!(text.starts_with("hi y"));
+        assert!((MAX_SEND - 2..=MAX_SEND).contains(&text.chars().count()));
+        assert_eq!(clean_text(" \u{1}\n ", MAX_SEND), "");
+    }
+
+    #[test]
+    fn a_batch_of_the_longest_lines_still_fits_a_frame() {
+        // the worst text: four bytes a character, and quotes that JSON doubles
+        let worst = |c: char| ChatLine {
+            number: u64::MAX,
+            time: u64::MAX,
+            kind: LineKind::Object,
+            emote: true,
+            from: c.to_string().repeat(MAX_NAME),
+            text: c.to_string().repeat(MAX_CHAT_TEXT),
+        };
+        for c in ['\u{1F600}', '"', '\\', '\n', 'a'] {
+            let mut batch = ChatBatch {
+                title: c.to_string().repeat(MAX_TITLE),
+                ..Default::default()
+            };
+            let mut pushed = 0;
+            while batch.push(worst(c)) {
+                pushed += 1;
+                assert!(pushed <= MAX_BATCH_LINES);
+            }
+            assert!(pushed >= 1, "the first line always fits");
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &ToHost::Chat(Box::new(batch.clone()))).expect("a full batch is under the frame limit");
+            assert_eq!(
+                read_frame::<ToHost>(&mut wire.as_slice()).expect("read"),
+                ToHost::Chat(Box::new(batch))
+            );
+        }
+        // short lines: the count bounds the batch
+        let mut batch = ChatBatch::default();
+        let pushed = (0..100).filter(|_| batch.push(ChatLine::default())).count();
+        assert_eq!(pushed, MAX_BATCH_LINES);
+    }
+
+    #[test]
+    fn a_message_of_another_protocol_is_not_one() {
+        // a chat line is not a command, a command is not a report
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToHost::Chat(Box::default())).expect("written");
+        assert!(matches!(read_frame::<ToViewer>(&mut wire.as_slice()), Err(FrameError::Invalid(_))));
+        let mut wire = Vec::new();
+        write_frame(
+            &mut wire,
+            &serde_json::json!({"SendChat": {"id": 1, "generation": 1, "conversation": "Nearby", "text": "x", "as": "someone else"}}),
+        )
+        .expect("written");
+        // (an unknown field is ignored; a missing or misshapen one refuses the frame)
+        assert!(read_frame::<ToViewer>(&mut wire.as_slice()).is_ok());
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &serde_json::json!({"SendChat": {"id": 1, "text": "x"}})).expect("written");
+        assert!(matches!(read_frame::<ToViewer>(&mut wire.as_slice()), Err(FrameError::Invalid(_))));
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &serde_json::json!({"SendChatAs": {"slot": 2, "text": "x"}})).expect("written");
+        assert!(matches!(read_frame::<ToViewer>(&mut wire.as_slice()), Err(FrameError::Invalid(_))));
     }
 }
