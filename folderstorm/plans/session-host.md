@@ -1581,6 +1581,213 @@ May be two small PRs: 1a profiles, 1b behind policy.
       measurements of section 4.3 on a real card first. Not recommended
       before A has been lived with.
 
+### Checkpoint 8: docked bar and compact controls
+
+- **The human's notes and decision (2026-11-12)**, from screenshots of
+  Folderstorm (C++)'s host: the characters are driven from **one row at
+  the top of the active viewer**, not from a second window. **Option (a)
+  is decided:** each managed viewer draws the bar itself, at the top of
+  its own window; the host feeds it over the link that exists and every
+  click goes back to the host as a request. (Not chosen: a host window
+  laid over or glued to the viewer's, which is rule R2's and section 7's
+  "fitted" trouble again.) Popped out, the bar leaves every viewer and
+  the host shows it as its own compact window, "Character controls".
+- **The bar, one row, left to right:**
+  - *profile dropdown*: "n: name" for the active character; its list has
+    every character with "Active", "Inactive" or nothing (not logged
+    in). Picking one is that character's quick action (section 13):
+    switch when it runs, bring it forward at its login screen, start it
+    when it has no viewer;
+  - *open a login*: the first character that is not logged in (its
+    viewer is started, or brought forward at its login screen); a right
+    click lists the characters to choose from;
+  - *shared chat*: shows or hides the host's chat in its own window;
+  - *monitors*: a menu with each character (greyed when it is not in the
+    world, or is the active one), "Open all inactive monitors", "Close
+    all monitors", "Monitor settings…". (A place is kept for "Cycling
+    monitor": checkpoint 9.);
+  - *settings*: a menu to the host's pages (the bar's and quick actions'
+    page, the hotkeys), "Show the host's window" and "Quit…";
+  - *middle, the quick actions*: up to 12 positions the user fills in
+    the host's settings, each Unused, Character 1 to 5, Attention (with
+    the count; opens the inbox; shown even at zero), Mute background
+    sound (a toggle, new) or Voice follows active (a toggle, new). A
+    character's button carries its alias and its colour (checkpoint 7);
+  - *right*: pop out, collapse (the bar becomes a thin handle that
+    opens it again).
+  - Label modes, two settings: the quick actions' (icon and text by
+    default) and the toolbar buttons' (icons only by default), each
+    icons only / text only / icon and text.
+  - No voice status line.
+- **New rules of the desk** (both saved, both also quick actions):
+  - **Mute background sound**: every character that is not the active
+    one is cut, whatever its own "heard in the background"; each
+    character's own choice is kept and applies again when the toggle is
+    off.
+  - **Voice follows active** (on by default: today's behaviour). Off:
+    the voice stays with the character that holds it when another one
+    becomes active, until that character's viewer ends (the active one
+    then takes it and keeps it). "Given up before it is given" is
+    unchanged: never two voices. The character that holds the voice in
+    the background is heard there (its voice is one of its viewer's
+    sounds, and a viewer that is cut cannot transmit), unless "Mute
+    background sound" is on, which cuts it too.
+- **The host's windows.**
+  - *Docked* (the default): while a viewer shows the bar, **the host's
+    own window is hidden** (setting "Hide the host's window while the
+    bar is shown", on by default). It comes back from the bar ("Show
+    the host's window", or any entry that opens one of its pages), and
+    by itself as soon as no viewer shows a bar (none runs, or all were
+    let go): the host is never out of reach. Shown that way, its close
+    button hides it again; "Quit…" in the bar's menu asks the usual
+    question (Quit all / Close only the host / Cancel) in it. Nothing
+    about a hidden host changes for the viewers: the host's loop does
+    not depend on its window being drawn.
+  - *Popped out*: the compact "Character controls" window, the same row
+    in one line, with a **pin** (always on top: a filled pin on the
+    accent when pinned, a plain pin when not, said in its tooltip) and
+    "Dock back". Its close button docks the bar back: closing it never
+    quits anything. Docked or popped, the pin and the window's place
+    are remembered (`session-host.json`), and a place is brought back
+    onto a connected screen as the panels' are.
+  - The chat, the monitors and the inbox are the panels of checkpoint 6:
+    the bar opens them in their own windows (the host's window may be
+    hidden).
+- **One taskbar button (Windows only, setting, on by default).** While
+  the bar is docked: the host's window is hidden (or, shown from the
+  bar, off the taskbar); a background character's window is taken off
+  the taskbar and out of Alt-Tab; the active character's is on both.
+  Switching swaps them.
+  - Each viewer does it to **its own window**, in its own process, on
+    the host's word (`Assignment::off_taskbar`): the taskbar's tab
+    through winit's `set_skip_taskbar` (`ITaskbarList::DeleteTab` /
+    `AddTab`, which winit also puts back when Explorer restarts), the
+    Alt-Tab list through the `WS_EX_TOOLWINDOW` bit of the window's
+    extended style. **No window is hidden, cloaked or re-parented**
+    (rule R2), and no window is owned across processes (section 7).
+  - **Minimised windows (Economy).** Windows parks a minimised window
+    off screen only when it is a taskbar window by its style; a
+    minimised tool window is left as a small title bar above the
+    taskbar. So the tool-window bit is only ever set on a window that
+    is not minimised and that the host does not minimise (Warm standby
+    or an open monitor), and it is taken away before the window is
+    minimised or shown. An Economy window loses its taskbar tab only:
+    it may stay in Alt-Tab. **(verify on Windows)**
+  - **Always put back:** when the character becomes the active one, when
+    its window gets the keyboard, when the host goes away (the link
+    ends), when the viewer is let go, when the setting is turned off or
+    the bar is popped out. The decision is a pure function of what the
+    viewer holds, applied whenever it changes and again on a new window
+    (the one a GPU recovery makes).
+  - Elsewhere than Windows nothing changes.
+- **Link (protocol 4).** `Assignment` gains `off_taskbar`.
+  `ToViewer::Bar(State)`: the bar as the host wants it drawn, whole, the
+  latest replacing the others: docked or not, collapsed, the characters
+  (slot, shown name, real name behind an alias, colour, presence, what
+  picking it does, its monitor), the inbox's count, the chat's window
+  and unread count, the two toggles, the quick actions and the two
+  label modes. `ToHost::Bar(Request)`: one click (pick a character,
+  open a login, the chat, a monitor, all or no monitors, a page of the
+  host, show the host, quit, the inbox, a toggle, pop out, collapse).
+  A request only ever does what the same click does in the host's own
+  window: nothing is answered, no line is said, no process is ended
+  from the bar. Every text is bounded and cleaned on arrival, both
+  ways.
+  - **Checkpoint 7's rule, restated:** an alias and a colour now reach
+    the viewers the host manages, on their own private pipe, **for the
+    bar and nothing else**: the viewer keeps them in the bar's state,
+    draws them and forgets them with the link. They are never written
+    to a viewer's settings, logs, chat or window title, and nothing of
+    them goes to a grid (tested: the bar's state is used by the bar's
+    drawing only).
+  - A viewer that loses the host drops the bar's state: the strip goes
+    and its interface takes the whole window again.
+- **Upstream hook (one, in `app.rs`):** before the interface's pass,
+  `raw.safe_area_insets = self.folderstorm_bar_inset(); // Folderstorm:
+  …`. egui's own "safe area" keeps the top strip out of
+  `content_rect()`, which every screen of the viewer lays itself out in
+  (login, loading, world, both styles of bars, the windows' work area),
+  so nothing of upstream's layout is edited. The bar is drawn in that
+  strip by the hook that draws the "3D paused" notice already
+  (`folderstorm_characters_notice`, ours). None in a viewer that no
+  host manages. The bar is hidden with the interface and in mouselook.
+- **Settings** (`session-host.json`, absent fields read as the
+  defaults, checked when the file is read): `bar` (docked or popped,
+  collapsed, pinned, the popped window's place, the 12 quick actions,
+  the two label modes, `one_taskbar_button`, `hide_host`),
+  `mute_background`, `voice_follows`. A file of before has none of them
+  and reads as: docked, the five characters and Attention as quick
+  actions, nothing muted more than before, voice follows.
+- **Acceptance:**
+  - the bar shows in every managed viewer while docked, in none while
+    popped out, and in none that lost its host; an unmanaged viewer is
+    as upstream's, to the pixel;
+  - every click of the bar does what the host's own window does for it,
+    and nothing else; a slot never gets a second process;
+  - never two voices, with "Voice follows active" on or off;
+  - the host is always reachable: its window is hidden only while a bar
+    is on screen;
+  - closing the popped-out window docks the bar; closing a viewer or
+    the host restores every window's taskbar tab and style;
+  - no window is hidden, cloaked, re-parented or minimised by this
+    checkpoint (R2), and checkpoint 1's rules (R4, R5) are untouched;
+  - long names are cut with the full name in the hover; the row fits a
+    narrow window by dropping the labels, then scrolling the quick
+    actions.
+- **Demo:** `AURORA_DEMO_SESSION_HOST_BAR=docked|popped` (with
+  `AURORA_DEMO_SESSION_HOST`), listed in `docs/TESTING.md`.
+
+### Checkpoint 9: monitor windows (placeholder)
+
+Not built. From the human's notes (2026-11-12):
+
+- each monitor in **its own window**, compact: no "Read-only preview"
+  text; Switch (was "Exchange": the monitored character becomes the
+  active one and the one that was active is monitored in this window),
+  Chat and Settings as icon buttons; a pin (always on top, as the
+  Character controls' pin); the character's name somewhere;
+- a **cycling monitor** that rotates through the background characters
+  (the bar's monitor menu keeps a place for it), which pauses while the
+  user types in it ("Require pause to chat", on by default), so a line
+  is never said as the wrong character;
+- options: sizes 320 / 480 / 640, rates 0.5 / 1 / 2 / 5, the shared
+  budget's note, "Show chat", "Use as monitor defaults";
+- the chat in a monitor: New IM, Friends; conversations as chips like
+  the shared chat's (not a dropdown), a close × per chat (not Nearby);
+  names cut to a least length with the full name in the hover; at most
+  two rows of chips, then a "+N" chip that lists the rest (order:
+  Nearby, pinned, unread, recent; a new message promotes its chat); the
+  same in the shared chat.
+
+### Checkpoint 10: settings redesign (placeholder)
+
+Not built. From the human's notes (2026-11-12), after Folderstorm
+(C++)'s "Host Preferences", without its sparse pages:
+
+- **Layout**: toolbar button labels and quick action labels (built in
+  checkpoint 8, to move here);
+- **Character settings**, per character: name, background mode (Warm /
+  Economy), alias, colour (C++ had a free colour), "Logged in as", card
+  position, "Include in Attention"; sounds: alerts while another
+  character is active (direct IM, group chat, conference,
+  notifications), a notification sound (WAV, built-in tone, preview,
+  reset);
+- **Chats and notifications**: what appears in the shared and monitor
+  chats (Nearby, direct IMs, group chats, conferences, viewer
+  notifications); which offers appear in Attention (teleport offers,
+  permission requests, inventory offers, notifications: no chats),
+  oldest first; reading: "Mark displayed chats read", "Auto-read the
+  active character" after a delay (60 s);
+- **Audio and voice**: Voice follows active, Mute background sound
+  (both built in checkpoint 8), alert volume;
+- **Controls**: the quick actions (checkpoint 8) and the hotkeys
+  (checkpoint 4 and its follow-ups);
+- **Advanced**: open the settings folder, icon credits, recover window
+  positions, show diagnostics;
+- **Updates and Support**: point to the viewer's own pages for now;
+- the MCP controller's page waits for the MCP session routing
+  (FEATURES 4.6).
+
 ## 16. Verified in code vs inferred
 
 **Verified by reading this repository:** the instance registry,
