@@ -1895,27 +1895,153 @@ May be two small PRs: 1a profiles, 1b behind policy.
     is off); the panels' windows off the taskbar too; a free order of
     the toolbar.
 
-### Checkpoint 9: monitor windows (placeholder)
+### Checkpoint 9: monitors in their own windows
 
-Not built. From the human's notes (2026-11-12):
-
-- each monitor in **its own window**, compact: no "Read-only preview"
-  text; Switch (was "Exchange": the monitored character becomes the
-  active one and the one that was active is monitored in this window),
-  Chat and Settings as icon buttons; a pin (always on top, as the
-  Character controls' pin); the character's name somewhere;
-- a **cycling monitor** that rotates through the background characters
-  (the bar's monitor menu keeps a place for it), which pauses while the
-  user types in it ("Require pause to chat", on by default), so a line
-  is never said as the wrong character;
-- options: sizes 320 / 480 / 640, rates 0.5 / 1 / 2 / 5, the shared
-  budget's note, "Show chat", "Use as monitor defaults";
-- the chat in a monitor: New IM, Friends; conversations as chips like
-  the shared chat's (not a dropdown), a close × per chat (not Nearby);
-  names cut to a least length with the full name in the hover; at most
-  two rows of chips, then a "+N" chip that lists the rest (order:
-  Nearby, pinned, unread, recent; a new message promotes its chat); the
-  same in the shared chat.
+- **The human's notes and decisions (2026-11-12)**, from Folderstorm
+  (C++)'s monitors: **each monitor is a window of its own**, compact, and
+  there is a **cycling monitor** that goes round the background
+  characters. This replaces checkpoint 6's one "Monitors" window, and the
+  pictures in the characters' cards.
+- **A monitor's window** (one per monitored character, at most
+  `MAX_SLOTS`; at most 4 are asked for pictures at once, as before):
+  - *a thin header*: the character's colour and its alias or name (the
+    real name and how the monitor does in the hover), then icon buttons,
+    each with a tooltip: **Switch** (`arrows-exchange`), **Chat** (shows
+    or hides the chat part), **Pin** (always on top: a filled pin on the
+    accent when pinned, a plain pin when not, as the "Character
+    controls" window's), **Options**;
+  - *the picture*, in the room under the header, never stretched; no
+    "read-only" text; it still senses neither clicks nor keys. Without a
+    picture, why, in its place (the texts of checkpoint 5);
+  - *the options*, a sheet inside the window (a window this small cannot
+    show a menu that is taller than itself): the sizes 320 × 180 /
+    480 × 270 / 640 × 360, the rates 0.5 / 1 / 2 / 5 a second, the note
+    that all monitors share one budget (with the rate granted when it was
+    lowered), "Show chat", and "Use this size and rate as monitor
+    defaults";
+  - *the chat part* (off at first): that character's conversations as
+    chips, the lines of the one chosen, and a box that says a line **as
+    that character** (the shared chat's own sending: a line is handed to
+    its viewer once, is uncertain on a broken pipe, and the viewer's RLVa
+    rules decide; the draft is the one the shared chat shows for that
+    character and conversation).
+- **Switch swaps.** The monitored character becomes the active one, and
+  the window then shows the character that was active: a monitor's window
+  follows *the character that is not in front*. The same holds however
+  the switch is made (the window's button, the bar, a hotkey, a click in
+  the character's own window): when a character whose monitor is open
+  comes to the front and the one that leaves the front has none, the
+  monitor (its size and rate, its window with its place, pin and chat)
+  moves to the one that left. Nothing moves when no character was in
+  front, or when the one that left has a monitor already; the monitor of
+  the character in front then says so, as in checkpoint 5.
+- **Chips** (the monitor's chat and the shared chat, one code):
+  - one chip per conversation: its kind's icon, its name, its unread
+    count, and a close × on every chip but Nearby;
+  - **order**: Nearby, then pinned, then unread, then the most recent;
+  - **names shrink to fit**: all chips are cut to the same length, the
+    longest that fits, never under 6 characters and an ellipsis; a cut
+    name is whole in the hover;
+  - **at most two rows**; what does not fit at the least length goes
+    behind a "+N" chip at the end of the second row, which lists the
+    rest in the lines' place (a list, not a menu: it scrolls in a small
+    window); "+N" says how many of them have something unread. A new
+    message makes its conversation unread, so it comes out of "+N" by
+    the order above; the conversation on screen is never hidden;
+  - **close** takes the conversation out of the host's chips only:
+    nothing is said to the viewer, where it stays open; its lines stay in
+    "All", and a new line from someone else or a notice of the host
+    about a line of the user's brings the chip back;
+  - **pin** (a right click on a chip: Pin / Unpin, Close): host only,
+    for this login of the character, not saved.
+  - **New IM and Friends are not built**: the shared chat cannot start a
+    conversation (the link has no message for it, and the host knows no
+    friends list). They stay in FEATURES' "left for the human to pick".
+- **Cycling monitor**: one more window that shows each background
+  character in turn (in the world, behind the active one; slot order),
+  each for the interval chosen (5 s at first; 2 s to 10 min). Its header
+  says who is shown; besides Switch, Chat, Pin and Options it has
+  **previous**, **pause** and **next**. Its options add the interval and
+  "Pause cycling while typing". Only the character shown is asked for
+  pictures.
+  - **"Pause cycling while typing"** (on by default; C++'s "Require
+    pause to chat"): while the box of the cycling monitor's chat has the
+    keyboard, or holds a text typed there that is not sent yet, the turn
+    does not pass; it passes a whole interval after the line is sent or
+    erased. So the character never changes between composing and
+    sending.
+  - **Never the wrong character, whatever the setting**: a draft
+    belongs to one character and one conversation (checkpoint 3). With
+    the setting off, a turn that passes while a text is typed leaves the
+    text with the character it was typed for; the box then shows the
+    next character's own (empty) draft, and Enter sends nothing.
+  - Its Switch brings the character shown to the front and shows the one
+    that was in front.
+- **The bar's monitors menu** (checkpoint 8): each character (ticked
+  when its monitor is open; greyed when it is not in the world or is in
+  front, unless its monitor is open, which can always be closed), "Open
+  all inactive monitors", "Cycling monitor" (now real: a tick), "Close
+  all monitors" (the cycling one too), "Monitor settings…" (a page of
+  the host: the defaults for a new monitor, the cycling monitor's
+  interval and "Pause cycling while typing", the budget's note).
+- **Kept from checkpoints 5 and 6, unchanged:** the budget
+  (1 200 000 pixels a second for all monitors together; the cycling
+  monitor's character counts as one monitor); a monitor is asked for
+  pictures only while a window that draws it is on screen (a window that
+  is minimised, hidden or covered whole asks nothing, window by window;
+  so does a window whose options or list covers the picture); a busy
+  card lowers the rate, a lost or stalled one gets no request; nothing
+  of a picture is written anywhere (the latest one per character, in
+  memory, dropped when no monitor shows that character). A character
+  shown by two windows (its own and the cycling one) is asked once, for
+  the larger size and the faster rate of the two. While a monitor of a
+  character is open, or the cycling monitor is, that character is not
+  minimised behind (Economy is kept as the choice, as before).
+- **What checkpoint 6's Monitors window becomes:** it is gone. The
+  panels are the chat, the characters and the inbox. A character's card
+  keeps the **Monitor** box (it opens and closes that character's
+  window) and the size and rate; the picture is in the window.
+- **Settings** (`session-host.json`; absent fields read as the
+  defaults, everything checked when the file is read):
+  - per character, beside `monitor` (open, with its size and rate, as
+    before): `monitor_window` (`place`, `pinned`, `chat`);
+  - `monitors`: `defaults` (size and rate of a monitor that is opened),
+    `cycling` (`open`, `interval_s`, `pause_typing`, `spec`, `window`).
+  - **Migration:** a file of checkpoints 5 to 8 reads as it is: its open
+    monitors are open (each in a window of its own now, at its first
+    size, where the system puts it), `panels.monitors` (the old window:
+    out or not, its place) is read past and not written again, the
+    cycling monitor is closed, the defaults are 480 × 270 at 1 a second.
+  - A place is kept when its window is moved or resized, not while it is
+    minimised or maximised, and brought back onto a connected screen
+    when it opens (`panels::on_screen`, checkpoint 6's).
+- **Link (protocol 5).** `bar::State` gains `cycling` (the cycling
+  monitor is open); `bar::Request` gains `Cycling(bool)`. Nothing else:
+  a monitor's window is the host's own, and what it sends a viewer
+  (`Assign` with the monitor's order, `SendChat`, `MarkRead`) exists.
+- **Upstream hooks: none planned.** Everything is in the fork's files;
+  the locales and `docs/TESTING.md` get lines.
+- **Acceptance:**
+  - each open monitor has its own window, remembered with its place, pin
+    and chat, and brought back on screen; closing a window closes that
+    monitor (its viewer goes back to 3D Off) and nothing else;
+  - Switch swaps: the window shows the character that was in front, with
+    the same place, size, pin and chat; no window ever takes a second
+    character while it shows one;
+  - a line typed in a monitor is said by the character whose name the
+    header shows, once; the cycling monitor never changes character
+    under a text being typed (setting on), and never sends a text as
+    another character (either way);
+  - the chips never take more than two rows, never hide the
+    conversation on screen, and no name is cut under 6 characters while
+    another is still whole;
+  - a monitor nobody can see asks nothing; never more than 4 viewers
+    are asked, within the budget;
+  - no window opened here takes the keyboard unless the user asked for
+    it; no viewer's window is moved, hidden or re-parented (R2), and
+    checkpoint 1's rules (R4, R5) are untouched.
+- **Demo:** `AURORA_DEMO_SESSION_HOST_MONITORS=windows|cycling` (with
+  `AURORA_DEMO_SESSION_HOST`), listed in `docs/TESTING.md`.
 
 ### Checkpoint 10: settings redesign (placeholder)
 
