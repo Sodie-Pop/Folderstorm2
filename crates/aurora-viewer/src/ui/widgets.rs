@@ -598,6 +598,7 @@ impl<'a> Floater<'a> {
         let opening = self
             .cascade
             .and_then(|group| cascade::prepare(ctx, window_id, group, egui::Rect::from_min_size(self.default_pos, expanded), work));
+        let work = crate::folderstorm::viewport::floater_room(ctx, work); // Folderstorm: fit the viewer window, not the world
         // A window as tall as its content (fixed, or of automatic height)
         // whose content is taller than the room scrolls it, from the frame
         // after the one that showed it too tall, and for as long as it is.
