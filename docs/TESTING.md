@@ -6340,6 +6340,19 @@ failure. Grid validation and any paid upload are performed by the human.
   cancel), the folder named in the question, and that an item's Wear entry and
   a folder's Wear objects entry are greyed in their menus until Preferences ›
   Inventory › Enable "Wear" in inventory menus is on.
+- **`AURORA_DEMO_INVENTORY=custom-tabs|aurora-custom-tabs`** (Folderstorm2):
+  two sample custom tabs, "Textures and sounds" (shown) and "Demo items" (the
+  search "demo"), after the built-in tabs of the Legacy or Aurora inventory
+  (Aurora's shortcuts column from ~720 px wide). Check that "Customize tab…"
+  appears beside the search box only while a custom tab is shown (a sliders
+  button in Aurora) and opens "Customize tab: <name>" with no "Keep by
+  default"; a filter or search typed on one tab is still there after visiting
+  the other tabs, and after restarting the viewer. Right-click a custom tab:
+  Customize tab… (selects an inactive tab first), Rename… (empty and repeated
+  names are refused), Clone (the copy is shown), Delete… (asks first, Cancel
+  focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
+  a custom tab with that tab's finder and search. The `aurora-` mode starts with
+  the narrow window; widen it to see the shortcuts column.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory

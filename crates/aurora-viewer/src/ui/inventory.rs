@@ -28,8 +28,10 @@ pub use clipboard::demo_events as clipboard_demo_events;
 mod context;
 mod context_catalog;
 pub(crate) mod context_customize;
+// Folderstorm: custom Inventory tabs
 pub(crate) mod context_notecards;
 mod controls;
+pub(crate) mod custom_tabs;
 pub(crate) use controls::recent_period;
 pub(crate) mod default_permissions;
 mod delete;
@@ -503,6 +505,8 @@ pub struct InventoryUi {
     pub marketplace_commands: std::collections::HashMap<Uuid, Vec<crate::ui::marketplace_listings::OptionState>>,
     /// Save live splitter changes once the pointer is released.
     pub preferences_dirty: bool,
+    // Folderstorm: custom Inventory tabs
+    custom_tabs: custom_tabs::State,
     was_open: bool,
     focus_search: bool,
     bulk_permissions: bulk_permissions::State,
@@ -518,7 +522,8 @@ pub struct InventoryUi {
     /// Display owner rights plus next-owner rights in this window only.
     pub show_next_owner: bool,
     filters_initialized: bool,
-    tab_filters: [TabFilters; 5],
+    // Folderstorm: the per-tab arrays have a sixth slot, shared by the custom tabs (custom_tabs.rs)
+    tab_filters: [TabFilters; 6],
     filters: view::Filters,
     saved_filters: Option<view::Filters>,
     /// Advanced search in this window: `filters.smart` holds the rules and
@@ -543,7 +548,7 @@ pub struct InventoryUi {
     pub demo_menu: Option<Uuid>,
     pub fetch_all: bool,
     pub search: String,
-    searches: [String; 5],
+    searches: [String; 6],
     pub tab: usize,
     pub expand_all: Option<bool>,
     pub selected: Option<Uuid>,
@@ -562,7 +567,7 @@ pub struct InventoryUi {
     last_list: Option<(u64, ListKey)>,
     list_shown: Option<ListShown>,
     /// Where each tab's list was left, for its return.
-    tab_scroll: [f32; 5],
+    tab_scroll: [f32; 6],
     roots_seen: HashSet<Uuid>,
     /// Received Items folders already shown once (closed on their arrival).
     received_shown: HashSet<Uuid>,
@@ -960,7 +965,7 @@ impl InventoryUi {
         if self.tab == tab {
             return;
         }
-        let mut next = std::mem::take(&mut self.tab_filters[tab.min(4)]);
+        let mut next = std::mem::take(&mut self.tab_filters[tab.min(5)]);
         std::mem::swap(&mut self.filters_initialized, &mut next.filters_initialized);
         std::mem::swap(&mut self.filters, &mut next.filters);
         std::mem::swap(&mut self.saved_filters, &mut next.saved_filters);
@@ -969,7 +974,7 @@ impl InventoryUi {
         std::mem::swap(&mut self.active_smart, &mut next.active_smart);
         std::mem::swap(&mut self.similar, &mut next.similar);
         std::mem::swap(&mut self.links_filter, &mut next.links_filter);
-        self.tab_filters[self.tab.min(4)] = next;
+        self.tab_filters[self.tab.min(5)] = next;
         self.tab = tab;
         self.fetch_generation = None;
     }
@@ -1844,12 +1849,12 @@ fn set_tab(st: &mut InventoryUi, prefs: &InventoryPreferences, tab: usize) {
         return;
     }
     let text = if st.advanced { st.quick_text.clone() } else { st.search.clone() };
-    st.searches[st.tab.min(4)] = text.clone();
+    st.searches[st.tab.min(5)] = text.clone();
     st.switch_filter_tab(tab);
     controls::init_filters(st, prefs);
     if !st.advanced {
         st.search = if prefs.separate_searches {
-            st.searches[tab.min(4)].clone()
+            st.searches[tab.min(5)].clone()
         } else {
             text
         };
@@ -2031,9 +2036,9 @@ fn hold_list_scroll(st: &mut InventoryUi, generation: u64, key: ListKey, user: b
         && old.tab != key.tab
     {
         if let Some(shown) = shown {
-            st.tab_scroll[old.tab.min(4)] = shown.offset;
+            st.tab_scroll[old.tab.min(5)] = shown.offset;
         }
-        st.scroll_restore = Some(st.tab_scroll[key.tab.min(4)]);
+        st.scroll_restore = Some(st.tab_scroll[key.tab.min(5)]);
         st.scroll_hold = None;
         return;
     }
@@ -2085,9 +2090,8 @@ fn inventory_contents(
             labels.push((label, true));
         }
     }
-    let mut visible_tab = tab_ids.iter().position(|id| *id == st.tab).unwrap_or(0);
-    super::widgets::tabs(ui, p, &mut visible_tab, &labels);
-    set_tab(st, prefs, tab_ids[visible_tab]);
+    // Folderstorm: the custom tabs follow the built-in ones (custom_tabs.rs)
+    custom_tabs::legacy_strip(ui, p, st, prefs, &tab_ids, &labels);
     let (root, filtered) = list_scope(inv, st, prefs, facts);
     ui.add_space(6.0);
     next_owner_control(ui, p, st);

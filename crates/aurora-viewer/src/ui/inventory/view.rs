@@ -385,6 +385,8 @@ pub struct InventoryPreferences {
     // Folderstorm: "Wear" in the item menus (off: greyed, ui/inventory/outfit_safety.rs)
     pub context_wear: bool,
     pub folder_colors: std::collections::BTreeMap<Uuid, [u8; 3]>,
+    // Folderstorm: custom Inventory tabs (custom_tabs.rs)
+    pub custom_tabs: Vec<super::custom_tabs::CustomTab>,
 }
 impl Default for InventoryPreferences {
     fn default() -> Self {
@@ -433,6 +435,7 @@ impl Default for InventoryPreferences {
             folder_colors_enabled: true,
             context_wear: false, // Folderstorm: outfit safety
             folder_colors: Default::default(),
+            custom_tabs: Vec::new(), // Folderstorm: custom Inventory tabs
         }
     }
 }
@@ -1075,28 +1078,29 @@ pub struct TreeRow {
 #[derive(Default)]
 pub struct TreeState {
     key: Option<(u64, Uuid, usize, bool)>,
-    closed: [HashSet<Uuid>; 5],
+    // Folderstorm: a sixth slot for the custom tabs (custom_tabs.rs)
+    closed: [HashSet<Uuid>; 6],
     /// The folders listed so far with Always show folders, and those of them
     /// closed because no matching item was below them.
-    seen: [HashSet<Uuid>; 5],
-    hollow_closed: [HashSet<Uuid>; 5],
+    seen: [HashSet<Uuid>; 6],
+    hollow_closed: [HashSet<Uuid>; 6],
     pub rows: Vec<TreeRow>,
     pub order: Vec<Uuid>,
 }
 impl TreeState {
     pub fn collapse_folders(&mut self, folders: impl IntoIterator<Item = Uuid>, tab: usize) {
-        self.closed[tab.min(4)].extend(folders);
+        self.closed[tab.min(5)].extend(folders);
         self.key = None;
     }
 
     pub fn expand_folder(&mut self, id: Uuid, tab: usize) {
-        if self.closed[tab.min(4)].remove(&id) {
+        if self.closed[tab.min(5)].remove(&id) {
             self.key = None;
         }
     }
 
     pub fn prepare(&mut self, view: &ViewCache, root: Uuid, tab: usize, show_root: bool) -> bool {
-        let tab = tab.min(4);
+        let tab = tab.min(5);
         let show_root = show_root && !view.query.as_ref().is_some_and(|q| q.flat_favorites);
         let key = (view.revision, root, tab, show_root);
         if self.key == Some(key) {
@@ -1147,7 +1151,7 @@ impl TreeState {
     }
 
     pub fn is_open(&self, id: Uuid, tab: usize) -> bool {
-        !self.closed[tab.min(4)].contains(&id)
+        !self.closed[tab.min(5)].contains(&id)
     }
 
     pub fn set_open(&mut self, id: Uuid, tab: usize, open: bool) {
@@ -1157,7 +1161,7 @@ impl TreeState {
     }
 
     pub fn toggle(&mut self, id: Uuid, tab: usize) {
-        let closed = &mut self.closed[tab.min(4)];
+        let closed = &mut self.closed[tab.min(5)];
         if !closed.remove(&id) {
             closed.insert(id);
         }
@@ -1165,7 +1169,7 @@ impl TreeState {
     }
 
     pub fn reveal(&mut self, inv: &Inventory, id: Uuid, tab: usize) {
-        let closed = &mut self.closed[tab.min(4)];
+        let closed = &mut self.closed[tab.min(5)];
         let mut parent = rules::parent(inv, id);
         let mut seen = HashSet::new();
         let mut changed = false;
@@ -1183,8 +1187,8 @@ impl TreeState {
 
     pub fn set_all(&mut self, view: &ViewCache, root: Uuid, tab: usize, open: bool) {
         // Expand all or Collapse all is the user's choice for every folder.
-        self.hollow_closed[tab.min(4)].clear();
-        let closed = &mut self.closed[tab.min(4)];
+        self.hollow_closed[tab.min(5)].clear();
+        let closed = &mut self.closed[tab.min(5)];
         closed.clear();
         if !open {
             closed.extend(view.result_children.keys().filter(|id| **id != root).copied());
