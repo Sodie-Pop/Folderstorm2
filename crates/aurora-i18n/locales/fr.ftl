@@ -4427,6 +4427,10 @@ folderstorm-host-add-duplicate = Ce profil est déjà dans la liste.
 folderstorm-host-add-full = L'hôte fait tourner { $max } personnages au plus.
 folderstorm-host-quit-all = Tout quitter
 folderstorm-host-quit-all-help = Demande à chaque personnage de se déconnecter et de quitter, puis ferme cette fenêtre.
+folderstorm-host-quit-all-question = { $count ->
+        [one] Quitter le personnage ouvert ? Il lui est demandé de se déconnecter et de quitter.
+       *[other] Quitter les { $count } personnages ouverts ? Il est demandé à chacun de se déconnecter et de quitter.
+    }
 folderstorm-host-quit-waiting = En attente de la déconnexion des personnages…
 folderstorm-host-quit-overdue = Des personnages sont encore ouverts : l'un d'eux demande peut-être quoi faire d'un travail non enregistré. Répondez dans sa fenêtre, ou arrêtez-le depuis sa ligne.
 folderstorm-host-close-question = Des personnages sont encore ouverts.
@@ -4502,10 +4506,10 @@ folderstorm-host-new-profile-help = Crée un profil pour un autre personnage, av
 folderstorm-host-hotkeys = Raccourcis…
 folderstorm-host-hotkeys-help = Des touches qui changent de personnage depuis n'importe quelle fenêtre, même quand le viewer d'un personnage a le clavier.
 folderstorm-hotkeys-heading = Raccourcis globaux
-folderstorm-hotkeys-intro = Ces touches fonctionnent dans tous les programmes tant que cette fenêtre est ouverte, même quand le viewer d'un personnage a le clavier. Le raccourci d'un personnage fait ce que fait son bouton numéroté : basculer vers lui, le démarrer, ou amener son écran de connexion au premier plan. Saisissez les touches en texte, par exemple Ctrl+Alt+1 ou Ctrl+Shift+F5, puis appuyez sur Entrée. Laissez un champ vide pour ne pas avoir de raccourci.
+folderstorm-hotkeys-intro = Ces touches fonctionnent dans tous les programmes tant que cette fenêtre est ouverte, même quand le viewer d'un personnage a le clavier. Le raccourci d'un personnage fait ce que fait son bouton numéroté : basculer vers lui, le démarrer, ou amener son écran de connexion au premier plan. Saisissez les touches en texte, par exemple Ctrl+Shift+F1 ou Alt+Shift+F9, puis appuyez sur Entrée. Laissez un champ vide pour ne pas avoir de raccourci.
 folderstorm-hotkeys-windows-only = Les raccourcis globaux ne fonctionnent que sous Windows. Sur ce système, les choix sont conservés mais aucune touche n'est prise.
 folderstorm-hotkeys-enabled = Utiliser les raccourcis globaux
-folderstorm-hotkeys-hint = Par exemple Ctrl+Alt+1
+folderstorm-hotkeys-hint = Par exemple Ctrl+Shift+F1
 folderstorm-hotkeys-character = Personnage { $number }
 folderstorm-hotkeys-next = Personnage suivant
 folderstorm-hotkeys-previous = Personnage précédent
@@ -4572,7 +4576,7 @@ folderstorm-panel-dock-help = Revient dans la fenêtre de l'hôte. Fermer cette 
 folderstorm-panel-monitors-empty = Aucun moniteur n'est ouvert. Cochez « Moniteur » sur un personnage pour voir son image ici.
 folderstorm-inbox = Boîte de réception
 folderstorm-inbox-intro = on répond dans la fenêtre de chaque personnage
-folderstorm-inbox-help = Ce qui attend une réponse dans les fenêtres des personnages : offres, demandes de téléportation et d'amitié, dialogues et demandes de permissions des scripts, appels. Rien n'est accepté, refusé ni écarté d'ici : « Basculer pour répondre » amène ce personnage au premier plan. Une question quitte la liste une fois qu'on y a répondu là-bas, ou qu'elle y a expiré.
+folderstorm-inbox-help = Ce qui attend une réponse dans les fenêtres des personnages : offres, demandes de téléportation et d'amitié, dialogues et demandes de permissions des scripts, appels. Rien n'est accepté ni refusé d'ici : « Basculer pour répondre » amène ce personnage au premier plan. Une question quitte la liste une fois qu'on y a répondu là-bas, ou qu'elle y a expiré. « Écarter » la retire seulement de cette liste : elle attend toujours dans la fenêtre du personnage.
 folderstorm-inbox-empty = Rien n'attend de réponse.
 folderstorm-inbox-more = { $count ->
         [one] 1 autre attend dans la fenêtre de { $name }
@@ -4582,6 +4586,11 @@ folderstorm-inbox-age-now = à l'instant
 folderstorm-inbox-age-minutes = { $count } min
 folderstorm-inbox-age-hours = { $count } h
 folderstorm-inbox-age-help = Depuis combien de temps l'hôte la voit attendre. La question elle-même peut être plus ancienne.
+folderstorm-inbox-dismiss = Écarter
+folderstorm-inbox-dismiss-help = La retire seulement de cette liste. Rien n'est répondu ni refusé : elle attend toujours dans la fenêtre du personnage, et une nouvelle question arrive comme d'habitude.
+folderstorm-inbox-dismiss-menu = Écarter…
+folderstorm-inbox-dismiss-all = Tout écarter ({ $count })
+folderstorm-inbox-dismiss-for = Tout écarter pour { $name } ({ $count })
 folderstorm-identity = Alias et couleur
 folderstorm-identity-help = Alias et couleur : un nom et une couleur de votre choix pour ce personnage, pour distinguer les personnages dans les fenêtres de l'hôte.
 folderstorm-identity-note = Seulement pour les fenêtres de cet hôte. Jamais envoyé à la grille, jamais montré à quelqu'un d'autre.

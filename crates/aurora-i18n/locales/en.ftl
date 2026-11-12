@@ -4421,6 +4421,10 @@ folderstorm-host-add-duplicate = This profile is already in the list.
 folderstorm-host-add-full = The host runs { $max } characters at most.
 folderstorm-host-quit-all = Quit all
 folderstorm-host-quit-all-help = Asks every character to log out and quit, then closes this window.
+folderstorm-host-quit-all-question = { $count ->
+        [one] Quit the character that is open? It is asked to log out and quit.
+       *[other] Quit all { $count } characters that are open? Each is asked to log out and quit.
+    }
 folderstorm-host-quit-waiting = Waiting for the characters to log out…
 folderstorm-host-quit-overdue = Some characters are still open: one may be asking about unsaved work. Answer in its window, or end it from its row.
 folderstorm-host-close-question = Characters are still open.
@@ -4496,10 +4500,10 @@ folderstorm-host-new-profile-help = Makes a profile for another character, with 
 folderstorm-host-hotkeys = Hotkeys…
 folderstorm-host-hotkeys-help = Keys that switch characters from any window, even while a character's viewer has the keyboard.
 folderstorm-hotkeys-heading = Global hotkeys
-folderstorm-hotkeys-intro = These keys work in every program while this window is open, even while a character's viewer has the keyboard. A character's hotkey does what its numbered button does: switch to it, start it, or bring its login screen forward. Type the keys as text, for example Ctrl+Alt+1 or Ctrl+Shift+F5, then press Enter. Leave a field empty for no hotkey.
+folderstorm-hotkeys-intro = These keys work in every program while this window is open, even while a character's viewer has the keyboard. A character's hotkey does what its numbered button does: switch to it, start it, or bring its login screen forward. Type the keys as text, for example Ctrl+Shift+F1 or Alt+Shift+F9, then press Enter. Leave a field empty for no hotkey.
 folderstorm-hotkeys-windows-only = Global hotkeys work on Windows only. On this system the choices are kept but no key is taken.
 folderstorm-hotkeys-enabled = Use global hotkeys
-folderstorm-hotkeys-hint = For example Ctrl+Alt+1
+folderstorm-hotkeys-hint = For example Ctrl+Shift+F1
 folderstorm-hotkeys-character = Character { $number }
 folderstorm-hotkeys-next = Next character
 folderstorm-hotkeys-previous = Previous character
@@ -4566,7 +4570,7 @@ folderstorm-panel-dock-help = Back into the host's window. Closing this window d
 folderstorm-panel-monitors-empty = No monitor is open. Tick "Monitor" on a character to see its picture here.
 folderstorm-inbox = Inbox
 folderstorm-inbox-intro = answered in each character's own window
-folderstorm-inbox-help = What waits for an answer in the characters' own windows: offers, teleport and friendship requests, scripts' dialogs and permission questions, calls. Nothing is accepted, declined or dismissed from here: "Switch to answer" brings that character forward. A question leaves the list once it is answered, or expires, there.
+folderstorm-inbox-help = What waits for an answer in the characters' own windows: offers, teleport and friendship requests, scripts' dialogs and permission questions, calls. Nothing is accepted or declined from here: "Switch to answer" brings that character forward. A question leaves the list once it is answered, or expires, there. "Dismiss" only takes it out of this list: it still waits in the character's window.
 folderstorm-inbox-empty = Nothing waits for an answer.
 folderstorm-inbox-more = { $count ->
         [one] 1 more waits in { $name }'s own window
@@ -4576,6 +4580,11 @@ folderstorm-inbox-age-now = just now
 folderstorm-inbox-age-minutes = { $count } min
 folderstorm-inbox-age-hours = { $count } h
 folderstorm-inbox-age-help = For how long the host has seen it wait. The question itself may be older.
+folderstorm-inbox-dismiss = Dismiss
+folderstorm-inbox-dismiss-help = Takes it out of this list only. Nothing is answered or declined: it still waits in the character's own window, and a new question comes in as usual.
+folderstorm-inbox-dismiss-menu = Dismiss…
+folderstorm-inbox-dismiss-all = Dismiss all ({ $count })
+folderstorm-inbox-dismiss-for = Dismiss all for { $name } ({ $count })
 folderstorm-identity = Alias and colour
 folderstorm-identity-help = Alias and colour: a name and a colour of your choice for this character, to tell the characters apart in the host's windows.
 folderstorm-identity-note = Only for this host's windows. Never sent to the grid, and never shown to anyone else.

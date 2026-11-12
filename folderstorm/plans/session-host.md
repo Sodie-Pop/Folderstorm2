@@ -456,7 +456,8 @@ available.
 
 - **Quick actions:** a host button per slot (switch when ready, launch when
   stopped, bring forward at its login screen; never two processes for one
-  slot) and global hotkeys (`RegisterHotKey`: Ctrl+Alt+1–5, next, previous;
+  slot) and global hotkeys (`RegisterHotKey`: Ctrl+Shift+F1–F5, next, previous, since
+  the follow-ups to checkpoint 7; first Ctrl+Alt+1–5;
   configurable, conflicts reported). Host settings go in `<config
   root>/session-host.json` (slots, stage rectangle, hotkeys, standby and
   monitor choices), never credentials.
@@ -472,7 +473,8 @@ available.
   condensed or minimal host modes, MCP session routing (FEATURES 4.6).
   (Checkpoint 7 built the colours and aliases, the attention inbox and
   the condensed mode, and decided against the bird's-eye effect as C++
-  had it: see its "As built".)
+  had it: see its "As built". Its follow-ups added the inbox's host-only
+  Dismiss, a confirmation for Quit all and new default hotkeys.)
 - **Creators' permissions:** none of this shows, copies or exports assets or
   asset ids. Monitors show what that character's viewer shows and are never
   saved. Profile copy moves the user's own settings files only.
@@ -846,7 +848,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
     (`Desk::hotkey`) in the same turn of the loop. A character's hotkey is
     its quick action (it starts a stopped character); next and previous go
     round the characters that run and never start one. Defaults
-    Ctrl+Alt+1–5, Ctrl+Alt+PageDown (next), Ctrl+Alt+PageUp (previous);
+    Ctrl+Alt+1–5, Ctrl+Alt+PageDown (next), Ctrl+Alt+PageUp (previous)
+    (replaced by Ctrl+Shift+F1–F7 in the follow-ups to checkpoint 7);
     "Hotkeys…" changes them as text ("Ctrl+Shift+F5": digits, letters,
     F1–F24, arrows, PageUp, PageDown, Home, End, Insert, Num0–Num9; Ctrl or
     Alt needed, and a second modifier unless the key is a function key;
@@ -1272,7 +1275,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
     answer**.
     - **Nothing is answered from the host**, as in checkpoint 3: the
       inbox has no accept, decline or dismiss, and its only act is the
-      desk's switch. Nothing about a question is ever written to a
+      desk's switch (the follow-ups below added a dismiss that is the
+      host's own and answers nothing). Nothing about a question is ever written to a
       viewer (tested: drawing and switching leave the chat's effects
       empty).
     - **The viewers' lists are the truth** (`inbox::Inbox::set`, fed
@@ -1418,12 +1422,102 @@ May be two small PRs: 1a profiles, 1b behind policy.
     beside the stage, with the chat in its own window; the global
     hotkeys with it.
   - Not done: no sound or taskbar flash for a new question (the chat's
-    alert for a message is unchanged); no dismiss or "seen" in the inbox
-    (it would be a second truth beside the viewer's); a colour is one of
+    alert for a message is unchanged); no "seen" in the inbox (dismiss
+    was added by the follow-ups below, at the human's request); a colour is one of
     the eight, not a free one; no automatic colour for a new character;
     the condensed lines have no End process (it is in the cards, where
     its confirmation is); the host's own window's place is still not
     remembered.
+
+- **Follow-ups after the human's test on Windows (branch
+  `claude/session-host-followups`, 2026-11-12).** No new upstream hook,
+  no new message on the link (the protocol number stays).
+  - **Hotkeys need no key released between two switches.** Cause:
+    winit's `focus_window` on Windows sends an Alt press *and release*
+    before `SetForegroundWindow` (to lift the foreground lock). With the
+    user still holding Ctrl+Alt, that release left Windows believing Alt
+    was up: the next digit came as Ctrl+digit, which is no hotkey and is
+    the Build tools' key (Ctrl+1 to 5) in the viewer that had just come
+    forward; only pressing Alt again brought it back. (`MOD_NOREPEAT` was
+    not the cause: it only stops the auto-repeat of one hotkey, and is
+    kept.) Fix, `folderstorm_characters/foreground.rs`, used by the
+    managed viewer's `Show` and a profile's second launch: the window is
+    first asked to the front plainly, which the host's
+    `AllowSetForegroundWindow` (given by a process that received the
+    hotkey or the click) allows, so usually no key is sent at all; only
+    if that is refused is the Alt press sent, ending as the user holds
+    Alt (held: released then pressed again; not held: winit's press and
+    release). No held key comes back: the viewer left drops its held keys
+    on losing the focus (`app.rs`), the one in front ignores winit's
+    made-up presses and gets the real releases. The pure part (the Alt
+    events end as the user holds Alt) is tested; the Windows calls are
+    checked against `windows-sys` for the Windows target. **(verify on
+    Windows)**: Ctrl+Shift held, F2, F3, F1 switch three times; the same
+    with a chord of the user's that has Alt; no flashing taskbar button
+    instead of the window; no key stays held.
+  - **New default hotkeys: Ctrl+Shift+F1 to F5, Ctrl+Shift+F6
+    (previous), Ctrl+Shift+F7 (next).** The clash with Build that the
+    human saw was the lost Alt above (Ctrl+Alt+digit itself is no default
+    binding of the viewer: the Build tools take Ctrl+digit without Alt),
+    but the old defaults had real faults: Ctrl+Alt is AltGr, so on many
+    European layouts (AZERTY among them) Ctrl+Alt+2 to 5 type a character
+    and were refused; Ctrl+Alt+PageUp and PageDown start the camera's
+    Alt+PageUp / Alt+PageDown orbit in the viewer (a held binding accepts
+    more modifiers); Ctrl+Shift+digit is taken too (Ctrl+Shift+1
+    Performance, 3 and 4 the texture and debug consoles). Folderstorm
+    (C++) suggested Alt+Shift+1 to 5 and Alt+Shift+Right / Left, off by
+    default; Alt+Shift with an arrow is the camera's orbit here as well,
+    and Alt+Shift+digit is one of Windows' own optional language-switch
+    keys. Ctrl+Shift with a function key is no key of the viewer's
+    default bindings (a test checks every default against the viewer's
+    table, and that the old ones are caught), types nothing on any
+    layout, and cannot be a gesture's key (a gesture takes Ctrl or
+    Shift, not both). On laptops whose top row is media keys by default,
+    Fn is needed with it. **Migration:** `hotkeys.defaults` in
+    `session-host.json` says which defaults wrote the file (missing: the
+    first); a file of the first defaults whose seven hotkeys are all the
+    old defaults, unchanged, gets the new ones (on or off kept); a file
+    with any hotkey of the user's own keeps every one of them, and the
+    old defaults typed again later are kept as a choice (the file then
+    says `defaults: 2`).
+  - **Quit all is confirmed** under the rows ("Quit all 3 characters
+    that are open?", Quit all / Cancel), in the cards and in the
+    condensed lines alike. The close button's question (Quit all, Close
+    only this window, Cancel) is a question already: its Quit all does
+    not ask again. There is no hotkey for Quit all.
+  - **Inbox: Dismiss**, per row, and **Dismiss all** / **Dismiss all
+    for <character>** under "Dismiss…" beside the heading, in the band
+    and in the inbox's own window. Host-only: the entry leaves the inbox,
+    "Inbox (n)", the condensed line's count and the chat's "has something
+    to answer" box; nothing is said to the viewer, where the question
+    still waits unanswered (nothing is answered from the host stays
+    true). A dismissed question stays out while its viewer keeps listing
+    it in the same login (`Inbox::dismiss`, by the viewer's number, which
+    a viewer never gives twice in one login); a new question, or the same
+    number after another login, comes in as usual. Dismissing all of a
+    character also leaves out how many more it has than are listed,
+    until that count grows. Memory only, bounded (64 numbers per
+    character; those the viewer's whole list no longer has are
+    forgotten).
+  - **Clearing in the viewer.** What a viewer clears does reach the
+    host for the inbox: a question answered, declined or closed (its
+    card's or toast's ×) leaves the viewer's list and the next list,
+    within a quarter of a second, takes it out of the host. What does not
+    leave is what still waits there: the bell's "Mark all read" marks the
+    questions read but keeps them in its "To do", and a toast that fades
+    leaves its question under the bell; the host lists them because they
+    are unanswered (Dismiss now hides them in the host). What did not
+    follow, and is now fixed, is the **chat's unread count**: a
+    conversation read in the viewer stayed unread in the host (the host
+    told the viewer when it was read in the host, `MarkRead`, but not the
+    other way). The viewer already told its unread count with each
+    conversation; the host now takes a fall of that count to zero as
+    "read there" (`chat::Chat::batch`). Only the fall: a viewer that
+    shows a conversation as its lines come (open behind the others) has
+    nothing unread there, and the host still counts those lines for the
+    user who has not seen them. A "seen" mark for questions (read in the
+    viewer, dimmed in the host) would need a field on the attention items
+    and a protocol change: not done.
 
 - **Bird's-eye switch effect: not built (decision), design note.**
   - **What Folderstorm (C++) meant** (its `doc/plans/

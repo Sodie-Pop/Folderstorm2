@@ -13,6 +13,7 @@ use super::faces::{self, Face};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::chat::{Blocked, Chat, Entry, Note, Thread, Viewing};
+use ::folderstorm_session::inbox::Inbox;
 use ::folderstorm_session::ipc::{self, AttentionKind, Conversation, LineKind, MAX_SLOTS, SendRefusal, SessionKind};
 use aurora_i18n::tr;
 use egui::{RichText, Vec2};
@@ -156,7 +157,7 @@ impl ChatPanel {
                 host.chat.thread(slot, self.shown[slot]).map(|t| (slot, t.conversation))
             }
         };
-        self.attention(ui, p, &host.chat, &name, &mut asked);
+        self.attention(ui, p, &host.chat, &host.inbox, &name, &mut asked);
         let room = (ui.available_height() - COMPOSE_ROOM).max(80.0);
         egui::Frame::new()
             .fill(p.field)
@@ -237,8 +238,9 @@ impl ChatPanel {
     }
 
     /// What waits for an answer in the characters' own windows. Nothing is
-    /// answered here: the button brings that window forward.
-    fn attention(&self, ui: &mut egui::Ui, p: &Palette, chat: &Chat, name: &dyn Fn(usize) -> String, asked: &mut Asked) {
+    /// answered here: the button brings that window forward. What was
+    /// dismissed from the inbox is left out here too.
+    fn attention(&self, ui: &mut egui::Ui, p: &Palette, chat: &Chat, inbox: &Inbox, name: &dyn Fn(usize) -> String, asked: &mut Asked) {
         let slots: Vec<usize> = match self.tab {
             // (the inbox beside the chat lists them all, once)
             Tab::All if self.inbox_beside => Vec::new(),
@@ -246,7 +248,11 @@ impl ChatPanel {
             Tab::Character(slot) => vec![slot],
         };
         for slot in slots {
-            let (items, more) = chat.attention(slot);
+            let (listed, _) = chat.attention(slot);
+            let login = chat.login(slot);
+            let items: Vec<&ipc::AttentionItem> = listed.iter().filter(|item| !inbox.is_dismissed(slot, login, item.id)).collect();
+            // (what is not listed, as the inbox counts it)
+            let more = inbox.more(slot);
             if items.is_empty() {
                 continue;
             }
