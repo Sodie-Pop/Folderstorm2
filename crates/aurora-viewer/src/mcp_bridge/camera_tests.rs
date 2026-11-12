@@ -682,3 +682,7 @@ fn the_thumbnail_answers_when_the_gallery_snapshot_ends() {
     assert_eq!(answer.try_recv().expect("answered").expect_err("late").code, ErrorCode::Timeout);
     assert!(!studio.thumbnail_busy());
 }
+
+// Folderstorm: the studio's waiting calls decided again by the desk's rules
+#[cfg(test)]
+mod recheck;
