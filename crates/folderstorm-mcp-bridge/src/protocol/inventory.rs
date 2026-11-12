@@ -29,6 +29,7 @@ const fn spec(name: &'static str, description: &'static str, class: Class, schem
         name,
         description,
         class: Some(class),
+        also: None,
         schema,
         wait,
     }
