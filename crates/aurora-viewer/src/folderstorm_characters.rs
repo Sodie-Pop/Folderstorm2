@@ -24,6 +24,11 @@
 //!   profile made from another one (the host's quick actions and global
 //!   hotkeys are in [`host`]).
 //!
+//! Checkpoint 5, monitors:
+//! - [`Monitoring`]: what a managed viewer keeps of the pictures it takes
+//!   for the host (the `impl App` glue is in
+//!   `app/folderstorm_characters/monitor.rs`; the host's side in [`host`]).
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod chat_export;
@@ -89,6 +94,27 @@ pub struct State {
     /// window out of the app while it is drawn: the rules asked during the
     /// frame go by what the window said just before.
     pub window_focus: std::cell::Cell<Option<bool>>,
+    /// The monitor's pictures taken for the session host (checkpoint 5).
+    pub monitor: Monitoring,
+}
+
+/// What a managed viewer keeps of its monitor (plan section 12): when the
+/// next picture is due, and the one asked of the renderer and not
+/// answered yet. No picture is kept here: it goes to the link at once.
+#[derive(Debug, Default)]
+pub struct Monitoring {
+    pub schedule: ::folderstorm_session::monitor::Schedule,
+    /// The size of the picture asked of the renderer, until its answer.
+    pub asked: Option<(u32, u32)>,
+    /// The host asked for pictures as of the last frame.
+    pub ordered: bool,
+    /// The number of the last picture sent.
+    pub seq: u64,
+    /// What the host was last told of the monitor.
+    pub state: ::folderstorm_session::monitor::State,
+    /// Pictures sent, and the time their frames took in all, for the log.
+    pub sent: u64,
+    pub waited: std::time::Duration,
 }
 
 /// The window's focus for the session's rules: as the window says when it
@@ -144,6 +170,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_demo_variable_keeps_or_replaces_the_policy() {
+        assert_eq!(parse_demo("1"), Some(None));
+        assert_eq!(parse_demo(" Off "), Some(Some(Behind3d::Off)));
+        assert_eq!(parse_demo("limited"), Some(Some(Behind3d::Limited)));
+        assert_eq!(parse_demo("normal"), Some(Some(Behind3d::Normal)));
+        assert_eq!(parse_demo("0"), None);
+        assert_eq!(parse_demo(""), None);
+    }
+
+    #[test]
     fn the_window_s_focus_is_remembered_while_a_frame_holds_the_window() {
         let remembered = std::cell::Cell::new(None);
         // no window yet: nothing is known, never focused
@@ -154,16 +190,6 @@ mod tests {
         // it lost the keyboard between two frames
         assert_eq!(window_focus(&remembered, Some(false)), Some(false));
         assert_eq!(window_focus(&remembered, None), Some(false));
-    }
-
-    #[test]
-    fn the_demo_variable_keeps_or_replaces_the_policy() {
-        assert_eq!(parse_demo("1"), Some(None));
-        assert_eq!(parse_demo(" Off "), Some(Some(Behind3d::Off)));
-        assert_eq!(parse_demo("limited"), Some(Some(Behind3d::Limited)));
-        assert_eq!(parse_demo("normal"), Some(Some(Behind3d::Normal)));
-        assert_eq!(parse_demo("0"), None);
-        assert_eq!(parse_demo(""), None);
     }
 
     #[test]

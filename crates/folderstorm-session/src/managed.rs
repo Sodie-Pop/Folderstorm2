@@ -16,6 +16,7 @@
 
 use crate::behind::Behind3d;
 use crate::ipc::{Assignment, Role, Standby};
+use crate::monitor::Order;
 
 /// The host's hold on this viewer.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -73,7 +74,14 @@ impl Managed {
     /// said nothing (the viewer then asks the instances registry, with its
     /// profile's own policy).
     pub fn behind(&self, focused: bool) -> Option<(bool, Behind3d)> {
-        self.assignment.map(|a| (a.role == Role::Background && !focused, a.behind))
+        self.assignment.map(|a| (a.role.background() && !focused, a.behind))
+    }
+
+    /// The monitor's pictures the host asks for (checkpoint 5): only of a
+    /// background character that has not the keyboard. One the user went
+    /// to draws its 3D in its own window: nothing is taken for the host.
+    pub fn monitor(&self, focused: bool) -> Option<Order> {
+        self.assignment.filter(|_| !focused).and_then(|a| a.role.monitor())
     }
 
     /// Every sound is cut for now.
@@ -204,6 +212,55 @@ mod tests {
         // not allowed any more, but still connected: not given up yet
         assert!(m.voice_report(true));
         assert!(!m.voice_report(false));
+    }
+
+    fn watched(seq: u64, interval_ms: u32) -> Assignment {
+        Assignment {
+            role: Role::Monitor(Order {
+                size: crate::monitor::Size::Large,
+                interval_ms,
+            }),
+            standby: Standby::Warm,
+            ..background(seq)
+        }
+    }
+
+    #[test]
+    fn a_watched_character_is_a_background_one_that_takes_pictures() {
+        let mut m = Managed::default();
+        m.link();
+        assert_eq!(m.monitor(false), None, "nothing is asked before the host says so");
+        // Off → Monitor: still behind, 3D off, muted, without voice
+        assert!(m.assign(background(1)));
+        assert_eq!(m.monitor(false), None);
+        assert!(m.assign(watched(2, 1000)));
+        assert_eq!(m.monitor(false).map(|o| o.interval_ms), Some(1000));
+        assert!(!m.in_front(false));
+        assert_eq!(m.behind(false), Some((true, Behind3d::Off)), "the 3D stays off between pictures");
+        assert!(m.sound_muted());
+        assert!(!m.voice_allowed());
+        // the user clicks its window: it draws there, nothing for the host
+        assert_eq!(m.monitor(true), None);
+        assert_eq!(m.behind(true), Some((false, Behind3d::Off)));
+        // Monitor → Front: the host made it the active character
+        assert!(m.assign(active(3)));
+        assert_eq!(m.monitor(false), None);
+        assert!(m.in_front(false));
+        // Front → Monitor → Off (the monitor closed, or the host is hidden)
+        assert!(m.assign(watched(4, 500)));
+        assert_eq!(m.monitor(false).map(|o| o.interval_ms), Some(500));
+        assert!(m.assign(background(5)));
+        assert_eq!(m.monitor(false), None);
+        assert_eq!(m.behind(false), Some((true, Behind3d::Off)));
+        // an old order that comes late does not bring the monitor back
+        assert!(!m.assign(watched(4, 500)));
+        assert_eq!(m.monitor(false), None);
+        // an order is never faster than a monitor's fastest rate
+        assert!(m.assign(watched(6, 0)));
+        assert_eq!(m.monitor(false).map(|o| o.interval_ms), Some(crate::monitor::MIN_INTERVAL_MS));
+        // the host gone: no monitor
+        m.release();
+        assert_eq!(m.monitor(false), None);
     }
 
     #[test]

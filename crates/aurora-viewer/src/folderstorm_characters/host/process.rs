@@ -12,11 +12,18 @@
 //!   passes (process, slot, one-time token, protocol, build), then hands
 //!   its reports to the host's window.
 //!
+//! A **monitor's picture** (checkpoint 5) is not an event: the reader
+//! thread reads it whole (after its header passed `ipc`'s checks), makes
+//! the image the window will show, and leaves it in a place for one
+//! (`monitor::Latest`). The window takes the latest when it looks; one it
+//! had no time to show is replaced, never queued.
+//!
 //! The host never waits on a viewer: both threads may block for as long
 //! as a viewer is slow, the window's thread only ever tries to queue.
 
 use super::super::{managed, transport};
 use ::folderstorm_session::ipc::{self, AttentionList, Bootstrap, ChatBatch, Refusal, SendOutcome, Status, ToHost, ToViewer};
+use ::folderstorm_session::monitor::{FrameHeader, Latest};
 use ::folderstorm_session::profile::ProfileName;
 use crossbeam_channel::{Receiver, Sender};
 use std::io::{self, Read, Write};
@@ -51,6 +58,15 @@ pub enum Kind {
     Unreachable,
 }
 
+/// A monitor's picture as the window shows it.
+pub struct Shot {
+    pub header: FrameHeader,
+    pub image: egui::ColorImage,
+}
+
+/// Where a viewer's reader thread leaves its monitor's latest picture.
+pub type Shots = Arc<parking_lot::Mutex<Latest<Shot>>>;
+
 /// A started viewer.
 pub struct Viewer {
     pub launch: u32,
@@ -62,6 +78,8 @@ pub struct Viewer {
     cancelled: Arc<AtomicBool>,
     /// The viewer reached the endpoint.
     arrived: Arc<AtomicBool>,
+    /// Its monitor's latest picture, not looked at yet.
+    shots: Shots,
 }
 
 impl Viewer {
@@ -73,6 +91,11 @@ impl Viewer {
     /// ones (the desk sends an assignment again, a click can be repeated).
     pub fn send(&self, message: ToViewer) -> bool {
         self.commands.as_ref().is_some_and(|c| c.try_send(message).is_ok())
+    }
+
+    /// Its monitor's latest picture since the last call.
+    pub fn shot(&self) -> Option<Shot> {
+        self.shots.lock().take()
     }
 
     /// The host lets the viewer go (refused, or it never reached the
@@ -162,7 +185,9 @@ pub fn spawn(slot: usize, launch: u32, profile: &ProfileName, events: &Sender<Ev
         endpoint,
         cancelled: cancelled.clone(),
         arrived: arrived.clone(),
+        shots: Shots::default(),
     };
+    let shots = viewer.shots.clone();
     let pid = viewer.pid();
     let token = boot.token.clone();
     std::thread::Builder::new()
@@ -187,7 +212,7 @@ pub fn spawn(slot: usize, launch: u32, profile: &ProfileName, events: &Sender<Ev
                 }
             };
             arrived.store(true, Ordering::Release);
-            read_reports(from_viewer, slot, launch, &token, &managed::build_id(), &events);
+            read_reports(from_viewer, slot, launch, &token, &managed::build_id(), &events, &shots);
         })?;
     log::info!(
         "session host: character {} started (profile {}, process {pid})",
@@ -214,7 +239,7 @@ fn write_commands(mut to_viewer: impl Write, boot: &Bootstrap, queued: &Receiver
 
 /// The reader thread, once the viewer reached the endpoint: its hello,
 /// then its reports until it ends or says something that is not one.
-fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &str, build: &str, events: &Sender<Event>) {
+fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &str, build: &str, events: &Sender<Event>, shots: &Shots) {
     let tell = |kind| events.send(Event { slot, launch, kind }).is_ok();
     let hello = match ipc::read_frame::<ToHost>(&mut from_viewer) {
         Ok(ToHost::Hello(hello)) => hello.check(slot as u8, token, build),
@@ -239,6 +264,24 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
             Ok(ToHost::Chat(batch)) => Kind::Chat(batch),
             Ok(ToHost::Attention(list)) => Kind::Attention(list),
             Ok(ToHost::SendResult { id, outcome }) => Kind::SendResult(id, outcome),
+            Ok(ToHost::Frame(header)) => {
+                // its size is checked before a byte of it is read
+                match ipc::read_picture(&mut from_viewer, &header) {
+                    Ok(rgb) => {
+                        let size = [usize::from(header.width), usize::from(header.height)];
+                        let image = egui::ColorImage::from_rgb(size, &rgb);
+                        shots.lock().put(Shot { header, image });
+                        continue;
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "session host: character {} sent a monitor picture that is not one ({e}); its reports are no longer read",
+                            slot + 1
+                        );
+                        return;
+                    }
+                }
+            }
             // a second hello is not a report
             Ok(ToHost::Hello(_)) => {
                 log::warn!(
@@ -289,9 +332,22 @@ mod tests {
     }
 
     fn told_of(wire: &[u8]) -> Vec<Kind> {
+        told_and_shown(wire).0
+    }
+
+    /// What the reader thread tells of `wire`, and the monitor's picture
+    /// it leaves.
+    fn told_and_shown(wire: &[u8]) -> (Vec<Kind>, Option<Shot>, u64) {
         let (tx, rx) = crossbeam_channel::unbounded();
-        read_reports(wire, 1, 7, &token(), "build", &tx);
+        let shots = Shots::default();
+        read_reports(wire, 1, 7, &token(), "build", &tx, &shots);
         drop(tx);
+        let told = told_from(&rx);
+        let mut shots = shots.lock();
+        (told, shots.take(), shots.replaced())
+    }
+
+    fn told_from(rx: &Receiver<Event>) -> Vec<Kind> {
         rx.iter()
             .map(|e| {
                 assert_eq!((e.slot, e.launch), (1, 7));
@@ -347,6 +403,68 @@ mod tests {
     }
 
     #[test]
+    fn a_monitor_s_pictures_are_read_between_the_reports_and_only_the_latest_is_left() {
+        let picture = |seq, width: u32, height: u32, fill: u8| {
+            let header = FrameHeader::new(1, seq, width, height).expect("a header");
+            (header, vec![fill; (width * height * 3) as usize])
+        };
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &hello(token())).expect("written");
+        write_frame(&mut wire, &ToHost::Heartbeat { loop_count: 1 }).expect("written");
+        for (header, rgb) in [picture(1, 320, 180, 10), picture(2, 320, 180, 20), picture(3, 240, 180, 30)] {
+            ipc::write_picture(&mut wire, header, &rgb).expect("written");
+        }
+        write_frame(&mut wire, &ToHost::Heartbeat { loop_count: 2 }).expect("written");
+        let (told, shot, replaced) = told_and_shown(&wire);
+        // the reports around the pictures read as before: in step
+        assert!(matches!(told.as_slice(), [Kind::Connected, Kind::Heartbeat(1), Kind::Heartbeat(2)]));
+        // nobody looked in between: the two older pictures were replaced
+        let shot = shot.expect("the latest picture");
+        assert_eq!((shot.header.seq, shot.image.size), (3, [240, 180]));
+        assert!(shot.image.pixels.iter().all(|c| *c == egui::Color32::from_rgb(30, 30, 30)));
+        assert_eq!(replaced, 2);
+    }
+
+    #[test]
+    fn a_picture_that_is_not_one_ends_the_reading_of_that_viewer() {
+        let header = FrameHeader::new(1, 1, 320, 180).expect("a header");
+        // a header that asks for far more than a monitor's picture: nothing
+        // of what follows is read, and nothing after it is taken
+        for lying in [
+            FrameHeader { bytes: u32::MAX, ..header },
+            FrameHeader {
+                width: 4000,
+                height: 4000,
+                bytes: 48_000_000,
+                ..header
+            },
+            FrameHeader { bytes: 0, ..header },
+        ] {
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &hello(token())).expect("written");
+            write_frame(&mut wire, &ToHost::Frame(lying)).expect("written");
+            write_frame(&mut wire, &ToHost::Heartbeat { loop_count: 9 }).expect("written");
+            let (told, shot, _) = told_and_shown(&wire);
+            assert!(matches!(told.as_slice(), [Kind::Connected]), "{lying:?}");
+            assert!(shot.is_none());
+        }
+        // a picture cut short by the viewer's end
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &hello(token())).expect("written");
+        ipc::write_picture(&mut wire, header, &vec![0; 320 * 180 * 3]).expect("written");
+        wire.truncate(wire.len() - 1);
+        let (told, shot, _) = told_and_shown(&wire);
+        assert!(matches!(told.as_slice(), [Kind::Connected]));
+        assert!(shot.is_none());
+        // no picture before the hello
+        let mut wire = Vec::new();
+        ipc::write_picture(&mut wire, header, &vec![0; 320 * 180 * 3]).expect("written");
+        let (told, shot, _) = told_and_shown(&wire);
+        assert!(matches!(told.as_slice(), [Kind::Refused(Refusal::Protocol)]));
+        assert!(shot.is_none());
+    }
+
+    #[test]
     fn the_writer_sends_the_bootstrap_first_then_the_commands_in_order() {
         let boot = Bootstrap {
             protocol: ipc::PROTOCOL,
@@ -391,6 +509,7 @@ mod tests {
             endpoint: String::new(),
             cancelled: Arc::new(AtomicBool::new(false)),
             arrived: Arc::new(AtomicBool::new(true)),
+            shots: Shots::default(),
         };
         assert!(viewer.send(ToViewer::Minimise));
         viewer.let_go();
@@ -448,7 +567,7 @@ mod tests {
             scope.spawn(|| {
                 // (the "viewer" is this very process)
                 let from_viewer = listener.accept(std::process::id(), &cancelled).expect("accepted");
-                read_reports(from_viewer, 0, 1, &token, &managed::build_id(), &events_tx);
+                read_reports(from_viewer, 0, 1, &token, &managed::build_id(), &events_tx, &Shots::default());
             });
             // what the writer thread puts on the viewer's standard input
             let (commands, queued) = crossbeam_channel::bounded(8);
@@ -521,7 +640,7 @@ mod tests {
         std::thread::scope(|scope| {
             scope.spawn(|| {
                 let from_viewer = listener.accept(std::process::id(), &cancelled).expect("accepted");
-                read_reports(from_viewer, 1, 1, &expected, &managed::build_id(), &events_tx);
+                read_reports(from_viewer, 1, 1, &expected, &managed::build_id(), &events_tx, &Shots::default());
             });
             let mut stdin = Vec::new();
             ipc::write_frame(&mut stdin, &boot).expect("written");
@@ -530,6 +649,121 @@ mod tests {
         drop(events_tx);
         let kinds: Vec<Kind> = events.iter().map(|e| e.kind).collect();
         assert!(matches!(kinds.as_slice(), [Kind::Refused(Refusal::Token)]), "{kinds:?}");
+    }
+
+    /// A monitor whole, over the real endpoint: the host asks a background
+    /// viewer for pictures, the viewer's link sends what its main thread
+    /// leaves, the largest picture arrives intact between two reports, and
+    /// pictures the host had no time to look at are replaced.
+    #[cfg(unix)]
+    #[test]
+    fn a_monitor_s_pictures_cross_the_real_endpoint_latest_only() {
+        use ::folderstorm_session::ipc::Role;
+        use ::folderstorm_session::monitor::{Order, Size};
+        use std::os::unix::net::UnixStream;
+        use std::time::{Duration, Instant};
+
+        const SLOT: usize = 3;
+        const LAUNCH: u32 = 1;
+        let listener = transport::Listener::bind(SLOT as u8).expect("bound");
+        let boot = Bootstrap {
+            protocol: ipc::PROTOCOL,
+            slot: SLOT as u8,
+            host_pid: std::process::id(),
+            endpoint: listener.endpoint().to_owned(),
+            token: transport::random_hex(ipc::TOKEN_LEN),
+        };
+        let (events_tx, events) = crossbeam_channel::unbounded();
+        let token = boot.token.clone();
+        let shots = Shots::default();
+        let reader_shots = shots.clone();
+        let reader = std::thread::spawn(move || {
+            let cancelled = AtomicBool::new(false);
+            let from_viewer = listener.accept(std::process::id(), &cancelled).expect("accepted");
+            read_reports(from_viewer, SLOT, LAUNCH, &token, &managed::build_id(), &events_tx, &reader_shots);
+        });
+        let (mut to_viewer, viewer_input) = UnixStream::pair().expect("pipe");
+        let (link, viewer) = managed::start_viewer(viewer_input);
+        ipc::write_frame(&mut to_viewer, &boot).expect("bootstrap");
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let viewer_event = || loop {
+            if let Some(event) = link.poll().next() {
+                return event;
+            }
+            assert!(Instant::now() < deadline, "the viewer heard nothing");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        assert_eq!(viewer_event(), managed::Event::Linked { slot: SLOT as u8 });
+
+        // the host's order reaches the viewer as its role
+        let order = Order {
+            size: Size::Large,
+            interval_ms: 1000,
+        };
+        let assignment = ::folderstorm_session::ipc::Assignment {
+            seq: 1,
+            role: Role::Monitor(order),
+            behind: ::folderstorm_session::behind::Behind3d::Off,
+            standby: ::folderstorm_session::ipc::Standby::Warm,
+            sound_muted: true,
+            voice_allowed: false,
+        };
+        ipc::write_frame(&mut to_viewer, &ToViewer::Assign(assignment)).expect("written");
+        let managed::Event::Command(ToViewer::Assign(taken)) = viewer_event() else {
+            panic!("not an assignment");
+        };
+        assert_eq!(taken.role.monitor(), Some(order));
+
+        // the largest picture, a pattern that would show any byte out of place
+        let rgba: Vec<u8> = (0..640 * 360)
+            .flat_map(|i: u32| [i as u8, (i >> 8) as u8, (i >> 16) as u8, 255])
+            .collect();
+        let picture = |seq, rgba: Vec<u8>| managed::Picture {
+            generation: 1,
+            seq,
+            width: 640,
+            height: 360,
+            rgba,
+        };
+        link.picture(picture(1, rgba.clone()));
+        let wait_for = |seq: u64| loop {
+            if let Some(shot) = shots.lock().take().filter(|shot| shot.header.seq == seq) {
+                return shot;
+            }
+            assert!(Instant::now() < deadline, "picture {seq} never came");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        let shot = wait_for(1);
+        assert_eq!(shot.image.size, [640, 360]);
+        let expected: Vec<egui::Color32> = (0..640 * 360u32)
+            .map(|i| egui::Color32::from_rgb(i as u8, (i >> 8) as u8, (i >> 16) as u8))
+            .collect();
+        assert!(shot.image.pixels == expected, "the picture arrived as it was taken");
+
+        // a burst nobody looks at: the last one is what is left, and the
+        // reports that follow are still read
+        for seq in 2..=6 {
+            link.picture(picture(seq, vec![seq as u8; 640 * 360 * 4]));
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        let last = wait_for(6);
+        assert!(last.image.pixels.iter().all(|c| *c == egui::Color32::from_rgb(6, 6, 6)));
+        assert!(shots.lock().take().is_none(), "nothing older waits behind it");
+        assert!(link.report(Status {
+            unread: 7,
+            ..Default::default()
+        }));
+        loop {
+            let event = events.recv_timeout(Duration::from_secs(20)).expect("a report");
+            if matches!(&event.kind, Kind::Status(status) if status.unread == 7) {
+                break;
+            }
+        }
+        // the host goes: the viewer is on its own, the reader ends
+        drop(to_viewer);
+        assert_eq!(viewer_event(), managed::Event::Gone);
+        viewer.join().expect("the viewer's link ended");
+        reader.join().expect("the reader ended");
     }
 
     /// The shared chat whole, over the real endpoint and a real pipe for
@@ -561,7 +795,15 @@ mod tests {
         let reader = std::thread::spawn(move || {
             let cancelled = AtomicBool::new(false);
             let from_viewer = listener.accept(std::process::id(), &cancelled).expect("accepted");
-            read_reports(from_viewer, SLOT, LAUNCH, &token, &managed::build_id(), &events_tx);
+            read_reports(
+                from_viewer,
+                SLOT,
+                LAUNCH,
+                &token,
+                &managed::build_id(),
+                &events_tx,
+                &Shots::default(),
+            );
         });
         // the viewer's standard input: a pipe the host writes
         let (mut to_viewer, viewer_input) = UnixStream::pair().expect("pipe");

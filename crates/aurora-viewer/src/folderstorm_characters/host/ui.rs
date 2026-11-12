@@ -5,9 +5,11 @@
 //! Drawn on the processor like the crash window (`crash/window.rs`, whose
 //! event loop this follows), with the viewer's theme, fonts, icons and
 //! catalogues. Checkpoint 4's part (quick actions, hotkeys, "New character
-//! profile…") is in `ui/comfort.rs`.
+//! profile…") is in `ui/comfort.rs`, checkpoint 5's (the monitors) in
+//! `ui/monitors.rs`.
 
 mod comfort;
+mod monitors;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
@@ -71,6 +73,7 @@ pub fn run(mut host: Host) -> anyhow::Result<()> {
         new_profile: String::new(),
         add_error: None,
         comfort: Default::default(),
+        monitors: Default::default(),
         ending: None,
         closing: false,
         chat: ChatPanel::default(),
@@ -107,6 +110,8 @@ struct Window_ {
     add_error: Option<String>,
     /// Checkpoint 4: the hotkeys' and the new profile's pages.
     comfort: comfort::Panel,
+    /// Checkpoint 5: the monitors' textures, and which are on screen.
+    monitors: monitors::Panel,
     /// The character whose "End process" waits for its confirmation.
     ending: Option<usize>,
     /// The window's close button was pressed while characters run.
@@ -143,6 +148,8 @@ enum Act {
     Refresh,
     /// Checkpoint 4 (`ui/comfort.rs`).
     Comfort(comfort::Act),
+    /// Checkpoint 5: a character's monitor opened, changed or closed.
+    Monitor(usize, Option<::folderstorm_session::monitor::Spec>),
 }
 
 impl Window_ {
@@ -150,6 +157,7 @@ impl Window_ {
         let p = self.palette;
         let now = Instant::now();
         let mut acts = Vec::new();
+        self.monitors_begin();
         let wide = ui.available_width() >= WIDE;
         let frame = egui::Frame::new().fill(p.panel).inner_margin(18.0);
         if wide {
@@ -240,6 +248,7 @@ impl Window_ {
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             self.character(ui, &p, *slot, state, now, quitting, acts);
+                            self.monitor_panel(ui, &p, *slot, state, now, acts);
                         });
                     ui.add_space(8.0);
                 }
@@ -370,6 +379,7 @@ impl Window_ {
                 acts.push(Act::Standby(slot, if economy { Standby::Economy } else { Standby::Warm }));
             }
             self.sound_choice(ui, p, slot, state, acts);
+            self.monitor_choice(ui, p, slot, state, acts);
         });
     }
 
@@ -463,6 +473,7 @@ impl Window_ {
                 }
                 Act::Refresh => {}
                 Act::Comfort(act) => self.comfort_apply(act, now),
+                Act::Monitor(slot, spec) => self.host.desk.set_monitor(slot, spec),
             }
         }
         self.host.tick(now);
@@ -688,6 +699,10 @@ impl ApplicationHandler for Window_ {
         if let WindowEvent::Focused(focused) = event {
             self.focused = focused;
         }
+        if let WindowEvent::Occluded(occluded) = event {
+            // covered whole: its monitors ask nothing until it shows again
+            self.monitors.occluded = occluded;
+        }
         if let (Some(input), Some(window)) = (&mut self.input, &self.window) {
             let response = input.on_window_event(window, &event);
             self.redraw |= response.repaint;
@@ -716,6 +731,7 @@ impl ApplicationHandler for Window_ {
             self.redraw = true;
         }
         if now >= self.next_tick {
+            self.monitors_watch(now);
             self.host.tick(now);
             let tick = if self.host.desk.live() > 0 { TICK } else { IDLE_TICK };
             self.next_tick = now + tick;
@@ -813,6 +829,7 @@ mod tests {
             new_profile: String::new(),
             add_error: None,
             comfort: Default::default(),
+            monitors: Default::default(),
             ending: None,
             closing: false,
             chat: ChatPanel::default(),

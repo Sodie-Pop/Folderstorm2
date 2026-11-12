@@ -8,6 +8,7 @@
 //! a managed viewer is in `folderstorm_characters/chat.rs`.
 
 mod chat;
+mod monitor;
 
 use super::*;
 use crate::folderstorm_characters::managed::Event as HostEvent;
@@ -273,6 +274,7 @@ impl App {
                         log::info!("session host: gone, this viewer goes on by itself");
                     }
                     self.folderstorm_characters.managed.release();
+                    self.folderstorm_characters.monitor.state = Default::default();
                     self.sync_minimized_mute();
                 }
             }
@@ -349,6 +351,7 @@ impl App {
         if std::mem::replace(&mut report.logged_in, logged_in) != logged_in {
             report.generation = report.generation.wrapping_add(1);
         }
+        let focused = self.folderstorm_focused();
         let state = &self.folderstorm_characters;
         let (screen, window, gpu) = match &self.gfx {
             None => (ipc::Screen::Starting, ipc::WindowState::default(), ipc::Gpu::Ok),
@@ -408,13 +411,19 @@ impl App {
                 0
             },
             // (no window yet: never focused)
-            focused: self.folderstorm_focused(),
+            focused,
             window,
             gpu,
             paused_3d: state.paused,
             sound_muted: self.minimized_mute.active,
             // given up only once the voice is off too
             voice_allowed: state.managed.voice_report(self.voice.connected),
+            // (frames are rare in a minimised window: said from here)
+            monitor: match state.managed.monitor(focused) {
+                None => ::folderstorm_session::monitor::State::Off,
+                Some(_) if window.minimised => ::folderstorm_session::monitor::State::Minimised,
+                Some(_) => state.monitor.state,
+            },
         }
         .cleaned()
     }

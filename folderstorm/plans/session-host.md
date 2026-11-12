@@ -944,6 +944,168 @@ May be two small PRs: 1a profiles, 1b behind policy.
   barely changes (measure the added GPU and CPU cost); a busy card lowers the
   monitor rate instead of resetting the GPU.
 
+- **As built (branch `claude/session-checkpoint-5`, on top of checkpoint
+  4):** the rules are pure and tested in `crates/folderstorm-session`
+  (`monitor`: sizes, rates, the budget, when a viewer takes a picture and
+  how it lowers its rate, the picture's size and its header's checks,
+  "latest only"; `ipc`: protocol 3; `managed`: the role; `host`: which
+  characters are watched, in `host/monitor_tests.rs`). In the viewer:
+  `app/folderstorm_characters/monitor.rs` (a managed viewer takes its
+  pictures), `folderstorm_characters/managed.rs` (the link sends the
+  latest), `host/process.rs` (the host's reader takes them),
+  `host/monitors.rs` and `host/ui/monitors.rs` (the host keeps and shows
+  the latest).
+  - **Upstream hooks (new):** `aurora-render` `main_thread.rs`:
+    `Renderer::snapshot_wait` (how long the frame that carries a photo
+    waits for the card, instead of `CAPTURE_WAIT`'s 10 s) and
+    `Renderer::snapshot_pending()` (a photo's frame is still on the card);
+    `app.rs`: one call after `photo_frame` (`folderstorm_monitor_frame`)
+    and one before `photo_drawn` (`folderstorm_monitor_drawn`). Nothing
+    else of Aurora's photo path changes: a monitor's picture is a
+    `Renderer::snapshot_request` like a photo's part, asked only when no
+    photo is drawn, and its answer is taken before `photo_drawn` would
+    drop it.
+  - **Role.** `Role::Monitor(Order{size, interval_ms})` beside `Active`
+    and `Background`, in the one `Assign` (so idempotent, acknowledged and
+    sent again like the rest). A watched viewer is a background character
+    in everything (3D Off, sound, voice): the 3D pause of checkpoint 1
+    stays on between two pictures and only the frame that carries a
+    picture draws the scene (`App::scene_paused` is false for a frame
+    whose `snapshots.capturing` is set, as for a photo). A window the user
+    clicks takes no pictures (it draws for itself), and the host then
+    makes it the active character as before.
+  - **Watched only while seen.** The desk asks pictures of a character
+    only while it runs in the background, its monitor is open **and that
+    monitor's box is on screen in the host's window**: each drawing of the
+    window notes which boxes are visible (`ui.is_rect_visible`), and none
+    is while the window is minimised or covered (`WindowEvent::Occluded`,
+    `Window::is_minimized`), on the chat's page of a narrow window, or
+    scrolled away. Otherwise the viewer gets a plain `Background`
+    assignment: closing or hiding a monitor returns that viewer to Off.
+    Monitors are saved per character in `session-host.json` (`monitor`:
+    size and rate). At most 4 run at once (decision 3).
+  - **Budget.** 1 200 000 pixels a second for all monitors together
+    (four 640 × 360 monitors at 1 a second, or one at 5 a second, pass).
+    Past it every monitor's interval is stretched by the same factor
+    (`monitor::grant`), and the monitor says "n pictures a second: the
+    monitors share one budget".
+  - **A picture has the window's proportions** (`monitor::fit`): the
+    largest even size with the proportions of the world's part of the
+    viewer's window inside the monitor's 16:9 box, so it is the
+    character's own view scaled down (a 4:3 window gives 480 × 360 in the
+    large box), drawn with the frame's own camera and field of view and
+    shown in the host with bars, never stretched. Rows come from the top,
+    as the photo path reads them back.
+  - **Frame transport: raw RGB on the viewer's own endpoint, after a
+    checked header.** A `ToHost::Frame(FrameHeader{generation, seq,
+    width, height, bytes})` message (JSON, within the 64 KiB frame) is
+    followed at once by exactly `bytes` raw bytes, written in one write by
+    the link's out thread, the endpoint's only writer. The host's reader
+    checks the header before it allocates or reads anything: both sides
+    between 16 and 640 × 360, and `bytes == width × height × 3`; so at
+    most 691 200 bytes are ever read for a picture, and anything else ends
+    the reading of that viewer (as any message that is not one does). Why
+    this and not the alternatives: **(a)** no codec: JPEG or WebP would fit
+    most pictures in 64 KiB but not all (an adaptive quality loop), cost
+    more processor time than a 0.7 MB local copy, and put an image decoder
+    in front of bytes from another process; **(b)** no chunks: one length,
+    one read, nothing to reassemble or to bound twice; **(c)** no shared
+    memory: no new system object and no Windows-only unsafe code to
+    secure and test; the picture uses the endpoint that already exists,
+    with its security as it is (this logon only, first instance, remote
+    clients refused, the launch's process id and one-time token, protocol
+    and build). The plan's section 8 said "binary, 2 MiB at most, latest
+    only": it is binary, 691 200 bytes at most, latest only. At the
+    budget's most, the pipes carry about 3.6 MB a second in all.
+  - **Latest only, three times** (`monitor::Latest`, a place for one):
+    the viewer's main thread leaves the pixels for the out thread and
+    never waits (one not written yet is replaced); the host's reader
+    leaves the image for the window (one not looked at yet is replaced);
+    the window replaces its texture whole. Nothing is queued anywhere, so
+    a slow host or a slow pipe costs pictures, never memory. A viewer
+    never has two pictures on its card: the schedule asks one at a time.
+  - **Never a long wait on the card.** The frame that carries a picture
+    waits 60 ms for it (`snapshot_wait`) instead of 10 s; a picture not
+    back by then comes through the renderer's existing late answer
+    (`snapshot_sent`) with a later frame, and ordinary paused frames go on
+    meanwhile; one not back after 1.5 s is given up
+    (`Renderer::drop_snapshot`: its answer is not kept) and nothing more
+    is asked until the card has answered it.
+  - **A busy card lowers the rate** (`monitor::Schedule`), and the
+    monitor says so. A picture that took 150 ms or more (the busy
+    pause's own measure) doubles the time to the next one; one given up
+    quadruples it; up to 32 times the order's interval, 60 s at most; four
+    quick pictures in a row bring it back one step ("fewer pictures: the
+    graphics card is busy"). While Aurora's busy pause is on: one picture
+    every 10 s at most. While the card holds a frame (stall), is lost,
+    out of video memory or past the driver's budget behind: none
+    ("paused: the graphics card does not answer"). Checkpoint 1's rules
+    are untouched: a loss behind still waits for the window to come
+    forward, a stall behind shows no box, and a monitor asks nothing of a
+    card in either state. Not on a timed run, with a headset, or while a
+    photo of the user's is drawn (the photo comes first).
+  - **RLVa.** A picture is drawn by the same `FrameParams` as the frame
+    on screen, so what the renderer does for RLVa applies as on screen:
+    vision spheres (`rlva_spheres`), overlays (`rlva_overlays`), the
+    resolution divisor, restricted textures, hidden avatars. Checked in
+    code: `App::scene_paused` is false for the picture's frame, so the
+    divisor is RLVa's and not the pause's, and the snapshot target is the
+    frame's own surface view, where spheres and overlays are drawn. The
+    picture carries **no interface**, so nothing the interface shows can
+    leak past a restriction (name tags, hover text, the map, the
+    location): stricter than the screen. **Not** covered by a pixel test
+    here (no graphics device in the sandbox): to check on Windows with
+    `@setsphere` and `@setoverlay`.
+  - **Minimised windows.** A minimised viewer gave its textures back
+    (Economy) and gets few frames: it takes no picture and its monitor
+    says so ("Switch to it once…"). A character whose monitor is open is
+    therefore **not minimised behind** even with "Minimise in the
+    background" (`Slot::waits`: Warm while its monitor is open); the
+    choice itself is kept. Restoring a minimised window without giving it
+    the keyboard is not done (winit's restore activates the window).
+  - **In the host:** in a character's card, a **Monitor** checkbox; while
+    it is open, the size (320 × 180, 480 × 270, 640 × 360) and the rate
+    (0.5, 1, 2, 5 a second), the picture in its 16:9 box (1:1 when the
+    card is wide enough, scaled down otherwise), and under it "name · n s
+    ago · how its viewer does". The picture senses no click and no key;
+    the card's **Switch** is the way to act. The host keeps the latest
+    picture of each monitor in memory only, and drops it when the monitor
+    closes, the character comes to the front or leaves the world, or its
+    viewer ends; a hidden monitor keeps its last picture, with its age.
+    No file, no log line holds a picture. (`AURORA_SESSION_HOST_CAPTURE`,
+    demo only, writes the whole host window, monitors included: demo
+    viewers have no grid.) The window is still drawn on the processor;
+    the texture is replaced whole and the window is painted off screen
+    and presented in one piece: no flicker.
+  - **Cost (estimated, not measured: no graphics card here).** In a
+    watched viewer, a picture is one offscreen frame of the scene at
+    640 × 360 at most (a ninth of a 1080p frame's pixels; the shadow and
+    reflection passes do not shrink with it), 230 400 pixels read back
+    (0.9 MB) and 0.7 MB written to the pipe: at 1 picture a second about
+    one small frame a second per monitor, against the active character's
+    60 or more full frames. Its main thread waits 60 ms at most per
+    picture. In the host: 0.7 MB read and one image made per picture, off
+    the window's thread, and the pictures' pixels painted by the
+    processor at the window's 5 drawings a second. To measure on Windows:
+    the watched viewer's log says `session monitor: off … (n pictures
+    sent, x ms a picture)` when a monitor closes; compare the active
+    viewer's frame rate with 0 and 4 monitors open.
+  - **Fixed on the way (checkpoint 2's code):** `App::frame` takes the
+    window out of the app while it draws, so `folderstorm_focused`, asked
+    during the frame, saw no window and answered "no keyboard" every
+    time: a focused viewer was capped as a background one, could be
+    paused by the busy pause, and its GPU loss in front was left to wait.
+    The window's answer is now remembered from just before the frame
+    (`folderstorm_characters::window_focus`).
+  - **Demo:** `AURORA_DEMO_SESSION_HOST` opens every demo character's
+    monitor; the demo viewers draw their demo scene (`docs/TESTING.md`).
+  - Not done: the world viewport of section 12 (a "Limited" window
+    drawing only a small world rectangle, a large active window with the
+    host's panels beside it): not small, it needs the host to place
+    panels over another process's window; HUD attachments in the picture
+    (off, as in a photo by default); monitors as separate windows
+    (checkpoint 6); a picture for a minimised window.
+
 ### Checkpoint 6: pop-out panels and fitted layout (optional)
 
 - Chat, controls and monitors as separate host windows; an opt-in fitted

@@ -291,6 +291,10 @@ pub struct Renderer {
     snapshot_sent: bool,
     /// That photo was given up (`drop_snapshot`): its answer is not kept.
     snapshot_dropped: bool,
+    /// Folderstorm: how long the photo asked is waited for instead of
+    /// `CAPTURE_WAIT` (a session monitor's picture: a short wait, then
+    /// the late answer above).
+    pub snapshot_wait: Option<Duration>,
     /// Count the luminance histogram of the next frame shown at that
     /// exposure (asked each frame the photo viewfinder shows it).
     pub histogram_request: Option<f32>,
@@ -766,6 +770,7 @@ impl Renderer {
             snapshot_request: None,
             snapshot: None,
             snapshot_sent: false,
+            snapshot_wait: None, // Folderstorm
             snapshot_dropped: false,
             histogram_request: None,
             histogram: None,
@@ -1128,6 +1133,13 @@ impl Renderer {
     pub fn drop_snapshot(&mut self) {
         self.snapshot_request = None;
         self.snapshot_dropped = self.snapshot_sent;
+    }
+
+    /// Folderstorm: the photo asked left with a frame the GPU has not
+    /// finished yet; its answer comes with a later frame (a session
+    /// monitor asks nothing more until then).
+    pub fn snapshot_pending(&self) -> bool {
+        self.snapshot_sent
     }
 
     /// Apply quality settings: pipelines and targets are rebuilt by the
@@ -1516,7 +1528,12 @@ impl Renderer {
                     // the capture is read right after this call; a GPU that
                     // stops answering in it leaves it for a later frame
                     let t = Instant::now();
-                    match owner.finish_until(t + CAPTURE_WAIT) {
+                    // Folderstorm: snapshot_wait, a session monitor's short wait
+                    let wait = match capture {
+                        Some(crate::packet::Capture::Snapshot(_)) => self.snapshot_wait.unwrap_or(CAPTURE_WAIT),
+                        _ => CAPTURE_WAIT,
+                    };
+                    match owner.finish_until(t + wait) {
                         Ok(Some(Done::Frame(r))) => {
                             if r.index != index {
                                 log::warn!("capture: frame {} answered for frame {index}", r.index);
