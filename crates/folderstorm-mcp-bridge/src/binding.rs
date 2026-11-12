@@ -36,13 +36,7 @@ pub const WORLD: &str = "world";
 
 /// What this build implements. Later groups add theirs: `receipts`,
 /// `plans`, `operations`…
-pub const CAPABILITIES: &[(&str, u32)] = &[
-    (INVENTORY, 1),
-    (CAMERA, 1),
-    (INVENTORY_GAPS, 1),
-    (WORLD, 1),
-    (LOGIN_BINDING, 1),
-];
+pub const CAPABILITIES: &[(&str, u32)] = &[(INVENTORY, 1), (CAMERA, 1), (INVENTORY_GAPS, 1), (WORLD, 1), (LOGIN_BINDING, 1)];
 
 /// [`CAPABILITIES`] as a map.
 pub fn capabilities() -> Capabilities {

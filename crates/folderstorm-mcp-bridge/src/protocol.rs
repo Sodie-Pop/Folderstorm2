@@ -745,10 +745,7 @@ pub fn tool(name: &str) -> Option<&'static ToolSpec> {
 
 /// Every tool: [`TOOLS`], then the groups phase 3 adds.
 pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
-    TOOLS
-        .iter()
-        .chain(inventory::INVENTORY_TOOLS)
-        .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
+    TOOLS.iter().chain(inventory::INVENTORY_TOOLS).chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
 }
 
 #[cfg(test)]
