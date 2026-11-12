@@ -176,6 +176,7 @@ impl Window_ {
     }
 
     /// The settings window is wanted open.
+    #[cfg(test)]
     pub(super) fn settings_wanted(&self) -> bool {
         self.settings.open
     }
