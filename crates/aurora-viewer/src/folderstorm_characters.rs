@@ -79,6 +79,21 @@ pub struct State {
     pub chat: chat_export::Export,
     /// The session host asked this viewer to quit.
     pub quit_by_host: bool,
+    /// The window's own focus as last read from it. A frame takes the
+    /// window out of the app while it is drawn: the rules asked during the
+    /// frame go by what the window said just before.
+    pub window_focus: std::cell::Cell<Option<bool>>,
+}
+
+/// The window's focus for the session's rules: as the window says when it
+/// is there to ask (`window`: None while a frame holds it, or before it is
+/// made), which is then remembered; otherwise as it last said. None: no
+/// window ever said anything.
+pub fn window_focus(remembered: &std::cell::Cell<Option<bool>>, window: Option<bool>) -> Option<bool> {
+    if window.is_some() {
+        remembered.set(window);
+    }
+    remembered.get()
 }
 
 /// What a managed viewer keeps of its reports to the host.
@@ -121,6 +136,19 @@ fn parse_demo(value: &str) -> Option<Option<Behind3d>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_s_focus_is_remembered_while_a_frame_holds_the_window() {
+        let remembered = std::cell::Cell::new(None);
+        // no window yet: nothing is known, never focused
+        assert_eq!(window_focus(&remembered, None), None);
+        // the window says it has the keyboard, then the frame takes it
+        assert_eq!(window_focus(&remembered, Some(true)), Some(true));
+        assert_eq!(window_focus(&remembered, None), Some(true), "during the frame: as it last said");
+        // it lost the keyboard between two frames
+        assert_eq!(window_focus(&remembered, Some(false)), Some(false));
+        assert_eq!(window_focus(&remembered, None), Some(false));
+    }
 
     #[test]
     fn the_demo_variable_keeps_or_replaces_the_policy() {
