@@ -282,7 +282,9 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
             if world::answers(&call.tool) {
-                // reads of what the viewer shows, answered at once
+                // reads of what the viewer shows, answered at once once the
+                // desk has checked the login and the levels
+                let Some(call) = rt.desk.admit(call) else { continue };
                 let result = world::answer(&call.tool, &call.arguments, &view.observation());
                 call.answer(result);
                 continue;

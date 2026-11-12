@@ -152,3 +152,27 @@ fn a_relog_while_the_dialog_is_open_refuses_end_to_end_and_nothing_is_resent() {
     assert_ne!(bridge.viewer_session().as_deref(), Some(first.as_str()));
     bridge.stop();
 }
+
+/// Folderstorm: #27's world reads are answered before the desk takes any
+/// call (`mcp_bridge::frame`); `Desk::admit` checks them as `take` would.
+#[test]
+fn a_world_read_is_checked_before_it_is_answered() {
+    let mut desk = desk_with(allow_all());
+    desk.set_login(1, Some(S1.to_owned()));
+    let (a, answer) = pinned("world_location", json!({}), Some(S2));
+    assert!(desk.admit(a).is_none());
+    let e = answered(&answer).expect_err("refused");
+    assert_eq!(e.code, ErrorCode::SessionChanged);
+    assert_eq!(e.viewer_session.as_deref(), Some(S1), "the login now");
+    let (b, _answer) = pinned("world_location", json!({}), Some(S1));
+    assert!(desk.admit(b).is_some(), "this login");
+    let (c, _answer) = pinned("world_location", json!({}), None);
+    assert!(desk.admit(c).is_some(), "not pinned (an older sidecar)");
+    // Read set to Never while the call was queued
+    let mut never = allow_all();
+    never.set(Class::Read, Level::Never);
+    desk.set_permissions(never);
+    let (d, answer) = pinned("world_location", json!({}), Some(S1));
+    assert!(desk.admit(d).is_none());
+    assert_eq!(answered(&answer).expect_err("refused").code, ErrorCode::PermissionDenied);
+}

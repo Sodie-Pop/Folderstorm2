@@ -242,6 +242,29 @@ impl Desk {
         }
     }
 
+    /// Folderstorm: a call answered outside the desk (the world reads, which
+    /// `mcp_bridge::frame` answers at once) is checked first as [`Desk::take`]
+    /// checks every call: pinned to another login, or needing a class now on
+    /// Never, it is refused. Some: answer it now.
+    pub fn admit(&self, call: Pending) -> Option<Pending> {
+        let Some(spec) = protocol::tool(&call.tool) else {
+            call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
+            return None;
+        };
+        if spec.bound()
+            && let Some(pinned) = &call.session
+            && self.session.as_deref() != Some(pinned.as_str())
+        {
+            call.answer(Err(binding::session_changed(self.session.as_deref())));
+            return None;
+        }
+        if decision(&self.permissions, &call.tool) == Decision::Refuse {
+            call.answer(Err(refused(PERMISSIONS_CHANGED)));
+            return None;
+        }
+        Some(call)
+    }
+
     /// The user's levels in force, given each frame before the calls: the
     /// calls waiting are decided again with them ([`Desk::tick`]).
     pub fn set_permissions(&mut self, permissions: Permissions) {
