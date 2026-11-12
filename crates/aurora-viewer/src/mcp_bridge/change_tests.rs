@@ -31,7 +31,7 @@ const SILHOUETTE: Uuid = Uuid::from_u128(710);
 const JACKET: Uuid = Uuid::from_u128(715);
 const SPARE_SHIRT: Uuid = Uuid::from_u128(722);
 
-fn demo_inventory() -> Inventory {
+pub(super) fn demo_inventory() -> Inventory {
     let mut inv = Inventory {
         root: Uuid::from_u128(80),
         owner: AGENT,
@@ -56,7 +56,7 @@ fn demo_inventory() -> Inventory {
     inv
 }
 
-fn ctx(inv: &Inventory) -> Ctx<'_> {
+pub(super) fn ctx(inv: &Inventory) -> Ctx<'_> {
     let mut worn = HashSet::new();
     if let Some(cof) = appearance::cof(inv) {
         worn.extend(
@@ -74,6 +74,7 @@ fn ctx(inv: &Inventory) -> Ctx<'_> {
         inventory_locked: false,
         protected: HashSet::new(),
         outfit_points: HashMap::new(),
+        stage: Default::default(),
     }
 }
 
@@ -99,6 +100,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
             let (change, _) = appearance::plan(inv, action, &HashMap::new()).expect("outfit planned");
             appearance::demo_mutate(inv, AGENT, &change).expect("outfit applied");
         }
+        Work::Camera(_) | Work::Snapshot(_) | Work::Thumbnail(_) => panic!("not an inventory change"),
     }
 }
 

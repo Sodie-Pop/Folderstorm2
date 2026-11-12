@@ -38,6 +38,12 @@ pub enum Work {
     Inventory(Mutation),
     /// An outfit change, through `App::apply_appearance_action`.
     Outfit(Action),
+    /// A camera move (phase 3, `camera`).
+    Camera(super::camera::Move),
+    /// A picture, drawn by a photo job (phase 3, `picture`).
+    Snapshot(super::picture::Request),
+    /// The gallery's Take snapshot as this entry's picture (phase 3).
+    Thumbnail(Uuid),
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +149,9 @@ fn what(inv: &Inventory, ids: &[Uuid]) -> String {
 
 /// Plan one change, checking it as the window would.
 pub fn plan(tool: &str, args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
+    if super::camera::handles(tool) {
+        return super::camera::plan(tool, args, cx);
+    }
     ready(cx)?;
     match tool {
         "inventory_create_folder" => create_folder(args, cx),

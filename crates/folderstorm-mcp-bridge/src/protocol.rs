@@ -116,6 +116,9 @@ pub struct ToolSpec {
     pub description: &'static str,
     /// The permission it needs; None for the health check.
     pub class: Option<Class>,
+    /// A second permission it needs too (a thumbnail from a picture: Edit
+    /// and Camera); see `Permissions::decide_all`.
+    pub also: Option<Class>,
     /// Its JSON Schema (MCP `inputSchema`).
     pub schema: fn() -> Value,
     /// How long the viewer may take on top of the usual wait once the call
@@ -128,6 +131,18 @@ impl ToolSpec {
     pub fn changes(&self) -> bool {
         self.class.is_some_and(Class::can_ask)
     }
+
+    /// Every permission class it needs.
+    pub fn classes(&self) -> impl Iterator<Item = Class> {
+        self.class.into_iter().chain(self.also)
+    }
+}
+
+/// Calls that ask the user even when their classes are on Allow: a picture
+/// with the viewer's interface shows its windows, chat included. Never
+/// still refuses them.
+pub fn always_asks(tool: &str, arguments: &Value) -> bool {
+    tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -144,6 +159,25 @@ pub const CHANGE_WAIT: Duration = Duration::from_secs(30);
 pub const BAKE_WAIT_DEFAULT: u64 = 30;
 pub const BAKE_WAIT_MAX: u64 = 120;
 const NO_WAIT: Duration = Duration::ZERO;
+/// How long a camera move may take to settle before it answers.
+pub const CAMERA_WAIT: Duration = Duration::from_secs(5);
+/// How long a picture may take: the camera, a photo already being drawn,
+/// its passes and its encoding.
+pub const SNAPSHOT_WAIT: Duration = Duration::from_secs(45);
+/// The camera presets of `camera_preset`.
+pub const CAMERA_PRESETS: &[&str] = &["portrait", "full_body", "front", "back", "left", "right"];
+/// A picture's sides, in pixels.
+pub const SNAPSHOT_EDGE_MIN: u32 = 64;
+pub const SNAPSHOT_EDGE_MAX: u32 = 2048;
+pub const SNAPSHOT_EDGE_DEFAULT: u32 = 1024;
+/// The largest encoded picture sent (4 MB once in base64, well under the
+/// client's 8 MiB answer).
+pub const IMAGE_BYTES_MAX: usize = 3_000_000;
+/// The field of view an exact shot may ask for, in degrees.
+pub const FOV_DEGREES: (f32, f32) = (5.0, 120.0);
+/// The key of a result that carries a picture: `{"mime_type", "data"}`
+/// (base64), which the sidecar sends as MCP image content.
+pub const IMAGE_KEY: &str = "image";
 
 /// Tools that are never run, whatever the permissions: permanent delete,
 /// Purge and Empty Trash. Asking for one answers `permission_denied`.
@@ -301,6 +335,73 @@ fn bake_schema() -> Value {
     })
 }
 
+fn camera_preset_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "preset": {"type": "string", "enum": CAMERA_PRESETS,
+                "description": "portrait: head and shoulders from the front; full_body: the whole avatar from the front, a little above; front, back, left, right: the whole avatar from that side, level."}
+        },
+        "required": ["preset"],
+        "additionalProperties": false
+    })
+}
+
+fn vector_schema(what: &str) -> Value {
+    json!({"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3, "description": what})
+}
+
+fn camera_shot_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "position": vector_schema("Where the camera stands, in region coordinates (metres). Give `target` with it."),
+            "target": vector_schema("The point the camera looks at, in region coordinates (metres)."),
+            "camera_offset": vector_schema("Instead of `position`: the camera relative to the avatar, in metres in its frame (x forward, y left, z up)."),
+            "focus_offset": vector_schema("With `camera_offset`: the point looked at, relative to the avatar in its frame. Default: the avatar's centre."),
+            "fov_degrees": {"type": "number", "minimum": FOV_DEGREES.0, "maximum": FOV_DEGREES.1,
+                "description": "Vertical field of view. The user's own comes back with camera_reset or camera_preset."}
+        },
+        "additionalProperties": false
+    })
+}
+
+fn snapshot_schema() -> Value {
+    let edge = |what: &str| json!({"type": "integer", "minimum": SNAPSHOT_EDGE_MIN, "maximum": SNAPSHOT_EDGE_MAX, "description": what});
+    let fraction = json!({"type": "number", "minimum": 0.0, "maximum": 1.0});
+    json!({
+        "type": "object",
+        "properties": {
+            "source": {"type": "string", "enum": ["window", "world"], "default": "window",
+                "description": "window: the window's proportions; world: the world view only (the custom world viewport when one is set)."},
+            "width": edge("The picture's width. With `height`: that size, centre-cropped to its proportions. Alone: the height follows."),
+            "height": edge("The picture's height."),
+            "max_edge": {"type": "integer", "minimum": SNAPSHOT_EDGE_MIN, "maximum": SNAPSHOT_EDGE_MAX, "default": SNAPSHOT_EDGE_DEFAULT,
+                "description": "Without width and height: the long edge at most."},
+            "crop": {"type": "object", "description": "The part of the source kept, in fractions of its width and height (0 to 1).",
+                "properties": {"x": fraction, "y": fraction, "width": fraction, "height": fraction},
+                "required": ["x", "y", "width", "height"], "additionalProperties": false},
+            "interface": {"type": "boolean", "default": false,
+                "description": "Include the viewer's windows (chat included) as on screen; window source only. Always asks the user first."},
+            "huds": {"type": "boolean", "default": false, "description": "Include the HUDs."},
+            "format": {"type": "string", "enum": ["jpeg", "png"], "default": "jpeg"},
+            "save": {"type": "boolean", "default": false, "description": "Also save the picture in the viewer's photo folder."}
+        },
+        "additionalProperties": false
+    })
+}
+
+fn thumbnail_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "The outfit folder's, folder's or item's UUID."},
+            "path": {"type": "string", "description": "Instead of `id`: a folder's path, e.g. \"My Outfits/Evening\"."}
+        },
+        "additionalProperties": false
+    })
+}
+
 /// The `type` values of search results and filters.
 pub const KINDS: &[&str] = &[
     "folder",
@@ -323,12 +424,14 @@ pub const KINDS: &[&str] = &[
     "other",
 ];
 
-/// The tools: the reads of phase 1, then the changes of phase 2.
+/// The tools: the reads of phase 1, the changes of phase 2, then the
+/// camera and pictures of phase 3.
 pub const TOOLS: &[ToolSpec] = &[
     ToolSpec {
         name: "viewer_status",
         description: "Whether the viewer is logged in, whether its inventory is usable, and how far the inventory fetch has gone. Works even when inventory reads are not allowed.",
         class: None,
+        also: None,
         schema: no_arguments,
         wait: NO_WAIT,
     },
@@ -336,6 +439,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_search",
         description: "Find inventory items and folders by name, optionally inside one folder or path, or of one type. Results are capped (see `truncated`). Names are not unique: use the returned ids.",
         class: Some(Class::Read),
+        also: None,
         schema: search_schema,
         wait: NO_WAIT,
     },
@@ -343,6 +447,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_list_folder",
         description: "List the subfolders and items of one inventory folder, by id or by path. Without arguments, lists My Inventory.",
         class: Some(Class::Read),
+        also: None,
         schema: folder_schema,
         wait: NO_WAIT,
     },
@@ -350,6 +455,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_item",
         description: "Details of one inventory item: name, description, type, folder, creator, creation date, permissions, whether it is worn. The asset id is given only for an item with full permissions, as in the viewer.",
         class: Some(Class::Read),
+        also: None,
         schema: item_schema,
         wait: NO_WAIT,
     },
@@ -357,6 +463,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "outfits_list",
         description: "The outfits saved in My Outfits, with the current outfit's base marked.",
         class: Some(Class::Read),
+        also: None,
         schema: no_arguments,
         wait: NO_WAIT,
     },
@@ -364,6 +471,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "worn_items",
         description: "What the avatar wears now: body parts, clothing and attached objects.",
         class: Some(Class::Read),
+        also: None,
         schema: no_arguments,
         wait: NO_WAIT,
     },
@@ -371,6 +479,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_create_folder",
         description: "Create a folder, in My Inventory or inside another folder. Not in the Library, the Current Outfit, Received Items, the Trash or My Outfits.",
         class: Some(Class::Edit),
+        also: None,
         schema: create_folder_schema,
         wait: CHANGE_WAIT,
     },
@@ -378,6 +487,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_rename",
         description: "Rename an item or a folder. System folders, links, calling cards, Library entries and items without Modify permission cannot be renamed.",
         class: Some(Class::Edit),
+        also: None,
         schema: rename_schema,
         wait: CHANGE_WAIT,
     },
@@ -385,6 +495,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_describe",
         description: "Change an item's description. Items without Modify permission, links and Library items cannot be changed.",
         class: Some(Class::Edit),
+        also: None,
         schema: describe_schema,
         wait: CHANGE_WAIT,
     },
@@ -392,6 +503,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_move",
         description: "Move items and folders into another folder. System, locked and worn entries stay. To delete, use inventory_trash.",
         class: Some(Class::Move),
+        also: None,
         schema: to_folder_schema,
         wait: CHANGE_WAIT,
     },
@@ -399,6 +511,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_copy",
         description: "Copy items and folders into another folder. Items without Copy permission cannot be copied; folders must be fully loaded.",
         class: Some(Class::Move),
+        also: None,
         schema: to_folder_schema,
         wait: CHANGE_WAIT,
     },
@@ -406,6 +519,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_link",
         description: "Create links to items or folders in another folder (an outfit folder only links what can be worn).",
         class: Some(Class::Move),
+        also: None,
         schema: to_folder_schema,
         wait: CHANGE_WAIT,
     },
@@ -413,6 +527,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_trash",
         description: "Move items and folders to the Trash, as Delete does in the inventory. Nothing is deleted for good: inventory_restore brings them back. Worn items and system folders stay.",
         class: Some(Class::Trash),
+        also: None,
         schema: ids_only_schema,
         wait: CHANGE_WAIT,
     },
@@ -420,6 +535,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "inventory_restore",
         description: "Move items and folders out of the Trash, to the folder of their type (\"Restore item\").",
         class: Some(Class::Trash),
+        also: None,
         schema: ids_only_schema,
         wait: CHANGE_WAIT,
     },
@@ -427,6 +543,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "outfit_wear",
         description: "Wear a saved outfit, instead of the current one (replace) or over it (add). Then call wait_for_bake.",
         class: Some(Class::Wear),
+        also: None,
         schema: outfit_wear_schema,
         wait: CHANGE_WAIT,
     },
@@ -434,6 +551,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "outfit_take_off",
         description: "Take off what an outfit folder holds. Body parts always stay.",
         class: Some(Class::Wear),
+        also: None,
         schema: outfit_take_off_schema,
         wait: CHANGE_WAIT,
     },
@@ -441,6 +559,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "items_wear",
         description: "Wear clothing, body parts or objects from the inventory. Library items must be copied first.",
         class: Some(Class::Wear),
+        also: None,
         schema: items_wear_schema,
         wait: CHANGE_WAIT,
     },
@@ -448,6 +567,7 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "items_take_off",
         description: "Take off worn clothing or attached objects. Body parts cannot be taken off, only replaced.",
         class: Some(Class::Wear),
+        also: None,
         schema: items_take_off_schema,
         wait: CHANGE_WAIT,
     },
@@ -455,8 +575,49 @@ pub const TOOLS: &[ToolSpec] = &[
         name: "wait_for_bake",
         description: "Wait until the last outfit change is over and the avatar's appearance is up to date, or the timeout. Changes nothing.",
         class: Some(Class::Read),
+        also: None,
         schema: bake_schema,
         wait: Duration::from_secs(BAKE_WAIT_MAX),
+    },
+    ToolSpec {
+        name: "camera_preset",
+        description: "Frame your own avatar: portrait, full_body, front, back, left or right. Answers once the camera has stopped. Refused under an RLV camera restriction.",
+        class: Some(Class::Camera),
+        also: None,
+        schema: camera_preset_schema,
+        wait: CAMERA_WAIT,
+    },
+    ToolSpec {
+        name: "camera_shot",
+        description: "Place the camera exactly: position and target in region coordinates, or offsets from your avatar in its frame, with an optional field of view. Within the draw distance of the avatar.",
+        class: Some(Class::Camera),
+        also: None,
+        schema: camera_shot_schema,
+        wait: CAMERA_WAIT,
+    },
+    ToolSpec {
+        name: "camera_reset",
+        description: "Put the camera back behind the avatar, as Escape does, with the user's own field of view.",
+        class: Some(Class::Camera),
+        also: None,
+        schema: no_arguments,
+        wait: CAMERA_WAIT,
+    },
+    ToolSpec {
+        name: "camera_snapshot",
+        description: "Take a picture of the world as the camera sees it, at a chosen size and crop, and get it as an image (JPEG or PNG, 3 MB at most). No interface or HUDs unless asked; asking for the interface always asks the user. Optionally saved in the viewer's photo folder.",
+        class: Some(Class::Camera),
+        also: None,
+        schema: snapshot_schema,
+        wait: SNAPSHOT_WAIT,
+    },
+    ToolSpec {
+        name: "inventory_snapshot_thumbnail",
+        description: "Set the picture of an outfit, a folder or an item from what the camera sees now (square, 256 x 256), as the Outfit Gallery's Take snapshot does. Free. Frame it first with camera_preset or camera_shot.",
+        class: Some(Class::Edit),
+        also: Some(Class::Camera),
+        schema: thumbnail_schema,
+        wait: Duration::from_secs(SNAPSHOT_WAIT.as_secs() + CHANGE_WAIT.as_secs()),
     },
 ];
 
@@ -479,12 +640,41 @@ mod tests {
         }
         assert!(tool("viewer_status").is_some_and(|t| t.class.is_none()));
         assert!(TOOLS.iter().filter(|t| t.name != "viewer_status").all(|t| t.class.is_some()));
-        // what waits for the server or the avatar says so
-        assert!(TOOLS.iter().filter(|t| t.changes()).all(|t| t.wait == CHANGE_WAIT));
+        // what waits for the server, the camera or the photo says so
+        assert!(TOOLS.iter().filter(|t| t.changes()).all(|t| t.wait >= CAMERA_WAIT));
+        assert!(
+            TOOLS
+                .iter()
+                .filter(|t| t.class == Some(Class::Camera))
+                .all(|t| t.wait >= CAMERA_WAIT)
+        );
         assert!(TOOLS.iter().filter(|t| t.class == Some(Class::Read)).all(|t| !t.changes()));
         for never in NEVER {
             assert!(tool(never).is_none(), "{never} is never a tool");
         }
+    }
+
+    #[test]
+    fn the_camera_tools_and_the_thumbnail_need_their_classes() {
+        for name in ["camera_preset", "camera_shot", "camera_reset", "camera_snapshot"] {
+            let t = tool(name).expect(name);
+            assert_eq!(t.classes().collect::<Vec<_>>(), vec![Class::Camera], "{name}");
+            assert!(t.changes(), "{name} may ask");
+        }
+        let thumbnail = tool("inventory_snapshot_thumbnail").expect("thumbnail");
+        assert_eq!(thumbnail.classes().collect::<Vec<_>>(), vec![Class::Edit, Class::Camera]);
+        assert!(thumbnail.wait > SNAPSHOT_WAIT);
+        let presets = camera_preset_schema();
+        assert_eq!(presets["properties"]["preset"]["enum"], json!(CAMERA_PRESETS));
+        assert_eq!(snapshot_schema()["properties"]["width"]["maximum"], SNAPSHOT_EDGE_MAX);
+    }
+
+    #[test]
+    fn a_picture_with_the_interface_always_asks() {
+        assert!(always_asks("camera_snapshot", &json!({"interface": true})));
+        assert!(!always_asks("camera_snapshot", &json!({"interface": false})));
+        assert!(!always_asks("camera_snapshot", &json!({})));
+        assert!(!always_asks("camera_preset", &json!({"interface": true})));
     }
 
     #[test]

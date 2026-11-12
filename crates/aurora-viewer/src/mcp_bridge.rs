@@ -10,13 +10,22 @@
 //! (`app/local_assistant.rs`), which runs them through the inventory
 //! window's and Appearance's own paths. The call waits in [`Desk`] until the
 //! server confirms the change ([`observe`]), all polled once per frame.
+//!
+//! The camera, pictures and thumbnails (phase 3) are planned in [`camera`],
+//! sized and encoded in [`picture`], and wait in [`studio::Studio`] for the
+//! camera to stop, for their photo or for the gallery's snapshot.
 
 pub mod ask;
+pub mod camera;
+#[cfg(test)]
+mod camera_tests;
 #[cfg(test)]
 mod change_tests;
 pub mod changes;
 pub mod desk;
+pub mod picture;
 pub mod setup;
+pub mod studio;
 #[cfg(test)]
 mod tests;
 pub mod tools;
@@ -26,7 +35,7 @@ pub use desk::Desk;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
 use folderstorm_mcp_bridge::{Bridge, LocalAssistant, Preset, ToolError};
 use std::collections::HashSet;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
 use uuid::Uuid;
@@ -44,13 +53,17 @@ struct Runtime {
     running: Option<Running>,
     /// Calls waiting for the user, the server or the avatar.
     desk: Desk,
+    /// Camera moves, pictures and thumbnails waiting (phase 3).
+    studio: studio::Studio,
     /// "Use these settings for this session only": the settings in force
     /// instead of the saved ones until the viewer quits.
     session: Option<LocalAssistant>,
     /// `--mcp-api` (and the demo's `AURORA_DEMO_MCP`) applied once.
     started: bool,
-    /// `AURORA_DEMO_MCP=ask`: the demo's own request was made.
+    /// `AURORA_DEMO_MCP=ask|camera`: the demo's own requests were made.
     demo_asked: bool,
+    /// The demo's requests waiting for their answer, logged when it comes.
+    demo_answers: Vec<(&'static str, Receiver<Result<serde_json::Value, ToolError>>)>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -94,10 +107,16 @@ pub fn discovery_dir() -> std::path::PathBuf {
     crate::settings::config_dir()
 }
 
-/// `AURORA_DEMO_MCP=ask`: the session asks before every change, and the
-/// demo makes one request of its own so that the dialog shows.
+/// `AURORA_DEMO_MCP=ask` (or `camera`): the session asks before every
+/// change, and the demo makes requests of its own so that the dialog shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera")
+}
+
+/// `AURORA_DEMO_MCP=camera`: the demo's requests frame the avatar and take
+/// a picture (saved in the photo folder) instead of creating a folder.
+fn demo_camera() -> bool {
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "camera")
 }
 
 /// What the frame thread reads for the calls, gathered by the app.
@@ -109,6 +128,10 @@ pub struct View<'a> {
     /// An outfit change is still on its way (Appearance waits for the
     /// server, or its detaches have not landed yet).
     pub appearance_busy: bool,
+    /// What the camera tools read (phase 3).
+    pub stage: camera::Stage,
+    /// Where the camera is now.
+    pub camera: camera::Pose,
 }
 
 impl View<'_> {
@@ -130,6 +153,7 @@ impl View<'_> {
             inventory_locked: world.rlva.has("showinv"),
             protected: self.protected.clone(),
             outfit_points: world.outfit_attachment_points(),
+            stage: self.stage,
         }
     }
 
@@ -172,6 +196,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             rt.running = None;
             // the waiting calls end with the bridge ("the call was dropped")
             rt.desk = Desk::default();
+            rt.studio.drop_calls();
             return Vec::new();
         }
         if rt.running.is_none() && rt.failure.is_none() {
@@ -195,22 +220,42 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             running.bridge.set_permissions(wanted.permissions);
         }
         let now = Instant::now();
+        rt.studio.observe(view.camera, now);
         let mut cx = None;
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
             let cx = cx.get_or_insert_with(|| view.context());
             rt.desk.take(call, cx, now);
         }
-        if view.demo && !rt.demo_asked && demo_asks() && !view.world.inventory.root.is_nil() {
+        let demo_ready = !view.world.inventory.root.is_nil() && (!demo_camera() || view.stage.in_world);
+        if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
-            let (call, _answer) = Pending::detached(
-                "inventory_create_folder",
-                serde_json::json!({"name": "Sorted by the assistant"}),
-                true,
-                Some("Demo assistant"),
-            );
-            rt.desk.take(call, cx.get_or_insert_with(|| view.context()), now);
+            let requests = if demo_camera() {
+                vec![
+                    ("camera_preset", serde_json::json!({"preset": "full_body"})),
+                    (
+                        "camera_snapshot",
+                        serde_json::json!({"source": "world", "width": 512, "height": 512, "save": true}),
+                    ),
+                ]
+            } else {
+                vec![("inventory_create_folder", serde_json::json!({"name": "Sorted by the assistant"}))]
+            };
+            for (tool, arguments) in requests {
+                let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(|| view.context()), now);
+                rt.demo_answers.push((tool, answer));
+            }
         }
+        rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
+            Ok(result) => {
+                log_demo_answer(tool, &result);
+                false
+            }
+            Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => false,
+        });
+        rt.studio.tick(&view.camera, now);
         rt.desk.tick(&view.bake(), now)
     })
 }
@@ -244,8 +289,75 @@ pub fn observe(event: &aurora_net::NetEvent) {
 pub fn shutdown() {
     with(|rt| {
         rt.desk = Desk::default();
+        rt.studio = studio::Studio::default();
         rt.running = None;
     });
+}
+
+/// The demo's request answered: what it did, never the picture's bytes.
+fn log_demo_answer(tool: &str, result: &Result<serde_json::Value, ToolError>) {
+    match result {
+        Ok(value) => {
+            let mut value = value.clone();
+            if let Some(object) = value.as_object_mut() {
+                object.remove(folderstorm_mcp_bridge::protocol::IMAGE_KEY);
+            }
+            log::info!("local assistant demo: {tool} answered {value}");
+        }
+        Err(e) => log::info!("local assistant demo: {tool} ended with {e}"),
+    }
+}
+
+/// A camera move was made: its call answers once the camera stops.
+pub fn wait_move(call: Pending, reply: serde_json::Value) {
+    with(|rt| rt.studio.wait_move(call, reply, Instant::now()));
+}
+
+/// A picture to take once the camera stops.
+pub fn queue_photo(call: Pending, request: picture::Request) {
+    with(|rt| rt.studio.queue_photo(call, request, Instant::now()));
+}
+
+/// In the frame's drawing: whether to start a picture's photo now.
+pub fn photo_step(drawing: bool) -> studio::PhotoStep {
+    with(|rt| rt.studio.photo_step(drawing, Instant::now()))
+}
+
+/// The picture's photo started, planned as `plan`.
+pub fn photo_started(plan: picture::Plan) {
+    with(|rt| rt.studio.photo_started(plan));
+}
+
+/// The picture's photo came back: encoded (and saved in `folder`) on a
+/// worker.
+pub fn photo_drawn(size: (u32, u32), pixels: Vec<u8>, folder: std::path::PathBuf) {
+    let stamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S").to_string();
+    with(|rt| rt.studio.photo_drawn(size, pixels, folder, stamp));
+}
+
+/// A thumbnail of the assistant started through the gallery's snapshot.
+pub fn thumbnail_started(call: Pending, reply: serde_json::Value) {
+    with(|rt| rt.studio.thumbnail_started(call, reply, Instant::now()));
+}
+
+/// Whether the assistant's thumbnail is under way.
+pub fn thumbnail_busy() -> bool {
+    with(|rt| rt.studio.thumbnail_busy())
+}
+
+/// The gallery's snapshot ended (`app/inventory_thumbnail.rs`): the
+/// assistant's thumbnail, if it was one, learns how.
+pub fn thumbnail_done(error: Option<&str>) {
+    with(|rt| rt.studio.thumbnail_done(error));
+}
+
+/// The field of view an exact shot replaced, kept until the camera is reset.
+pub fn fov_before() -> Option<f32> {
+    with(|rt| rt.studio.fov_before)
+}
+
+pub fn set_fov_before(fov: Option<f32>) {
+    with(|rt| rt.studio.fov_before = fov);
 }
 
 /// LLPanelWearableOutfitItem::updateItem, as `ui/appearance/items.rs`

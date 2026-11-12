@@ -279,6 +279,7 @@ impl App {
         if self.inventory_images.outfit == Some(request) {
             // the gallery's snapshot has no window: Appearance says why
             self.inventory_images.outfit = None;
+            crate::mcp_bridge::thumbnail_done(error.as_deref()); // Folderstorm: the local assistant's thumbnail
             if let Some(error) = error {
                 self.appearance_ui.message = error;
             }

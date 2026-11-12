@@ -7,6 +7,8 @@ Port of Folderstorm (C++)'s local assistant bridge (`doc/fs-mcp.md`,
 Phase 1 is **read-only**: nothing an assistant asks can change the
 inventory, the avatar, the camera or the world. Phase 2 adds inventory and
 outfit changes, each behind its permission class (see "Phase 2" below).
+Phase 3 part 1 adds the camera, pictures and thumbnails (see "Phase 3,
+part 1" below).
 
 ## Architecture
 
@@ -88,6 +90,7 @@ Classes, each with a level **Allow / Ask / Never**:
 | `move` | 2 | move, copy, link |
 | `wear` | 2 | wear, take off, detach |
 | `trash` | 2 | move to Trash, restore |
+| `camera` | 3 | camera moves and pictures |
 
 `viewer_status` is the health check: it needs a valid token but no class,
 so *Check connection* works even with Read set to Never. It returns only
@@ -95,7 +98,7 @@ login and inventory readiness.
 
 Presets (derived from the levels, never stored):
 
-| Preset | read | edit, move, wear, trash |
+| Preset | read | edit, move, wear, trash, camera |
 |---|---|---|
 | Read only | Allow | Never |
 | Ask before changes | Allow | Ask |
@@ -130,8 +133,8 @@ or from the Library (`Library/…`). Names are not unique: an ambiguous path
 returns an error listing the candidate ids.
 
 Phase 2 (changes): see "Phase 2" below. Phase 3: camera presets and
-snapshots (4.4), then FEATURES.md 4.6 one group at a time (navigation,
-chat, teleport, uploads, world observation…).
+snapshots (4.4, "Phase 3, part 1" below), then FEATURES.md 4.6 one group
+at a time (navigation, chat, teleport, uploads, world observation…).
 
 ## Phase 2: changes
 
@@ -198,6 +201,62 @@ socket timeout follows the same table.
 Preferences shows every class under Custom now, with Allow / Ask / Never
 (Read: Allow / Never).
 
+## Phase 3, part 1: camera and pictures
+
+FEATURES.md 4.4, after Folderstorm (C++)'s `doc/help.md` ("Asking for
+something": `camera_snapshot`, `inventory_snapshot_upload`, the presets
+`portrait`, `full_body`, `front`, `back`, `left`, `right`) and
+`doc/plans/assistant-permission-presets.md` (Camera is in "Ask before
+changes"). The camera moves through the camera's own calls (`set_view`, the
+`pstcampos` path; `handle_reset_view`, Escape); pictures through Aurora's
+photo jobs (`Renderer::snapshot_request`, as Snapshot to disk), and the
+thumbnail through the Outfit Gallery's Take snapshot (#2716: the photo,
+square, 256 × 256, JPEG2000, `UploadInventoryThumbnail`). No new network
+message.
+
+| Tool | Class | Arguments | Returns | Refused when |
+|---|---|---|---|---|
+| `camera_preset` | camera | `preset`: `portrait`, `full_body`, `front`, `back`, `left`, `right` | `camera`, `target` (region metres), `fov_degrees`, once the camera stopped (3 s at most) | not in the world; the avatar not drawn yet; an RLVa camera restriction (`not_allowed`) |
+| `camera_shot` | camera | `position` and `target` (region metres), or `camera_offset` with optional `focus_offset` (metres in the avatar's frame: x forward, y left, z up); optional `fov_degrees` (5–120) | as above | as above; a camera farther from the avatar than the draw distance (64 m at least), as `pstcampos` refuses it |
+| `camera_reset` | camera | none | `done` | not in the world; RLVa |
+| `camera_snapshot` | camera | `source` `window` (default) or `world` (the world viewport); `width` and/or `height` (64–2048), else `max_edge` (64–2048, default 1024); `crop` `{x, y, width, height}` (fractions of the source); `interface`, `huds` (default false); `format` `jpeg` (default) or `png`; `save` (default false) | the picture as MCP image content (base64), with `width`, `height`, `format`, `bytes`, and `saved_to` when saved | not in the world; `interface` with `source: world`; arguments out of range |
+| `inventory_snapshot_thumbnail` | edit + camera | `id` (outfit, folder or item) or `path` (folder) | `id`, `done` once the server confirmed it | `actions::mutable` says no (Library, Current Outfit, Received Items); the Marketplace Listings folder; another snapshot or inventory change under way (`busy`) |
+
+- **Sizes.** Both `width` and `height`: that size, the source (after
+  `crop`) centre-cropped to its proportions, as Folderstorm (C++) does. One
+  of them: the other follows the cropped source's proportions. Neither: the
+  cropped source at its size in the window, the long edge brought down to
+  `max_edge`. The photo is drawn at the size that gives the cropped part
+  these pixels (4096 on its long edge at most), then cut and scaled on a
+  worker.
+- **Bytes.** The encoded picture is 3 000 000 bytes at most (4 MB in
+  base64, under the bridge's 8 MiB answer): a JPEG steps its quality down
+  (90, 80, 70, 60), then both formats shrink by a quarter until they fit.
+  The answer gives the size actually sent.
+- **What the picture shows.** What the viewer would put in a photo: no
+  interface and no HUDs unless asked for (Aurora's photo options
+  "interface" and "HUDs"), never the photo window's looks. RLVa's vision
+  restrictions are drawn in it as in any photo. `interface: true` shows the
+  viewer's windows, chat included: such a call **always asks**, even with
+  Camera on Allow (`protocol::always_asks`); Never still refuses it.
+- **Saved copies** (`save: true`) go to the Photo window's folder,
+  `assistant-<date>-<time>.jpg|png`; `saved_to` gives the path.
+- **Compound class.** `inventory_snapshot_thumbnail` needs Edit and Camera
+  (`ToolSpec::also`): either on Never refuses, either on Ask asks once.
+- **The field of view** of `camera_shot` is the view's (Preferences'
+  "Viewing angle", which a camera preset's lens sets too): the user's own
+  comes back with `camera_reset` or the next `camera_preset`.
+- **RLVa.** Any camera restriction (`@setcam`, `@setcam_unlock` /
+  `@camunlock`, eye or focus offsets, distance and field-of-view limits,
+  `@setcam_mouselook`) refuses the three camera moves with `not_allowed`.
+  Pictures stay allowed: they show what the restricted view shows.
+- **Waits.** A camera move answers once the camera stopped (3 s at most); a
+  picture waits for the camera to stop and for any photo being drawn, then
+  45 s at most; a thumbnail 45 s plus the server's confirmation (30 s).
+- **Not in this part**: uploading a picture as a texture (an L$ price,
+  asked with the amount), animated shots, and a camera on an object or a
+  fixed place by name.
+
 ## MCP sidecar: no SDK
 
 The official Rust SDK, `rmcp` 3.9 (Apache-2.0, maintained by the MCP
@@ -223,7 +282,8 @@ success, 1 on failure, 2 on bad arguments.
 | `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
 | `crates/folderstorm-mcp/` | binary `folderstorm-mcp`: `jsonrpc` (MCP), `diagnose`, `main` |
 | `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake), `ask` (the dialog) |
-| `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id |
+| `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id; phase 3: moves the camera, starts the assistant's photo jobs and the gallery's thumbnail snapshot |
+| `crates/aurora-viewer/src/mcp_bridge/{camera,picture,studio}.rs` | phase 3: the camera tools' arguments, presets and RLVa check; the picture's size, crop and encoding; the calls waiting for the camera, the photo or the thumbnail |
 | `crates/aurora-viewer/src/ui/options/pages/local_assistant.rs` | the Preferences group |
 
 New dependencies: `getrandom` 0.4 (OS random source, MIT/Apache-2.0,
@@ -251,6 +311,11 @@ workspace uses them; `tempfile` for tests (already in the lock).
   of `on_app_event` (inventory and outfit answers), one
   `mcp_bridge::ask::show(&ctx, &p)` beside the other confirmation dialogs
   of `draw_ui`. The `fs-mcp-*` block of the catalogues grows.
+- Phase 3, `app.rs`: one `self.local_assistant_photo(&gfx.renderer)` beside
+  `poll_outfit_photo`; `app/snapshot.rs`: the `Purpose::Assistant` photo
+  (its size and options in `photo_job`, its pixels to `mcp_bridge`);
+  `app/inventory_thumbnail.rs`: one `mcp_bridge::thumbnail_done` where the
+  gallery's snapshot ends.
 
 ## Tests
 
@@ -287,6 +352,12 @@ workspace uses them; `tempfile` for tests (already in the lock).
   tools/list annotations, permanent delete refused); an end-to-end move
   allowed and Trash refused in the dialog, from the sidecar to the demo
   inventory.
+
+- phase 3: arguments of each camera tool, presets → camera and target,
+  the size and crop math, the byte cap, the Camera class and its migration
+  from saved settings, the compound class of the thumbnail and the
+  interface's forced Ask in the bridge, RLVa refusals, the waits for the
+  camera and the photo, `tools/list` and the image content in the sidecar.
 
 Not testable here: the look of the page and of the dialog (no display in
 the sandbox), real MCP clients on Windows, and the grid's answers (the

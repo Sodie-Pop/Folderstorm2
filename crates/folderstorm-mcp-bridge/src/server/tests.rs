@@ -284,3 +284,62 @@ fn an_asking_call_may_wait_longer_than_a_read() {
     assert_eq!(code(client.call("worn_items", json!({})).expect_err("late")), ErrorCode::Timeout);
     drop(calls);
 }
+
+#[test]
+fn a_thumbnail_from_a_picture_needs_edit_and_camera() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let mut p = Preset::ReadOnly.permissions();
+    p.set(Class::Edit, Level::Allow);
+    bridge.set_permissions(p);
+    // Edit alone is not enough: Camera is on Never
+    assert_eq!(
+        code(
+            client
+                .call("inventory_snapshot_thumbnail", json!({"id": "x"}))
+                .expect_err("refused")
+        ),
+        ErrorCode::PermissionDenied
+    );
+    assert!(calls.try_recv().is_err(), "refused before the viewer");
+    p.set(Class::Camera, Level::Ask);
+    bridge.set_permissions(p);
+    let viewer = std::thread::spawn(move || {
+        let call = calls.recv().expect("a call");
+        let ask = call.ask;
+        call.answer(Ok(json!({"done": true})));
+        ask
+    });
+    client.call("inventory_snapshot_thumbnail", json!({"id": "x"})).expect("allowed");
+    assert!(viewer.join().expect("viewer"), "Camera on Ask: the viewer asks once");
+}
+
+#[test]
+fn a_picture_with_the_interface_asks_even_on_allow() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let mut p = Preset::ReadOnly.permissions();
+    p.set(Class::Camera, Level::Allow);
+    bridge.set_permissions(p);
+    let viewer = std::thread::spawn(move || {
+        let mut asks = Vec::new();
+        for _ in 0..2 {
+            let call = calls.recv().expect("a call");
+            asks.push(call.ask);
+            call.answer(Ok(json!({})));
+        }
+        (asks, calls)
+    });
+    client.call("camera_snapshot", json!({})).expect("taken");
+    client.call("camera_snapshot", json!({"interface": true})).expect("taken");
+    let (asks, calls) = viewer.join().expect("viewer");
+    assert_eq!(asks, vec![false, true]);
+    // Never still refuses it, without a dialog
+    p.set(Class::Camera, Level::Never);
+    bridge.set_permissions(p);
+    assert_eq!(
+        code(client.call("camera_snapshot", json!({"interface": true})).expect_err("refused")),
+        ErrorCode::PermissionDenied
+    );
+    assert!(calls.try_recv().is_err());
+}
