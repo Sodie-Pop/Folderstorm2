@@ -181,6 +181,21 @@ margins are dark, the bars sit inside it (except with `bars-window`), a click
 in a margin selects nothing, windows can be dragged into the margins, and the
 settings are under Preferences › Layout › Bars and windows › World viewport.
 
+**Chat image upload (Folderstorm2).** `AURORA_DEMO_CHAT_UPLOAD=1` turns the
+uploads on for the run with an uploader inside the viewer: nothing leaves the
+computer, and after 1.5 s it answers with a made-up link on
+`images.example.invalid`. Paste an image (Ctrl+V with a picture and no text on
+the clipboard), drop an image file on a chat field, or use the picture button
+of a conversation's field (add `AURORA_DEMO_CONV=1` to open one). `staged` also
+puts a made-up picture in the first chat field shown, so the confirmation opens
+by itself; `fail` refuses every image as too large; `token` refuses as a host
+that needs a token. Check the confirmation (preview, size, host, the public
+notice; a dropped file asks even with the question turned off), the progress chip and its Stop, the link put at the text cursor (never
+sent by itself), the error chips with Try again and Dismiss, and the settings
+under Preferences › Chat › Image uploads (a build can carry an upload folder for
+Folderstorm's host, shown only as present or absent, but never a token: the
+only token is one the user saves for their own host).
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
