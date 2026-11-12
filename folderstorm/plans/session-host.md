@@ -2071,7 +2071,9 @@ May be two small PRs: 1a profiles, 1b behind policy.
       "bring forward"), moves the monitor; the host's windows follow
       (`Desk::take_monitor_moves`): the view, with its window, goes to
       the other character's place in the table, so the system's window is
-      never closed and opened again. What the character that left
+      never closed and opened again, and is never moved while it is
+      being drawn. The character that left is asked for pictures at once
+      (the window is on screen as it was). What the character that left
       remembered of a window of its own goes to the one that came
       forward: the two swap whole.
     - *The options are a sheet and "+N" opens a list, both inside the
@@ -2101,8 +2103,9 @@ May be two small PRs: 1a profiles, 1b behind policy.
     - *The cycling monitor's hold*: its box has the keyboard in a window
       that has it, or a text was typed there for the character shown and
       is still that character's draft. A draft typed elsewhere (the
-      shared chat) does not hold it. The pause button is lit while it
-      holds, and says why.
+      shared chat) does not hold it, and "previous" or "next" lets go of
+      it (the text stays its character's draft). The pause button is
+      lit while it holds, and says why.
     - *The nearby chat's chip keeps its label*; the others are cut
       together. A cut name is at least six characters and "…"; a name one
       character longer than the cut is left whole (the ellipsis would
