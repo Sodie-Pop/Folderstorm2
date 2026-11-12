@@ -10,7 +10,11 @@
 //! viewer sends ([`monitors`]); the host keeps the latest one only, in
 //! memory, for as long as the monitor is open.
 //!
-//! The window is drawn on the processor, like the crash window
+//! Checkpoint 6: the chat, the characters' controls and the monitors can
+//! each have a window of their own (`ui/panels.rs`), remembered in the
+//! settings file.
+//!
+//! Every window is drawn on the processor, like the crash window
 //! (`crash/software.rs`): the host opens no graphics device, so it takes
 //! nothing from the characters' card and no driver trouble reaches it.
 //!
@@ -35,6 +39,11 @@ use std::time::{Duration, Instant};
 /// `AURORA_DEMO_SESSION_HOST=<n>`, demo only: the host starts with `n`
 /// demo characters (`demo-1` to `demo-n`, 1 to 5) and starts their viewers.
 pub const DEMO_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST";
+
+/// `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors` (or `all`),
+/// demo only, with [`DEMO_VARIABLE`]: the host starts with those panels
+/// in windows of their own (checkpoint 6).
+pub const DEMO_PANELS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_PANELS";
 
 /// How long a change of the settings waits before it is written (a window
 /// being dragged moves the stage many times).
@@ -169,6 +178,10 @@ impl Host {
                 host.desk.launch(slot, slot == 0);
                 // the demo shows the monitors without a click
                 host.desk.set_monitor(slot, Some(Default::default()));
+            }
+            let out = std::env::var(DEMO_PANELS_VARIABLE).unwrap_or_default();
+            for panel in ::folderstorm_session::panels::parse_list(&out) {
+                host.desk.set_panel_out(panel, true);
             }
         }
         host

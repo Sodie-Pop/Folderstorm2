@@ -34,6 +34,7 @@ use crate::behind::Behind3d;
 use crate::hotkeys;
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
 use crate::monitor::{self, FrameHeader, MAX_MONITORS};
+use crate::panels;
 use crate::profile::ProfileName;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -97,6 +98,9 @@ pub struct Config {
     pub chat_sound: bool,
     /// Checkpoint 4: the global hotkeys, as texts.
     pub hotkeys: hotkeys::Config,
+    /// Checkpoint 6: the panels that have a window of their own, and
+    /// where.
+    pub panels: panels::Config,
 }
 
 impl Default for Config {
@@ -107,6 +111,7 @@ impl Default for Config {
             stage_rect: None,
             chat_sound: false,
             hotkeys: hotkeys::Config::default(),
+            panels: panels::Config::default(),
         }
     }
 }
@@ -132,6 +137,7 @@ impl Config {
         self.slots = kept;
         self.stage_rect = self.stage_rect.filter(Stage::valid);
         self.hotkeys = self.hotkeys.cleaned();
+        self.panels = self.panels.cleaned();
         self
     }
 
@@ -325,6 +331,7 @@ pub struct Desk {
     stage_rect: Option<Stage>,
     chat_sound: bool,
     hotkeys: hotkeys::Config,
+    panels: panels::Config,
     quitting: Option<Instant>,
     effects: Vec<Effect>,
 }
@@ -390,6 +397,8 @@ pub enum Voice {
 mod comfort_tests;
 #[cfg(test)]
 mod monitor_tests;
+#[cfg(test)]
+mod panel_tests;
 
 impl Desk {
     pub fn new(config: Config) -> Self {
@@ -411,6 +420,7 @@ impl Desk {
             stage_rect: config.stage_rect,
             chat_sound: config.chat_sound,
             hotkeys: config.hotkeys,
+            panels: config.panels,
             quitting: None,
             effects: Vec::new(),
         }
@@ -433,6 +443,7 @@ impl Desk {
             stage_rect: self.stage_rect,
             chat_sound: self.chat_sound,
             hotkeys: self.hotkeys.clone(),
+            panels: self.panels,
         }
     }
 
@@ -643,6 +654,33 @@ impl Desk {
         }
     }
 
+    /// Checkpoint 6: the panels that have a window of their own.
+    pub fn panels(&self) -> &panels::Config {
+        &self.panels
+    }
+
+    /// A panel leaves the host's window for its own, or comes back.
+    pub fn set_panel_out(&mut self, panel: panels::Panel, out: bool) {
+        if self.panels.set_out(panel, out) {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// A panel's window was closed: the panel is docked back. Nothing
+    /// else happens: no character is closed and the host stays open.
+    pub fn panel_closed(&mut self, panel: panels::Panel) {
+        if self.panels.closed(panel) {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// A panel's window was moved or resized: remembered for next time.
+    pub fn panel_placed(&mut self, panel: panels::Panel, place: panels::Place) {
+        if self.panels.placed(panel, place) {
+            self.effects.push(Effect::Save);
+        }
+    }
+
     /// Opens (with that size and rate), changes or closes (None) a
     /// character's monitor. Closing it returns its viewer to a plain
     /// background character: 3D off.
@@ -658,8 +696,8 @@ impl Desk {
         self.sync(None);
     }
 
-    /// Which monitors are on screen in the host's window now: all false
-    /// while the window is minimised or hidden. A monitor nobody can see
+    /// Which monitors are on screen in one of the host's windows now
+    /// (`panels::seen`): none of a window that is minimised or hidden. A monitor nobody can see
     /// asks nothing of its viewer.
     pub fn monitors_seen(&mut self, seen: [bool; MAX_SLOTS], now: Instant) {
         let mut changed = false;
@@ -1165,6 +1203,7 @@ mod tests {
             }),
             chat_sound: true,
             hotkeys: hotkeys::Config::default(),
+            panels: panels::Config::default(),
         }
         .cleaned();
         assert!(config.chat_sound);

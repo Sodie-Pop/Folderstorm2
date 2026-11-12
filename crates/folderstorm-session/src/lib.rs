@@ -43,6 +43,11 @@
 //!   viewer takes a picture and how it lowers its rate on a busy card,
 //!   the picture's size and its header's checks, "latest only";
 //! - [`host`]: which characters are watched, and what each is asked.
+//!
+//! Checkpoint 6 (pop-out panels, section 7):
+//! - [`panels`]: which of the host's panels have a window of their own
+//!   and where, a saved place brought back onto a connected screen,
+//!   "closing a panel docks it", and the monitors seen window by window.
 
 pub mod behind;
 pub mod chat;
@@ -54,4 +59,5 @@ pub mod hotkeys;
 pub mod ipc;
 pub mod managed;
 pub mod monitor;
+pub mod panels;
 pub mod profile;
