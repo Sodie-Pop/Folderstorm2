@@ -4442,6 +4442,79 @@ folderstorm-condensed-waiting = { $count ->
     }
 folderstorm-condensed-monitor = Its monitor is open. Its picture is in the cards, or in the Monitors window; here it is paused.
 folderstorm-condensed-more-in-cards = "Cards" has what can be done about it.
+folderstorm-bar-title = Character controls
+folderstorm-bar-inactive = Inactive
+folderstorm-bar-characters = Characters
+folderstorm-bar-characters-help = Characters: pick one to switch to it, to bring it forward at its login screen, or to start it.
+folderstorm-bar-characters-none = No character yet. The host's window has the field to add one.
+folderstorm-bar-login = Open a login
+folderstorm-bar-login-help = Open a login for { $name }: its viewer starts, or comes forward at its login screen. Right-click to choose another character.
+folderstorm-bar-login-none = Every character is logged in or on its way.
+folderstorm-bar-chat = Chat
+folderstorm-bar-chat-show-help = Show the shared chat of all characters, in its own window.
+folderstorm-bar-chat-hide-help = Hide the shared chat's window.
+folderstorm-bar-chat-unread = { $count ->
+        [one] 1 unread line
+       *[other] { $count } unread lines
+    }
+folderstorm-bar-monitors = Monitors
+folderstorm-bar-monitors-help = Small live views of the characters behind the active one.
+folderstorm-bar-monitors-open-all = Open all inactive monitors
+folderstorm-bar-monitors-cycling = Cycling monitor
+folderstorm-bar-monitors-cycling-help = Not built yet: it comes with the monitors' own windows.
+folderstorm-bar-monitors-close-all = Close all monitors
+folderstorm-bar-monitors-settings = Monitor settings…
+folderstorm-bar-settings = Settings
+folderstorm-bar-settings-help = The host's settings, its window, and Quit.
+folderstorm-bar-settings-bar = Bar and quick actions…
+folderstorm-bar-show-host = Show the host's window
+folderstorm-bar-quit = Quit…
+folderstorm-bar-attention = Attention
+folderstorm-bar-attention-help = { $count ->
+        [0] Nothing waits for an answer. Opens the inbox.
+        [one] 1 question waits for an answer in a character's own window. Opens the inbox.
+       *[other] { $count } questions wait for an answer in the characters' own windows. Opens the inbox.
+    }
+folderstorm-bar-mute = Mute background
+folderstorm-bar-mute-long = Mute background sound
+folderstorm-bar-mute-on-help = Background sound is muted: every character but the active one is cut, whatever its own "Heard in the background". Click to go back to each character's own choice.
+folderstorm-bar-mute-off-help = Mute every character but the active one, whatever its own "Heard in the background". Each character's own choice is kept for when this is off.
+folderstorm-bar-voice = Voice follows
+folderstorm-bar-voice-long = Voice follows active
+folderstorm-bar-voice-on-help = Voice follows the active character: switching moves the voice with you. Click to keep the voice with the character that has it now.
+folderstorm-bar-voice-off-help = Off: the voice stays with the character that has it when you switch, and that character stays heard in the background (unless background sound is muted). On: the voice goes to the character you switch to. Only one character has voice at a time either way.
+folderstorm-bar-pop-out = Pop out
+folderstorm-bar-pop-out-help = Move this bar out of the characters' windows into a small window of its own.
+folderstorm-bar-collapse = Collapse
+folderstorm-bar-collapse-help = Shrink this bar to a thin handle at the top of the window.
+folderstorm-bar-expand-help = Show the character bar.
+folderstorm-bar-pin = Pin
+folderstorm-bar-pin-help = Not pinned. Click to keep this window above the others.
+folderstorm-bar-pinned = Pinned
+folderstorm-bar-pinned-help = Pinned: this window stays above the others. Click to unpin.
+folderstorm-bar-dock = Dock
+folderstorm-bar-dock-help = Put the bar back at the top of the characters' windows. Closing this window does the same.
+folderstorm-bar-labels-icons = Icons only
+folderstorm-bar-labels-text = Text only
+folderstorm-bar-labels-both = Icon and text
+folderstorm-bar-quick-unused = Unused
+folderstorm-bar-page-heading = Bar and quick actions
+folderstorm-bar-page-intro = The row from which the characters are driven: at the top of each character's window, or in a small window of its own.
+folderstorm-bar-page-where = Where the bar is
+folderstorm-bar-page-docked = In the characters' windows
+folderstorm-bar-page-popped = In its own window
+folderstorm-bar-page-hide-host = Hide this window while the bar is shown
+folderstorm-bar-page-hide-host-help = While a bar is on screen, this window hides once you leave it. The bar's settings menu brings it back, and it comes back by itself when no bar is left. Its close button then only hides it.
+folderstorm-bar-page-taskbar = One taskbar button
+folderstorm-bar-page-taskbar-help = While the bar is in the characters' windows, only the active character's window is on the taskbar and in Alt-Tab; switching swaps them. Every window is put back when the host closes.
+folderstorm-bar-page-taskbar-windows-only = "One taskbar button" works on Windows only.
+folderstorm-bar-page-labels = Labels
+folderstorm-bar-page-toolbar-labels = Toolbar buttons
+folderstorm-bar-page-quick-labels = Quick actions
+folderstorm-bar-page-sound = Sound and voice
+folderstorm-bar-page-quick = Quick actions
+folderstorm-bar-page-quick-intro = Up to twelve buttons in the middle of the bar, in this order. Each action shows once; a character that is not in the list has no button.
+folderstorm-bar-page-position = Position { $number }
 busy-pause-window-title = { $title } — Paused
 video-memory-full-notice = Video memory is full and the world cannot be drawn. Close programs that use the graphics card: it comes back on its own.
 video-memory-full-window-title = { $title } — Video memory full

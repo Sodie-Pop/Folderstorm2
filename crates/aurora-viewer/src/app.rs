@@ -10810,6 +10810,7 @@ impl App {
         }
         ui::fonts::preview::release_unused(&self.egui_ctx);
         let mut raw = gfx.egui_state.take_egui_input(&gfx.window);
+        self.folderstorm_bar_inset(&mut raw); // Folderstorm: the session host's bar keeps a strip at the top (app/folderstorm_characters/bar.rs)
         raw.events.extend(self.alt_text.drain(..).map(egui::Event::Text));
         self.demo_script_input(&mut raw);
         // Synthetic preedit uses the ordinary focused Conversations editor.
@@ -15848,6 +15849,7 @@ impl App {
                     renderer.world_rect(),
                     ctx.pixels_per_point(),
                 );
+                let viewport_bars = crate::folderstorm_characters::bar::bars_room(&ctx, viewport_bars); // Folderstorm: under the session host's bar
                 crate::folderstorm::viewport::set_bars_area(&ctx, viewport_bars);
                 let mut bars_child = viewport_bars.map(|r| ui.new_child(egui::UiBuilder::new().max_rect(r)));
                 let ui: &mut egui::Ui = match bars_child.as_mut() {

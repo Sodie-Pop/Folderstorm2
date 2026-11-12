@@ -4445,6 +4445,79 @@ folderstorm-condensed-waiting = { $count ->
     }
 folderstorm-condensed-monitor = Son moniteur est ouvert. Son image est dans les cartes, ou dans la fenêtre Moniteurs ; ici il est en pause.
 folderstorm-condensed-more-in-cards = « Cartes » contient ce qu'on peut y faire.
+folderstorm-bar-title = Commandes des personnages
+folderstorm-bar-inactive = Inactif
+folderstorm-bar-characters = Personnages
+folderstorm-bar-characters-help = Personnages : choisissez-en un pour basculer vers lui, l'amener au premier plan sur son écran de connexion, ou le démarrer.
+folderstorm-bar-characters-none = Aucun personnage pour l'instant. La fenêtre de l'hôte a le champ pour en ajouter un.
+folderstorm-bar-login = Ouvrir une connexion
+folderstorm-bar-login-help = Ouvrir une connexion pour { $name } : sa visionneuse démarre, ou passe au premier plan sur son écran de connexion. Clic droit pour choisir un autre personnage.
+folderstorm-bar-login-none = Tous les personnages sont connectés ou en cours de démarrage.
+folderstorm-bar-chat = Chat
+folderstorm-bar-chat-show-help = Afficher le chat partagé de tous les personnages, dans sa propre fenêtre.
+folderstorm-bar-chat-hide-help = Masquer la fenêtre du chat partagé.
+folderstorm-bar-chat-unread = { $count ->
+        [one] 1 ligne non lue
+       *[other] { $count } lignes non lues
+    }
+folderstorm-bar-monitors = Moniteurs
+folderstorm-bar-monitors-help = Petites vues en direct des personnages derrière le personnage actif.
+folderstorm-bar-monitors-open-all = Ouvrir tous les moniteurs inactifs
+folderstorm-bar-monitors-cycling = Moniteur tournant
+folderstorm-bar-monitors-cycling-help = Pas encore fait : il viendra avec les fenêtres propres aux moniteurs.
+folderstorm-bar-monitors-close-all = Fermer tous les moniteurs
+folderstorm-bar-monitors-settings = Réglages des moniteurs…
+folderstorm-bar-settings = Réglages
+folderstorm-bar-settings-help = Les réglages de l'hôte, sa fenêtre, et Quitter.
+folderstorm-bar-settings-bar = Barre et actions rapides…
+folderstorm-bar-show-host = Afficher la fenêtre de l'hôte
+folderstorm-bar-quit = Quitter…
+folderstorm-bar-attention = Attention
+folderstorm-bar-attention-help = { $count ->
+        [0] Rien n'attend de réponse. Ouvre la boîte de réception.
+        [one] 1 question attend une réponse dans la fenêtre d'un personnage. Ouvre la boîte de réception.
+       *[other] { $count } questions attendent une réponse dans les fenêtres des personnages. Ouvre la boîte de réception.
+    }
+folderstorm-bar-mute = Muet en arrière-plan
+folderstorm-bar-mute-long = Couper le son en arrière-plan
+folderstorm-bar-mute-on-help = Le son en arrière-plan est coupé : tous les personnages sauf l'actif sont muets, quel que soit leur propre « Entendu en arrière-plan ». Cliquez pour revenir au choix de chaque personnage.
+folderstorm-bar-mute-off-help = Couper le son de tous les personnages sauf l'actif, quel que soit leur propre « Entendu en arrière-plan ». Le choix de chaque personnage est conservé pour quand ceci est désactivé.
+folderstorm-bar-voice = La voix suit
+folderstorm-bar-voice-long = La voix suit le personnage actif
+folderstorm-bar-voice-on-help = La voix suit le personnage actif : basculer emmène la voix avec vous. Cliquez pour laisser la voix au personnage qui l'a maintenant.
+folderstorm-bar-voice-off-help = Désactivé : la voix reste au personnage qui l'a quand vous basculez, et ce personnage reste entendu en arrière-plan (sauf si le son en arrière-plan est coupé). Activé : la voix va au personnage vers lequel vous basculez. Dans les deux cas, un seul personnage a la voix à la fois.
+folderstorm-bar-pop-out = Détacher
+folderstorm-bar-pop-out-help = Sortir cette barre des fenêtres des personnages, dans une petite fenêtre à elle.
+folderstorm-bar-collapse = Réduire
+folderstorm-bar-collapse-help = Réduire cette barre à une fine poignée en haut de la fenêtre.
+folderstorm-bar-expand-help = Afficher la barre des personnages.
+folderstorm-bar-pin = Épingler
+folderstorm-bar-pin-help = Non épinglée. Cliquez pour garder cette fenêtre au-dessus des autres.
+folderstorm-bar-pinned = Épinglée
+folderstorm-bar-pinned-help = Épinglée : cette fenêtre reste au-dessus des autres. Cliquez pour la détacher.
+folderstorm-bar-dock = Ancrer
+folderstorm-bar-dock-help = Remettre la barre en haut des fenêtres des personnages. Fermer cette fenêtre fait la même chose.
+folderstorm-bar-labels-icons = Icônes seules
+folderstorm-bar-labels-text = Texte seul
+folderstorm-bar-labels-both = Icône et texte
+folderstorm-bar-quick-unused = Inutilisée
+folderstorm-bar-page-heading = Barre et actions rapides
+folderstorm-bar-page-intro = La rangée d'où l'on pilote les personnages : en haut de la fenêtre de chaque personnage, ou dans une petite fenêtre à elle.
+folderstorm-bar-page-where = Où est la barre
+folderstorm-bar-page-docked = Dans les fenêtres des personnages
+folderstorm-bar-page-popped = Dans sa propre fenêtre
+folderstorm-bar-page-hide-host = Masquer cette fenêtre quand la barre est affichée
+folderstorm-bar-page-hide-host-help = Tant qu'une barre est à l'écran, cette fenêtre se masque dès que vous la quittez. Le menu des réglages de la barre la ramène, et elle revient d'elle-même quand il ne reste aucune barre. Son bouton de fermeture ne fait alors que la masquer.
+folderstorm-bar-page-taskbar = Un seul bouton dans la barre des tâches
+folderstorm-bar-page-taskbar-help = Quand la barre est dans les fenêtres des personnages, seule la fenêtre du personnage actif est dans la barre des tâches et dans Alt-Tab ; basculer les échange. Toutes les fenêtres sont rétablies quand l'hôte se ferme.
+folderstorm-bar-page-taskbar-windows-only = « Un seul bouton dans la barre des tâches » ne fonctionne que sous Windows.
+folderstorm-bar-page-labels = Libellés
+folderstorm-bar-page-toolbar-labels = Boutons de la barre
+folderstorm-bar-page-quick-labels = Actions rapides
+folderstorm-bar-page-sound = Son et voix
+folderstorm-bar-page-quick = Actions rapides
+folderstorm-bar-page-quick-intro = Jusqu'à douze boutons au milieu de la barre, dans cet ordre. Chaque action n'apparaît qu'une fois ; un personnage absent de la liste n'a pas de bouton.
+folderstorm-bar-page-position = Position { $number }
 busy-pause-window-title = { $title } — En pause
 video-memory-full-notice = La mémoire vidéo est pleine et le monde ne peut pas être affiché. Fermez les programmes qui utilisent la carte graphique : il reviendra tout seul.
 video-memory-full-window-title = { $title } — Mémoire vidéo pleine

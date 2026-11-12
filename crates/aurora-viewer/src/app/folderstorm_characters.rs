@@ -7,6 +7,7 @@
 //! `folderstorm-session` crate's pure functions. The shared chat's side of
 //! a managed viewer is in `folderstorm_characters/chat.rs`.
 
+mod bar;
 mod chat;
 mod monitor;
 
@@ -91,9 +92,14 @@ impl App {
         behind::cap(cap, policy, behind, self.settings.folderstorm_characters.behind_fps, exempt)
     }
 
-    /// The notice over the world paused by the Off policy (the busy card's
-    /// own notice takes its place when both apply).
+    /// Every frame, before the screen is drawn: the session host's bar
+    /// (`folderstorm_characters/bar.rs`), then the notice over the world
+    /// paused by the Off policy (the busy card's own notice takes its
+    /// place when both apply).
     pub(super) fn folderstorm_characters_notice(&self, ctx: &egui::Context, p: &crate::theme::Palette) {
+        // (checkpoint 8: the session host's bar, in its strip above the
+        // interface, on every screen)
+        self.folderstorm_bar(ctx, p);
         if !self.folderstorm_characters.paused || self.busy_pause.paused() || self.last_render.video_memory_full || !self.in_world() {
             return;
         }
@@ -263,8 +269,9 @@ impl App {
                 HostEvent::Command(command @ (ipc::ToViewer::SendChat { .. } | ipc::ToViewer::MarkRead { .. })) => {
                     self.folderstorm_chat_command(command);
                 }
-                // (checkpoint 8: the bar to draw; the viewer's side comes next)
-                HostEvent::Command(ipc::ToViewer::Bar(_)) => {}
+                // (cleaned and bounded by the link's thread; kept for the
+                // bar's drawing and nothing else)
+                HostEvent::Command(ipc::ToViewer::Bar(bar)) => self.folderstorm_characters.bar = Some(*bar),
                 HostEvent::Command(ipc::ToViewer::Quit) => {
                     log::info!("session host: asked to quit");
                     self.folderstorm_characters.quit_by_host = true;
@@ -277,10 +284,14 @@ impl App {
                     }
                     self.folderstorm_characters.managed.release();
                     self.folderstorm_characters.monitor.state = Default::default();
+                    // nothing of the bar outlives the link
+                    self.folderstorm_characters.bar = None;
                     self.sync_minimized_mute();
                 }
             }
         }
+        // (also once the host is gone: the window is as any window again)
+        self.folderstorm_taskbar(Instant::now());
         if !self.folderstorm_characters.managed.linked() {
             self.folderstorm_characters.report.show = None;
             return;
