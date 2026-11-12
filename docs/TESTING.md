@@ -5373,7 +5373,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…" |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6710,6 +6710,50 @@ failure. Grid validation and any paid upload are performed by the human.
     refused by `@recvchat` / `@recvim`) is hidden or absent in what the
     host is told; when a restriction comes after lines were told, the
     host's copy of the conversation is replaced.
+  - **quick actions** (checkpoint 4): above the rows, one numbered button
+    per character ("1 · demo-1"…). It does what fits where that viewer is,
+    and its tooltip says which: switch to it, bring the active one's window
+    forward, bring a login screen forward, start it, start it again; it is
+    greyed while that viewer closes. Press the button of a closed character
+    several times quickly: one viewer starts, never two (the host's log
+    says `quick action for character 2: Restart`, then `Wait`).
+  - **global hotkeys** (checkpoint 4, Windows): Ctrl+Alt+1 to 5 do each
+    character's quick action, Ctrl+Alt+PageDown and Ctrl+Alt+PageUp go to
+    the next and the previous character that runs, from any program and
+    while a character's viewer has the keyboard: click in a viewer, press
+    Ctrl+Alt+2, and the second character comes forward in its place (the
+    host's log says `hotkey Character(1), character 2`). **Hotkeys…** under
+    the rows lists them, each with what Windows answered: "In use", or why
+    not (the keys are another program's; they type a character on this
+    keyboard, AltGr being Ctrl+Alt; the text is no hotkey; two actions on
+    the same keys). Type other keys as text and press Enter ("Ctrl+Shift+F5");
+    a hotkey that does not work is also said under the rows ("1 hotkey does
+    not work"). To see a refusal, start a second host with another
+    settings folder, or any program that takes Ctrl+Alt+1 first. The demo
+    does not save the choices. On Linux and macOS nothing is registered
+    and the page says so; in the demo each hotkey has a **Try** button
+    that does what the key would, on every system.
+  - **New character profile…** (checkpoint 4), under the rows: type a name
+    ("copy1"), keep "The main profile" and press **Create profile**. The
+    row "copy1" appears; `config\demo\profiles\copy1` holds `settings.json`
+    (the demo main profile's, without `username`, `last_login`, `window_*`
+    and the settings kept per account), `ui_layout.ron` and `skins\` when
+    the main demo profile has them, and nothing else: no `accounts`, no
+    `login_accounts.json`, no `profile.lock`. **Start** it: its viewer
+    opens with the main demo profile's interface (font size, key bindings,
+    window layout) and its own window place. The same name again is
+    refused ("already exists, and is never overwritten"), as is a profile
+    whose viewer runs ("is open in a viewer"). "The defaults" makes an
+    empty profile; an existing profile can be the source too. (To try it
+    again, delete `config\demo\profiles\copy1`.)
+  - **voice and sound** (checkpoint 4): the active character's row says
+    **Voice** once its viewer has reported that voice is allowed there;
+    after a switch the row left says "Releasing voice…" until its viewer
+    has reported its voice off, and under the rows "Voice stays off until
+    … has released it". (The demo has no voice server: live voice is tested
+    on the grid by the human.) "Heard in the background" on a row keeps
+    that character's sounds while another one is active (its log says
+    `Background, …, sound on, voice off`).
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames.

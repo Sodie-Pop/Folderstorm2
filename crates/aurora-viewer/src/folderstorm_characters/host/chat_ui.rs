@@ -490,6 +490,7 @@ pub(super) mod tests {
             desk: Desk::new(Config::demo(2)),
             chat: Chat::default(),
             alert: false,
+            comfort: Default::default(),
             viewers: Default::default(),
             events,
             events_tx,

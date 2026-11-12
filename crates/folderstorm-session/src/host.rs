@@ -24,6 +24,7 @@
 //!   from an earlier launch of that slot is dropped.
 
 use crate::behind::Behind3d;
+use crate::hotkeys;
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
 use crate::profile::ProfileName;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,18 @@ pub const STAGE_SETTLE: Duration = Duration::from_millis(1500);
 /// slow disk, or never reach the host).
 pub const START_NOTE_AFTER: Duration = Duration::from_secs(60);
 
+/// What is heard of a character while another one is active (plan
+/// section 10). Session only: a viewer's saved volumes never change.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BackgroundSound {
+    /// Nothing: every sound of its viewer is cut.
+    #[default]
+    Muted,
+    /// Everything, as if it were the active character (its voice stays
+    /// off).
+    All,
+}
+
 /// One character of the host's settings file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotConfig {
@@ -53,6 +66,9 @@ pub struct SlotConfig {
     pub profile: String,
     #[serde(default)]
     pub standby: Standby,
+    /// Checkpoint 4: heard in the background or not.
+    #[serde(default)]
+    pub sound: BackgroundSound,
 }
 
 /// The host's settings file (`session-host.json`): the characters, and the
@@ -68,6 +84,8 @@ pub struct Config {
     /// The host sounds when a character that is not the active one gets a
     /// message (their own sounds are cut).
     pub chat_sound: bool,
+    /// Checkpoint 4: the global hotkeys, as texts.
+    pub hotkeys: hotkeys::Config,
 }
 
 impl Default for Config {
@@ -77,6 +95,7 @@ impl Default for Config {
             stage: true,
             stage_rect: None,
             chat_sound: false,
+            hotkeys: hotkeys::Config::default(),
         }
     }
 }
@@ -101,6 +120,7 @@ impl Config {
         kept.sort_by_key(|k| k.slot);
         self.slots = kept;
         self.stage_rect = self.stage_rect.filter(Stage::valid);
+        self.hotkeys = self.hotkeys.cleaned();
         self
     }
 
@@ -113,6 +133,7 @@ impl Config {
                     slot: i as u8,
                     profile: format!("demo-{}", i + 1),
                     standby: Standby::Warm,
+                    sound: BackgroundSound::Muted,
                 })
                 .collect(),
             ..Self::default()
@@ -166,6 +187,8 @@ pub enum Note {
 pub struct Slot {
     pub profile: ProfileName,
     pub standby: Standby,
+    /// What is heard of it while another character is active.
+    pub sound: BackgroundSound,
     pub phase: Phase,
     /// The viewer's last report.
     pub status: Option<Status>,
@@ -194,6 +217,7 @@ impl Slot {
         Self {
             profile,
             standby,
+            sound: BackgroundSound::Muted,
             phase: Phase::Stopped,
             status: None,
             note: None,
@@ -276,9 +300,51 @@ pub struct Desk {
     stage: bool,
     stage_rect: Option<Stage>,
     chat_sound: bool,
+    hotkeys: hotkeys::Config,
     quitting: Option<Instant>,
     effects: Vec<Effect>,
 }
+
+/// What a character's quick action does now (plan section 13): the one
+/// button, and the one hotkey, that does the right thing for where its
+/// viewer is. Whatever it is, a slot never gets a second process.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Quick {
+    /// It runs behind the active character: it becomes the active one.
+    Switch,
+    /// It is the active character: its window comes forward.
+    Show,
+    /// It waits at its login screen: its window comes forward, for the
+    /// user to log in there.
+    LogIn,
+    /// Its viewer is starting: it comes forward when it reports.
+    Wait,
+    /// It has no viewer: one is started.
+    Launch,
+    /// Its viewer ended: one is started again.
+    Restart,
+    /// Nothing can be done now: it is closing, its viewer runs unmanaged,
+    /// "Quit all" is under way, or the slot is empty.
+    Nothing,
+}
+
+/// What a character holds of the voice (plan section 10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Voice {
+    /// It is the active character and its viewer says voice is allowed
+    /// there: the only one that may connect and transmit.
+    Allowed,
+    /// It is the active character and waits for that other one to give
+    /// the voice up.
+    WaitsFor(usize),
+    /// It was allowed voice and has not said yet that it gave it up.
+    GivingUp,
+    /// Voice is off there.
+    Off,
+}
+
+#[cfg(test)]
+mod comfort_tests;
 
 impl Desk {
     pub fn new(config: Config) -> Self {
@@ -286,7 +352,10 @@ impl Desk {
         let mut slots: [Option<Slot>; MAX_SLOTS] = Default::default();
         for s in config.slots {
             if let (Some(place), Ok(name)) = (slots.get_mut(usize::from(s.slot)), ProfileName::parse(&s.profile)) {
-                *place = Some(Slot::new(name, s.standby));
+                *place = Some(Slot {
+                    sound: s.sound,
+                    ..Slot::new(name, s.standby)
+                });
             }
         }
         Self {
@@ -295,6 +364,7 @@ impl Desk {
             stage: config.stage,
             stage_rect: config.stage_rect,
             chat_sound: config.chat_sound,
+            hotkeys: config.hotkeys,
             quitting: None,
             effects: Vec::new(),
         }
@@ -309,11 +379,13 @@ impl Desk {
                     slot: i as u8,
                     profile: s.profile.shown().to_owned(),
                     standby: s.standby,
+                    sound: s.sound,
                 })
                 .collect(),
             stage: self.stage,
             stage_rect: self.stage_rect,
             chat_sound: self.chat_sound,
+            hotkeys: self.hotkeys.clone(),
         }
     }
 
@@ -410,6 +482,120 @@ impl Desk {
         }
     }
 
+    /// What is heard of a character while another one is active.
+    pub fn set_sound(&mut self, slot: usize, sound: BackgroundSound) {
+        let Some(s) = self.slot_mut(slot).filter(|s| s.sound != sound) else {
+            return;
+        };
+        s.sound = sound;
+        self.effects.push(Effect::Save);
+        self.sync(None);
+    }
+
+    /// The global hotkeys' settings.
+    pub fn hotkeys(&self) -> &hotkeys::Config {
+        &self.hotkeys
+    }
+
+    /// The user's choice for one hotkey; true when the settings changed
+    /// (the host then registers the hotkeys again).
+    pub fn set_hotkey(&mut self, action: hotkeys::Action, text: &str) -> bool {
+        let changed = self.hotkeys.set(action, text);
+        if changed {
+            self.effects.push(Effect::Save);
+        }
+        changed
+    }
+
+    /// Replaces the hotkeys' settings whole (enabled or not, back to the
+    /// defaults); true when they changed.
+    pub fn set_hotkeys(&mut self, config: hotkeys::Config) -> bool {
+        let config = config.cleaned();
+        let changed = self.hotkeys != config;
+        if changed {
+            self.hotkeys = config;
+            self.effects.push(Effect::Save);
+        }
+        changed
+    }
+
+    /// What a character's quick action does now.
+    pub fn quick(&self, slot: usize) -> Quick {
+        let Some(s) = self.slot(slot) else {
+            return Quick::Nothing;
+        };
+        match s.phase {
+            _ if s.closing => Quick::Nothing,
+            Phase::Running if s.status.as_ref().is_some_and(|st| st.screen == Screen::Login) => Quick::LogIn,
+            Phase::Running if self.active == Some(slot) => Quick::Show,
+            Phase::Running => Quick::Switch,
+            Phase::Starting => Quick::Wait,
+            // its process runs, let go by the host: never a second one
+            Phase::Unmanaged => Quick::Nothing,
+            Phase::Stopped | Phase::Ended { .. } if self.quitting.is_some() => Quick::Nothing,
+            Phase::Stopped => Quick::Launch,
+            Phase::Ended { .. } => Quick::Restart,
+        }
+    }
+
+    /// Carries a character's quick action out, and says which it was.
+    pub fn quick_act(&mut self, slot: usize, now: Instant) -> Quick {
+        let quick = self.quick(slot);
+        if quick != Quick::Nothing {
+            self.switch(slot, now);
+        }
+        quick
+    }
+
+    /// The character "next" or "previous" goes to: the running one after
+    /// (or before) the active one, round the desk. None when no other
+    /// character runs. A hotkey never starts a viewer this way.
+    pub fn neighbour(&self, forward: bool) -> Option<usize> {
+        let ready: Vec<usize> = self
+            .slots()
+            .filter(|(_, s)| s.phase == Phase::Running && !s.closing)
+            .map(|(i, _)| i)
+            .collect();
+        let found = match self.active {
+            None if forward => ready.first(),
+            None => ready.last(),
+            Some(active) if forward => ready.iter().find(|i| **i > active).or(ready.first()),
+            Some(active) => ready.iter().rev().find(|i| **i < active).or(ready.last()),
+        };
+        found.copied().filter(|slot| Some(*slot) != self.active)
+    }
+
+    /// A global hotkey was pressed. A character's hotkey is its quick
+    /// action; next and previous bring a running neighbour forward.
+    /// Returns the slot it went to, if any.
+    pub fn hotkey(&mut self, action: hotkeys::Action, now: Instant) -> Option<usize> {
+        let slot = match action {
+            hotkeys::Action::Character(slot) => slot,
+            hotkeys::Action::Next => self.neighbour(true)?,
+            hotkeys::Action::Previous => self.neighbour(false)?,
+        };
+        (self.quick_act(slot, now) != Quick::Nothing).then_some(slot)
+    }
+
+    /// What a character holds of the voice.
+    pub fn voice(&self, slot: usize) -> Voice {
+        let Some(s) = self.slot(slot).filter(|s| s.phase == Phase::Running) else {
+            return Voice::Off;
+        };
+        if self.active != Some(slot) {
+            return if s.voice_out { Voice::GivingUp } else { Voice::Off };
+        }
+        if let Some(other) = self.voice_waits_for() {
+            return Voice::WaitsFor(other);
+        }
+        let allowed = s.sent.is_some_and(|(sent, _)| sent.voice_allowed) && s.acknowledged();
+        if allowed && s.status.as_ref().is_some_and(|st| st.voice_allowed) {
+            Voice::Allowed
+        } else {
+            Voice::Off
+        }
+    }
+
     /// Tells the user why a slot did not start.
     pub fn note(&mut self, slot: usize, note: Note) {
         if let Some(s) = self.slot_mut(slot) {
@@ -430,6 +616,7 @@ impl Desk {
         *s = Slot {
             launch,
             activate,
+            sound: s.sound,
             phase: Phase::Starting,
             ..Slot::new(s.profile.clone(), s.standby)
         };
@@ -743,7 +930,7 @@ impl Desk {
                 role: if is_active { Role::Active } else { Role::Background },
                 behind: Behind3d::Off,
                 standby: s.standby,
-                sound_muted: !is_active,
+                sound_muted: !is_active && s.sound == BackgroundSound::Muted,
                 voice_allowed: is_active && !voice_held_elsewhere,
             };
             if s.sent.is_some_and(|(sent, _)| Assignment { seq: 0, ..sent } == wanted) {
@@ -813,6 +1000,7 @@ mod tests {
             slot,
             profile: profile.into(),
             standby: Standby::Warm,
+            sound: BackgroundSound::Muted,
         };
         let config = Config {
             slots: vec![
@@ -833,6 +1021,7 @@ mod tests {
                 maximised: false,
             }),
             chat_sound: true,
+            hotkeys: hotkeys::Config::default(),
         }
         .cleaned();
         assert!(config.chat_sound);

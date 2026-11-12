@@ -1236,6 +1236,18 @@ exe before publishing; the local build also writes it to `version.txt`.
   with its rules and restrictions. Offers, requests and script dialogs are
   only listed ("Switch to answer"): they are answered in the character's
   window. Transcripts stay in each viewer.
+  A numbered button per character does the right thing for where its
+  viewer is (switch, start, bring its login screen forward), and so do the
+  global hotkeys, on Windows: Ctrl+Alt+1 to 5, Ctrl+Alt+PageDown (next) and
+  Ctrl+Alt+PageUp (previous), from any program, even while a viewer has
+  the keyboard. **Hotkeys…** changes them and says which ones Windows
+  refused (keys of another program, or keys that type a character with
+  AltGr on this keyboard). **New character profile…** makes a profile with
+  the interface of the main profile or of another one (preferences, key
+  bindings, layout, skin) and no account: no saved login, no password, no
+  transcript, no cache; an existing profile is never overwritten. Only the
+  active character may use voice; "Heard in the background" keeps a
+  background character's sounds.
   Closing or losing the host closes no viewer: they stay logged in and go
   back to their own settings. The list is saved in
   `…\config\session-host.json`; the log is `aurora-session-host.log`.

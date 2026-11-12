@@ -19,12 +19,18 @@
 //! - [`chat_export`]: what a managed viewer tells the host of its
 //!   conversations, read from the world as its own window shows it.
 //!
+//! Checkpoint 4, comfort:
+//! - [`profile_copy`]: "New character profile…", the files of a new
+//!   profile made from another one (the host's quick actions and global
+//!   hotkeys are in [`host`]).
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod chat_export;
 pub mod host;
 pub mod managed;
 pub mod profile;
+pub mod profile_copy;
 pub mod transport;
 
 use ::folderstorm_session::behind::{self, Behind3d};
