@@ -344,7 +344,7 @@ fn destination(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, review: &mut Bul
         review.folders = Some((inv.generation, super::folder_jump::index(inv)));
     }
     let width = ui.available_width();
-    search_field(ui, &mut review.query, aurora_i18n::tr!("inventory-folder-jump-filter"), width);
+    search_field(ui, p, &mut review.query, aurora_i18n::tr!("inventory-folder-jump-filter"), width);
     let Some((_, folders)) = &review.folders else { return };
     let (results, _) = super::folder_jump::search(folders, &review.query.trim().to_lowercase());
     egui::Frame::new().fill(p.field).show(ui, |ui| {
