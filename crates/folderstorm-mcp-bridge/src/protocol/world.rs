@@ -27,6 +27,7 @@ const fn read(name: &'static str, description: &'static str, schema: fn() -> Val
         name,
         description,
         class: Some(Class::Read),
+        also: None,
         schema,
         wait: Duration::ZERO,
     }
