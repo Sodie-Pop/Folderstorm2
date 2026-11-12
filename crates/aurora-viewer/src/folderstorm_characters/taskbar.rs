@@ -85,6 +85,7 @@ impl Tracker {
     }
 
     /// What the window was last made.
+    #[cfg(test)]
     pub fn applied(&self) -> Taskbar {
         self.applied
     }
