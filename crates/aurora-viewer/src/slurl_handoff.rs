@@ -33,6 +33,9 @@ use crossbeam_channel::Receiver;
 mod windows;
 #[cfg(windows)]
 pub use windows::{focused, hand_off, listen, release, window_ready};
+// Folderstorm: the session host's report pipe (folderstorm_characters/transport.rs)
+#[cfg(windows)]
+pub use windows::folderstorm_session_pipe;
 
 /// Longest link received (a SLURL is far shorter).
 #[cfg(any(windows, target_os = "linux"))]
@@ -87,7 +90,8 @@ mod bus {
 
     /// `org.aurora_viewer.AuroraViewer[.Demo][.T_<title>]`.
     fn bus_name() -> String {
-        name_for(std::env::var_os("AURORA_DEMO").is_some(), crate::cli::title_slug().as_deref())
+        let name = name_for(std::env::var_os("AURORA_DEMO").is_some(), crate::cli::title_slug().as_deref());
+        name + &crate::folderstorm_characters::profile::bus_suffix() // Folderstorm: the profile's own name
     }
 
     /// A bus name's elements hold only `[A-Za-z0-9_]` and do not start with

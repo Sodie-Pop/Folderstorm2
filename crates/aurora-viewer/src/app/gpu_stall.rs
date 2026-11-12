@@ -70,6 +70,10 @@ impl App {
         let now = Instant::now();
         // a VR session is not recovered yet (TASKS.md): it closes as before
         let recovers = super::gpu_recovery::enabled(self.settings.gpu_recovery) && !renderer.vr_engaged();
+        // Folderstorm: not in front, a loss waits, uncounted (app/folderstorm_characters.rs)
+        if renderer.device_lost() && !self.gpu_stall.lost && self.folderstorm_gpu_loss(recovers) {
+            return;
+        }
         if renderer.device_lost() && recovers && !self.gpu_stall.lost {
             crate::crash::gpu_loss_snapshot();
             use super::gpu_recovery::LossStep;
@@ -91,6 +95,7 @@ impl App {
                 LossStep::Close => log::error!("the graphics card is lost a third time within minutes: no recovery"),
             }
         }
+        let in_front = self.folderstorm_gpu_notice_allowed(renderer.stalled_for()); // Folderstorm: no box behind
         let stall = &mut self.gpu_stall;
         if renderer.device_lost() {
             if !std::mem::replace(&mut stall.lost, true) {
@@ -119,7 +124,7 @@ impl App {
                     );
                     crate::crash::gpu_stalled(stalled.as_secs());
                 }
-                if notice_due(stalled, stall.notice.is_some(), stall.waited_at, now) {
+                if notice_due(stalled, stall.notice.is_some(), stall.waited_at, now) && in_front {
                     let (title, body) = text(stalled.as_secs());
                     stall.notice = show(title, body, true);
                 }

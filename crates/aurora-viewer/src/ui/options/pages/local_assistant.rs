@@ -116,24 +116,58 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     },
                 )
             });
-        let saved_read = field!(local_assistant.permissions.read);
-        let track: &dyn super::super::cx::Track = if session.is_none() { &saved_read } else { &Nothing };
         cx.conditional(shown == Preset::Custom, |cx| {
-            let levels = [
-                (Level::Allow, tr!("fs-mcp-level-allow"), false),
-                (Level::Never, tr!("fs-mcp-level-never"), false),
+            let rows = [
+                (
+                    Class::Read,
+                    tr!("fs-mcp-read"),
+                    tr!("fs-mcp-read-hint"),
+                    field!(local_assistant.permissions.read),
+                ),
+                (
+                    Class::Edit,
+                    tr!("fs-mcp-edit"),
+                    tr!("fs-mcp-edit-hint"),
+                    field!(local_assistant.permissions.edit),
+                ),
+                (
+                    Class::Move,
+                    tr!("fs-mcp-move"),
+                    tr!("fs-mcp-move-hint"),
+                    field!(local_assistant.permissions.move_),
+                ),
+                (
+                    Class::Wear,
+                    tr!("fs-mcp-wear"),
+                    tr!("fs-mcp-wear-hint"),
+                    field!(local_assistant.permissions.wear),
+                ),
+                (
+                    Class::Trash,
+                    tr!("fs-mcp-trash"),
+                    tr!("fs-mcp-trash-hint"),
+                    field!(local_assistant.permissions.trash),
+                ),
             ];
-            cx.row(tr!("fs-mcp-read"), tr!("fs-mcp-read-hint"), track, |ui, s| {
-                let mut level = current.permissions.level(Class::Read);
-                if !segmented(ui, &p, &mut level, &levels) {
-                    return false;
+            for (class, label, hint, saved) in rows {
+                let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];
+                if class.can_ask() {
+                    levels.push((Level::Ask, tr!("fs-mcp-level-ask"), false));
                 }
-                let mut new = current;
-                new.permissions.set(Class::Read, level);
-                store(s, session, new)
-            });
+                levels.push((Level::Never, tr!("fs-mcp-level-never"), false));
+                let track: &dyn super::super::cx::Track = if session.is_none() { &saved } else { &Nothing };
+                cx.row(label, hint, track, |ui, s| {
+                    let mut level = current.permissions.level(class);
+                    if !segmented(ui, &p, &mut level, &levels) {
+                        return false;
+                    }
+                    let mut new = current;
+                    new.permissions.set(class, level);
+                    store(s, session, new)
+                });
+            }
         });
-        cx.note(tr!("fs-mcp-changes-later"));
+        cx.note(tr!("fs-mcp-changes-note"));
 
         // what the bridge does now
         let status = mcp_bridge::status();

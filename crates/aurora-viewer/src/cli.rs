@@ -32,6 +32,13 @@ pub struct Cli {
     /// `--uninstall`: remove what the viewer registered on this computer,
     /// print what it did and exit, without a window (`uninstall.rs`).
     pub uninstall: bool,
+    // Folderstorm: `--profile <name>`, one character's own settings
+    // (folderstorm_characters/profile.rs); checked there, never used raw
+    pub profile: Option<String>,
+    // Folderstorm: `--session-host`, the characters' host instead of a viewer,
+    // and `--managed`, a viewer started by it (folderstorm_characters/host.rs)
+    pub session_host: bool,
+    pub managed: bool,
     /// Folderstorm: `--mcp-api`, local assistant access for this session only.
     pub mcp_api: bool,
     help: bool,
@@ -85,6 +92,8 @@ pub fn get() -> &'static Cli {
                 .collect::<Vec<_>>()
                 .join(", ");
             println!("{}", aurora_i18n::tr!("cli-help", languages = languages));
+            println!("{}", aurora_i18n::tr!("folderstorm-cli-help-profile")); // Folderstorm: --profile
+            println!("{}", aurora_i18n::tr!("folderstorm-cli-help-session-host")); // Folderstorm: --session-host
             println!("{}", aurora_i18n::tr!("fs-mcp-cli-help")); // Folderstorm: --mcp-api
             std::process::exit(0);
         }
@@ -118,6 +127,14 @@ fn parse(args: impl Iterator<Item = String>) -> Cli {
             cli.title = Some(v.to_owned());
         } else if a == "--title" {
             cli.title = args.next();
+        } else if let Some(v) = a.strip_prefix("--profile=") {
+            cli.profile = Some(v.to_owned()); // Folderstorm: --profile, before the bare SLURL below
+        } else if a == "--profile" {
+            cli.profile = args.next_if(|value| !value.starts_with('-')).or(Some(String::new())); // Folderstorm
+        } else if a == "--session-host" {
+            cli.session_host = true; // Folderstorm: the characters' host
+        } else if a == "--managed" {
+            cli.managed = true; // Folderstorm: started by the characters' host
         } else if a == "--vr" {
             cli.vr = true;
         } else if let Some(v) = a.strip_prefix("--fps-limit=") {
@@ -207,7 +224,9 @@ fn parse_fps_limit(value: &str) -> Option<u32> {
 /// The window title, ending with the build profile ("(Dev)", "(Release)",
 /// "(Debug)"): test windows of different builds can be told apart.
 pub fn window_title() -> String {
-    title_with(get().title.as_deref(), env!("AURORA_BUILD_PROFILE"), aurora_version::version())
+    // Folderstorm: the profile's name in the title (folderstorm_characters/profile.rs)
+    let title = crate::folderstorm_characters::profile::title_text(get().title.as_deref());
+    title_with(title.as_deref(), env!("AURORA_BUILD_PROFILE"), aurora_version::version())
 }
 
 /// The viewer's identity on the Linux desktop: Wayland app_id, X11
@@ -384,6 +403,40 @@ mod tests {
         assert!(!format!("{login:?}").contains("not-a-password"));
         assert_eq!(cli.title.as_deref(), Some("T"));
         assert!(args(&["--login", "Synthetic", "Resident"]).login.lock().expect("login").is_none());
+    }
+
+    // Folderstorm: --profile
+    #[test]
+    fn profile_forms_and_its_value_is_never_the_startup_slurl() {
+        let url = "secondlife://Region/1/2/3";
+        for list in [vec!["--profile", "Alt1"], vec!["--profile=Alt1"]] {
+            let cli = args(&list);
+            assert_eq!(cli.profile.as_deref(), Some("Alt1"));
+            assert_eq!(cli.url, None, "the value is not a SLURL");
+        }
+        let cli = args(&["--profile", "Alt1", url]);
+        assert_eq!((cli.profile.as_deref(), cli.url.as_deref()), (Some("Alt1"), Some(url)));
+        // a missing value is kept as empty, so that it is refused, not
+        // taken as the main profile
+        let cli = args(&["--profile", "--title", "T"]);
+        assert_eq!((cli.profile.as_deref(), cli.title.as_deref()), (Some(""), Some("T")));
+        assert_eq!(args(&["--profile"]).profile.as_deref(), Some(""));
+        // nothing after the link is read: a web page cannot pick a profile
+        assert_eq!(args(&["-url", url, "--profile", "Alt1"]).profile, None);
+    }
+
+    // Folderstorm: --session-host, --managed
+    #[test]
+    fn session_host_and_managed_are_switches_a_link_cannot_set() {
+        let cli = args(&["--session-host", "--title", "T"]);
+        assert!(cli.session_host && !cli.managed);
+        assert_eq!(cli.title.as_deref(), Some("T"));
+        let cli = args(&["--profile", "Alt1", "--managed"]);
+        assert!(cli.managed && !cli.session_host);
+        assert_eq!(cli.profile.as_deref(), Some("Alt1"));
+        let cli = args(&["-url", "secondlife://Region/1/2/3", "--managed", "--session-host"]);
+        assert!(!cli.managed && !cli.session_host);
+        assert!(!args(&[]).managed && !args(&[]).session_host);
     }
 
     #[test]

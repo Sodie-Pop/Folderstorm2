@@ -111,35 +111,37 @@ while rethinking the user interface.
   </tr>
 </table>
 
-### New in 0.9.5 <img src="docs/readme/pill-new.svg" alt="New" height="18" align="absmiddle">
+### New in 0.9.6 <img src="docs/readme/pill-new.svg" alt="New" height="18" align="absmiddle">
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>Region Tracker, like the Legacy Viewer</h3>
-      Watch a list of regions from World › Region tracker or the map's
-      Track region: whether each one is up and how many avatars are there,
-      without opening the map.
+      <h3>A showcase for your outfits</h3>
+      Appearance's Outfit gallery shows each outfit as a large picture, with
+      favourites, folders and one-click wear. Auto portrait frames you in a
+      studio, and Take the portraits does every outfit in one go.
     </td>
     <td width="50%" valign="top">
-      <h3>Find your contacts in the world</h3>
-      A contact set can mark its members with a small circle or diamond,
-      seen through walls and held at the screen's edge when they are out of
-      view. Off by default, chosen set by set.
+      <h3>65 photo looks built in</h3>
+      The photo LUT tab comes with 20 looks by Czar Fenris and 45 by Nanner
+      Pudding, shared with every Aurora user. Import several .cube files of
+      your own at once.
     </td>
   </tr>
   <tr>
     <td valign="top">
-      <h3>Emojis and chat</h3>
-      A row of your recent emojis by the chat field, favourite emojis if
-      you want them, recent GIFs in the picker, Alt+Enter for ((OOC)) chat,
-      and Request teleport next to Offer teleport.
+      <h3>The Milky Way from real stars</h3>
+      The night sky's band is drawn from the 2.5 million stars of the
+      Tycho-2 Catalogue, and Star hour can follow the real clock.
+      Advanced › Rendering types hides parts of the world, like the Legacy
+      Viewer.
     </td>
     <td valign="top">
-      <h3>Your avatar, your view</h3>
-      Import an appearance XML into the shape and clothing editors, hide
-      the face lights other avatars wear, hide every name tag in one click,
-      and keep avatar tips with world tooltips off.
+      <h3>Poser, building and inventory</h3>
+      Space brakes your avatar like the Legacy Viewer, the poser gets
+      Save as…, move handles are easier to grab, land selections snap to
+      the parcel grid, and Favorites lists starred items without their
+      folders.
     </td>
   </tr>
 </table>
@@ -1122,9 +1124,13 @@ clippy on a Mac, and the merge queue runs the tests and draws a demo frame on
 an Apple GPU.
 
 Preferences › Graphics › Smoothness offers a 50–100% **3D render scale**.
-At lower scales, the world is reconstructed with a nine-tap Catmull-Rom spatial
-upscaler; controls, HUDs and world labels retain the window's native resolution.
-Saved photos render at their requested resolution. The default remains 100%.
+At lower scales, the world is reconstructed and sharpened in one AMD CAS spatial
+upscaler (Sharpness 0, or HDR off, keeps a Catmull-Rom reconstruction); controls, HUDs and world labels retain the window's native resolution.
+Saved photos render at their requested resolution. Its **Match the display**
+switch follows the display's logical resolution instead (50% on a 2× display,
+67% on 1.5×), as the Legacy Viewer draws a Retina Mac's world: on by default
+on macOS, where a new profile also starts from the Legacy Viewer's Mac
+Mid-High values; elsewhere it is off and the default remains 100%.
 With AMD FSR 3.1 as the anti-aliasing, FSR's own mode (Native AA, Quality,
 Balanced, Performance, Ultra performance) takes the render scale's place.
 Bindless texture pages use the adapter's binding-array limit rather than its
@@ -1155,6 +1161,8 @@ exe before publishing; the local build also writes it to `version.txt`.
 | `-h`, `--help` | Shows the help |
 | `-V`, `--version` | Prints the built version then exits, with no window, log or network |
 | `--uninstall` | Removes what Aurora registered on this computer, prints it and the folders left, then exits, with no window |
+| `--profile <name>` (Folderstorm2) | Runs a separate character profile: its own settings, cache, log and window title; one window per profile |
+| `--session-host` (Folderstorm2) | Opens the characters' host instead of a viewer: up to five character profiles, each in its own viewer, one active at a time |
 | `--mcp-api` | Folderstorm2: allows local assistant access (the MCP bridge) for this session only, without saving it |
 
 - `--title`: the build profile ends the title (Dev, Release, Debug); the log
@@ -1197,6 +1205,60 @@ exe before publishing; the local build also writes it to `version.txt`.
 - `--login`: the account follows the usual "remember" choices; a single
   user name is written `<name> Resident`. `--grid` alone selects the grid of
   a new account's form.
+- `--profile <name>` (Folderstorm2, for several characters on one PC; also
+  `--profile=<name>`): 1 to 32 letters, digits, `_` or `-`, starting with a
+  letter or a digit, without case (`Alt1` and `alt1` are one profile); `main`
+  is the main profile, which is what starting without the argument gives,
+  with its usual folders. Anything else is refused with a message. A named
+  profile keeps its settings, accounts list, transcripts and layouts in
+  `…\config\profiles\<name>` (`…\config\demo\profiles\<name>` in demo
+  mode) and its asset cache in `…\cache-profiles\<name>` beside the main
+  cache (Preferences › Graphics › Frames per second › "Share the main
+  profile's cache" uses the main one instead, from the next start). Saved
+  passwords are shared: a profile finds the password of an account it lists.
+  The log is `aurora-<name>.log`, the window title ends with the name, and a
+  `secondlife://` link given with `--profile <name>` goes to that profile's
+  window (a browser's link still goes to the last focused window). A second
+  launch of a profile already open brings its window forward instead. Named
+  profiles start with "3D while another Folderstorm2 window is in front" set
+  to Off (Preferences › Graphics › Frames per second): a window behind
+  another Folderstorm2 window stops drawing the world and keeps its chat and
+  connection at a few frames per second, until it is clicked.
+- `--session-host` (Folderstorm2): opens the characters' host, a small
+  window, instead of a viewer. Add up to five profile names; **Start** opens
+  that character's own viewer (`--profile <name> --managed`), where it logs
+  in as usual: the host never sees a password. One character is active; the
+  others wait with their 3D off, their sound cut and voice off, behind the
+  active window or minimised ("Minimise in the background"), and keep
+  receiving chat, IMs and teleports. **Switch** brings another one forward,
+  in the same place and size when "Keep the characters' windows in the same
+  place" is on; clicking a character's window does the same. A viewer that
+  closed or crashed shows **Restart**; one that is slow or silent is only
+  marked, never closed by the host. **Quit all** asks each to log out.
+  The window's **Chat** shows what every character hears and reads (nearby
+  chat, instant messages, group chats and conferences), per character and
+  in "All", with unread counts; a line typed there is said by the character
+  named above the box ("Send as …") through that character's own viewer,
+  with its rules and restrictions. Offers, requests and script dialogs are
+  only listed ("Switch to answer"): they are answered in the character's
+  window. Transcripts stay in each viewer.
+  A numbered button per character does the right thing for where its
+  viewer is (switch, start, bring its login screen forward), and so do the
+  global hotkeys, on Windows: Ctrl+Alt+1 to 5, Ctrl+Alt+PageDown (next) and
+  Ctrl+Alt+PageUp (previous), from any program, even while a viewer has
+  the keyboard. **Hotkeys…** changes them and says which ones Windows
+  refused (keys of another program, or keys that type a character with
+  AltGr on this keyboard). **New character profile…** makes a profile with
+  the interface of the main profile or of another one (preferences, key
+  bindings, layout, skin) and no account: no saved login, no password, no
+  transcript, no cache; an existing profile is never overwritten. Only the
+  active character may use voice; "Heard in the background" keeps a
+  background character's sounds.
+  Closing or losing the host closes no viewer: they stay logged in and go
+  back to their own settings. The list is saved in
+  `…\config\session-host.json`; the log is `aurora-session-host.log`.
+  `--managed` is what the host passes to its viewers and does nothing by
+  hand.
 
 ### Demo mode and test switches
 

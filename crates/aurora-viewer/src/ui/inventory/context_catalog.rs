@@ -23,6 +23,8 @@ pub(super) enum Command {
     Batch(Vec<InvAction>),
     Properties(Uuid),
     BulkPermissions(Vec<Uuid>),
+    // Folderstorm: Review bulk changes
+    BulkReview(Vec<Uuid>),
     Rename(Uuid),
     Image(Uuid),
     Protect(Uuid),
@@ -735,6 +737,15 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
                 Command::BulkPermissions(ids.clone()),
             );
         }
+        // Folderstorm: Review bulk changes (bulk_review.rs)
+        c.add(
+            "bulk-review",
+            TEXT,
+            "pencil-filled",
+            aurora_i18n::tr!("inventory-bulk-review-menu"),
+            ready && (1..=super::bulk_review::MAX).contains(&ids.len()),
+            Command::BulkReview(ids.clone()),
+        );
         c.add(
             "rename",
             TEXT,
@@ -871,7 +882,7 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
         .filter(|it| !trash && super::context::exposes_asset_uuid(it.asset_type))
         .or_else(|| all.then_some(&placeholder))
     {
-        let asset = super::context::copyable_asset_uuid(inv, it);
+        let asset = super::context::copyable_asset_uuid(inv, it, facts.god);
         c.add(
             "asset-uuid",
             &organize,
@@ -1192,7 +1203,14 @@ pub(super) fn execute(
             });
             submit(plan);
         }
-        Command::Delete(ids, purge) => st.dialog = Some(EditDialog::Delete(ids, purge)),
+        Command::Delete(ids, purge) => {
+            if purge {
+                // Permanent delete always asks (PurgeSelectedItems has no ignore).
+                st.dialog = Some(EditDialog::Delete(ids, true));
+            } else {
+                super::delete::confirm_or_run(inv, st, prefs, facts, actions, ids);
+            }
+        }
         Command::Share(ids) => {
             st.share_items = ids;
             st.share_picker.open(&format!("inventory_share_{}", st.ui_id), false);
@@ -1231,6 +1249,7 @@ pub(super) fn execute(
             st.dialog = Some(EditDialog::Properties(id));
         }
         Command::BulkPermissions(ids) => st.open_bulk_permissions(ids),
+        Command::BulkReview(ids) => super::bulk_review::open(st, ids), // Folderstorm: Review bulk changes
         Command::Rename(id) => st.begin_rename(inv, id),
         Command::Image(id) => st.thumbnail.open(id),
         Command::Protect(id) => {

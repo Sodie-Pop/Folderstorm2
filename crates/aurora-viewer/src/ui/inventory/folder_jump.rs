@@ -246,7 +246,7 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, inv: &Invent
     )
     .show(ctx, p, &mut open, |ui| {
         let width = ui.available_width();
-        let filter = search_field(ui, &mut jump.query, aurora_i18n::tr!("inventory-folder-jump-filter"), width)
+        let filter = search_field(ui, p, &mut jump.query, aurora_i18n::tr!("inventory-folder-jump-filter"), width)
             .on_hover_text(aurora_i18n::tr!("inventory-folder-jump-filter-tip"));
         if jump.focus {
             filter.request_focus();

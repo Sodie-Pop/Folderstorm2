@@ -1,0 +1,156 @@
+name: Folderstorm release build
+
+# Manual build of the viewer and the MCP helper, kept as a workflow artifact
+# (a zip, or a tar.gz on Linux). Publishes nothing: no GitHub release, no tag,
+# no signing, no update feed (FEATURES.md 0.3 does those later). Ours: upstream's
+# release.yml stays unchanged and disabled. See folderstorm/CI.md.
+# Build steps follow upstream's release.yml (toolchain, cache, --locked
+# release build); packaging is folderstorm/scripts/package-release.ps1.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_label:
+        description: Label for the file names, for example "test1" (optional; letters, digits, dot, dash)
+        required: false
+        default: ''
+        type: string
+      platforms:
+        description: Platforms to build
+        required: true
+        default: windows
+        type: choice
+        options:
+          - windows
+          - windows and linux
+
+concurrency:
+  group: folderstorm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      LABEL_INPUT: ${{ inputs.version_label }}
+      IMAGE_HOST_FOLDER: ${{ vars.FOLDERSTORM_IMAGE_HOST_FOLDER }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Names
+        id: names
+        shell: bash
+        run: |
+          # the slug comes from folderstorm-brand, not from this file
+          slug=$(sed -n 's/^pub const SLUG: &str = "\(.*\)";/\1/p' crates/folderstorm-brand/src/lib.rs)
+          label=$(printf '%s' "$LABEL_INPUT" | tr -c 'A-Za-z0-9.-' '-' | cut -c1-40)
+          [ -n "$label" ] || label=dev
+          if ! printf '%s' "$slug" | grep -Eq '^[a-z0-9]+$'; then echo "no product slug found"; exit 1; fi
+          echo "name=$slug-$label-${GITHUB_SHA::7}-windows-x64" >> "$GITHUB_OUTPUT"
+      - name: Image host folder
+        shell: bash
+        run: |
+          if [ -z "$IMAGE_HOST_FOLDER" ]; then
+            echo "::warning::FOLDERSTORM_IMAGE_HOST_FOLDER is empty: chat image uploads will need the folder entered in Preferences."
+            echo "Warning: the repository variable FOLDERSTORM_IMAGE_HOST_FOLDER is empty. Chat image uploads will need the folder entered in Preferences." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Rust stable
+        run: rustup update stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # the OpenXR loader built in, as upstream's release: the exe needs
+      # nothing beside it. Compile-time settings go in this step's env only.
+      - name: Build
+        shell: pwsh
+        env:
+          FOLDERSTORM_IMAGE_HOST_FOLDER: ${{ vars.FOLDERSTORM_IMAGE_HOST_FOLDER }}
+          FOLDERSTORM_IMAGE_HOST_TOKEN: ${{ secrets.FOLDERSTORM_IMAGE_HOST_TOKEN }}
+        run: cargo build --release --locked -p aurora-viewer -p folderstorm-mcp --features aurora-viewer/xr-static-loader
+      - name: Package
+        shell: pwsh
+        env:
+          NAME: ${{ steps.names.outputs.name }}
+        run: |
+          ./folderstorm/scripts/package-release.ps1 -Exe target/release/aurora-viewer.exe -Mcp target/release/folderstorm-mcp.exe -Out $env:NAME
+          Compress-Archive -Path $env:NAME -DestinationPath "$env:NAME.zip"
+          $hash = (Get-FileHash -LiteralPath "$env:NAME.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:NAME.zip" | Set-Content -LiteralPath "$env:NAME.zip.sha256" -Encoding utf8NoBOM
+          "Built ``$env:NAME.zip`` ($([math]::Round((Get-Item "$env:NAME.zip").Length / 1MB)) MB), SHA-256 ``$hash``. Not signed. Anything compiled into the build can be extracted from it." >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.names.outputs.name }}
+          path: |
+            ${{ steps.names.outputs.name }}.zip
+            ${{ steps.names.outputs.name }}.zip.sha256
+          compression-level: 0
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64
+    if: ${{ inputs.platforms == 'windows and linux' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      LABEL_INPUT: ${{ inputs.version_label }}
+      IMAGE_HOST_FOLDER: ${{ vars.FOLDERSTORM_IMAGE_HOST_FOLDER }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Names
+        id: names
+        run: |
+          slug=$(sed -n 's/^pub const SLUG: &str = "\(.*\)";/\1/p' crates/folderstorm-brand/src/lib.rs)
+          label=$(printf '%s' "$LABEL_INPUT" | tr -c 'A-Za-z0-9.-' '-' | cut -c1-40)
+          [ -n "$label" ] || label=dev
+          if ! printf '%s' "$slug" | grep -Eq '^[a-z0-9]+$'; then echo "no product slug found"; exit 1; fi
+          echo "name=$slug-$label-${GITHUB_SHA::7}-linux-x64" >> "$GITHUB_OUTPUT"
+      - name: Image host folder
+        run: |
+          if [ -z "$IMAGE_HOST_FOLDER" ]; then
+            echo "::warning::FOLDERSTORM_IMAGE_HOST_FOLDER is empty: chat image uploads will need the folder entered in Preferences."
+            echo "Warning: the repository variable FOLDERSTORM_IMAGE_HOST_FOLDER is empty. Chat image uploads will need the folder entered in Preferences." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # ALSA for the sound, the rest for winit's X11 / Wayland back ends
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev
+      - name: Rust stable
+        run: rustup update stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # debug info stays out of the binary, as upstream's Linux release
+      - name: Build
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: debuginfo
+          FOLDERSTORM_IMAGE_HOST_FOLDER: ${{ vars.FOLDERSTORM_IMAGE_HOST_FOLDER }}
+          FOLDERSTORM_IMAGE_HOST_TOKEN: ${{ secrets.FOLDERSTORM_IMAGE_HOST_TOKEN }}
+        run: cargo build --release --locked -p aurora-viewer -p folderstorm-mcp
+      # tar keeps the executable bit
+      - name: Package
+        shell: pwsh
+        env:
+          NAME: ${{ steps.names.outputs.name }}
+        run: |
+          ./folderstorm/scripts/package-release.ps1 -Exe target/release/aurora-viewer -Mcp target/release/folderstorm-mcp -Out $env:NAME
+          & tar -czf "$env:NAME.tar.gz" $env:NAME
+          if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
+          $hash = (Get-FileHash -LiteralPath "$env:NAME.tar.gz" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:NAME.tar.gz" | Set-Content -LiteralPath "$env:NAME.tar.gz.sha256" -Encoding utf8NoBOM
+          "Built ``$env:NAME.tar.gz``, SHA-256 ``$hash``. Not signed. Anything compiled into the build can be extracted from it." >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.names.outputs.name }}
+          path: |
+            ${{ steps.names.outputs.name }}.tar.gz
+            ${{ steps.names.outputs.name }}.tar.gz.sha256
+          compression-level: 0
+          if-no-files-found: error

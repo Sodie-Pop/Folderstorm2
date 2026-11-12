@@ -6,7 +6,7 @@
 
 use crate::discovery::{self, Discovery};
 use crate::http::{self, HttpError};
-use crate::policy::{Class, Level, Permissions};
+use crate::policy::{Class, Decision, Permissions};
 use crate::protocol::{self, CallRequest, ErrorCode, Health, ToolError};
 use crate::token::Token;
 use serde_json::{Value, json};
@@ -32,6 +32,11 @@ pub const ACTIVITY: usize = 20;
 /// The header the sidecar's `--diagnose` sends, so that its probes do not
 /// show as an assistant's activity.
 pub const PROBE_HEADER: &str = "x-folderstorm-probe";
+/// The header the sidecar passes the MCP client's own name in
+/// (`clientInfo.name`), for the Ask dialog.
+pub const CLIENT_HEADER: &str = "x-folderstorm-client";
+/// The longest client name kept.
+pub const CLIENT_NAME_MAX: usize = 48;
 
 pub struct Config {
     /// Where the discovery file goes; None writes none (tests).
@@ -46,10 +51,31 @@ pub struct Config {
 pub struct Pending {
     pub tool: String,
     pub arguments: Value,
+    /// The user's permissions say Ask: the viewer asks before it runs.
+    pub ask: bool,
+    /// The name the MCP client gives itself, cleaned; None when it gave
+    /// none. Any local program can claim any name.
+    pub client: Option<String>,
     reply: SyncSender<Result<Value, ToolError>>,
 }
 
 impl Pending {
+    /// A call made in the process (the viewer's tests), and where its
+    /// answer arrives.
+    pub fn detached(tool: &str, arguments: Value, ask: bool, client: Option<&str>) -> (Pending, Receiver<Result<Value, ToolError>>) {
+        let (reply, answer) = mpsc::sync_channel(1);
+        (
+            Pending {
+                tool: tool.to_owned(),
+                arguments,
+                ask,
+                client: client.and_then(clean_client),
+                reply,
+            },
+            answer,
+        )
+    }
+
     /// Answer the call; an answer after the timeout is dropped.
     pub fn answer(self, result: Result<Value, ToolError>) {
         let _ = self.reply.try_send(result);
@@ -287,6 +313,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
         return Err(ToolError::new(ErrorCode::Unavailable, "the bridge is stopping"));
     }
     let probe = head.header(PROBE_HEADER).is_some();
+    let client = head.header(CLIENT_HEADER).and_then(clean_client);
     let method = head.first[0].as_str();
     let path = head.first[1].as_str();
     match (method, path) {
@@ -303,7 +330,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
         ("POST", "/v1/call") => {
             let call: CallRequest =
                 serde_json::from_slice(&body).map_err(|_| ToolError::new(ErrorCode::BadRequest, "the body is not a tool call"))?;
-            let result = call_tool(shared, &call);
+            let result = call_tool(shared, &call, client);
             if !probe {
                 record(shared, &call.tool, &result);
             }
@@ -314,30 +341,42 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
     }
 }
 
-fn call_tool(shared: &Shared, call: &CallRequest) -> Result<Value, ToolError> {
+/// A client's name as the dialog may show it: printable, one line, short.
+fn clean_client(name: &str) -> Option<String> {
+    let name: String = name.chars().filter(|c| !c.is_control()).take(CLIENT_NAME_MAX).collect();
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Result<Value, ToolError> {
+    if protocol::NEVER.contains(&call.tool.as_str()) {
+        return Err(ToolError::new(ErrorCode::PermissionDenied, protocol::NEVER_MESSAGE));
+    }
     let spec = protocol::tool(&call.tool).ok_or_else(|| ToolError::new(ErrorCode::UnknownTool, format!("unknown tool `{}`", call.tool)))?;
+    let mut ask = false;
     if let Some(class) = spec.class {
         let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Err(level) = permissions.check(class) {
-            let why = match level {
-                Level::Ask => "this kind of change needs the user's approval, which this version cannot ask for",
-                _ => "the user does not allow this in Preferences › Privacy › Local assistant",
-            };
-            return Err(ToolError::new(ErrorCode::PermissionDenied, why));
+        match permissions.decide(class) {
+            Decision::Run => {}
+            Decision::Ask => ask = true,
+            Decision::Refuse => {
+                return Err(ToolError::new(
+                    ErrorCode::PermissionDenied,
+                    "the user does not allow this in Preferences › Privacy › Local assistant",
+                ));
+            }
         }
     }
-    let (reply, answer) = mpsc::sync_channel(1);
-    let pending = Pending {
-        tool: call.tool.clone(),
-        arguments: call.arguments.clone(),
-        reply,
-    };
+    let (pending, answer) = Pending::detached(&call.tool, call.arguments.clone(), ask, None);
+    let pending = Pending { client, ..pending };
     match shared.queue.try_send(pending) {
         Ok(()) => {}
         Err(TrySendError::Full(_)) => return Err(ToolError::new(ErrorCode::Busy, "too many calls waiting for the viewer")),
         Err(TrySendError::Disconnected(_)) => return Err(ToolError::new(ErrorCode::Unavailable, "the bridge is stopping")),
     }
-    match answer.recv_timeout(shared.viewer_timeout) {
+    // the dialog's time, then the tool's own, on top of the usual wait
+    let wait = shared.viewer_timeout + spec.wait + if ask { protocol::ASK_TIMEOUT } else { Duration::ZERO };
+    match answer.recv_timeout(wait) {
         Ok(result) => result,
         Err(RecvTimeoutError::Timeout) => Err(ToolError::new(ErrorCode::Timeout, "the viewer did not answer in time")),
         Err(RecvTimeoutError::Disconnected) => Err(ToolError::new(ErrorCode::Unavailable, "the call was dropped")),

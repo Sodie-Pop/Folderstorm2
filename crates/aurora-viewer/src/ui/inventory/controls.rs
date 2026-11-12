@@ -66,6 +66,12 @@ pub(super) fn preferences_for_tab(ui: &mut egui::Ui, p: &Palette, prefs: &mut In
     changed |= check(
         ui,
         p,
+        aurora_i18n::tr!("inventory-favorites-show-parent-folders"),
+        &mut prefs.favorites_show_parent_folders,
+    );
+    changed |= check(
+        ui,
+        p,
         aurora_i18n::tr!("ui-inventory-controls-separate-search-in-each-tab"),
         &mut prefs.separate_searches,
     );
@@ -211,7 +217,9 @@ pub fn search(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inventor
     let searching = !st.search.trim().is_empty();
     ui.horizontal(|ui| {
         let selector_width = 112.0_f32.min(ui.available_width() * 0.4);
-        let field_width = (ui.available_width() - selector_width - ui.spacing().item_spacing.x).max(40.0);
+        // Folderstorm: room for "Customize tab…" while a custom tab is shown
+        let customize_width = super::custom_tabs::legacy_button_width(ui, st);
+        let field_width = (ui.available_width() - selector_width - ui.spacing().item_spacing.x - customize_width).max(40.0);
         search_input(ui, p, st, hint, field_width);
         egui::ComboBox::from_id_salt("inventory_search_field")
             .width(selector_width)
@@ -245,6 +253,7 @@ pub fn search(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inventor
             .on_hover_text(aurora_i18n::tr!(
                 "ui-inventory-controls-case-insensitive-search-combines-terms-quotes-search-for-an"
             ));
+        super::custom_tabs::legacy_button(ui, p, st); // Folderstorm: custom Inventory tabs
     });
     after_search(inv, st, searching);
 }
@@ -255,7 +264,8 @@ fn advanced_search(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
     let saved = super::smart_store::list();
     ui.horizontal(|ui| {
         let summary = st.filters.smart.as_ref().map(super::smart_builder::summary).unwrap_or_default();
-        let reserve = 150.0 + if saved.is_empty() { 0.0 } else { 112.0 };
+        // Folderstorm: room for "Customize tab…" while a custom tab is shown
+        let reserve = 150.0 + if saved.is_empty() { 0.0 } else { 112.0 } + super::custom_tabs::legacy_button_width(ui, st);
         let width = (ui.available_width() - reserve).max(60.0);
         let line = ui
             .scope(|ui| {
@@ -289,6 +299,7 @@ fn advanced_search(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
                 st.open_smart(Some(id), query);
             }
         }
+        super::custom_tabs::legacy_button(ui, p, st); // Folderstorm: custom Inventory tabs
         if widgets::flat_button(ui, p, aurora_i18n::tr!("inventory-search-quick")).clicked() {
             st.leave_advanced();
         }
@@ -347,6 +358,7 @@ pub fn after_search(inv: &Inventory, st: &mut InventoryUi, searching: bool) {
 }
 
 pub fn dialogs(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
+    super::custom_tabs::frame(ctx, p, st, prefs); // Folderstorm: custom Inventory tabs
     let screen = ctx.content_rect();
     let preferences_size = Vec2::new(410.0, 600.0_f32.min((screen.height() - 90.0).max(180.0)));
     // the rule builder's rows hold a field, an operator, a value, Not and
@@ -379,7 +391,8 @@ pub fn dialogs(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &m
     let mut filters_open = st.filters_open;
     Floater::new(
         &format!("inventory_filters_{}", st.ui_id),
-        aurora_i18n::tr!("ui-inventory-controls-inventory-filters"),
+        // Folderstorm: a custom tab's editor is named after it
+        super::custom_tabs::filters_title(st).unwrap_or_else(|| aurora_i18n::tr!("ui-inventory-controls-inventory-filters").to_owned()),
         screen.center() - filters_size / 2.0,
         filters_size,
     )
@@ -393,6 +406,7 @@ pub fn dialogs(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &m
                     super::smart_builder::show(ui, p, st);
                     return;
                 }
+                let custom_tab = super::custom_tabs::editing(st); // Folderstorm: custom Inventory tabs
                 let f = &mut st.filters;
                 ui.label(RichText::new(aurora_i18n::tr!("ui-inventory-controls-item-types")).color(p.muted));
                 ui.horizontal(|ui| {
@@ -525,7 +539,8 @@ pub fn dialogs(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &m
                     if flat_button(ui, p, aurora_i18n::tr!("common-reset")).clicked() {
                         *f = Filters::default();
                     }
-                    if flat_button(ui, p, aurora_i18n::tr!("ui-inventory-controls-keep-by-default")).clicked() {
+                    // Folderstorm: a custom tab remembers its filters by itself
+                    if !custom_tab && flat_button(ui, p, aurora_i18n::tr!("ui-inventory-controls-keep-by-default")).clicked() {
                         prefs.filters_for_mut(st.tab).clone_from(f);
                     }
                 });
