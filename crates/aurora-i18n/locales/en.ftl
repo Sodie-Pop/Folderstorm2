@@ -1262,6 +1262,14 @@ folderstorm-viewport-mouselook = Keep the viewport in mouselook
 folderstorm-viewport-mouselook-help = Off, mouselook uses the whole window.
 folderstorm-viewport-bars = Keep the bars inside the viewport
 folderstorm-viewport-bars-help = The top, bottom and side bars stay over the world instead of stretching across the whole window.
+folderstorm-viewport-diagram = Window and monitors
+folderstorm-viewport-diagram-help = Drag an edge of the world to move that margin: it snaps to the monitors' borders and the window's sides, and stops before the world gets under a quarter of the window. Escape during a drag puts the margin back. Click a monitor to select it; a double click puts the world on it.
+folderstorm-viewport-put-world = Put the world on this monitor
+folderstorm-viewport-put-world-on = Put the world on monitor { $n }
+folderstorm-viewport-monitor-scaled = { $width }×{ $height } · { $percent } %
+folderstorm-viewport-not-under = This monitor is not under the viewer window.
+folderstorm-viewport-too-small = Too little of this monitor is under the viewer window.
+folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
