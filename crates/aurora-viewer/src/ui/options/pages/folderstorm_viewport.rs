@@ -1,9 +1,11 @@
 //! Folderstorm: Preferences › Layout › Bars and windows › World viewport
 //! (`crate::folderstorm::viewport`). Folderstorm (C++) had these under
-//! Move & View › Layout.
+//! Move & View › Layout. The diagram (`crate::folderstorm::diagram`) shows
+//! under the switch as soon as the viewport is on; the margin sliders stay
+//! behind the cog as the keyboard route and edit the same settings.
 
 use super::super::cx::{Cx, field, fields};
-use crate::folderstorm::viewport;
+use crate::folderstorm::{diagram, viewport};
 
 pub(super) fn group(cx: &mut Cx) {
     use aurora_i18n::tr;
@@ -66,6 +68,25 @@ pub(super) fn group(cx: &mut Cx) {
                 &field!(folderstorm_viewport.bars_in_viewport),
             );
         });
+        // the diagram shows as soon as the viewport is on, without opening
+        // the cog (the sliders and switches stay behind it)
+        if !off {
+            let p = cx.p;
+            cx.below().row(
+                tr!("folderstorm-viewport-diagram"),
+                tr!("folderstorm-viewport-diagram-help"),
+                &fields!(
+                    folderstorm_viewport.left,
+                    folderstorm_viewport.right,
+                    folderstorm_viewport.top,
+                    folderstorm_viewport.bottom
+                ),
+                |ui, s| {
+                    let desktop = diagram::desktop(ui.ctx());
+                    diagram::widget::show(ui, &p, &mut s.folderstorm_viewport, &desktop)
+                },
+            );
+        }
     });
 }
 

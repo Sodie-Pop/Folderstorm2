@@ -83,25 +83,36 @@ impl App {
 }
 
 /// Tells Preferences where the window and the monitors are, about once a
-/// second (listing the monitors is a system call).
+/// second (listing the monitors is a system call): the "Fit to a monitor"
+/// buttons and the diagram. In a demo run, `AURORA_DEMO_MONITORS` pretends
+/// the monitors (`crate::folderstorm::diagram::parse_demo_monitors`).
 pub(super) fn publish_monitors(ctx: &egui::Context, window: &winit::window::Window, frame: u64) {
+    use crate::folderstorm::diagram::{self, Desktop, Monitor};
     if !frame.is_multiple_of(60) {
         return;
     }
-    // (Wayland gives no window position: no "Fit to a monitor" there)
-    let Ok(at) = window.inner_position() else { return };
     let size = window.inner_size();
-    let monitors = window
-        .available_monitors()
-        .map(|m| [m.position().x, m.position().y, m.size().width as i32, m.size().height as i32])
-        .collect();
-    viewport::set_monitors(
-        ctx,
-        viewport::MonitorLayout {
-            window: [at.x, at.y, size.width as i32, size.height as i32],
-            monitors,
+    let size = (size.width, size.height);
+    let desktop = match diagram::demo_monitors() {
+        Some(demo) => demo.desktop(size),
+        None => Desktop {
+            window: size,
+            // (Wayland gives no window position: the diagram shows the
+            // window alone, and there is no "Fit to a monitor")
+            position: window.inner_position().ok().map(|at| (at.x, at.y)),
+            monitors: window
+                .available_monitors()
+                .map(|m| Monitor {
+                    rect: [m.position().x, m.position().y, m.size().width as i32, m.size().height as i32],
+                    scale: m.scale_factor() as f32,
+                })
+                .collect(),
         },
-    );
+    };
+    if let Some(layout) = desktop.monitor_layout() {
+        viewport::set_monitors(ctx, layout);
+    }
+    diagram::set_desktop(ctx, desktop);
 }
 
 /// The camera's view-projection carried into window coordinates: points the

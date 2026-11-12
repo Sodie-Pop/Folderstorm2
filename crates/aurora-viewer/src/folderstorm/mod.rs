@@ -3,4 +3,5 @@
 //! reach them through one-line hooks marked `// Folderstorm:`.
 
 pub mod chat_upload;
+pub mod diagram;
 pub mod viewport;

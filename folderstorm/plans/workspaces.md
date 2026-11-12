@@ -527,8 +527,8 @@ All in the demo's own settings; nothing reaches the user's.
 
 | Variable | What it shows | CP |
 |---|---|---|
-| `AURORA_DEMO_MONITORS="x,y,w,h[@scale];…"` | Pretend monitors (unequal, negative coordinates, a missing one) for the diagram and monitor matching, without the hardware | 2 |
-| `AURORA_DEMO_OPTIONS=layout/0` | Opens the World viewport group with the diagram (existing mechanism) | 2 |
+| `AURORA_DEMO_MONITORS="WxH[+X+Y][@scale],…[,window+X+Y]"` or `wayland` (syntax in `docs/TESTING.md`) | Pretend monitors (unequal, negative coordinates, a missing one) for the diagram and monitor matching, without the hardware | 2 |
+| `AURORA_DEMO_OPTIONS=layout/0:cogs` | Opens the World viewport group with the diagram (existing mechanism) | 2 |
 | `AURORA_DEMO_LAYOUTS=1` | Seeds "Wide" (world on the right half, Inventory and map on the left) and "Single" (viewport off, windows on one screen); opens the Layouts tab. Try with `AURORA_WINDOW_SIZE=3840,1080` | 3 |
 | `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide" | 4 |
 | `AURORA_DEMO_SWITCHER=1` | Opens the switcher on the seeded entries | 5 |

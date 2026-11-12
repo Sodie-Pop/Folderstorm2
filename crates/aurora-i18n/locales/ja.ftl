@@ -1247,6 +1247,14 @@ folderstorm-viewport-mouselook = マウスルックでも表示領域を保つ
 folderstorm-viewport-mouselook-help = オフにすると、マウスルックはウィンドウ全体を使います。
 folderstorm-viewport-bars = バーを表示領域内に保つ
 folderstorm-viewport-bars-help = 上、下、横のバーをウィンドウ全体に広げず、ワールドの上に表示します。
+folderstorm-viewport-diagram = ウィンドウとモニタ
+folderstorm-viewport-diagram-help = ワールドの端をドラッグすると、その側の余白が変わります。モニタの境界とウィンドウの端に吸着し、ワールドがウィンドウの４分の１未満になる手前で止まります。ドラッグ中にEscapeキーを押すと余白が元に戻ります。モニタをクリックすると選択し、ダブルクリックするとワールドをそのモニタに表示します。
+folderstorm-viewport-put-world = このモニタにワールドを表示
+folderstorm-viewport-put-world-on = モニタ{ $n }にワールドを表示
+folderstorm-viewport-monitor-scaled = { $width }×{ $height }・{ $percent }％
+folderstorm-viewport-not-under = このモニタはビューアのウィンドウの下にありません。
+folderstorm-viewport-too-small = ビューアのウィンドウの下にあるこのモニタの部分が小さすぎます。
+folderstorm-viewport-set-aside = この余白ではワールドがウィンドウの４分の１未満になるため、今はワールドがウィンドウ全体に表示されます。
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります
