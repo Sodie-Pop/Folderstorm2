@@ -217,7 +217,7 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::folderstorm_session::hotkeys::{State, Wanted};
+    use ::folderstorm_session::hotkeys::{Chord, Key, State, Wanted};
 
     #[test]
     fn without_a_hook_nothing_is_pressed_and_every_hotkey_has_an_answer() {
@@ -236,5 +236,84 @@ mod tests {
         registrar.apply(&Config { enabled: false, ..config });
         assert!(Action::all().all(|action| registrar.outcome(action).is_none()));
         assert!(matches!(plan[0], Wanted::Chord(_)));
+    }
+
+    /// The physical key of a hotkey, as the viewer's bindings name it.
+    fn code(key: Key) -> winit::keyboard::KeyCode {
+        use winit::keyboard::KeyCode as K;
+        const DIGITS: [K; 10] = [
+            K::Digit0,
+            K::Digit1,
+            K::Digit2,
+            K::Digit3,
+            K::Digit4,
+            K::Digit5,
+            K::Digit6,
+            K::Digit7,
+            K::Digit8,
+            K::Digit9,
+        ];
+        const FUNCTIONS: [K; 12] = [
+            K::F1,
+            K::F2,
+            K::F3,
+            K::F4,
+            K::F5,
+            K::F6,
+            K::F7,
+            K::F8,
+            K::F9,
+            K::F10,
+            K::F11,
+            K::F12,
+        ];
+        match key {
+            Key::Digit(d) => DIGITS[usize::from(d)],
+            Key::Function(n @ 1..=12) => FUNCTIONS[usize::from(n) - 1],
+            Key::PageUp => K::PageUp,
+            Key::PageDown => K::PageDown,
+            other => panic!("no key code for {other} in this test"),
+        }
+    }
+
+    /// The viewer's default binding a hotkey would take from it while the
+    /// host holds the key: a press bound to exactly those keys, or a held
+    /// action (walking, the camera) that those keys would start.
+    fn taken_from_the_viewer(chord: Chord) -> Option<crate::keybinds::Action> {
+        use crate::keybinds::{Input, KeyBindings, Mods, all_actions};
+        let bindings = KeyBindings::default();
+        let input = Input::key(code(chord.key));
+        let mods = Mods {
+            ctrl: chord.ctrl,
+            shift: chord.shift,
+            alt: chord.alt,
+        };
+        let down = std::collections::HashSet::from([input.clone()]);
+        // (the HUD gesture is Ctrl itself, held with any key: not a key's)
+        bindings.triggered(&input, mods).or_else(|| {
+            all_actions()
+                .filter(|action| *action != crate::keybinds::Action::HudDrag)
+                .find(|action| bindings.held(*action, &down, mods))
+        })
+    }
+
+    /// The default hotkeys are keys of none of the viewer's default
+    /// bindings: holding them in every program takes nothing from a
+    /// character's own window. (The Build tools' fixed keys, Ctrl+1 to
+    /// Ctrl+5, B, D, L…, and the menus' Ctrl+Shift+digit consoles use no
+    /// function key either.)
+    #[test]
+    fn the_default_hotkeys_take_no_key_of_the_viewer() {
+        for (action, chord) in Config::default().bindings() {
+            assert_eq!(taken_from_the_viewer(chord), None, "{action:?}: {chord}");
+            assert!(matches!(chord.key, Key::Function(_)), "{chord}");
+            assert!(chord.ctrl && chord.shift && !chord.alt, "{chord}");
+        }
+        // the check sees a clash: checkpoint 4's Ctrl+Alt+PageUp turned the
+        // camera (Alt+PageUp), Ctrl+Shift+1 is the Performance window
+        let first = |text: &str| Chord::parse(text).expect("a hotkey");
+        assert!(taken_from_the_viewer(first("Ctrl+Alt+PageUp")).is_some());
+        assert!(taken_from_the_viewer(first("Ctrl+Alt+PageDown")).is_some());
+        assert!(taken_from_the_viewer(first("Ctrl+Shift+1")).is_some());
     }
 }

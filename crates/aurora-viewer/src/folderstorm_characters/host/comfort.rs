@@ -126,7 +126,7 @@ mod tests {
         host.apply_hotkeys();
         assert_eq!(host.hotkey_problems(), 0, "the defaults are sound");
         assert!(host.desk.set_hotkey(Action::Next, "banana"));
-        assert!(host.desk.set_hotkey(Action::Previous, "Ctrl+Alt+1"));
+        assert!(host.desk.set_hotkey(Action::Previous, "Ctrl+Shift+F1"));
         host.apply_hotkeys();
         assert!(matches!(host.hotkey_state(Action::Next), State::Invalid(_)));
         assert_eq!(host.hotkey_state(Action::Previous), State::Duplicate(Action::Character(0)));

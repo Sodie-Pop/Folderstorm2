@@ -498,17 +498,17 @@ mod tests {
         let (drawn, _) = draw(&mut app, 1120, 900);
         assert!(shows(&drawn, "Global hotkeys"), "{drawn:?}");
         assert!(shows(&drawn, "Character 1") && shows(&drawn, "Next character") && shows(&drawn, "Previous character"));
-        assert!(shows(&drawn, "Ctrl+Alt+1") && shows(&drawn, "Ctrl+Alt+PageDown"));
+        assert!(shows(&drawn, "Ctrl+Shift+F1") && shows(&drawn, "Ctrl+Shift+F7"));
         assert!(!shows(&drawn, "Each character runs in its own viewer"), "the page takes the column");
         // (the tests register nothing: as on a system without them)
         assert!(shows(&drawn, "Windows only"));
         // a choice that is no hotkey, and one already used: both are told
         app.comfort_apply(Act::Hotkey(Action::Next, "ctrl+banana".into()), now);
-        app.comfort_apply(Act::Hotkey(Action::Previous, "ctrl + alt + 2".into()), now);
+        app.comfort_apply(Act::Hotkey(Action::Previous, "ctrl + shift + f2".into()), now);
         let (drawn, _) = draw(&mut app, 1120, 900);
         assert!(shows(&drawn, "banana"), "{drawn:?}");
         assert!(shows(&drawn, "Same keys as") && shows(&drawn, "which keeps them"));
-        assert_eq!(app.host.desk.hotkeys().text(Action::Previous), "Ctrl+Alt+2");
+        assert_eq!(app.host.desk.hotkeys().text(Action::Previous), "Ctrl+Shift+F2");
         assert_eq!(app.host.hotkey_problems(), 2);
         // and on the characters' page
         app.comfort_apply(Act::Page(Page::Characters), now);
@@ -519,7 +519,7 @@ mod tests {
         assert_eq!(app.host.hotkey_problems(), 0);
         app.comfort_apply(Act::HotkeysEnabled(false), now);
         assert!(!app.host.desk.hotkeys().enabled);
-        assert_eq!(app.host.desk.hotkeys().text(Action::Character(0)), "Ctrl+Alt+1");
+        assert_eq!(app.host.desk.hotkeys().text(Action::Character(0)), "Ctrl+Shift+F1");
         // the demo's "Try" does what the hotkey would
         app.host.desk.take_effects();
         app.comfort_apply(Act::Try(Action::Character(1)), now);
