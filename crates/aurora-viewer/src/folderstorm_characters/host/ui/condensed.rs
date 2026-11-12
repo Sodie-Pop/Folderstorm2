@@ -25,7 +25,6 @@ use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::host::{Phase, Quick, Slot, Voice};
 use ::folderstorm_session::ipc::Screen;
-use ::folderstorm_session::panels::Panel;
 use aurora_i18n::tr;
 use egui::{RichText, Vec2};
 use std::time::Instant;
@@ -174,12 +173,8 @@ impl Window_ {
                     faces::sign(ui, "message-circle-filled", p.violet_light, &tip);
                 }
                 if state.monitor.is_some() {
-                    let tip = if self.out(Panel::Monitors) {
-                        tr!("folderstorm-monitor-in-window")
-                    } else {
-                        tr!("folderstorm-condensed-monitor")
-                    };
-                    faces::sign(ui, "device-desktop-filled", p.muted, tip);
+                    // (checkpoint 9: its picture is in its own window)
+                    faces::sign(ui, "device-desktop-filled", p.muted, tr!("folderstorm-monitor-in-window"));
                 }
                 match desk.voice(slot) {
                     Voice::Allowed => {
@@ -234,6 +229,7 @@ mod tests {
     use super::*;
     use ::folderstorm_session::identity::Colour;
     use ::folderstorm_session::ipc::{AttentionItem, AttentionKind, AttentionList, Conversation, LineKind};
+    use ::folderstorm_session::panels::Panel;
 
     fn shows(drawn: &[String], text: &str) -> bool {
         drawn.iter().any(|t| t.contains(text))
@@ -370,26 +366,26 @@ mod tests {
     }
 
     #[test]
-    fn a_monitor_that_no_window_draws_asks_its_viewer_for_nothing() {
+    fn a_monitor_s_picture_is_in_its_own_window_whatever_the_layout() {
+        use super::super::monitor_windows::Seat;
         use ::folderstorm_session::host::Watch;
         let now = Instant::now();
         let mut app = window(host());
         running(&mut app, now);
         app.host.desk.set_monitor(1, Some(Default::default()));
-        // the cards draw the picture's box: the monitor is asked for
+        // neither the cards nor the lines draw a picture: nothing is
+        // asked until the monitor's own window shows it
         draw(&mut app, 1120, 1100);
         app.monitors_watch(now);
-        assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
-        // the lines do not: it is paused, the viewer's 3D off again
+        assert_eq!(app.host.desk.watch(1), Watch::Hidden);
         app.host.desk.set_condensed(true);
         let (drawn, _) = draw(&mut app, 1120, 1100);
         assert!(shows(&drawn, "2 · demo-2"));
         app.monitors_watch(now);
         assert_eq!(app.host.desk.watch(1), Watch::Hidden);
-        // with the monitors in their own window, they go on
-        app.host.desk.set_panel_out(Panel::Monitors, true);
-        app.panes[Panel::Monitors.index()] = Some(app.look.view());
-        draw_in(&mut app, Which::Pane(Panel::Monitors), 700, 520);
+        // its window draws it: asked, condensed or not
+        app.monitors.test_open(Seat::Slot(1), app.look.view());
+        draw_in(&mut app, Which::Monitor(1), 480, 300);
         app.monitors_watch(now);
         assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
     }

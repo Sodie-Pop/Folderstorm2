@@ -38,7 +38,7 @@ fn popping_a_panel_out_and_back_is_saved() {
     );
     // what is saved is what the next host starts with
     let next = Desk::new(desk.config());
-    assert!(next.panels().out(Panel::Chat) && !next.panels().out(Panel::Monitors));
+    assert!(next.panels().out(Panel::Chat) && !next.panels().out(Panel::Inbox));
     assert_eq!(next.panels().get(Panel::Chat).place, Some(place));
 }
 
@@ -51,13 +51,13 @@ fn closing_a_panel_s_window_never_quits_the_host_or_a_character() {
         desk.connected(slot, 1, now);
     }
     desk.set_panel_out(Panel::Controls, true);
-    desk.set_panel_out(Panel::Monitors, true);
+    desk.set_panel_out(Panel::Inbox, true);
     desk.take_effects();
     desk.panel_closed(Panel::Controls);
     let effects = desk.take_effects();
     assert!(matches!(effects.as_slice(), [Effect::Save]), "{effects:?}");
     assert!(!desk.panels().out(Panel::Controls));
-    assert!(desk.panels().out(Panel::Monitors));
+    assert!(desk.panels().out(Panel::Inbox));
     assert_eq!(desk.live(), 2);
     assert_eq!(desk.active(), Some(0));
     assert!(!desk.quitting());
@@ -68,7 +68,7 @@ fn closing_a_panel_s_window_never_quits_the_host_or_a_character() {
 #[test]
 fn a_file_with_a_place_no_window_has_starts_the_panel_at_its_first_size() {
     let mut config = Config::demo(1);
-    config.panels.monitors = PanelConfig {
+    config.panels.inbox = PanelConfig {
         out: true,
         place: Some(Place {
             position: Some([0, 0]),
@@ -76,7 +76,7 @@ fn a_file_with_a_place_no_window_has_starts_the_panel_at_its_first_size() {
         }),
     };
     let desk = Desk::new(config);
-    assert_eq!(desk.panels().get(Panel::Monitors), PanelConfig { out: true, place: None });
+    assert_eq!(desk.panels().get(Panel::Inbox), PanelConfig { out: true, place: None });
     // a settings file from before checkpoint 6 reads, panels docked
     let old: Config = serde_json::from_str(r#"{"slots": [], "stage": true}"#).expect("reads");
     assert_eq!(old.panels, crate::panels::Config::default());

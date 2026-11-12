@@ -96,6 +96,17 @@ pub fn natural_size(spec: Spec, chat: bool, scale: f64) -> [u32; 2] {
     [width.max(points(MIN_WIDTH)), points(HEADER) + height + chat]
 }
 
+/// The height of a monitor's window once its chat part is shown (`chat`)
+/// or hidden, from the height it has: it grows or shrinks by the chat
+/// part and keeps the width the user gave it; never lower than the header
+/// and the least picture.
+pub fn toggled_height(height: u32, chat: bool, scale: f64) -> u32 {
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    let points = |points: u32| (f64::from(points) * scale).round() as i64;
+    let change = if chat { points(CHAT) } else { -points(CHAT) };
+    (i64::from(height) + change).clamp(points(HEADER + MIN_PICTURE), 16_384) as u32
+}
+
 /// The cycling monitor in the settings file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -341,6 +352,20 @@ mod tests {
                 assert!(place_valid(&Place { position: None, size }));
             }
         }
+    }
+
+    #[test]
+    fn showing_the_chat_part_grows_the_window_by_it_and_hiding_it_shrinks_it() {
+        assert_eq!(toggled_height(HEADER + 270, true, 1.0), HEADER + 270 + CHAT);
+        assert_eq!(toggled_height(HEADER + 270 + CHAT, false, 1.0), HEADER + 270);
+        // a window the user made taller keeps what they added
+        assert_eq!(toggled_height(700, true, 1.0), 700 + CHAT);
+        assert_eq!(toggled_height(700, false, 2.0), 700 - 2 * CHAT);
+        // never lower than the header and the least picture
+        assert_eq!(toggled_height(200, false, 1.0), HEADER + MIN_PICTURE);
+        assert_eq!(toggled_height(0, false, 1.5), 180);
+        assert_eq!(toggled_height(u32::MAX, true, 1.0), 16_384);
+        assert_eq!(toggled_height(300, true, f64::NAN), 300 + CHAT);
     }
 
     #[test]

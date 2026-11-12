@@ -36,6 +36,11 @@
 //! hears the clicks on it ([`ToHost::Bar`]), and may ask a background
 //! character's window off the taskbar ([`Assignment::off_taskbar`]).
 //!
+//! Since protocol 5 (checkpoint 9) the bar's state says whether the
+//! cycling monitor is open, and a click may open or close it
+//! ([`bar::Request::Cycling`]). The monitors' own windows are the host's:
+//! nothing else changed on the link.
+//!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
 //! and bounded before anything shows it ([`Status::cleaned`]).
@@ -61,7 +66,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 4;
+pub const PROTOCOL: u32 = 5;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;

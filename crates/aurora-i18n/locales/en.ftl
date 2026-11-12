@@ -4368,7 +4368,7 @@ folderstorm-new-profile-done = Profile "{ $name }" made and added to the list. S
 folderstorm-new-profile-done-full = Profile "{ $name }" made. The list already holds { $max } characters: remove one to add it.
 folderstorm-new-profile-done-unreadable = The settings it was to start from could not be read, so it starts with the defaults.
 folderstorm-monitor = Monitor
-folderstorm-monitor-help = While this character is in the background, show a small picture of what its own viewer shows, a few times a second at most. Its 3D is drawn for those pictures only, and only while the monitor is on screen here. Nothing is recorded or saved, and nothing you do here reaches its window: use "Switch to".
+folderstorm-monitor-help = While this character is in the background, show a small picture of what its own viewer shows, in a window of its own, a few times a second at most. Its 3D is drawn for those pictures only, and only while that window is on screen. Nothing is recorded or saved, and nothing you do on the picture reaches its window: use "Switch".
 folderstorm-monitor-rate = { $rate } / s
 folderstorm-monitor-age-now = just now
 folderstorm-monitor-age = { $seconds } s ago
@@ -4386,14 +4386,51 @@ folderstorm-monitor-no-viewer = Its viewer is not running.
 folderstorm-monitor-hidden = paused
 folderstorm-monitor-too-many = At most { $max } monitors run at once.
 folderstorm-monitor-not-answering = its viewer does not answer
-folderstorm-monitor-in-window = Its picture is in the Monitors window.
-folderstorm-panel-monitors = Monitors
+folderstorm-monitor-in-window = Its picture is in its own window.
+folderstorm-monitor-switch-help = Switch to this character. This window then shows the character that was active.
+folderstorm-monitor-chat-show = Show this character's chat
+folderstorm-monitor-chat-hide = Hide the chat
+folderstorm-monitor-options = Options
+folderstorm-monitor-show-chat = Show chat
+folderstorm-monitor-budget-note = All monitors share one budget: with more monitors, larger pictures or higher rates, each one gets fewer pictures a second.
+folderstorm-monitor-use-as-defaults = Use this size and rate as monitor defaults
+folderstorm-monitor-use-as-defaults-help = A monitor that is opened later starts with this size and rate.
+folderstorm-monitor-are-defaults = This size and rate are the monitor defaults.
+folderstorm-monitors-page-heading = Monitors
+folderstorm-monitors-page-intro = What a new monitor opens with, and the cycling monitor. Each monitor's own size, rate and chat are in its window's options.
+folderstorm-monitors-page-defaults = A new monitor opens with
+folderstorm-cycling-intro = One window that shows each character behind the active one in turn.
+folderstorm-cycling-open = Open the cycling monitor
+folderstorm-cycling-interval = Show each character for
+folderstorm-cycling-seconds = { $seconds } s
+folderstorm-cycling-spec = Its pictures
+folderstorm-cycling-pause-typing = Pause cycling while typing
+folderstorm-cycling-pause-typing-help = While you type in the cycling monitor's chat, it stays on the same character until your line is sent or erased. Either way, a line is only ever said by the character it was typed for.
+folderstorm-cycling-nobody = No character is in the world behind the active one.
+folderstorm-cycling-nobody-short = Nobody to show
+folderstorm-cycling-previous = Previous character
+folderstorm-cycling-next = Next character
+folderstorm-cycling-pause = Stay on this character
+folderstorm-cycling-resume = Paused on this character. Click to go on cycling.
+folderstorm-cycling-typing = Paused while you type here: the character does not change under your text.
+folderstorm-chips-close = Close
+folderstorm-chips-close-help = Close this conversation here. It stays open in the character's own window, and comes back here with its next message.
+folderstorm-chips-pin = Pin
+folderstorm-chips-unpin = Unpin
+folderstorm-chips-more-heading = More conversations
+folderstorm-chips-more-help = { $count ->
+        [one] 1 more conversation
+       *[other] { $count } more conversations
+    }
+folderstorm-chips-more-unread-help = { $count ->
+        [one] 1 more conversation, with something unread
+       *[other] { $count } more conversations, { $unread } with something unread
+    }
 folderstorm-panel-own-window = In a window of its own:
 folderstorm-panel-own-window-help = Shows this part in a separate window that you can place anywhere, on another screen for instance. Closing that window, or "Dock back", brings it back here. The characters' own windows do not change.
 folderstorm-panel-out = In a window of its own: { $panel }
 folderstorm-panel-dock = Dock back
 folderstorm-panel-dock-help = Back into the host's window. Closing this window does the same.
-folderstorm-panel-monitors-empty = No monitor is open. Tick "Monitor" on a character to see its picture here.
 folderstorm-inbox = Inbox
 folderstorm-inbox-intro = answered in each character's own window
 folderstorm-inbox-help = What waits for an answer in the characters' own windows: offers, teleport and friendship requests, scripts' dialogs and permission questions, calls. Nothing is accepted or declined from here: "Switch to answer" brings that character forward. A question leaves the list once it is answered, or expires, there. "Dismiss" only takes it out of this list: it still waits in the character's window.
@@ -4440,7 +4477,6 @@ folderstorm-condensed-waiting = { $count ->
         [one] 1 question waits for an answer in its own window
        *[other] { $count } questions wait for an answer in its own window
     }
-folderstorm-condensed-monitor = Its monitor is open. Its picture is in the cards, or in the Monitors window; here it is paused.
 folderstorm-condensed-more-in-cards = "Cards" has what can be done about it.
 folderstorm-bar-title = Character controls
 folderstorm-bar-inactive = Inactive
@@ -4461,7 +4497,6 @@ folderstorm-bar-monitors = Monitors
 folderstorm-bar-monitors-help = Small live views of the characters behind the active one.
 folderstorm-bar-monitors-open-all = Open all inactive monitors
 folderstorm-bar-monitors-cycling = Cycling monitor
-folderstorm-bar-monitors-cycling-help = Not built yet: it comes with the monitors' own windows.
 folderstorm-bar-monitors-close-all = Close all monitors
 folderstorm-bar-monitors-settings = Monitor settings…
 folderstorm-bar-settings = Settings

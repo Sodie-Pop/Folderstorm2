@@ -130,7 +130,9 @@ impl Window_ {
             // (their windows open at the next wait, in front: asked for)
             Request::Chat(true) => self.bar.raise = Some(Which::Pane(Panel::Chat)),
             Request::Inbox => self.bar.raise = Some(Which::Pane(Panel::Inbox)),
-            Request::Monitor(_, true) | Request::OpenMonitors => self.bar.raise = Some(Which::Pane(Panel::Monitors)),
+            // (checkpoint 9: each monitor's own window)
+            Request::Monitor(slot, true) => self.bar.raise = Some(Which::Monitor(usize::from(slot))),
+            Request::Cycling(true) => self.bar.raise = Some(Which::Cycling),
             Request::Dock(false) => self.bar.raise = Some(Which::Bar),
             _ => {}
         }
@@ -145,19 +147,14 @@ impl Window_ {
         match page {
             bar::Page::Bar => self.comfort.page = Page::Bar,
             bar::Page::Hotkeys => self.comfort.page = Page::Hotkeys,
-            bar::Page::Monitors => {
-                // each monitor's size and rate are in its character's card
-                self.comfort.page = Page::Characters;
-                if self.host.desk.condensed() {
-                    self.host.desk.set_condensed(false);
-                    if let Some(window) = &self.main.window {
-                        window.set_min_inner_size(Some(super::min_size(false)));
-                    }
-                }
-            }
+            // (checkpoint 9: the monitors have a page of their own)
+            bar::Page::Monitors => self.comfort.page = Page::Monitors,
             bar::Page::Host => raise = Which::Main,
             bar::Page::Quit => {
                 raise = Which::Main;
+                // (the question is asked under the characters, not under
+                // one of their pages)
+                self.comfort.page = Page::Characters;
                 if self.host.desk.live() == 0 {
                     // nothing runs: nothing to ask
                     self.host.exit = true;
@@ -836,12 +833,11 @@ mod tests {
             (LabelMode::IconAndText, LabelMode::IconOnly)
         );
         assert!(!config.one_taskbar_button && !config.hide_host && !app.host.desk.voice_follows());
-        // the hotkeys' page, and the monitors' settings: the cards
+        // the hotkeys' page, and the monitors' own (checkpoint 9)
         app.bar_apply(Request::Show(bar::Page::Hotkeys), now);
         assert!(app.comfort.page == Page::Hotkeys);
-        app.host.desk.set_condensed(true);
         app.bar_apply(Request::Show(bar::Page::Monitors), now);
-        assert!(app.comfort.page == Page::Characters && !app.host.desk.condensed());
+        assert!(app.comfort.page == Page::Monitors);
         // "Quit…" asks the usual question in the host's own window
         app.bar_apply(Request::Show(bar::Page::Quit), now);
         assert!(app.closing && !app.host.exit && !app.host.desk.quitting());
