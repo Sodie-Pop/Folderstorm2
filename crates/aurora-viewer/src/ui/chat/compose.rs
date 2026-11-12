@@ -145,6 +145,11 @@ pub(super) fn show(
                             let b = box_button(ui, p, "gif", aurora_i18n::tr!("ui-chat-gif"), st.gif_open);
                             super::gif_picker::button(&b, p, st);
                         }
+                        // Folderstorm: chat image upload (folderstorm/chat_upload)
+                        if crate::folderstorm::chat_upload::usable() {
+                            let b = box_button(ui, p, "photo-filled", aurora_i18n::tr!("fs-chat-upload-button"), false);
+                            crate::folderstorm::chat_upload::button(ui.ctx(), &b, conv_input);
+                        }
                         // narrow, only its icon. An IM has no attach button:
                         // inventory is given by dropping it on the
                         // conversation, which says so during the drag (#627)

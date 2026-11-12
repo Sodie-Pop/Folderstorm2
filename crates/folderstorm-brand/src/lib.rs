@@ -59,6 +59,14 @@ pub const KEYRING_LOGIN: &str = "Folderstorm2";
 pub const KEYRING_MFA: &str = "Folderstorm2 MFA";
 pub const KEYRING_CACHE: &str = "Folderstorm2 cache";
 pub const KEYRING_GITHUB: &str = "Folderstorm2 GitHub";
+/// The user's own token for the chat image host (FEATURES.md 3.3). The
+/// entry's account is the host's address: a token is only ever sent to the
+/// host it was saved for.
+pub const KEYRING_IMAGE_HOST: &str = "Folderstorm2 image host";
+
+/// The image host that chat image uploads go to by default (FEATURES.md
+/// 3.3): Folderstorm's Zipline. The user can choose another in Preferences.
+pub const IMAGE_HOST: &str = "https://images.sodie.online";
 
 /// The viewer channel sent to the grid at login and in viewer statistics
 /// (LLVersionInfo::getChannel). The Second Life third-party viewer policy
