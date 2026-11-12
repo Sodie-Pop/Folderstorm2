@@ -48,6 +48,7 @@ use crate::monitor::{self, FrameHeader, MAX_MONITORS};
 use crate::monitor_windows;
 use crate::panels;
 use crate::profile::ProfileName;
+use crate::settings;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -103,6 +104,13 @@ pub struct SlotConfig {
     /// Checkpoint 9: its monitor's own window (place, pin, chat part).
     #[serde(default, skip_serializing_if = "monitor_windows::Window::is_default")]
     pub monitor_window: monitor_windows::Window,
+    /// Checkpoint 10: its questions are listed in Attention.
+    #[serde(default = "settings::yes", skip_serializing_if = "settings::is_yes")]
+    pub attention: bool,
+    /// Checkpoint 10: what sounds the host's alert for it while another
+    /// character is active.
+    #[serde(default, skip_serializing_if = "settings::Alerts::is_default")]
+    pub alerts: settings::Alerts,
 }
 
 /// The host's settings file (`session-host.json`): the characters, and the
@@ -136,6 +144,15 @@ pub struct Config {
     /// Checkpoint 9: what a new monitor opens with, and the cycling
     /// monitor. (Each character's own monitor is with its character.)
     pub monitors: monitor_windows::Config,
+    /// Checkpoint 10: what the shared chat and the monitors' chat show.
+    pub chat_shown: settings::ChatShown,
+    /// Checkpoint 10: what is read by being shown, and the active
+    /// character's chats read after a while.
+    pub reading: settings::Reading,
+    /// Checkpoint 10: what Attention lists, and in which order.
+    pub attention: settings::Attention,
+    /// Checkpoint 10: the settings window's place and section.
+    pub settings_window: settings::Window,
 }
 
 impl Default for Config {
@@ -152,6 +169,10 @@ impl Default for Config {
             mute_background: false,
             voice_follows: true,
             monitors: monitor_windows::Config::default(),
+            chat_shown: settings::ChatShown::default(),
+            reading: settings::Reading::default(),
+            attention: settings::Attention::default(),
+            settings_window: settings::Window::default(),
         }
     }
 }
@@ -184,6 +205,8 @@ impl Config {
         self.panels = self.panels.cleaned();
         self.bar = self.bar.cleaned();
         self.monitors = self.monitors.cleaned();
+        self.reading = self.reading.cleaned();
+        self.settings_window = self.settings_window.cleaned();
         self
     }
 
@@ -201,6 +224,8 @@ impl Config {
                     colour: Colour::None,
                     alias: None,
                     monitor_window: monitor_windows::Window::default(),
+                    attention: true,
+                    alerts: settings::Alerts::default(),
                 })
                 .collect(),
             ..Self::default()
@@ -264,6 +289,10 @@ pub struct Slot {
     pub alias: Option<String>,
     /// Checkpoint 9: what is remembered of its monitor's window.
     pub monitor_window: monitor_windows::Window,
+    /// Checkpoint 10: its questions are listed in Attention.
+    pub attention: bool,
+    /// Checkpoint 10: what sounds the host's alert for it.
+    pub alerts: settings::Alerts,
     /// Its monitor is on screen in one of the host's windows.
     seen: bool,
     pub phase: Phase,
@@ -299,6 +328,8 @@ impl Slot {
             colour: Colour::None,
             alias: None,
             monitor_window: monitor_windows::Window::default(),
+            attention: true,
+            alerts: settings::Alerts::default(),
             seen: false,
             phase: Phase::Stopped,
             status: None,
@@ -416,6 +447,12 @@ pub struct Desk {
     voice_home: Option<usize>,
     /// Checkpoint 9: the monitors' defaults and the cycling monitor.
     monitors: monitor_windows::Config,
+    /// Checkpoint 10: what the chats show, reading, Attention, the
+    /// settings window.
+    chat_shown: settings::ChatShown,
+    reading: settings::Reading,
+    attention: settings::Attention,
+    settings_window: settings::Window,
     /// The character the cycling monitor shows on screen now.
     cycling_seen: Option<usize>,
     /// Monitors that moved from one character to another since the
@@ -495,6 +532,8 @@ mod monitor_window_tests;
 mod panel_tests;
 #[cfg(test)]
 mod polish_tests;
+#[cfg(test)]
+mod settings_tests;
 
 impl Desk {
     pub fn new(config: Config) -> Self {
@@ -508,6 +547,8 @@ impl Desk {
                     colour: s.colour,
                     alias: s.alias,
                     monitor_window: s.monitor_window,
+                    attention: s.attention,
+                    alerts: s.alerts,
                     ..Slot::new(name, s.standby)
                 });
             }
@@ -526,6 +567,10 @@ impl Desk {
             voice_follows: config.voice_follows,
             voice_home: None,
             monitors: config.monitors,
+            chat_shown: config.chat_shown,
+            reading: config.reading,
+            attention: config.attention,
+            settings_window: config.settings_window,
             cycling_seen: None,
             monitor_moves: Vec::new(),
             quitting: None,
@@ -547,6 +592,8 @@ impl Desk {
                     colour: s.colour,
                     alias: s.alias.clone(),
                     monitor_window: s.monitor_window,
+                    attention: s.attention,
+                    alerts: s.alerts,
                 })
                 .collect(),
             stage: self.stage,
@@ -559,7 +606,135 @@ impl Desk {
             mute_background: self.mute_background,
             voice_follows: self.voice_follows,
             monitors: self.monitors,
+            chat_shown: self.chat_shown,
+            reading: self.reading,
+            attention: self.attention,
+            settings_window: self.settings_window,
         }
+    }
+
+    /// Checkpoint 10: what the shared chat and the monitors' chat show.
+    pub fn chat_shown(&self) -> settings::ChatShown {
+        self.chat_shown
+    }
+
+    pub fn set_chat_shown(&mut self, shown: settings::ChatShown) {
+        if std::mem::replace(&mut self.chat_shown, shown) != shown {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: reading.
+    pub fn reading(&self) -> settings::Reading {
+        self.reading
+    }
+
+    pub fn set_reading(&mut self, reading: settings::Reading) {
+        let reading = reading.cleaned();
+        if std::mem::replace(&mut self.reading, reading) != reading {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: what Attention lists.
+    pub fn attention(&self) -> settings::Attention {
+        self.attention
+    }
+
+    pub fn set_attention(&mut self, attention: settings::Attention) {
+        if std::mem::replace(&mut self.attention, attention) != attention {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// A question of that kind, of that character, is listed in
+    /// Attention.
+    pub fn attention_lists(&self, slot: usize, kind: crate::ipc::AttentionKind) -> bool {
+        let included = self.slot(slot).is_none_or(|s| s.attention);
+        self.attention.lists(included, kind)
+    }
+
+    /// Checkpoint 10: the character's questions are listed in Attention.
+    pub fn set_attention_included(&mut self, slot: usize, included: bool) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.attention != included) {
+            s.attention = included;
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: what sounds the host's alert for the character.
+    pub fn set_alerts(&mut self, slot: usize, alerts: settings::Alerts) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.alerts != alerts) {
+            s.alerts = alerts;
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// A new line of that kind, in a conversation of that kind, of a
+    /// character that is not the active one, calls for the host's alert
+    /// by the character's own choice (the alert sounds when
+    /// [`Desk::chat_sound`] is on too).
+    pub fn alert_wanted(&self, slot: usize, conversation: crate::ipc::SessionKind, line: crate::ipc::LineKind) -> bool {
+        self.active != Some(slot) && self.slot(slot).is_some_and(|s| s.alerts.sounds(conversation, line))
+    }
+
+    /// Checkpoint 10: the settings window's place and section.
+    pub fn settings_window(&self) -> settings::Window {
+        self.settings_window
+    }
+
+    /// Changes what is remembered of the settings window; saved when that
+    /// changed something.
+    pub fn edit_settings_window(&mut self, edit: impl FnOnce(&mut settings::Window)) {
+        let mut window = self.settings_window;
+        edit(&mut window);
+        let window = window.cleaned();
+        if std::mem::replace(&mut self.settings_window, window) != window {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: two characters' cards may swap their places (their
+    /// numbers, for their hotkeys and quick actions): neither has a viewer
+    /// or an open monitor, so that nothing running changes number. Never
+    /// while "Quit all" is under way.
+    pub fn can_swap(&self, slot: usize, other: usize) -> bool {
+        let still = |s: &Slot| !s.has_process() && s.monitor.is_none();
+        slot != other && self.quitting.is_none() && self.slot(slot).is_some_and(still) && self.slot(other).is_some_and(still)
+    }
+
+    /// The card before (`up`) or after this character's, if any: the one
+    /// it would swap with.
+    pub fn neighbour_card(&self, slot: usize, up: bool) -> Option<usize> {
+        if up {
+            (0..slot).rev().find(|i| self.slot(*i).is_some())
+        } else {
+            (slot + 1..MAX_SLOTS).find(|i| self.slot(*i).is_some())
+        }
+    }
+
+    /// Two characters' cards swap their places ([`Desk::can_swap`]). Each
+    /// place keeps its own count of launches (what comes from an earlier
+    /// launch of a place is dropped by its number). True when they did.
+    pub fn swap_slots(&mut self, slot: usize, other: usize) -> bool {
+        if !self.can_swap(slot, other) {
+            return false;
+        }
+        self.slots.swap(slot, other);
+        let (a, b) = (
+            self.slots[slot].as_ref().map(|s| s.launch),
+            self.slots[other].as_ref().map(|s| s.launch),
+        );
+        if let (Some(a), Some(b)) = (a, b) {
+            if let Some(s) = self.slots[slot].as_mut() {
+                s.launch = b;
+            }
+            if let Some(s) = self.slots[other].as_mut() {
+                s.launch = a;
+            }
+        }
+        self.effects.push(Effect::Save);
+        true
     }
 
     /// The characters, with their slot numbers.
@@ -1265,6 +1440,14 @@ impl Desk {
             sound: s.sound,
             monitor: s.monitor,
             seen: s.seen,
+            // (the user's settings of the character are its own, whatever
+            // its launches: checkpoint 10 found the colour, the alias and
+            // the monitor's window dropped here)
+            colour: s.colour,
+            alias: s.alias.take(),
+            monitor_window: s.monitor_window,
+            attention: s.attention,
+            alerts: s.alerts,
             phase: Phase::Starting,
             ..Slot::new(s.profile.clone(), s.standby)
         };
@@ -1679,6 +1862,8 @@ mod tests {
             colour: Colour::None,
             alias: None,
             monitor_window: monitor_windows::Window::default(),
+            attention: true,
+            alerts: settings::Alerts::default(),
         };
         let config = Config {
             slots: vec![
