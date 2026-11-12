@@ -3,13 +3,28 @@
 //! for the app to run them, for the server's confirmation, for the avatar's
 //! bake. Polled once per frame with the time given, so the tests drive it
 //! without a clock or a window.
+//!
+//! The listener thread decided Allow / Ask / Never when the call arrived;
+//! the desk is the authority after that. It decides again with the levels
+//! in force (given each frame) when it takes a call, on every frame while
+//! the call waits, when Allow is clicked and just before the app sends it
+//! ([`Desk::recheck`]): any class now on Never refuses, a call not asked yet
+//! whose class now asks goes back to asking, and an Allow never answers a
+//! question already asked. A login change or access turned off refuses
+//! every call still waiting. A change already sent is never undone.
+//!
+//! Login binding (folderstorm/plans/mcp-receipts.md, section 2): a bound
+//! tool pinned by its sidecar to another `viewer_session` than the login's
+//! now is refused with `session_changed` when the desk takes it; once taken,
+//! a call belongs to the login generation it was taken under, and a login
+//! change refuses it with `session_changed` too.
 
 use super::changes::{self, Planned, Work};
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
-use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
+use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT, ToolSpec};
 use folderstorm_mcp_bridge::server::Pending;
-use folderstorm_mcp_bridge::{ErrorCode, ToolError};
+use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -100,12 +115,19 @@ pub struct Question {
     pub waiting: usize,
 }
 
+/// A change allowed, to run on this frame.
+struct Ready {
+    call: Pending,
+    /// For the dialog, should the levels ask first after all.
+    summary: String,
+}
+
 #[derive(Default)]
 pub struct Desk {
     asks: VecDeque<Asking>,
     asked: u64,
     /// Changes to run on this frame (allowed, or needing no question).
-    ready: Vec<Pending>,
+    ready: Vec<Ready>,
     sent: Vec<InFlight>,
     /// The change the app is sending now: answers arriving meanwhile are
     /// its own (the demo answers at once, inside the send).
@@ -115,20 +137,81 @@ pub struct Desk {
     journal: Journal,
     /// `inventory_landmark` calls waiting for their landmark (phase 3).
     landmarks: Vec<landmark::Wait>,
+    /// The user's levels in force ([`Desk::set_permissions`]); Read only
+    /// until the first frame gives them.
+    permissions: Permissions,
+    /// The login generation the waiting calls were taken under
+    /// ([`Desk::set_login`]).
+    login: u64,
+    /// That login's `viewer_session` (None while logged out), which a
+    /// bound call must be pinned to, when pinned at all.
+    session: Option<String>,
 }
 
 fn refused(message: &str) -> ToolError {
     ToolError::new(ErrorCode::PermissionDenied, message)
 }
 
+/// A class the call needs was set to Never while it waited.
+pub const PERMISSIONS_CHANGED: &str =
+    "the user changed the permissions in Preferences › Privacy › Local assistant while the call waited: refused, nothing was sent";
+/// The viewer logged out, or in again, while the call waited.
+pub const LOGIN_CHANGED: &str =
+    "the viewer's login changed while the call waited: refused, nothing was sent. Call viewer_status and look again before retrying";
+/// The user turned local assistant access off while the call waited.
+pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
+
+/// Every permission class a tool needs. One today; a tool needing two
+/// (a thumbnail from a picture: Edit and Camera) adds its second here.
+fn classes(spec: &ToolSpec) -> impl Iterator<Item = Class> {
+    spec.class.into_iter()
+}
+
+/// What the levels say of `call` now: any class on Never refuses, else any
+/// on Ask asks (once), else it runs. An unknown tool is refused.
+pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
+    let Some(spec) = protocol::tool(tool) else {
+        return Decision::Refuse;
+    };
+    classes(spec)
+        .map(|c| permissions.decide(c))
+        .fold(Decision::Run, |all, one| match (all, one) {
+            (Decision::Refuse, _) | (_, Decision::Refuse) => Decision::Refuse,
+            (Decision::Ask, _) | (_, Decision::Ask) => Decision::Ask,
+            _ => Decision::Run,
+        })
+}
+
 impl Desk {
+    /// The login changed under `call`: refused, with the login now.
+    fn login_changed(&self) -> ToolError {
+        ToolError {
+            viewer_session: self.session.clone(),
+            ..ToolError::new(ErrorCode::SessionChanged, LOGIN_CHANGED)
+        }
+    }
+
     /// A new call: a read is answered now; a change is checked, then asks
     /// the user or waits to run; `wait_for_bake` waits.
-    pub fn take(&mut self, call: Pending, cx: &Ctx, now: Instant) {
+    pub fn take(&mut self, mut call: Pending, cx: &Ctx, now: Instant) {
         let Some(spec) = protocol::tool(&call.tool) else {
             call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
             return;
         };
+        // pinned by its sidecar to another login than this one
+        if spec.bound()
+            && let Some(pinned) = &call.session
+            && self.session.as_deref() != Some(pinned.as_str())
+        {
+            let refusal = binding::session_changed(self.session.as_deref());
+            return call.answer(Err(refusal));
+        }
+        // the levels may have changed while the call was queued
+        match decision(&self.permissions, &call.tool) {
+            Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
+            Decision::Ask => call.ask = true,
+            Decision::Run => {}
+        }
         if call.tool == "wait_for_bake" {
             match bake_timeout(&call.arguments) {
                 Ok(wait) => self.bakes.push(BakeWait {
@@ -161,17 +244,80 @@ impl Desk {
                 reply,
                 ..
             }) => call.answer(Ok(reply)),
-            Ok(planned) if call.ask => {
-                self.asked += 1;
-                self.asks.push_back(Asking {
-                    number: self.asked,
-                    call,
-                    summary: planned.summary,
-                    deadline: now + ASK_TIMEOUT,
-                    decision: None,
-                });
+            Ok(planned) if call.ask => self.ask(call, planned.summary, now),
+            Ok(planned) => self.ready.push(Ready {
+                call,
+                summary: planned.summary,
+            }),
+        }
+    }
+
+    /// The user's levels in force, given each frame before the calls: the
+    /// calls waiting are decided again with them ([`Desk::tick`]).
+    pub fn set_permissions(&mut self, permissions: Permissions) {
+        self.permissions = permissions;
+    }
+
+    /// The login generation now and its `viewer_session`, given each frame
+    /// before the calls: when the generation moved, every call still
+    /// waiting (question, change not sent, bake wait) is refused with
+    /// `session_changed`. Changes already sent wait for their answer.
+    pub fn set_login(&mut self, generation: u64, session: Option<String>) {
+        self.session = session;
+        if generation == self.login {
+            return;
+        }
+        self.login = generation;
+        let refusal = self.login_changed();
+        self.refuse_waiting(&refusal);
+    }
+
+    fn refuse_waiting(&mut self, refusal: &ToolError) {
+        for ask in std::mem::take(&mut self.asks) {
+            ask.call.answer(Err(refusal.clone()));
+        }
+        for ready in std::mem::take(&mut self.ready) {
+            ready.call.answer(Err(refusal.clone()));
+        }
+        for wait in std::mem::take(&mut self.bakes) {
+            wait.call.answer(Err(refusal.clone()));
+        }
+    }
+
+    /// Access is turned off: every call still waiting is refused, the
+    /// changes already sent answer that they may still land, and the desk
+    /// starts empty.
+    pub fn close(&mut self) {
+        let mut old = std::mem::take(self);
+        old.refuse_waiting(&refused(ACCESS_OFF));
+        for flight in old.sending.take().into_iter().chain(old.sent) {
+            flight.call.answer(Err(ToolError::new(
+                ErrorCode::Timeout,
+                "the change was sent before local assistant access was turned off; it may still land: look again before retrying",
+            )));
+        }
+    }
+
+    /// Just before the app sends `call`'s change: decided again with the
+    /// levels and the login in force. Some: send it now. None: it was
+    /// refused, or it goes back to the dialog (its class asks now).
+    pub fn recheck(&mut self, call: Pending, login: u64, session: Option<String>, cx: &Ctx, now: Instant) -> Option<Pending> {
+        let moved = login != self.login;
+        self.set_login(login, session);
+        if moved {
+            call.answer(Err(self.login_changed()));
+            return None;
+        }
+        match decision(&self.permissions, &call.tool) {
+            Decision::Refuse => {
+                call.answer(Err(refused(PERMISSIONS_CHANGED)));
+                None
             }
-            Ok(_) => self.ready.push(call),
+            Decision::Ask if !call.ask => {
+                self.take(call, cx, now);
+                None
+            }
+            _ => Some(call),
         }
     }
 
@@ -191,9 +337,17 @@ impl Desk {
     /// The user's answer to question `number` (Allow, or Refuse / Escape /
     /// a click outside).
     pub fn decide(&mut self, number: u64, allow: bool) {
-        if let Some(ask) = self.asks.iter_mut().find(|a| a.number == number && a.decision.is_none()) {
-            ask.decision = Some(allow);
+        let Some(index) = self.asks.iter().position(|a| a.number == number && a.decision.is_none()) else {
+            return;
+        };
+        // an Allow for a class set to Never meanwhile refuses at once
+        if allow && decision(&self.permissions, &self.asks[index].call.tool) == Decision::Refuse {
+            if let Some(ask) = self.asks.remove(index) {
+                ask.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+            }
+            return;
         }
+        self.asks[index].decision = Some(allow);
     }
 
     /// Once per frame: settle the questions (answered or timed out), the
@@ -201,8 +355,16 @@ impl Desk {
     /// changes the app runs now.
     pub fn tick(&mut self, bake: &Bake, now: Instant) -> Vec<Pending> {
         for ask in std::mem::take(&mut self.asks) {
+            if decision(&self.permissions, &ask.call.tool) == Decision::Refuse {
+                // the dialog closes with it
+                ask.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+                continue;
+            }
             match ask.decision {
-                Some(true) => self.ready.push(ask.call),
+                Some(true) => self.ready.push(Ready {
+                    call: ask.call,
+                    summary: ask.summary,
+                }),
                 Some(false) => ask.call.answer(Err(refused("the user refused this change"))),
                 None if now >= ask.deadline => ask.call.answer(Err(refused(&format!(
                     "the user did not answer within {} seconds: refused",
@@ -222,13 +384,36 @@ impl Desk {
             }
         }
         for wait in std::mem::take(&mut self.bakes) {
-            if bake.settled() || now >= wait.deadline {
+            if decision(&self.permissions, &wait.call.tool) == Decision::Refuse {
+                wait.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+            } else if bake.settled() || now >= wait.deadline {
                 wait.call.answer(Ok(bake.answer()));
             } else {
                 self.bakes.push(wait);
             }
         }
-        std::mem::take(&mut self.ready)
+        let mut runs = Vec::new();
+        for ready in std::mem::take(&mut self.ready) {
+            match decision(&self.permissions, &ready.call.tool) {
+                Decision::Refuse => ready.call.answer(Err(refused(PERMISSIONS_CHANGED))),
+                // not asked yet, and its class asks now
+                Decision::Ask if !ready.call.ask => self.ask(ready.call, ready.summary, now),
+                _ => runs.push(ready.call),
+            }
+        }
+        runs
+    }
+
+    fn ask(&mut self, mut call: Pending, summary: String, now: Instant) {
+        call.ask = true;
+        self.asked += 1;
+        self.asks.push_back(Asking {
+            number: self.asked,
+            call,
+            summary,
+            deadline: now + ASK_TIMEOUT,
+            decision: None,
+        });
     }
 
     /// The app starts sending `call`'s change.

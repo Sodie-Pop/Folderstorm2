@@ -55,9 +55,9 @@ impl App {
     }
 
     fn local_assistant_run(&mut self, call: Pending) {
-        let planned = match mcp_bridge::replan(&call, &self.local_assistant_view()) {
-            Ok(planned) => planned,
-            Err(e) => return call.answer(Err(e)),
+        // decided again with the permissions and the login in force
+        let Some((call, planned)) = mcp_bridge::replan(call, &self.local_assistant_view()) else {
+            return;
         };
         let busy = |what: &str| {
             ToolError::new(

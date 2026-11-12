@@ -3,7 +3,15 @@
 //! call, check its permission class, then hand it to the viewer's frame
 //! thread through a bounded channel ([`Pending`]) and wait for the answer
 //! with a timeout. They never touch viewer state themselves.
+//!
+//! The frame thread tells the bridge the login it is on
+//! ([`Bridge::set_login`]); the bridge gives that login's `viewer_session`
+//! in `/v1/health`, refuses at once a bound call pinned to another one (the
+//! frame thread checks again: it is the authority), and answers each call
+//! with only the error codes its sidecar declares
+//! ([`ToolError::for_sidecar`]).
 
+use crate::binding::{self, Binding};
 use crate::discovery::{self, Discovery};
 use crate::http::{self, HttpError};
 use crate::policy::{Class, Decision, Permissions};
@@ -56,6 +64,10 @@ pub struct Pending {
     /// The name the MCP client gives itself, cleaned; None when it gave
     /// none. Any local program can claim any name.
     pub client: Option<String>,
+    /// The `viewer_session` the sidecar pinned; None: unbound (an older
+    /// sidecar, or nothing pinned yet). The frame thread refuses a bound
+    /// tool pinned to another login than its own.
+    pub session: Option<String>,
     reply: SyncSender<Result<Value, ToolError>>,
 }
 
@@ -70,6 +82,7 @@ impl Pending {
                 arguments,
                 ask,
                 client: client.and_then(clean_client),
+                session: None,
                 reply,
             },
             answer,
@@ -108,6 +121,8 @@ struct Shared {
     connections: AtomicUsize,
     activity: Mutex<VecDeque<Activity>>,
     queue: SyncSender<Pending>,
+    /// The login the frame thread is on, and its `viewer_session`.
+    binding: Mutex<Binding>,
 }
 
 /// The running bridge. Dropping it stops the listener and deletes the
@@ -137,6 +152,7 @@ impl Bridge {
             connections: AtomicUsize::new(0),
             activity: Mutex::new(VecDeque::new()),
             queue,
+            binding: Mutex::new(Binding::default()),
         });
         let discovery = match &config.discovery_dir {
             Some(dir) => Some(discovery::write(dir, &Discovery::new(config.pid, port, &shared.token))?),
@@ -187,6 +203,22 @@ impl Bridge {
         *self.shared.permissions.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The viewer's login now, from the frame thread once per frame: login
+    /// generation `generation`, logged in (or the demo) or not. A new
+    /// generation gets a new `viewer_session`.
+    pub fn set_login(&self, generation: u64, logged_in: bool) {
+        self.shared
+            .binding
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .update(generation, logged_in);
+    }
+
+    /// The `viewer_session` of the login now; None while logged out.
+    pub fn viewer_session(&self) -> Option<String> {
+        self.shared.viewer_session()
+    }
+
     /// The recent calls, newest last.
     pub fn activity(&self) -> Vec<Activity> {
         self.shared
@@ -227,6 +259,16 @@ impl Bridge {
 impl Drop for Bridge {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+impl Shared {
+    fn viewer_session(&self) -> Option<String> {
+        self.binding
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .session()
+            .map(str::to_owned)
     }
 }
 
@@ -324,6 +366,8 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
                 product: folderstorm_brand::PRODUCT.to_owned(),
                 version: shared.version.clone(),
                 read_allowed: permissions.check(Class::Read).is_ok(),
+                capabilities: Some(binding::capabilities()),
+                viewer_session: shared.viewer_session(),
             };
             serde_json::to_value(health).map_err(|_| ToolError::new(ErrorCode::Internal, "health not serialized"))
         }
@@ -334,7 +378,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
             if !probe {
                 record(shared, &call.tool, &result);
             }
-            result
+            result.map_err(|e| e.for_sidecar(call.features.as_ref()))
         }
         (_, "/v1/health" | "/v1/call") => Err(ToolError::new(ErrorCode::BadRequest, "wrong method")),
         _ => Err(ToolError::new(ErrorCode::NotFound, "no such endpoint")),
@@ -352,7 +396,31 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
     if protocol::NEVER.contains(&call.tool.as_str()) {
         return Err(ToolError::new(ErrorCode::PermissionDenied, protocol::NEVER_MESSAGE));
     }
-    let spec = protocol::tool(&call.tool).ok_or_else(|| ToolError::new(ErrorCode::UnknownTool, format!("unknown tool `{}`", call.tool)))?;
+    let Some(spec) = protocol::tool(&call.tool) else {
+        // a sidecar that knows capabilities only sends a tool it believes
+        // this viewer has: say plainly that the viewer is the older side
+        return Err(if call.features.is_some() {
+            ToolError::new(
+                ErrorCode::Unsupported,
+                format!(
+                    "the running {product} does not know the tool `{}`: update {product}; nothing was sent",
+                    call.tool,
+                    product = folderstorm_brand::PRODUCT
+                ),
+            )
+        } else {
+            ToolError::new(ErrorCode::UnknownTool, format!("unknown tool `{}`", call.tool))
+        });
+    };
+    // a fast refusal only: the frame thread decides again
+    if spec.bound()
+        && let Some(pinned) = &call.session
+    {
+        let current = shared.viewer_session();
+        if current.as_deref() != Some(pinned.as_str()) {
+            return Err(binding::session_changed(current.as_deref()));
+        }
+    }
     let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
     let ask = match permissions.decide_all(spec.classes()) {
         // a picture with the interface asks even on Allow
@@ -366,7 +434,11 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
         }
     };
     let (pending, answer) = Pending::detached(&call.tool, call.arguments.clone(), ask, None);
-    let pending = Pending { client, ..pending };
+    let pending = Pending {
+        client,
+        session: call.session.clone(),
+        ..pending
+    };
     match shared.queue.try_send(pending) {
         Ok(()) => {}
         Err(TrySendError::Full(_)) => return Err(ToolError::new(ErrorCode::Busy, "too many calls waiting for the viewer")),

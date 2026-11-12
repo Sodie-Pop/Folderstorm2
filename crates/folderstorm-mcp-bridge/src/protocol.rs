@@ -6,7 +6,13 @@
 //!   and the bridge listens (needs no permission class);
 //! - `POST /v1/call` with [`CallRequest`] → `{"ok":true,"result":…}` or
 //!   `{"ok":false,"error":ToolError}`.
+//!
+//! Every field added after the first release is optional and skipped when
+//! empty, so that an older side reads the wire as before (serde ignores the
+//! fields it does not know); [`crate::binding`] says how each side learns
+//! what the other one knows.
 
+use crate::binding::{self, Capabilities};
 use crate::policy::Class;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -23,6 +29,15 @@ pub struct CallRequest {
     pub tool: String,
     #[serde(default)]
     pub arguments: Value,
+    /// The `viewer_session` the sidecar pinned: a bound tool runs only on
+    /// that login ([`ToolSpec::bound`]). None: unbound, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    /// The sidecar's own capabilities. None: a sidecar older than
+    /// capability versions, which gets only the error codes it knows
+    /// ([`ErrorCode::for_sidecar`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub features: Option<Capabilities>,
 }
 
 /// `/v1/health`'s result.
@@ -33,6 +48,21 @@ pub struct Health {
     pub version: String,
     /// Whether inventory reads are allowed right now.
     pub read_allowed: bool,
+    /// The tool groups this viewer implements, and their versions. None: a
+    /// viewer older than capability versions ([`binding::assumed`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Capabilities>,
+    /// The login the viewer runs bound calls on now; None while logged out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer_session: Option<String>,
+}
+
+impl Health {
+    /// What the viewer implements, a viewer without the field counting as
+    /// [`binding::assumed`].
+    pub fn capabilities(&self) -> Capabilities {
+        self.capabilities.clone().unwrap_or_else(binding::assumed)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,6 +99,13 @@ pub enum ErrorCode {
     /// The bridge is stopping.
     Unavailable,
     Internal,
+    /// The call was bound to another login than the viewer's now (logged
+    /// out, in again, another character, or the bridge restarted): nothing
+    /// was sent. The error carries the current `viewer_session`.
+    SessionChanged,
+    /// The running viewer does not implement this tool (it is older than
+    /// the sidecar): nothing was sent.
+    Unsupported,
 }
 
 impl ErrorCode {
@@ -80,11 +117,33 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady => 409,
+            ErrorCode::NotReady | ErrorCode::SessionChanged => 409,
+            ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
             ErrorCode::Internal => 500,
             ErrorCode::Failed => 502,
+        }
+    }
+
+    /// A code added after the first release: the capability a sidecar
+    /// declares (`CallRequest::features`) to be sent it, and the older code
+    /// an older sidecar gets instead, since it reads an unknown code as an
+    /// unreadable error. None: every sidecar knows it.
+    pub fn fallback(self) -> Option<(&'static str, ErrorCode)> {
+        match self {
+            // both came with login binding, as `features` itself did
+            ErrorCode::SessionChanged => Some((binding::LOGIN_BINDING, ErrorCode::NotReady)),
+            ErrorCode::Unsupported => Some((binding::LOGIN_BINDING, ErrorCode::UnknownTool)),
+            _ => None,
+        }
+    }
+
+    /// This code as a sidecar declaring `features` may be sent it.
+    pub fn for_sidecar(self, features: Option<&Capabilities>) -> ErrorCode {
+        match self.fallback() {
+            Some((needs, older)) if !features.is_some_and(|f| f.contains_key(needs)) => older,
+            _ => self,
         }
     }
 }
@@ -95,6 +154,10 @@ impl ErrorCode {
 pub struct ToolError {
     pub code: ErrorCode,
     pub message: String,
+    /// `session_changed`: the viewer's `viewer_session` now (None while
+    /// logged out), which the sidecar pins next.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer_session: Option<String>,
 }
 
 impl ToolError {
@@ -102,7 +165,19 @@ impl ToolError {
         ToolError {
             code,
             message: message.into(),
+            viewer_session: None,
         }
+    }
+
+    /// This error as a sidecar declaring `features` may be sent it: an
+    /// older sidecar gets an older code, and today's fields only.
+    pub fn for_sidecar(mut self, features: Option<&Capabilities>) -> ToolError {
+        let code = self.code.for_sidecar(features);
+        if code != self.code {
+            self.code = code;
+            self.viewer_session = None;
+        }
+        self
     }
 }
 
@@ -125,6 +200,9 @@ pub struct ToolSpec {
     /// A second permission it needs too (a thumbnail from a picture: Edit
     /// and Camera); see `Permissions::decide_all`.
     pub also: Option<Class>,
+    /// The capability ([`crate::binding`]) whose version 1 brings it: the
+    /// sidecar sends it only to a viewer that advertises that group.
+    pub group: &'static str,
     /// Its JSON Schema (MCP `inputSchema`).
     pub schema: fn() -> Value,
     /// How long the viewer may take on top of the usual wait once the call
@@ -141,6 +219,14 @@ impl ToolSpec {
     /// Every permission class it needs.
     pub fn classes(&self) -> impl Iterator<Item = Class> {
         self.class.into_iter().chain(self.also)
+    }
+
+    /// Whether a call of it runs only on the login the sidecar pinned
+    /// (`CallRequest::session`). The health check (no class) answers on
+    /// whatever login is current: it is how the assistant looks again after
+    /// `session_changed`.
+    pub fn bound(&self) -> bool {
+        self.class.is_some()
     }
 }
 
@@ -441,6 +527,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: None,
         also: None,
         schema: no_arguments,
+        group: binding::INVENTORY,
         wait: NO_WAIT,
     },
     ToolSpec {
@@ -449,6 +536,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Read),
         also: None,
         schema: search_schema,
+        group: binding::INVENTORY,
         wait: NO_WAIT,
     },
     ToolSpec {
@@ -457,6 +545,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Read),
         also: None,
         schema: folder_schema,
+        group: binding::INVENTORY,
         wait: NO_WAIT,
     },
     ToolSpec {
@@ -465,6 +554,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Read),
         also: None,
         schema: item_schema,
+        group: binding::INVENTORY,
         wait: NO_WAIT,
     },
     ToolSpec {
@@ -473,6 +563,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Read),
         also: None,
         schema: no_arguments,
+        group: binding::INVENTORY,
         wait: NO_WAIT,
     },
     ToolSpec {
@@ -481,6 +572,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Read),
         also: None,
         schema: no_arguments,
+        group: binding::INVENTORY,
         wait: NO_WAIT,
     },
     ToolSpec {
@@ -489,6 +581,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Edit),
         also: None,
         schema: create_folder_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -497,6 +590,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Edit),
         also: None,
         schema: rename_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -505,6 +599,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Edit),
         also: None,
         schema: describe_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -513,6 +608,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Move),
         also: None,
         schema: to_folder_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -521,6 +617,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Move),
         also: None,
         schema: to_folder_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -529,6 +626,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Move),
         also: None,
         schema: to_folder_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -537,6 +635,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Trash),
         also: None,
         schema: ids_only_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -545,6 +644,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Trash),
         also: None,
         schema: ids_only_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -553,6 +653,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Wear),
         also: None,
         schema: outfit_wear_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -561,6 +662,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Wear),
         also: None,
         schema: outfit_take_off_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -569,6 +671,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Wear),
         also: None,
         schema: items_wear_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -577,6 +680,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Wear),
         also: None,
         schema: items_take_off_schema,
+        group: binding::INVENTORY,
         wait: CHANGE_WAIT,
     },
     ToolSpec {
@@ -585,6 +689,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Read),
         also: None,
         schema: bake_schema,
+        group: binding::INVENTORY,
         wait: Duration::from_secs(BAKE_WAIT_MAX),
     },
     ToolSpec {

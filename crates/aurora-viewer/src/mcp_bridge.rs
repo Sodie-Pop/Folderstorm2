@@ -14,6 +14,12 @@
 //! The camera, pictures and thumbnails (phase 3) are planned in [`camera`],
 //! sized and encoded in [`picture`], and wait in [`studio::Studio`] for the
 //! camera to stop, for their photo or for the gallery's snapshot.
+//!
+//! The desk decides every waiting call again with the permissions and the
+//! login in force ([`desk`], [`login`]). The bridge names each login with a
+//! `viewer_session` that the sidecar pins: a call pinned to another login is
+//! refused with `session_changed` (folderstorm/plans/mcp-receipts.md,
+//! section 2).
 
 pub mod ask;
 pub mod camera;
@@ -29,6 +35,7 @@ pub mod inventory_edits;
 pub mod inventory_reads;
 pub mod journal;
 pub mod landmark;
+pub mod login;
 pub mod picture;
 pub mod setup;
 pub mod studio;
@@ -42,7 +49,7 @@ mod world_tests;
 use crate::world::World;
 pub use desk::Desk;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
-use folderstorm_mcp_bridge::{Bridge, LocalAssistant, Preset, ToolError};
+use folderstorm_mcp_bridge::{Bridge, ErrorCode, LocalAssistant, Preset, ToolError};
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Mutex, PoisonError};
@@ -64,6 +71,8 @@ struct Runtime {
     desk: Desk,
     /// Camera moves, pictures and thumbnails waiting (phase 3).
     studio: studio::Studio,
+    /// The login generation the desk binds its calls to.
+    logins: login::Logins,
     /// "Use these settings for this session only": the settings in force
     /// instead of the saved ones until the viewer quits.
     session: Option<LocalAssistant>,
@@ -171,6 +180,7 @@ impl View<'_> {
             protected: self.protected.clone(),
             outfit_points: world.outfit_attachment_points(),
             stage: self.stage,
+            viewer_session: None,
         }
     }
 
@@ -182,6 +192,11 @@ impl View<'_> {
             object_props: &self.object_props,
             sounds: self.sounds,
         }
+    }
+
+    /// Logged in, or the demo: a login the calls can be bound to.
+    fn logged_in(&self) -> bool {
+        self.demo || self.world.login.is_some()
     }
 
     /// Where the last outfit change stands, for `wait_for_bake`.
@@ -218,11 +233,17 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             }
         }
         let wanted = rt.session.unwrap_or(*saved);
+        let generation = rt.logins.observe(view.world.login.as_ref());
         if !wanted.enabled {
             rt.failure = None;
-            rt.running = None;
-            // the waiting calls end with the bridge ("the call was dropped")
-            rt.desk = Desk::default();
+            // the calls waiting, queued or not, are refused, then the
+            // bridge stops
+            if let Some(running) = rt.running.take() {
+                while let Ok(call) = running.calls.try_recv() {
+                    call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
+                }
+            }
+            rt.desk.close();
             rt.studio.drop_calls();
             return Vec::new();
         }
@@ -246,9 +267,18 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         if running.bridge.permissions() != wanted.permissions {
             running.bridge.set_permissions(wanted.permissions);
         }
+        // before any call: the desk decides again with what is in force
+        running.bridge.set_login(generation, view.logged_in());
+        let session = running.bridge.viewer_session();
+        rt.desk.set_login(generation, session.clone());
+        rt.desk.set_permissions(wanted.permissions);
         let now = Instant::now();
         rt.studio.observe(view.camera, now);
         let mut cx = None;
+        let context = || tools::Ctx {
+            viewer_session: session.clone(),
+            ..view.context()
+        };
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
             if world::answers(&call.tool) {
@@ -257,7 +287,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 call.answer(result);
                 continue;
             }
-            let cx = cx.get_or_insert_with(|| view.context());
+            let cx = cx.get_or_insert_with(context);
             rt.desk.take(call, cx, now);
         }
         let demo_ready = !view.world.inventory.root.is_nil() && (!demo_camera() || view.stage.in_world);
@@ -276,7 +306,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             };
             for (tool, arguments) in requests {
                 let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
-                rt.desk.take(call, cx.get_or_insert_with(|| view.context()), now);
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
                 rt.demo_answers.push((tool, answer));
             }
         }
@@ -326,10 +356,28 @@ pub fn image_finished(request: Uuid, error: Option<&str>) {
     }
 }
 
-/// Plan a change again just before it runs: the inventory may have changed
-/// while the user read the dialog.
-pub fn replan(call: &Pending, view: &View) -> Result<changes::Planned, ToolError> {
-    changes::plan(&call.tool, &call.arguments, &view.context())
+/// Decide and plan a change again just before it is sent: the permissions,
+/// the login or the inventory may have changed while the user read the
+/// dialog. None: the call was answered, or it went back to the dialog.
+pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)> {
+    let cx = view.context();
+    let call = with(|rt| {
+        let Some(running) = &rt.running else {
+            call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
+            return None;
+        };
+        let generation = rt.logins.observe(view.world.login.as_ref());
+        running.bridge.set_login(generation, view.logged_in());
+        let session = running.bridge.viewer_session();
+        rt.desk.recheck(call, generation, session, &cx, Instant::now())
+    })?;
+    match changes::plan(&call.tool, &call.arguments, &cx) {
+        Ok(planned) => Some((call, planned)),
+        Err(e) => {
+            call.answer(Err(e));
+            None
+        }
+    }
 }
 
 /// A change starts: what the server answers while the app sends it belongs
@@ -363,7 +411,7 @@ pub fn observe(event: &aurora_net::NetEvent) {
 /// Stop the bridge and delete its discovery file (the viewer quits).
 pub fn shutdown() {
     with(|rt| {
-        rt.desk = Desk::default();
+        rt.desk.close();
         rt.studio = studio::Studio::default();
         rt.running = None;
     });

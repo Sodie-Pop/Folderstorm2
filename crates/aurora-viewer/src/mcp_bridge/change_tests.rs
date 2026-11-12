@@ -9,7 +9,7 @@ use crate::world::appearance::{self, Action};
 use crate::world::inventory::{FetchState, Folder, Inventory, actions};
 use aurora_net::inventory::{InvFolder, InvItem};
 use folderstorm_mcp_bridge::server::Pending;
-use folderstorm_mcp_bridge::{ErrorCode, ToolError};
+use folderstorm_mcp_bridge::{Class, ErrorCode, Level, Permissions, Preset, ToolError};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Receiver;
@@ -75,6 +75,7 @@ pub(super) fn ctx(inv: &Inventory) -> Ctx<'_> {
         protected: HashSet::new(),
         outfit_points: HashMap::new(),
         stage: Default::default(),
+        viewer_session: None,
     }
 }
 
@@ -518,12 +519,28 @@ const IDLE: Bake = Bake {
     server_bakes: true,
 };
 
+/// Every class that can on Allow, the rest as Read only leaves it.
+fn allow_all() -> Permissions {
+    let mut p = Permissions::default();
+    for class in Class::ALL {
+        p.set(class, Level::Allow);
+    }
+    p
+}
+
+/// A desk with these levels in force.
+fn desk_with(permissions: Permissions) -> Desk {
+    let mut desk = Desk::default();
+    desk.set_permissions(permissions);
+    desk
+}
+
 #[test]
 fn ask_shows_the_client_and_waits_for_the_answer() {
     let inv = demo_inventory();
     let cx = ctx(&inv);
     let now = Instant::now();
-    let mut desk = Desk::default();
+    let mut desk = desk_with(Preset::AskBeforeChanges.permissions());
     let rename = json!({"id": TEXTURE.to_string(), "name": "Brick"});
     let (a, refused_answer) = call("inventory_rename", rename.clone(), true);
     let (b, allowed_answer) = call("inventory_rename", rename.clone(), true);
@@ -555,7 +572,7 @@ fn ask_shows_the_client_and_waits_for_the_answer() {
 fn ask_refuses_after_sixty_seconds() {
     let inv = demo_inventory();
     let now = Instant::now();
-    let mut desk = Desk::default();
+    let mut desk = desk_with(Preset::AskBeforeChanges.permissions());
     let (a, answer) = call("inventory_trash", json!({"ids": [TEXTURE.to_string()]}), true);
     desk.take(a, &ctx(&inv), now);
     assert!(desk.tick(&IDLE, now + Duration::from_secs(59)).is_empty());
@@ -571,7 +588,7 @@ fn ask_refuses_after_sixty_seconds() {
 fn allowed_changes_run_at_once_and_refusals_need_no_question() {
     let inv = demo_inventory();
     let now = Instant::now();
-    let mut desk = Desk::default();
+    let mut desk = desk_with(allow_all());
     let (a, _) = call("inventory_trash", json!({"ids": [TEXTURE.to_string()]}), false);
     desk.take(a, &ctx(&inv), now);
     assert!(desk.question(now).is_none());
@@ -745,7 +762,7 @@ fn an_assistant_changes_the_demo_inventory_end_to_end() {
         (list, moved, trashed, deleted)
     });
     let mut inv = demo_inventory();
-    let mut desk = Desk::default();
+    let mut desk = desk_with(Preset::AskBeforeChanges.permissions());
     let mut questions = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(30);
     // the frame loop: never blocks on the assistant
@@ -794,3 +811,9 @@ fn an_assistant_changes_the_demo_inventory_end_to_end() {
     assert_eq!(activity.len(), 2, "the delete never reached the bridge");
     bridge.stop();
 }
+
+/// A waiting call decided again with the levels and the login in force.
+mod recheck;
+
+/// Calls bound to one login (`viewer_session`) and capability versions.
+mod binding;

@@ -121,7 +121,7 @@ Phase 1 (read):
 
 | Tool | Class | Returns |
 |---|---|---|
-| `viewer_status` | health | product, version, session state (logged out / logged in / demo), inventory usable, folders fetched / total, items known |
+| `viewer_status` | health | product, version, session state (logged out / logged in / demo), inventory usable, folders fetched / total, items known; `viewer_session` and `capabilities` (see "Login binding") |
 | `inventory_search` | read | items and folders whose name contains `query` (case-insensitive), filters `folder_id` / `path` (subtree), `type`, `include_library`, `include_trash`; `limit` ≤ 200, `truncated` flag |
 | `inventory_list_folder` | read | a folder by `folder_id` or `path` (root when neither): its subfolders and items (≤ 500), whether it is fetched |
 | `inventory_item` | read | one item: name, description, type, folder and path, creator, creation date, permissions, worn, link target; `asset_id` only per the rule above |
@@ -201,6 +201,52 @@ socket timeout follows the same table.
 Preferences shows every class under Custom now, with Allow / Ask / Never
 (Read: Allow / Never).
 
+### Permissions in force while a call waits
+
+The listener thread's Allow / Ask / Never is a fast refusal only: the frame
+thread (`mcp_bridge/desk.rs`) decides again with the levels in force when
+it takes a call, on every frame while the call waits, when Allow is
+clicked and in `App::local_assistant_run` just before the send
+(`mcp_bridge::replan` → `Desk::recheck`). For every class the call needs:
+
+- any class on Never: refused at once (`permission_denied`), its dialog
+  closes, a later click does nothing;
+- Ask → Allow while the call is asked or queued as asked: it still asks
+  (an Allow setting never answers an open question);
+- Allow → Ask for a call not asked yet: it goes back to asking;
+- access turned off: every waiting call, queued in the channel or not, is
+  refused (`permission_denied`, "access was turned off") instead of being
+  dropped; a change already sent answers `timeout` (it may still land);
+- another login (logout, login, another character): every waiting call
+  is refused (`session_changed`, "the viewer's login changed"; `not_ready`
+  for an older sidecar). The login generation (`mcp_bridge/login.rs`)
+  moves each time the frame sees `World::login` change.
+
+Anything already sent is never undone, but nothing more is sent. An
+approval covers that one call and never changes the saved levels.
+
+### Login binding and capability versions
+
+Checkpoint 2 of [mcp-receipts.md](mcp-receipts.md) (its "As built" has the
+details):
+
+- each login of a running bridge has a `viewer_session` (`vs-` and 32 hex
+  digits, random, new at each login and each bridge start), given by
+  `/v1/health` and `viewer_status`, absent while logged out;
+- the sidecar pins the first one it sees and sends it with every call; a
+  call of a tool with a class pinned to another login is refused
+  (`session_changed`, with the login now) and **never sent again** by the
+  sidecar: the assistant calls `viewer_status` and looks again.
+  `viewer_status` answers on any login;
+- after a refused connection or token, the viewer found again gets the
+  call only when it is on the pinned login (a restart never is);
+- both sides advertise `capabilities` (`{group: version}`; this build:
+  `inventory: 1`, `login_binding: 1`): the viewer in health and
+  `viewer_status`, the sidecar in each call. `tools/list` lists every tool
+  the sidecar knows; a tool whose group the viewer lacks answers
+  `unsupported` ("update Folderstorm2") without being sent. A sidecar that
+  declares no capabilities gets only the error codes it knows.
+
 ## Phase 3, part 1: camera and pictures
 
 FEATURES.md 4.4, after Folderstorm (C++)'s `doc/help.md` ("Asking for
@@ -272,8 +318,9 @@ Discovery: `FOLDERSTORM2_MCP_DISCOVERY` (a directory) overrides the default
 settings directory; `--viewer-pid` picks one viewer when several run;
 otherwise the newest file whose viewer answers is used.
 `folderstorm-mcp --diagnose [--viewer-pid N] [--discovery DIR]` prints one
-JSON line (stage reached, port, readiness; never the token) and exits 0 on
-success, 1 on failure, 2 on bad arguments.
+JSON line (stage reached, port, readiness, both sides' capabilities and
+what the viewer lacks, whether a login is bound; never the token) and exits
+0 on success, 1 on failure, 2 on bad arguments.
 
 ## Phase 3, part 2: inventory gaps
 
@@ -370,9 +417,9 @@ window's own command and rules; no new network message.
 
 | Where | What |
 |---|---|
-| `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
+| `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `binding` (`viewer_session`, capabilities), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
 | `crates/folderstorm-mcp/` | binary `folderstorm-mcp`: `jsonrpc` (MCP), `diagnose`, `main` |
-| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake), `ask` (the dialog) |
+| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake, decided again with the permissions in force), `login` (the login generation), `ask` (the dialog) |
 | `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id; phase 3: moves the camera, starts the assistant's photo jobs and the gallery's thumbnail snapshot |
 | `crates/aurora-viewer/src/mcp_bridge/{camera,picture,studio}.rs` | phase 3: the camera tools' arguments, presets and RLVa check; the picture's size, crop and encoding; the calls waiting for the camera, the photo or the thumbnail |
 | `crates/aurora-viewer/src/ui/options/pages/local_assistant.rs` | the Preferences group |
@@ -427,6 +474,8 @@ workspace uses them; `tempfile` for tests (already in the lock).
   TOML escaping of spaces, quotes, backslashes and Unicode), and an
   end-to-end test: sidecar logic → real socket → bridge → the adapter
   answering from the demo inventory.
+- login binding and capabilities: see the "As built" tests of
+  [mcp-receipts.md](mcp-receipts.md), checkpoint 2.
 - demo: `AURORA_DEMO_OPTIONS=privacy:local-assistant` opens the group;
   `AURORA_DEMO_MCP=1` also starts the bridge (session only) so its status
   and port show. Listed in `docs/TESTING.md`.
