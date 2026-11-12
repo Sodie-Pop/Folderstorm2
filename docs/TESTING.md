@@ -180,6 +180,11 @@ Check that the world, its HUDs and its name tags stay in the rectangle, the
 margins are dark, the bars sit inside it (except with `bars-window`), a click
 in a margin selects nothing, windows can be dragged into the margins, and the
 settings are under Preferences › Layout › Bars and windows › World viewport.
+`inventory` keeps the right 40 % for the world and opens Inventory in the left
+margin, half the window wide: wider than the world, it keeps its size (it is
+no longer shrunk to the world's width). Make the viewer window narrower and
+wider again: Inventory keeps its size unless it is wider than the whole window,
+and comes back to its place.
 
 **Chat image upload (Folderstorm2).** `AURORA_DEMO_CHAT_UPLOAD=1` turns the
 uploads on for the run with an uploader inside the viewer: nothing leaves the
@@ -5483,7 +5488,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MAP=1`, `mini` or words among `search:<text>`, `drawer:<tab>`, `landmarks`, `friend`, `legacy`, `switch`, `show-on-map`, `show-link`, `coordinates`, `beacon[-click|-offscreen]` | Maps, search, drawer, landmarks, followed friend, side panel layout, layout switched with the map open, Show on map, coordinate entry and clickable 3D beacon |
 | `AURORA_DEMO_NOTIF=1`, `AURORA_DEMO_STATUSMENU=1` or `invisible`, `AURORA_DEMO_MICMENU=1`, `AURORA_DEMO_NAVEDIT=1` | Notification list, status menu, microphone panel, location field |
 | `AURORA_DEMO_PARCEL_NAME=<text>` | Any parcel name in the place island (odd names, line breaks) |
-| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window |
+| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world) |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
