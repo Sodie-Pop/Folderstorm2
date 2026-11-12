@@ -161,6 +161,20 @@ pub const LOGIN_CHANGED: &str =
 /// The user turned local assistant access off while the call waited.
 pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
 
+/// Folderstorm: what [`Desk::review`] says of a call waiting outside the
+/// desk.
+#[derive(Debug)]
+pub enum Review {
+    /// It may go on.
+    Run,
+    /// Its classes ask now: a call not asked yet goes back to the desk
+    /// ([`Desk::take`]) before it acts.
+    Ask,
+    /// Refused (`session_changed`, or a class on Never): the refusal the
+    /// desk gives its own waiting calls.
+    Refuse(ToolError),
+}
+
 /// What the levels say of `call` now, for every class it needs
 /// (`ToolSpec::classes`: a thumbnail from a picture needs Edit and Camera):
 /// any class on Never refuses, else any on Ask asks (once), else it runs.
@@ -265,6 +279,28 @@ impl Desk {
         Some(call)
     }
 
+    /// Folderstorm: the login generation the desk binds its calls to now
+    /// (the studio binds its camera moves, pictures and thumbnail to it).
+    pub fn login(&self) -> u64 {
+        self.login
+    }
+
+    /// Folderstorm: a call that waits outside the desk (the studio's camera
+    /// moves, pictures and thumbnail, #21), taken under login generation
+    /// `login`, decided again by the desk's own rules: under another login
+    /// than the one now it is refused with `session_changed`; needing a
+    /// class now on Never it is refused; else what the levels say now.
+    pub fn review(&self, tool: &str, login: u64) -> Review {
+        if login != self.login {
+            return Review::Refuse(self.login_changed());
+        }
+        match decision(&self.permissions, tool) {
+            Decision::Refuse => Review::Refuse(refused(PERMISSIONS_CHANGED)),
+            Decision::Ask => Review::Ask,
+            Decision::Run => Review::Run,
+        }
+    }
+
     /// The user's levels in force, given each frame before the calls: the
     /// calls waiting are decided again with them ([`Desk::tick`]).
     pub fn set_permissions(&mut self, permissions: Permissions) {
@@ -317,18 +353,14 @@ impl Desk {
     /// levels and the login in force. Some: send it now. None: it was
     /// refused, or it goes back to the dialog (its class asks now).
     pub fn recheck(&mut self, call: Pending, login: u64, session: Option<String>, cx: &Ctx, now: Instant) -> Option<Pending> {
-        let moved = login != self.login;
+        let taken = self.login;
         self.set_login(login, session);
-        if moved {
-            call.answer(Err(self.login_changed()));
-            return None;
-        }
-        match decision(&self.permissions, &call.tool) {
-            Decision::Refuse => {
-                call.answer(Err(refused(PERMISSIONS_CHANGED)));
+        match self.review(&call.tool, taken) {
+            Review::Refuse(refusal) => {
+                call.answer(Err(refusal));
                 None
             }
-            Decision::Ask if !call.ask => {
+            Review::Ask if !call.ask => {
                 self.take(call, cx, now);
                 None
             }
