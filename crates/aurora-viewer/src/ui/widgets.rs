@@ -1832,7 +1832,24 @@ pub fn stretched_tabs(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labe
 }
 
 fn tabs_row(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labels: &[(&str, bool)], stretched: bool, compact: bool) -> bool {
+    tabs_row_responses(ui, p, selected, labels, stretched, compact).0
+}
+
+// Folderstorm: `tabs` that also gives each tab's response (right-click menus, custom_tabs.rs)
+pub fn tabs_with_responses(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labels: &[(&str, bool)]) -> (bool, Vec<egui::Response>) {
+    tabs_row_responses(ui, p, selected, labels, false, false)
+}
+
+fn tabs_row_responses(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    selected: &mut usize,
+    labels: &[(&str, bool)],
+    stretched: bool,
+    compact: bool,
+) -> (bool, Vec<egui::Response>) {
     let mut changed = false;
+    let mut responses = Vec::with_capacity(labels.len());
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         let n = labels.len().max(1) as f32;
@@ -1889,9 +1906,10 @@ fn tabs_row(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labels: &[(&st
                 *selected = i;
                 changed = true;
             }
+            responses.push(resp);
         }
     });
-    changed
+    (changed, responses)
 }
 
 /// Height of a `segmented` choice, room around its segments, and room

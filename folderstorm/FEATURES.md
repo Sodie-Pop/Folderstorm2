@@ -46,7 +46,7 @@ Needed before shipping any build. They also keep merges simple.
 
 | # | Feature | What it does | Aurora today | Source | Prio | Status |
 |---|---|---|---|---|---|---|
-| 2.1 | Custom Inventory tabs | "Customize tab…" beside the search box edits a custom tab's filters; the tab remembers filters and search; right-click a tab for Customize, Rename, Clone. | check | `doc/help.md` "Custom Inventory tabs" | P1 | ⬜ |
+| 2.1 | Custom Inventory tabs | "Customize tab…" beside the search box edits a custom tab's filters; the tab remembers filters and search; right-click a tab for Customize, Rename, Clone. | check | `doc/help.md` "Custom Inventory tabs" | P1 | 🔧 branch `claude/inventory-custom-tabs`: custom tabs in the Legacy and Aurora windows (strip, narrow tabs, wide shortcuts); Customize tab… beside the search box, Rename, Clone, Delete; saved in settings; demo `AURORA_DEMO_INVENTORY=custom-tabs`; awaiting your test on the grid |
 | 2.2 | Folder-scoped saved tabs | Save an Inventory tab scoped to chosen folders. | – | branch `codex/inventory-view-folders` | P2 | ⬜ |
 | 2.3 | Jump to folder | Go to an Inventory folder by typing its name or parent path. | check | branch `codex/inventory-folder-jump` | P1 | ✅ #3 |
 | 2.4 | Bulk review (rename / move) | Select 1–50 items → gear → Review bulk changes…: preview a rename pattern or a move; choose the destination by searching folder or parent name; exact before / after rows and skipped items before running. | – | `doc/help.md` "Review Inventory changes", `doc/local-assistant-bulk-inventory.md`, `doc/plans/bulk-inventory-review-and-history.md` | P1 | ✅ #7: native review (rename pattern, move, preview, rechecked execute); history and undo are 2.5 |
