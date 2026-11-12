@@ -374,6 +374,10 @@ mod tests {
             ..Default::default()
         };
         app.host.desk.status(slot, 1, status, now);
+        // a status comes over a live link, whose heartbeat comes with it:
+        // without it a slow test run passes the silence limit and the
+        // monitor says "not answering" instead
+        app.host.desk.heartbeat(slot, 1, 0, now);
     }
 
     fn shows(drawn: &[String], text: &str) -> bool {
