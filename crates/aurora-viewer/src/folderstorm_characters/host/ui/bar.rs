@@ -20,9 +20,10 @@
 //!   they are in it, never when it was asked for from the bar (until they
 //!   close it), never when no bar is left. A hidden host loses nothing:
 //!   its loop does not run on its window being drawn.
-//! - **Its page** in the characters' panel ("Bar and quick actions"):
-//!   where the bar is, the two label modes, the twelve quick actions, the
-//!   two sound and voice rules, the taskbar's and the hiding's choices.
+//! - **Its settings** (checkpoint 10: the settings window's "Toolbar and
+//!   windows" section, `ui/settings.rs`): where the bar is, the two label
+//!   modes, the taskbar's and the hiding's choices, the twelve quick
+//!   actions. The bar's cog menu opens that window on its sections.
 //!
 //! No window made or shown here takes the keyboard by itself: only what
 //! the user asked for from a bar comes forward.
@@ -32,12 +33,10 @@ use super::panels::{View, Which};
 use super::{Act, BUTTON, Window_};
 use crate::folderstorm_characters::bar::{self as drawn, Home};
 use crate::theme::Palette;
-use crate::ui::{
-    menu,
-    widgets::{self, ActionKind},
-};
+use crate::ui::{menu, widgets};
 use ::folderstorm_session::bar::{self, LabelMode, Placement, QuickAction, Request, WINDOW_MIN_SIZE, WINDOW_SIZE};
 use ::folderstorm_session::panels::{self, Panel, Place};
+use ::folderstorm_session::settings::Section;
 use aurora_i18n::tr;
 use egui::RichText;
 use std::time::Instant;
@@ -175,20 +174,19 @@ impl Window_ {
         }
     }
 
-    /// The host's own window comes forward on that page.
+    /// The host's own window comes forward on that page; the settings'
+    /// pages open the settings' window (checkpoint 10) and leave the
+    /// host's own window as it is.
     fn show_host(&mut self, page: bar::Page) {
-        self.bar.asked = true;
-        self.bar.dismissed = false;
-        // the pages are the characters' panel's: in the window that has it
-        let mut raise = self.home(Panel::Controls);
-        match page {
-            bar::Page::Bar => self.comfort.page = Page::Bar,
-            bar::Page::Hotkeys => self.comfort.page = Page::Hotkeys,
-            // (checkpoint 9: the monitors have a page of their own)
-            bar::Page::Monitors => self.comfort.page = Page::Monitors,
-            bar::Page::Host => raise = Which::Main,
+        let section = match page {
+            bar::Page::Bar => Section::Toolbar,
+            bar::Page::Hotkeys => Section::Hotkeys,
+            bar::Page::Monitors => Section::Monitors,
+            bar::Page::Host => {
+                self.raise_host();
+                return;
+            }
             bar::Page::Quit => {
-                raise = Which::Main;
                 // (the question is asked under the characters, not under
                 // one of their pages)
                 self.comfort.page = Page::Characters;
@@ -200,11 +198,20 @@ impl Window_ {
                     self.closing = true;
                     self.quit_asked = false;
                 }
+                self.raise_host();
+                return;
             }
-        }
+        };
+        self.open_settings(section, None);
+    }
+
+    /// The host's own window is asked for from a bar: it comes forward.
+    fn raise_host(&mut self) {
+        self.bar.asked = true;
+        self.bar.dismissed = false;
         // (a narrow window shows one page: the characters')
         self.chat_page = false;
-        self.bar.raise = Some(raise);
+        self.bar.raise = Some(Which::Main);
     }
 
     /// The clicks on the viewers' bars since the last look; true when
@@ -451,100 +458,103 @@ impl Window_ {
         });
     }
 
-    /// "Bar and quick actions", in place of the characters.
-    pub(super) fn bar_page(&mut self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<Act>) {
-        if widgets::action_button(ui, p, "arrow-left", tr!("common-back"), ActionKind::Flat, BUTTON).clicked() {
-            acts.push(Act::Comfort(super::comfort::Act::Page(Page::Characters)));
-        }
-        ui.add_space(8.0);
-        ui.label(RichText::new(tr!("folderstorm-bar-page-heading")).size(18.0).strong().color(p.ink));
-        ui.add_space(2.0);
-        ui.label(RichText::new(tr!("folderstorm-bar-page-intro")).color(p.muted));
-        ui.add_space(10.0);
+    /// Checkpoint 10: the settings window's "Toolbar and windows" (it was
+    /// checkpoint 8's "Bar and quick actions" page): where the bar is, its
+    /// labels, the host's windows, then the twelve quick actions.
+    pub(super) fn toolbar_settings(&mut self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<Act>) {
         let config = self.host.desk.bar().clone();
-        egui::ScrollArea::vertical()
-            .id_salt("folderstorm-host-bar-page")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                // where the bar is
-                ui.label(RichText::new(tr!("folderstorm-bar-page-where")).strong().color(p.ink));
+        let wide = ui.available_width() >= 640.0;
+        let place_and_labels = |ui: &mut egui::Ui, acts: &mut Vec<Act>| {
+            ui.label(RichText::new(tr!("folderstorm-bar-page-where")).strong().color(p.ink));
+            ui.add_space(4.0);
+            let mut place = usize::from(config.placement == Placement::Popped);
+            let places = [
+                (tr!("folderstorm-bar-page-docked"), true),
+                (tr!("folderstorm-bar-page-popped"), true),
+            ];
+            if widgets::segmented(ui, p, &mut place, &places) {
+                acts.push(Act::Bar(Request::Dock(place == 0)));
+            }
+            ui.add_space(8.0);
+            // how the buttons are labelled
+            ui.label(RichText::new(tr!("folderstorm-bar-page-labels")).strong().color(p.ink));
+            ui.add_space(4.0);
+            let modes: Vec<(&str, bool)> = LabelMode::ALL.into_iter().map(|mode| (mode_name(mode), true)).collect();
+            for (label, mode, toolbar) in [
+                (tr!("folderstorm-bar-page-toolbar-labels"), config.toolbar_labels, true),
+                (tr!("folderstorm-bar-page-quick-labels"), config.quick_labels, false),
+            ] {
+                // (a scope each: the two rows offer the same choices)
+                ui.push_id(("folderstorm-bar-labels", toolbar), |ui| {
+                    ui.label(RichText::new(label).color(p.muted));
+                    let mut selected = mode.index();
+                    if widgets::segmented(ui, p, &mut selected, &modes) {
+                        let mode = LabelMode::ALL[selected.min(LabelMode::ALL.len() - 1)];
+                        acts.push(Act::BarEdit(if toolbar {
+                            Edit::ToolbarLabels(mode)
+                        } else {
+                            Edit::QuickLabels(mode)
+                        }));
+                    }
+                });
                 ui.add_space(4.0);
-                let mut place = usize::from(config.placement == Placement::Popped);
-                let places = [
-                    (tr!("folderstorm-bar-page-docked"), true),
-                    (tr!("folderstorm-bar-page-popped"), true),
-                ];
-                if widgets::segmented(ui, p, &mut place, &places) {
-                    acts.push(Act::Bar(Request::Dock(place == 0)));
-                }
-                ui.add_space(6.0);
-                let mut hide = config.hide_host;
-                if widgets::checkbox(ui, p, &mut hide, tr!("folderstorm-bar-page-hide-host"))
-                    .on_hover_text(tr!("folderstorm-bar-page-hide-host-help"))
-                    .changed()
-                {
-                    acts.push(Act::BarEdit(Edit::HideHost(hide)));
-                }
-                let mut one = config.one_taskbar_button;
-                if widgets::checkbox(ui, p, &mut one, tr!("folderstorm-bar-page-taskbar"))
-                    .on_hover_text(tr!("folderstorm-bar-page-taskbar-help"))
-                    .changed()
-                {
-                    acts.push(Act::BarEdit(Edit::OneTaskbarButton(one)));
-                }
-                if !cfg!(windows) {
-                    ui.label(RichText::new(tr!("folderstorm-bar-page-taskbar-windows-only")).color(p.muted));
-                }
-                ui.add_space(12.0);
-                // how the buttons are labelled
-                ui.label(RichText::new(tr!("folderstorm-bar-page-labels")).strong().color(p.ink));
-                ui.add_space(4.0);
-                let modes: Vec<(&str, bool)> = LabelMode::ALL.into_iter().map(|mode| (mode_name(mode), true)).collect();
-                for (label, mode, toolbar) in [
-                    (tr!("folderstorm-bar-page-toolbar-labels"), config.toolbar_labels, true),
-                    (tr!("folderstorm-bar-page-quick-labels"), config.quick_labels, false),
-                ] {
-                    // (a scope each: the two rows offer the same choices)
-                    ui.push_id(("folderstorm-bar-labels", toolbar), |ui| {
-                        ui.horizontal(|ui| {
-                            row_name(ui, 150.0, RichText::new(label).color(p.ink));
-                            let mut selected = mode.index();
-                            if widgets::segmented(ui, p, &mut selected, &modes) {
-                                let mode = LabelMode::ALL[selected.min(LabelMode::ALL.len() - 1)];
-                                acts.push(Act::BarEdit(if toolbar {
-                                    Edit::ToolbarLabels(mode)
-                                } else {
-                                    Edit::QuickLabels(mode)
-                                }));
-                            }
-                        });
-                    });
-                    ui.add_space(4.0);
-                }
-                ui.add_space(8.0);
-                // sound and voice
-                ui.label(RichText::new(tr!("folderstorm-bar-page-sound")).strong().color(p.ink));
-                ui.add_space(4.0);
-                let mut mute = self.host.desk.mute_background();
-                if widgets::checkbox(ui, p, &mut mute, tr!("folderstorm-bar-mute-long"))
-                    .on_hover_text(tr!("folderstorm-bar-mute-off-help"))
-                    .changed()
-                {
-                    acts.push(Act::Bar(Request::MuteBackground(mute)));
-                }
-                let mut follows = self.host.desk.voice_follows();
-                if widgets::checkbox(ui, p, &mut follows, tr!("folderstorm-bar-voice-long"))
-                    .on_hover_text(tr!("folderstorm-bar-voice-off-help"))
-                    .changed()
-                {
-                    acts.push(Act::Bar(Request::VoiceFollows(follows)));
-                }
-                ui.add_space(12.0);
-                // the quick actions
-                ui.label(RichText::new(tr!("folderstorm-bar-page-quick")).strong().color(p.ink));
-                ui.label(RichText::new(tr!("folderstorm-bar-page-quick-intro")).color(p.muted));
-                ui.add_space(4.0);
-                for (position, held) in config.quick.iter().copied().enumerate() {
+            }
+        };
+        let windows = |ui: &mut egui::Ui, acts: &mut Vec<Act>| {
+            ui.label(RichText::new(tr!("folderstorm-settings-windows")).strong().color(p.ink));
+            ui.add_space(4.0);
+            let mut hide = config.hide_host;
+            if widgets::checkbox(ui, p, &mut hide, tr!("folderstorm-bar-page-hide-host"))
+                .on_hover_text(tr!("folderstorm-bar-page-hide-host-help"))
+                .changed()
+            {
+                acts.push(Act::BarEdit(Edit::HideHost(hide)));
+            }
+            let mut one = config.one_taskbar_button;
+            if widgets::checkbox(ui, p, &mut one, tr!("folderstorm-bar-page-taskbar"))
+                .on_hover_text(tr!("folderstorm-bar-page-taskbar-help"))
+                .changed()
+            {
+                acts.push(Act::BarEdit(Edit::OneTaskbarButton(one)));
+            }
+            if !cfg!(windows) {
+                ui.label(RichText::new(tr!("folderstorm-bar-page-taskbar-windows-only")).color(p.muted));
+            }
+            // (checkpoint 10: until now on the characters' page)
+            let mut stage = self.host.desk.stage();
+            if widgets::checkbox(ui, p, &mut stage, tr!("folderstorm-host-stage"))
+                .on_hover_text(tr!("folderstorm-host-stage-help"))
+                .changed()
+            {
+                acts.push(Act::Stage(stage));
+            }
+        };
+        if wide {
+            let mut left = Vec::new();
+            let mut right = Vec::new();
+            ui.columns(2, |columns| {
+                place_and_labels(&mut columns[0], &mut left);
+                windows(&mut columns[1], &mut right);
+            });
+            acts.extend(left);
+            acts.extend(right);
+        } else {
+            place_and_labels(ui, acts);
+            ui.add_space(8.0);
+            windows(ui, acts);
+        }
+        ui.add_space(10.0);
+        // the quick actions, two columns of six on a wide page
+        ui.label(RichText::new(tr!("folderstorm-bar-page-quick")).strong().color(p.ink));
+        ui.label(RichText::new(tr!("folderstorm-bar-page-quick-intro")).color(p.muted));
+        ui.add_space(4.0);
+        let columns = if wide { 2 } else { 1 };
+        let rows = config.quick.len().div_ceil(columns);
+        let mut asked = Vec::new();
+        ui.columns(columns, |cells| {
+            for (column, ui) in cells.iter_mut().enumerate() {
+                for position in column * rows..((column + 1) * rows).min(config.quick.len()) {
+                    let held = config.quick[position];
                     ui.push_id(("folderstorm-bar-quick", position), |ui| {
                         ui.horizontal(|ui| {
                             let number = RichText::new(tr!("folderstorm-bar-page-position", number = position + 1)).color(p.muted);
@@ -555,7 +565,7 @@ impl Window_ {
                                 for action in QuickAction::all() {
                                     let name = self.action_name(action);
                                     if menu::check(ui, p, action_icon(action), &name, action == held, true) && action != held {
-                                        acts.push(Act::BarEdit(Edit::Quick(position, action)));
+                                        asked.push(Act::BarEdit(Edit::Quick(position, action)));
                                     }
                                 }
                             });
@@ -563,7 +573,9 @@ impl Window_ {
                     });
                     ui.add_space(3.0);
                 }
-            });
+            }
+        });
+        acts.extend(asked);
     }
 }
 
@@ -977,21 +989,25 @@ mod tests {
     }
 
     #[test]
-    fn the_bar_s_pages_open_in_the_host_s_window() {
+    fn the_bar_s_settings_open_the_settings_window_on_their_section() {
         let now = Instant::now();
         let mut app = window(host());
         running(&mut app, now);
         app.bar_apply(Request::Show(bar::Page::Bar), now);
-        assert!(app.bar.asked && app.comfort.page == Page::Bar);
-        assert_eq!(app.bar.raise, Some(Which::Main));
-        draw(&mut app, 1120, 760);
-        let (drawn, pixels) = draw(&mut app, 1120, 760);
-        assert!(shows(&drawn, tr!("folderstorm-bar-page-heading")), "{drawn:?}");
+        // (checkpoint 10) the settings' own window, in front; the host's
+        // own window is left as it was
+        assert!(!app.bar.asked && app.settings_wanted());
+        assert_eq!(app.host.desk.settings_window().section, Section::Toolbar);
+        app.settings.view = Some(app.look.view());
+        draw_in(&mut app, Which::Settings, 1000, 760);
+        let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 760);
+        assert!(shows(&drawn, tr!("folderstorm-settings-toolbar")), "{drawn:?}");
         assert!(shows(&drawn, tr!("folderstorm-bar-page-quick")) && shows(&drawn, tr!("folderstorm-bar-labels-icons")));
         assert!(shows(&drawn, "(Main)"), "a character's position says who it is: {drawn:?}");
+        assert!(shows(&drawn, tr!("folderstorm-host-stage")), "the stage moved here: {drawn:?}");
         assert!(!shows(&drawn, "use of widget"), "two widgets share an id: {drawn:?}");
         assert!(painted(&pixels) > 10_000);
-        keep("page", &pixels, 1120, 760);
+        keep("settings-toolbar", &pixels, 1000, 760);
         // its choices are the desk's
         app.apply(
             vec![
@@ -1012,11 +1028,12 @@ mod tests {
             (LabelMode::IconAndText, LabelMode::IconOnly)
         );
         assert!(!config.one_taskbar_button && !config.hide_host && !app.host.desk.voice_follows());
-        // the hotkeys' page, and the monitors' own (checkpoint 9)
+        // the hotkeys' and the monitors' entries open their sections
         app.bar_apply(Request::Show(bar::Page::Hotkeys), now);
-        assert!(app.comfort.page == Page::Hotkeys);
+        assert_eq!(app.host.desk.settings_window().section, Section::Hotkeys);
         app.bar_apply(Request::Show(bar::Page::Monitors), now);
-        assert!(app.comfort.page == Page::Monitors);
+        assert_eq!(app.host.desk.settings_window().section, Section::Monitors);
+        assert!(!app.bar.asked, "the host's own window was never asked for");
         // "Quit…" asks the usual question in the host's own window
         app.bar_apply(Request::Show(bar::Page::Quit), now);
         assert!(app.closing && !app.host.exit && !app.host.desk.quitting());

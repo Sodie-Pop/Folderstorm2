@@ -88,6 +88,12 @@ pub const DEMO_BAR_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_BAR";
 /// with its chat part.
 pub const DEMO_MONITORS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_MONITORS";
 
+/// `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>`, demo only, with
+/// [`DEMO_VARIABLE`] (checkpoint 10): the settings' window opens on that
+/// section (`toolbar`, `characters`, `chat`, `sound`, `monitors`,
+/// `hotkeys`, `advanced`, `updates`).
+pub const DEMO_SETTINGS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_SETTINGS";
+
 /// What [`DEMO_MONITORS_VARIABLE`] asks for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct DemoMonitors {
@@ -269,6 +275,11 @@ struct Host {
     bar_sent: [Option<(u32, bar::State)>; MAX_SLOTS],
     /// The clicks on the viewers' bars since the window looked.
     bar_asked: Vec<bar::Request>,
+    /// Checkpoint 10: when the active character's chats are read.
+    auto_read: ::folderstorm_session::settings::AutoRead,
+    /// Checkpoint 10, demo only: the settings' window opens on that
+    /// section ([`DEMO_SETTINGS_VARIABLE`]).
+    demo_settings: Option<::folderstorm_session::settings::Section>,
 }
 
 /// The most clicks of the viewers' bars kept between two looks of the
@@ -296,6 +307,8 @@ impl Host {
             exit: false,
             bar_sent: Default::default(),
             bar_asked: Vec::new(),
+            auto_read: Default::default(),
+            demo_settings: None,
         };
         if host.demo {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
@@ -311,6 +324,9 @@ impl Host {
             if let Ok(value) = std::env::var(DEMO_BAR_VARIABLE) {
                 host.demo_bar(demo_bar(&value));
             }
+            host.demo_settings = std::env::var(DEMO_SETTINGS_VARIABLE)
+                .ok()
+                .and_then(|value| ::folderstorm_session::settings::Section::parse(&value));
         }
         host
     }
@@ -407,22 +423,28 @@ impl Host {
     /// The inbox follows what the chat keeps of each viewer's list: the
     /// chat already drops a list of another launch or login, and empties
     /// a character's when it logs out, ends or is let go.
+    /// (Checkpoint 10: only the questions Attention lists: of the kinds
+    /// chosen, of the characters included.)
     fn sync_inbox(&mut self, now: Instant) {
         for slot in 0..MAX_SLOTS {
             let (items, more) = self.chat.attention(slot);
             let login = self.chat.login(slot);
+            let mut shown = items.to_vec();
             if self.sample_inbox && self.demo {
-                let mut shown = items.to_vec();
                 shown.extend(sample_questions(slot));
-                self.inbox.set(slot, login, &shown, more, now);
-            } else {
-                self.inbox.set(slot, login, items, more, now);
             }
+            shown.retain(|item| self.desk.attention_lists(slot, item.kind));
+            let included = self.desk.slot(slot).is_none_or(|s| s.attention);
+            let more = if included { more } else { 0 };
+            self.inbox.set(slot, login, &shown, more, now);
         }
     }
 
     /// What happened since the last call, then what the desk asks for.
     fn tick(&mut self, now: Instant) {
+        // (checkpoint 10) what the chats show and what is read
+        self.chat.set_shown(self.desk.chat_shown());
+        self.chat.set_mark_displayed(self.desk.reading().mark_displayed);
         let events: Vec<process::Event> = self.events.try_iter().collect();
         for process::Event { slot, launch, kind } in events {
             // the chat takes nothing of a viewer the desk does not manage
@@ -475,6 +497,9 @@ impl Host {
         self.carry_out(now);
         self.tick_monitors(now);
         self.chat.set_active(self.desk.active());
+        if let Some(slot) = self.auto_read.tick(self.desk.active(), now, &self.desk.reading()) {
+            self.chat.read_in_host(slot);
+        }
         self.chat.tick(now);
         self.carry_out_chat();
         self.sync_inbox(now);
@@ -540,7 +565,14 @@ impl Host {
                         self.chat.not_written(id);
                     }
                 }
-                chat::Effect::Alert { .. } => self.alert = true,
+                chat::Effect::Alert { slot, kind, said, card } => {
+                    // (checkpoint 10: as the character's alerts say)
+                    use ::folderstorm_session::ipc::LineKind;
+                    let wanted = |line| self.desk.alert_wanted(slot, kind, line);
+                    if (said && wanted(LineKind::Said)) || (card && wanted(LineKind::Card)) {
+                        self.alert = true;
+                    }
+                }
             }
         }
     }

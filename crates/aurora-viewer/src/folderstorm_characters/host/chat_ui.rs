@@ -167,7 +167,7 @@ impl ChatPanel {
                 host.chat.open_thread(slot, self.shown[slot]).map(|t| (slot, t.conversation))
             }
         };
-        self.attention(ui, p, &host.chat, &host.inbox, &name, &mut asked);
+        self.attention(ui, p, &host.inbox, &name, &mut asked);
         let room = (ui.available_height() - COMPOSE_ROOM).max(80.0);
         egui::Frame::new()
             .fill(p.field)
@@ -195,7 +195,8 @@ impl ChatPanel {
                                 if thread.earlier_login {
                                     ui.label(RichText::new(tr!("folderstorm-chat-earlier-login")).italics().color(p.muted));
                                 }
-                                for entry in thread.entries() {
+                                // (checkpoint 10: the viewer's notices only when shown)
+                                for entry in thread.entries().filter(|entry| host.chat.shows_entry(entry)) {
                                     if entry_row(ui, p, entry, None) == Clicked::Answer {
                                         asked.switch = Some(slot);
                                     }
@@ -250,7 +251,7 @@ impl ChatPanel {
     /// What waits for an answer in the characters' own windows. Nothing is
     /// answered here: the button brings that window forward. What was
     /// dismissed from the inbox is left out here too.
-    fn attention(&self, ui: &mut egui::Ui, p: &Palette, chat: &Chat, inbox: &Inbox, name: &dyn Fn(usize) -> String, asked: &mut Asked) {
+    fn attention(&self, ui: &mut egui::Ui, p: &Palette, inbox: &Inbox, name: &dyn Fn(usize) -> String, asked: &mut Asked) {
         let slots: Vec<usize> = match self.tab {
             // (the inbox beside the chat lists them all, once)
             Tab::All if self.inbox_beside => Vec::new(),
@@ -258,9 +259,14 @@ impl ChatPanel {
             Tab::Character(slot) => vec![slot],
         };
         for slot in slots {
-            let (listed, _) = chat.attention(slot);
-            let login = chat.login(slot);
-            let items: Vec<&ipc::AttentionItem> = listed.iter().filter(|item| !inbox.is_dismissed(slot, login, item.id)).collect();
+            // (what the inbox lists of it: not dismissed, and, checkpoint
+            // 10, what Attention lists)
+            let items: Vec<&ipc::AttentionItem> = inbox
+                .waiting()
+                .iter()
+                .filter(|waiting| waiting.slot == slot)
+                .map(|waiting| &waiting.item)
+                .collect();
             // (what is not listed, as the inbox counts it)
             let more = inbox.more(slot);
             if items.is_empty() {
@@ -315,7 +321,7 @@ impl ChatPanel {
         tint: &dyn Fn(usize) -> Option<egui::Color32>,
         asked: &mut Asked,
     ) {
-        if chat.feed().len() == 0 {
+        if chat.feed().next().is_none() {
             ui.label(RichText::new(tr!("folderstorm-chat-all-empty")).color(p.muted));
         }
         for item in chat.feed() {
@@ -591,6 +597,8 @@ pub(super) mod tests {
             exit: false,
             bar_sent: Default::default(),
             bar_asked: Vec::new(),
+            auto_read: Default::default(),
+            demo_settings: None,
         };
         for slot in 0..2 {
             host.chat.status(slot, 1, 1, true);
@@ -746,6 +754,8 @@ pub(super) mod tests {
                 more: 0,
             },
         );
+        // (checkpoint 10: what the inbox lists of it)
+        host.sync_inbox(std::time::Instant::now());
         panel.tab = Tab::Character(0);
         let (drawn, asked) = frame(&ctx, &mut panel, &mut host, 1100.0);
         assert!(shows(&drawn, "Attention: demo-1 has something to answer"), "{drawn:?}");
@@ -816,6 +826,7 @@ pub(super) mod tests {
                 more: 0,
             },
         );
+        host.sync_inbox(std::time::Instant::now());
         // no inbox in this window: "All" lists it, as it always did
         let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
         assert!(shows(&drawn, "Attention: demo-1 has something to answer"), "{drawn:?}");
