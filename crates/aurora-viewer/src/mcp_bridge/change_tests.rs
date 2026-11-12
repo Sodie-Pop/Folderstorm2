@@ -101,6 +101,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
             appearance::demo_mutate(inv, AGENT, &change).expect("outfit applied");
         }
         Work::Camera(_) | Work::Snapshot(_) | Work::Thumbnail(_) => panic!("not an inventory change"),
+        Work::Create(_) | Work::Image { .. } => panic!("not run here (gap_tests)"),
     }
 }
 

@@ -275,6 +275,97 @@ otherwise the newest file whose viewer answers is used.
 JSON line (stage reached, port, readiness; never the token) and exits 0 on
 success, 1 on failure, 2 on bad arguments.
 
+## Phase 3, part 2: inventory gaps
+
+Step 2 of the MCP parity order: the inventory and outfit tools of
+Folderstorm (C++)'s `tools/fs-mcp` (`inventory_extra.go`, `appearance.go`,
+`server.go`) that phases 1 and 2 left out, with the C++ names. Their
+catalogue is its own file (`protocol/inventory.rs`, listed with
+`protocol::all()`), so that the other phase 3 groups do not touch it. No
+new permission class: reads are Read, changes are Edit (as
+`inventory_create_folder` is). Every change goes through the inventory
+window's own command and rules; no new network message.
+
+| Tool | Class | Arguments | Returns | Refused when |
+|---|---|---|---|---|
+| `inventory_get_many` | read | `ids` (1–50) | `entries` (each item as `inventory_item` gives it, each folder as listed, with its counts), `missing` | — (an asset id only for full permissions, as `inventory_item`) |
+| `inventory_system_folder` | read | `type`: a system folder name (`textures`, `landmarks`, `trash`, `current_outfit`…; usual spellings accepted) | the folder entry | a name that is no system folder; My Inventory has none (the Library's are never given) |
+| `inventory_types` | read | none | `kinds`, `system_folders`, `wearables`, `create_item_types`, `search_link_filters` | — |
+| `inventory_protected_folders` | read | none | each folder the changes leave alone, with why: `system`, `locked` (inventory window), `pinned` (#RLV, #Firestorm, #Aurora), `marketplace`, `listing`; the Library's id | — |
+| `inventory_changes` | read | `since` (optional) | `generation`, `changes` (`id`, `kind`, `change` added / changed / removed, `name`, `folder_id`), `more`, `reset` | `since` ahead of the viewer |
+| `inventory_landmark` | read | `item_id` (a link is followed) | `region_name` (when the map knows it), `region_id`, `region_position`, `global_position` (10 s at most) | not a landmark; RLVa `@showloc` (`not_allowed`); the asset unreadable (`failed`) or late (`timeout`) |
+| `appearance_outfit_items` | read | `outfit_id` or `path` | the outfit folder's entries, links followed: `type`, `wearable`, `worn`, `target_id`, `attachment_point`, `broken` | — |
+| `inventory_search` (more filters) | read | phase 1's, plus `description`, `creator_id`, `worn`, `copyable`, `modifiable`, `favorite`, `created_after`, `created_before` (Unix seconds), `filter_links` (`include` / `exclude` / `only`), `linked_id` | as before; entries now carry `favorite` | a filter of the wrong type |
+| `inventory_create_item` | edit | `type`: `notecard`, `script`, `gesture`, `material`, `sky`, `water`, `day_cycle`, `landmark`; `name` (optional); `folder_id` or `path` (default: the folder of its type, else My Inventory) | `item_id` once the item arrived, `name`, `folder_id` | where the New menu is not offered (`actions::destination`: Library, Current Outfit, Received Items, Trash, My Outfits; Lost And Found); the Marketplace; a landmark outside a region or under RLVa `@showloc` |
+| `inventory_set_favorite` | edit | `ids` (1–50), `favorite` | `ids`, `favorite` | as the menu's Favorites entries (`favorites_ready`): the Trash, the Library, My Inventory itself; the Marketplace |
+| `inventory_batch_rename` | edit | `items`: 1–50 `{id, name}` | `renamed`, `unchanged` | any entry `actions::renameable` refuses: nothing is renamed |
+| `inventory_set_thumbnail` | edit | `id`; `texture_id` (an inventory texture, a link to one, or an asset id the window accepts) or `clear: true` | `id`, `done` (or `cleared`) | the entry: `actions::mutable` says no, a link, an item without Modify (stricter than the window), the Marketplace; the texture: `thumbnail::usable` says no (Copy and Transfer, or the Library; not in the Trash) |
+
+- **`inventory_changes`.** The viewer keeps no list of changed entries:
+  the journal (`mcp_bridge/journal.rs`) keeps a fingerprint of each entry
+  of My Inventory (place, name, description, types, flags, rights,
+  favorite, picture) and compares it when the inventory's generation
+  moved, once a second at most, only while an assistant polls (the first
+  call starts it; 10 minutes without a call, or another login, stop it).
+  The answer folds each entry's changes into one (added then removed is
+  not reported), 200 entries at most (`more`, then poll from the
+  `generation` given). A cursor older than the journal answers `reset`.
+  It never carries an asset or picture id; the Library is left out.
+- **`inventory_landmark`** reads the landmark cache (`world::landmarks`:
+  the asset, then the region's handle), which the app asks for what is
+  missing; the call waits 10 s at most. Any landmark of the inventory or
+  the Library, as its About window shows it.
+- **`inventory_create_item`** sends what the New menu sends
+  (`InvAction::Create`, creation permissions from Preferences); a landmark
+  is named as the star's quick entries name it
+  (`landmark_create::default_title`). The call answers when the new item
+  arrives (`NetEvent::InventoryCreated` with that folder, type and name),
+  or `timeout` after 30 s. Unlike a click on New, the inventory window
+  neither selects nor renames it, and no editor opens. Clothing and body parts are not created: a new
+  wearable uploads its asset.
+- **`inventory_set_thumbnail`** runs the Image window's "Choose image"
+  path (`inventory_image_action` with `Input::Texture`): the texture is
+  fetched and checked (square, 64 pixels at least), used as it is when
+  256 pixels or less, else scaled down to 256 and sent to the free
+  thumbnail service, as the window does (no L$). The job has no window: two hooks in
+  `app/inventory_thumbnail.rs` keep it going without one and tell the desk
+  its errors. "Remove image" is the window's patch. Never an asset id in
+  the answer.
+- **The Ask dialog** names what changes: "Create the script “Door” in
+  “Objects”", "Create a landmark of where you stand in “Landmarks”", "Add
+  “Boots” to Favorites", "Rename 3 entries, “a” to “b” first", "Set the
+  picture of “Evening” to “Sunset”".
+- **Upstream hooks** (each marked `// Folderstorm:`):
+  `app/inventory_thumbnail.rs` (`mcp_bridge::image_job` in
+  `poll_inventory_images`, `mcp_bridge::image_finished` in
+  `finish_inventory_image`); `app.rs` (`mcp_bridge::created_by_assistant`
+  where a new item is filed: no rename box for the assistant's);
+  `aurora-i18n/locales/{en,fr,ja}.ftl` (the Ask
+  strings after `fs-mcp-ask-many`, the Edit row's hint). The rest is in
+  Folderstorm files: `protocol/inventory.rs`, `mcp_bridge/{inventory_reads,
+  inventory_edits,journal,landmark,gap_tests}.rs`, and small additions to
+  `tools.rs`, `changes.rs`, `desk.rs`, `mcp_bridge.rs`,
+  `app/local_assistant.rs` and the sidecar's `tools/list`.
+- **Tests** (`mcp_bridge/gap_tests.rs`, `protocol/inventory.rs`, the
+  sidecar): each tool on the demo inventory, the search filters, the
+  journal (changes, folding, paging, idle stop, reset), landmarks (wait,
+  timeout, unreadable, RLVa), the refusals of each change, the creators'
+  permissions matrix (owner, group-owned, someone else's, Library, no
+  copy, no transfer, no modify, full) for batch rename, pictures and
+  favorites, the desk's waits for a created item and a picture, the
+  bridge's classes (Read only refuses, Ask before changes asks), and
+  `tools/list`.
+- **Left out** (see the parity checklist): `inventory_replace_links`
+  (needs FEATURES 2.12), `inventory_preview_batch_rename`,
+  `inventory_preview_batch_move` and `inventory_execute_plan` (need the
+  receipts design, step 3, although the native review 2.4 exists),
+  `inventory_history` and `inventory_preview_undo` (FEATURES 2.5), the
+  copy policies and the `nocopy` class (Folderstorm2 keeps refusing to copy
+  no-copy items), new clothing and body parts (an asset upload),
+  `inventory_snapshot_upload` as a texture (L$) and from the camera (phase
+  3, part 1), the `creator_name` search filter (needs the name cache), and
+  `inventory_next_owner_set` (the building group, last in the order).
+
 ## Crates and files
 
 | Where | What |
@@ -285,6 +376,7 @@ success, 1 on failure, 2 on bad arguments.
 | `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id; phase 3: moves the camera, starts the assistant's photo jobs and the gallery's thumbnail snapshot |
 | `crates/aurora-viewer/src/mcp_bridge/{camera,picture,studio}.rs` | phase 3: the camera tools' arguments, presets and RLVa check; the picture's size, crop and encoding; the calls waiting for the camera, the photo or the thumbnail |
 | `crates/aurora-viewer/src/ui/options/pages/local_assistant.rs` | the Preferences group |
+| `crates/folderstorm-mcp-bridge/src/protocol/inventory.rs`, `crates/aurora-viewer/src/mcp_bridge/{inventory_reads,inventory_edits,journal,landmark}.rs` | phase 3, part 2: the inventory gaps' catalogue, reads, changes, `inventory_changes`' journal and the landmark waits |
 
 New dependencies: `getrandom` 0.4 (OS random source, MIT/Apache-2.0,
 already in Cargo.lock) and `subtle` 2.6 (constant-time comparison,

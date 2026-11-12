@@ -44,6 +44,11 @@ pub enum Work {
     Snapshot(super::picture::Request),
     /// The gallery's Take snapshot as this entry's picture (phase 3).
     Thumbnail(Uuid),
+    /// Folderstorm: a new item, through the New menu's path (phase 3).
+    Create(super::inventory_edits::Creation),
+    /// Folderstorm: an entry's picture from a texture, through the Image
+    /// window's path (phase 3).
+    Image { target: Uuid, texture: Uuid },
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +167,8 @@ pub fn plan(tool: &str, args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
         "inventory_restore" => restore(args, cx),
         "outfit_wear" | "outfit_take_off" => outfit(tool, args, cx),
         "items_wear" | "items_take_off" => items(tool, args, cx),
-        _ => Err(err(ErrorCode::UnknownTool, "unknown tool")),
+        // Folderstorm: phase 3, part 2 (inventory gaps)
+        _ => super::inventory_edits::plan(tool, args, cx).unwrap_or_else(|| Err(err(ErrorCode::UnknownTool, "unknown tool"))),
     }
 }
 

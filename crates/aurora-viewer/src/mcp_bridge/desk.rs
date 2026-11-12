@@ -6,6 +6,7 @@
 
 use super::changes::{self, Planned, Work};
 use super::tools::{self, Ctx};
+use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::{ErrorCode, ToolError};
@@ -33,6 +34,12 @@ struct InFlight {
     request: Option<Uuid>,
     outcome: Option<Outcome>,
     deadline: Instant,
+    /// A new item: the server's answer is the item arriving in `parent`,
+    /// of that asset type and name (phase 3).
+    expect: Option<(Uuid, i32, Option<String>)>,
+    /// A picture from a texture: the Image window's path ends it, or says
+    /// why it failed (phase 3).
+    image: bool,
 }
 
 struct BakeWait {
@@ -48,6 +55,8 @@ pub enum Outcome {
     Copying,
     /// Done; the folders it created, temporary id → the server's.
     Done(HashMap<Uuid, Uuid>),
+    /// The new item arrived (phase 3).
+    Created(Uuid),
     Failed(String),
 }
 
@@ -102,6 +111,10 @@ pub struct Desk {
     /// its own (the demo answers at once, inside the send).
     sending: Option<InFlight>,
     bakes: Vec<BakeWait>,
+    /// `inventory_changes`' journal (phase 3).
+    journal: Journal,
+    /// `inventory_landmark` calls waiting for their landmark (phase 3).
+    landmarks: Vec<landmark::Wait>,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -124,6 +137,16 @@ impl Desk {
                 }),
                 Err(e) => call.answer(Err(e)),
             }
+            return;
+        }
+        // Folderstorm: phase 3 reads that keep state or wait
+        if call.tool == "inventory_changes" {
+            let result = tools::ready(cx).and_then(|()| self.journal.answer(&call.arguments, cx.inv, now));
+            call.answer(result);
+            return;
+        }
+        if call.tool == "inventory_landmark" {
+            self.landmarks.extend(landmark::start(call, cx, now));
             return;
         }
         if !spec.changes() {
@@ -213,6 +236,10 @@ impl Desk {
         if let Some(earlier) = self.sending.take() {
             self.sent_one(earlier, None, None);
         }
+        let expect = match &planned.work {
+            Work::Create(c) => Some((c.parent, c.asset_type(), c.name.clone())),
+            _ => None,
+        };
         self.sending = Some(InFlight {
             call,
             outfit,
@@ -221,6 +248,8 @@ impl Desk {
             request: None,
             outcome: None,
             deadline: now + CHANGE_WAIT,
+            expect,
+            image: matches!(planned.work, Work::Image { .. }),
         });
     }
 
@@ -238,7 +267,7 @@ impl Desk {
             return;
         }
         flight.request = flight.request.or(request);
-        if flight.request.is_some() {
+        if flight.request.is_some() || (flight.expect.is_some() && failure.is_none()) {
             self.sent.push(flight);
             return;
         }
@@ -254,7 +283,7 @@ impl Desk {
         if let Some(flight) = self
             .sending
             .as_mut()
-            .filter(|f| f.outfit == outfit && f.request.is_none_or(|r| r == request))
+            .filter(|f| f.outfit == outfit && f.expect.is_none() && f.request.is_none_or(|r| r == request))
         {
             flight.request = Some(request);
             if outcome != Outcome::Copying {
@@ -268,6 +297,54 @@ impl Desk {
         if let Some(index) = self.sent.iter().position(|f| f.outfit == outfit && f.request == Some(request)) {
             finish(self.sent.swap_remove(index), outcome);
         }
+    }
+
+    /// Folderstorm: a new item arrived; the creation waiting for it ends.
+    /// True when it was the local assistant's.
+    pub fn created(&mut self, item: &aurora_net::inventory::InvItem) -> bool {
+        let matches = |f: &InFlight| {
+            f.expect.as_ref().is_some_and(|(parent, asset_type, name)| {
+                *parent == item.parent && *asset_type == item.asset_type && name.as_ref().is_none_or(|n| *n == item.name)
+            })
+        };
+        if let Some(flight) = self.sending.as_mut().filter(|f| matches(f) && f.outcome.is_none()) {
+            flight.outcome = Some(Outcome::Created(item.id));
+            return true;
+        }
+        if let Some(index) = self.sent.iter().position(matches) {
+            finish(self.sent.swap_remove(index), Outcome::Created(item.id));
+            return true;
+        }
+        false
+    }
+
+    /// Folderstorm: whether `request` is a picture this desk waits for (the
+    /// Image window's path then runs without a window).
+    pub fn image_job(&self, request: Uuid) -> bool {
+        self.sent.iter().any(|f| f.image && f.request == Some(request))
+    }
+
+    /// Folderstorm: the Image window's path ended `request` with an error
+    /// before the server was asked (or the server refused it).
+    pub fn image_failed(&mut self, request: Uuid, error: &str) {
+        if let Some(index) = self.sent.iter().position(|f| f.image && f.request == Some(request)) {
+            let flight = self.sent.swap_remove(index);
+            flight
+                .call
+                .answer(Err(ToolError::new(ErrorCode::Failed, format!("the picture was not set: {error}"))));
+        }
+    }
+
+    /// Folderstorm: once per frame, the reads that wait or follow the
+    /// inventory (phase 3).
+    pub fn tick_reads(&mut self, world: &crate::world::World, now: Instant) {
+        self.journal.follow(&world.inventory, now);
+        landmark::tick(&mut self.landmarks, world, now);
+    }
+
+    /// Folderstorm: the landmark assets the waiting calls need.
+    pub fn wanted_landmarks(&self) -> Vec<Uuid> {
+        landmark::wanted(&self.landmarks)
     }
 
     /// Calls in each state, for the tests: asking, ready, sent, bake waits.
@@ -284,6 +361,12 @@ fn finish(flight: InFlight, outcome: Outcome) {
             if let Some(temporary) = flight.created {
                 reply["folder_id"] = json!(created.get(&temporary).copied().unwrap_or(temporary));
             }
+            reply["done"] = json!(true);
+            flight.call.answer(Ok(reply));
+        }
+        Outcome::Created(item) => {
+            let mut reply = flight.reply;
+            reply["item_id"] = json!(item);
             reply["done"] = json!(true);
             flight.call.answer(Ok(reply));
         }
