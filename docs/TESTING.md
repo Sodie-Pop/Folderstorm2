@@ -6662,9 +6662,12 @@ failure. Grid validation and any paid upload are performed by the human.
     says `session host: gone, this viewer goes on by itself`, and each
     follows its own focus and settings again (sound back, the 3D of the
     focused one drawn).
-  - **Quit all**: each viewer quits, then the host closes. The host's
-    window close button, while characters run, asks: Quit all, Close only
-    this window, or Cancel.
+  - **Quit all**: it asks first, under the rows ("Quit all 3 characters
+    that are open?", **Quit all** or **Cancel**; the same in the condensed
+    lines); Cancel changes nothing. Confirmed, each viewer quits, then the
+    host closes. The host's window close button, while characters run,
+    asks: Quit all, Close only this window, or Cancel; its Quit all is the
+    answer and asks nothing more.
   - a second host on the same settings folder is refused with a message; a
     profile already open outside the host is not started twice ("already
     open in a window that this host did not start").
@@ -6717,19 +6720,29 @@ failure. Grid validation and any paid upload are performed by the human.
     greyed while that viewer closes. Press the button of a closed character
     several times quickly: one viewer starts, never two (the host's log
     says `quick action for character 2: Restart`, then `Wait`).
-  - **global hotkeys** (checkpoint 4, Windows): Ctrl+Alt+1 to 5 do each
-    character's quick action, Ctrl+Alt+PageDown and Ctrl+Alt+PageUp go to
+  - **global hotkeys** (checkpoint 4, Windows): Ctrl+Shift+F1 to F5 do
+    each character's quick action, Ctrl+Shift+F7 and Ctrl+Shift+F6 go to
     the next and the previous character that runs, from any program and
     while a character's viewer has the keyboard: click in a viewer, press
-    Ctrl+Alt+2, and the second character comes forward in its place (the
-    host's log says `hotkey Character(1), character 2`). **Hotkeys…** under
+    Ctrl+Shift+F2, and the second character comes forward in its place (the
+    host's log says `hotkey Character(1), character 2`). **Hold the
+    modifiers and press several keys** (Ctrl+Shift held, F2 then F3 then
+    F1): each switches, without letting go in between; the same with a
+    chord of your own that has Alt (Ctrl+Alt+F9, Ctrl+Alt+F10): Alt stays
+    held. After letting go, no key stays held in either viewer (walk with
+    the arrows in the one in front: it stops when the key is released; the
+    one left behind does not walk). None of the defaults is a key of the
+    viewer's default bindings. A `session-host.json` that still holds the
+    first defaults (Ctrl+Alt+1 to 5, Ctrl+Alt+PageDown, Ctrl+Alt+PageUp, all
+    unchanged) gets the new ones at the host's next start; a file with any
+    hotkey of your own keeps all of yours. **Hotkeys…** under
     the rows lists them, each with what Windows answered: "In use", or why
     not (the keys are another program's; they type a character on this
     keyboard, AltGr being Ctrl+Alt; the text is no hotkey; two actions on
     the same keys). Type other keys as text and press Enter ("Ctrl+Shift+F5");
     a hotkey that does not work is also said under the rows ("1 hotkey does
     not work"). To see a refusal, start a second host with another
-    settings folder, or any program that takes Ctrl+Alt+1 first. The demo
+    settings folder, or any program that takes Ctrl+Shift+F1 first. The demo
     does not save the choices. On Linux and macOS nothing is registered
     and the page says so; in the demo each hotkey has a **Try** button
     that does what the key would, on every system.
@@ -6854,16 +6867,33 @@ failure. Grid validation and any paid upload are performed by the human.
       of the host's window, "Inbox (4)" in the warning colour beside the
       other panels' boxes, and under it a band: one row per question, the
       oldest first, each with its character, the question, its age
-      ("just now", then minutes) and **Switch to answer**. The button
-      brings that character's window forward and does nothing else:
-      nothing is accepted from the host, and the row stays (a real
-      question leaves once it is answered or expires in its own window;
-      the demo's samples stay). Tick **Inbox** under "In a window of its
+      ("just now", then minutes), **Switch to answer** and **Dismiss**.
+      Switch to answer brings that character's window forward and does
+      nothing else: nothing is accepted from the host, and the row stays
+      (a real question leaves once it is answered or expires in its own
+      window; the demo's samples stay). **Dismiss** takes the row out of
+      the host's inbox only: "Inbox (n)", the band, the condensed line's
+      count and the chat's "has something to answer" box all drop it, and
+      it does not come back with the next list; nothing is said to the
+      viewer, where the question still waits (with a real question: it is
+      still under that viewer's bell, and answering it there changes
+      nothing more in the host). **Dismiss…** beside the heading has
+      **Dismiss all** and **Dismiss all for <character>** (only those that
+      have something). Dismissed is not saved: a new question (a new
+      teleport offer of the demo, or after a relog) comes in as usual.
+      Tick **Inbox** under "In a window of its
       own": the band leaves for a window whose title says how many wait;
       the chat's "All" tab then lists what waits itself, as before.
-      Closing that window docks the inbox back. Without `inbox`, the
-      demo's own teleport offer is the only question, when a demo viewer
-      lists it.
+      Closing that window docks the inbox back; Dismiss works there too.
+      Without `inbox`, the demo's own teleport offer is the only question,
+      when a demo viewer lists it.
+    - **read in the viewer, read in the host** (follow-ups to checkpoint
+      7): let a demo character's instant message stay unread in the
+      host (its tab shows a count), switch to that character and open the
+      conversation in its own Conversations window: the host's count for
+      it goes to zero. (A viewer that already shows the conversation as
+      the lines come, behind the others, does not clear the host's count:
+      the user has not seen them.)
     - **colours and aliases** (`colours`: the demo's characters have a
       colour each and the first two the aliases "Main" and "Shop
       keeper"). On a card, the palette button beside the name ("Alias
