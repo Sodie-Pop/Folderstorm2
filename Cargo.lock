@@ -655,6 +655,7 @@ dependencies = [
  "bytemuck",
  "egui",
  "egui-wgpu",
+ "flate2",
  "glam 0.34.1",
  "intel_tex_2",
  "libc",
@@ -734,6 +735,7 @@ dependencies = [
  "folderstorm-brand",
  "folderstorm-mcp",
  "folderstorm-mcp-bridge",
+ "folderstorm-session",
  "foldhash 0.2.0",
  "fontconfig-parser",
  "gilrs-core",
@@ -2227,6 +2229,15 @@ dependencies = [
  "serde_json",
  "subtle",
  "tempfile",
+]
+
+[[package]]
+name = "folderstorm-session"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

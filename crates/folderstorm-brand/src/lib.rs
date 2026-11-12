@@ -59,6 +59,14 @@ pub const KEYRING_LOGIN: &str = "Folderstorm2";
 pub const KEYRING_MFA: &str = "Folderstorm2 MFA";
 pub const KEYRING_CACHE: &str = "Folderstorm2 cache";
 pub const KEYRING_GITHUB: &str = "Folderstorm2 GitHub";
+/// The user's own token for the chat image host (FEATURES.md 3.3). The
+/// entry's account is the host's address: a token is only ever sent to the
+/// host it was saved for.
+pub const KEYRING_IMAGE_HOST: &str = "Folderstorm2 image host";
+
+/// The image host that chat image uploads go to by default (FEATURES.md
+/// 3.3): Folderstorm's Zipline. The user can choose another in Preferences.
+pub const IMAGE_HOST: &str = "https://images.sodie.online";
 
 /// The viewer channel sent to the grid at login and in viewer statistics
 /// (LLVersionInfo::getChannel). The Second Life third-party viewer policy
@@ -79,6 +87,26 @@ pub const SLURL_RECEIVER_PREFIX: &str = "Folderstorm2.SLurl.Receiver.2.";
 /// Desktop entry written on Linux for the link handler (Aurora's
 /// "aurora-viewer-slurl.desktop").
 pub const LINUX_SLURL_DESKTOP_ID: &str = "folderstorm2-slurl.desktop";
+
+/// Folder of the named profiles (`--profile <name>`, session-host plan
+/// section 5): `<settings folder>/profiles/<name>`, and the caches of the
+/// profiles beside the main cache, in `<cache folder>-profiles/<name>`.
+pub const PROFILES_FOLDER: &str = "profiles";
+
+/// What a second launch of a named profile hands to the viewer already
+/// running it, through the `secondlife://` hand-over: bring the window
+/// forward. Not a link: nothing else reads it.
+pub const PROFILE_RAISE_REQUEST: &str = "folderstorm2:raise-profile";
+
+/// Name prefix of the endpoint a managed viewer reports to its session host
+/// on: a Windows pipe `\\.\pipe\<prefix><session>-<host pid>-<slot>-<random>`,
+/// a socket file of that name elsewhere (session-host plan, section 8).
+pub const SESSION_PIPE_PREFIX: &str = "folderstorm2-session-";
+
+/// The session host's settings file, in the main settings folder, and the
+/// lock that keeps one host per settings folder.
+pub const SESSION_HOST_FILE: &str = "session-host.json";
+pub const SESSION_HOST_LOCK: &str = "session-host.lock";
 
 /// The fork's GitHub repository: updates, issues, source links.
 pub const REPOSITORY: &str = "Sodie-Pop/Folderstorm2";
@@ -121,9 +149,13 @@ mod tests {
             SLURL_PIPE_PREFIX,
             SLURL_RECEIVER_PREFIX,
             LINUX_SLURL_DESKTOP_ID,
+            PROFILE_RAISE_REQUEST,
+            SESSION_PIPE_PREFIX,
         ] {
             assert!(!aurora.contains(&ours), "{ours} is Aurora Viewer's");
         }
+        // a link never reaches the session host's pipes, nor the reverse
+        assert!(!SESSION_PIPE_PREFIX.starts_with(SLURL_PIPE_PREFIX) && !SLURL_PIPE_PREFIX.starts_with(SESSION_PIPE_PREFIX));
     }
 
     #[test]

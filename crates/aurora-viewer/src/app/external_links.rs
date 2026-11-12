@@ -128,6 +128,9 @@ impl App {
         }
         let received: Vec<String> = self.external.rx.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for url in received {
+            if self.folderstorm_raise_request(&url) {
+                continue; // Folderstorm: a second launch of this profile
+            }
             self.open_external_url(&url, true);
         }
         if matches!(self.screen, Screen::World) && !self.external.waiting.is_empty() {

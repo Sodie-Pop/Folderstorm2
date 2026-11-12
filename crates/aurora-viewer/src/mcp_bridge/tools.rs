@@ -43,9 +43,15 @@ pub struct Ctx<'a> {
     pub attachment_points: HashMap<Uuid, u8>,
     /// RLVa's @showinv: the inventory may not be looked at.
     pub inventory_locked: bool,
+    /// The folders locked in the inventory window (`InventoryPreferences::
+    /// protected`), which the changes leave in place as the window does.
+    pub protected: HashSet<Uuid>,
+    /// The worn objects' points, temporary attachments left out
+    /// (`World::outfit_attachment_points`), for the outfit rules.
+    pub outfit_points: HashMap<Uuid, u8>,
 }
 
-fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {
+pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {
     ToolError::new(code, message)
 }
 
@@ -78,7 +84,7 @@ fn known_argument(tool: &str, key: &str) -> bool {
     known.contains(&key)
 }
 
-fn ready(cx: &Ctx) -> Result<(), ToolError> {
+pub(super) fn ready(cx: &Ctx) -> Result<(), ToolError> {
     if cx.session == Session::LoggedOut || cx.inv.root.is_nil() {
         return Err(err(ErrorCode::NotReady, "the viewer is not logged in"));
     }
@@ -117,7 +123,7 @@ fn status(cx: &Ctx) -> Value {
 
 /// The kind of an item, from its asset and inventory types
 /// (LLAssetType / LLInventoryType).
-fn kind(item: &InvItem) -> &'static str {
+pub(super) fn kind(item: &InvItem) -> &'static str {
     match item.asset_type {
         0 if item.inv_type == 15 => "snapshot",
         0 => "texture",
@@ -198,7 +204,7 @@ fn wearable_name(flags: u32) -> &'static str {
 
 /// A folder's path: names from My Inventory (empty for the root itself),
 /// or from "Library".
-fn path(inv: &Inventory, folder: Uuid) -> String {
+pub(super) fn path(inv: &Inventory, folder: Uuid) -> String {
     let mut names: Vec<&str> = Vec::new();
     for id in actions::ancestors(inv, folder) {
         if id == inv.root {
@@ -217,7 +223,7 @@ fn path(inv: &Inventory, folder: Uuid) -> String {
     names.join("/")
 }
 
-fn uuid_arg(args: &Value, key: &str) -> Result<Option<Uuid>, ToolError> {
+pub(super) fn uuid_arg(args: &Value, key: &str) -> Result<Option<Uuid>, ToolError> {
     match &args[key] {
         Value::Null => Ok(None),
         Value::String(s) => Uuid::parse_str(s.trim())
@@ -237,7 +243,7 @@ fn bool_arg(args: &Value, key: &str) -> Result<bool, ToolError> {
 
 /// Follow a `/` path from My Inventory, or from "Library/". A level
 /// matches by exact name first, then ignoring case.
-fn resolve_path(inv: &Inventory, text: &str) -> Result<Uuid, ToolError> {
+pub(super) fn resolve_path(inv: &Inventory, text: &str) -> Result<Uuid, ToolError> {
     let mut parts: Vec<&str> = text.split('/').map(str::trim).filter(|p| !p.is_empty()).collect();
     let mut current = vec![inv.root];
     let root_name = inv.folders.get(&inv.root).map(|f| f.info.name.as_str());
@@ -293,7 +299,7 @@ fn resolve_path(inv: &Inventory, text: &str) -> Result<Uuid, ToolError> {
 }
 
 /// The folder named by `folder_id` or `path`; None when neither is given.
-fn scope(args: &Value, inv: &Inventory) -> Result<Option<Uuid>, ToolError> {
+pub(super) fn scope(args: &Value, inv: &Inventory) -> Result<Option<Uuid>, ToolError> {
     let id = uuid_arg(args, "folder_id")?;
     let path = match &args["path"] {
         Value::Null => None,
@@ -309,7 +315,7 @@ fn scope(args: &Value, inv: &Inventory) -> Result<Option<Uuid>, ToolError> {
     }
 }
 
-fn library(inv: &Inventory, folder: Uuid) -> bool {
+pub(super) fn library(inv: &Inventory, folder: Uuid) -> bool {
     inv.folders.get(&folder).is_some_and(|f| f.library)
 }
 

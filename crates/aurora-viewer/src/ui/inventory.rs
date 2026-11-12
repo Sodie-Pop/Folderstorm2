@@ -20,6 +20,9 @@ pub struct WearCopyGroup {
 mod aurora;
 mod bulk_permissions;
 pub use bulk_permissions::demo_menu as bulk_permissions_demo;
+// Folderstorm: Review bulk changes
+mod bulk_review;
+pub use bulk_review::demo as bulk_review_demo;
 mod clipboard;
 pub use clipboard::demo_events as clipboard_demo_events;
 mod context;
@@ -32,6 +35,8 @@ pub(crate) mod custom_tabs;
 pub(crate) use controls::recent_period;
 pub(crate) mod default_permissions;
 mod delete;
+pub use delete::DeleteRequest;
+pub(crate) use delete::DeleteSelection;
 pub(crate) mod menu_layout;
 pub use delete::demo_events as delete_demo_events;
 mod dialogs;
@@ -76,7 +81,8 @@ pub use aurora::{DEMO_FOLDER_WINDOW as AURORA_DEMO_FOLDER_WINDOW, demo_place as 
 /// A demo scenario written for the Legacy Viewer's window (its tabs, its
 /// footer): every `AURORA_DEMO_INVENTORY` mode but Aurora's own.
 pub fn legacy_demo() -> bool {
-    delete::demo_enabled() || std::env::var("AURORA_DEMO_INVENTORY").is_ok_and(|mode| !mode.starts_with("aurora"))
+    (delete::demo_enabled() && !aurora::demo_active())
+        || std::env::var("AURORA_DEMO_INVENTORY").is_ok_and(|mode| !mode.starts_with("aurora"))
 }
 
 /// Aurora's own demo scenarios show its window whatever the preference.
@@ -119,7 +125,19 @@ pub fn show_document(
         names: Default::default(),
         ..Default::default()
     };
-    dialogs::preview(ctx, p, icons, inv, drag_inventory, st, images, prefs, script_settings, &mut actions);
+    dialogs::preview(
+        ctx,
+        p,
+        icons,
+        inv,
+        drag_inventory,
+        st,
+        images,
+        prefs,
+        script_settings,
+        facts.god_level,
+        &mut actions,
+    );
     dialogs::show(ctx, p, icons, inv, st, prefs, &facts, images, &mut actions);
     actions
 }
@@ -139,6 +157,8 @@ pub enum InvAction {
     CopyLandmarkSlurl(Uuid),
     ShowLandmarkOnMap(Uuid),
     Edit(Mutation),
+    /// A deletion's selection advances only on this request's success.
+    Delete(Box<DeleteRequest>),
     /// The same change from a drag dropped on a folder: the listings ask
     /// some questions for a drag only (LLFolderBridge::dragCategoryIntoFolder).
     Drop(Mutation),
@@ -190,6 +210,9 @@ pub enum InvAction {
         items: Vec<Uuid>,
         png: bool,
     },
+    /// Preferences › Confirmations / Inventory: stop asking before a Trash
+    /// move (`DeleteItems` ignore box). Purge still always asks (#2344).
+    StopConfirmingDelete,
     WearLibrary {
         item: Uuid,
         replace: bool,
@@ -227,6 +250,10 @@ pub enum InvAction {
 #[derive(Default)]
 pub struct Facts {
     pub agent: Uuid,
+    /// We hold a god level (Copy Asset UUID of any item).
+    pub god: bool,
+    /// The server-granted god level (actions::with_god).
+    pub god_level: u8,
     pub worn: HashSet<Uuid>,
     pub active_gestures: std::collections::BTreeSet<Uuid>,
     pub worn_labels: std::collections::HashMap<Uuid, String>,
@@ -281,6 +308,8 @@ impl Facts {
             .collect();
         Self {
             agent: world.agent_id,
+            god: world.god_level > 0,
+            god_level: world.god_level,
             worn,
             active_gestures: world.active_gestures.clone(),
             worn_labels,
@@ -306,10 +335,7 @@ impl Facts {
                 .is_some_and(|parcel| {
                     crate::world::env_apply::can_update_parcel(
                         parcel,
-                        &crate::world::land::AgentRights {
-                            id: world.agent_id,
-                            groups: &world.groups.groups,
-                        },
+                        &world.agent_rights(),
                         world
                             .main_region
                             .and_then(|handle| world.regions.get(&handle))
@@ -484,6 +510,8 @@ pub struct InventoryUi {
     was_open: bool,
     focus_search: bool,
     bulk_permissions: bulk_permissions::State,
+    // Folderstorm: Review bulk changes
+    bulk_review: Option<bulk_review::BulkReview>,
     menu_editor: context_customize::State,
     menu_notecards: context_notecards::State,
     /// Library wearables being copied to be worn: copy request → replace.
@@ -547,9 +575,14 @@ pub struct InventoryUi {
     pub selection: HashSet<Uuid>,
     anchor: Option<Uuid>,
     keyboard_selection: bool,
+    /// "Do not show again" on the Delete confirmation (Trash moves only).
+    delete_dont_ask: bool,
+    pending_delete: Option<Box<delete::PendingDelete>>,
     /// Last actual scroll offset and viewport height of this window's list.
     list_viewport: Option<(f32, f32)>,
     list_focus_frame: Option<u64>,
+    /// Which row order the list drew last, for the work done outside it.
+    shown_order: keyboard::ShownOrder,
     visible: Vec<Uuid>,
     pub clipboard: Vec<Uuid>,
     pub cut: bool,
@@ -1474,7 +1507,7 @@ fn status(
                 .color(p.muted),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            delete::button(ui, p, inv, st, prefs, facts);
+            delete::button(ui, p, inv, st, prefs, facts, actions);
             if st.busy() {
                 ui.add(egui::Spinner::new().size(14.0).color(p.violet));
             }
@@ -2116,6 +2149,9 @@ pub fn show(
 ) -> Vec<InvAction> {
     let mut actions = Vec::new();
     clipboard::prepare(st);
+    if !*open {
+        st.pending_delete = None;
+    }
     st.focus_search = *open && (st.focus_search || !st.was_open);
     // What is worn, the attachment points and the names are read for the
     // windows and dialogs that show them, not every frame while closed.
@@ -2202,8 +2238,9 @@ pub fn show(
         }
     }
     let inv = &mut world.inventory;
-    context_catalog::process_deferred(inv, st, prefs, &facts);
+    context_catalog::process_deferred(inv, st, prefs, &facts, &mut actions);
     bulk_permissions::show(ctx, p, inv, st, world.agent_id, &mut actions);
+    bulk_review::show(ctx, p, inv, st, prefs, &facts, &mut actions); // Folderstorm: Review bulk changes
     st.visible.clear();
     fetch_whole_inventory(inv, st);
     // Copied folders load their whole tree for the paste; once loaded, they
@@ -2265,7 +2302,19 @@ pub fn show(
     move_to::show(ctx, p, icons, inv, st, prefs, &facts, &mut actions);
     folder_jump::show(ctx, p, icons, inv, st, prefs); // Folderstorm: Go to folder
     outfit_safety::show(ctx, p, inv, st, &facts, &mut actions); // Folderstorm: outfit safety
-    dialogs::preview(ctx, p, icons, inv, inv, st, images, prefs, script_settings, &mut actions);
+    dialogs::preview(
+        ctx,
+        p,
+        icons,
+        inv,
+        inv,
+        st,
+        images,
+        prefs,
+        script_settings,
+        facts.god_level,
+        &mut actions,
+    );
     st.thumbnail.show(
         ctx,
         p,
@@ -2286,6 +2335,9 @@ pub fn show(
     let mut windows = std::mem::take(&mut st.windows);
     let mut spawned = Vec::new();
     for w in &mut windows {
+        if !w.open {
+            w.state.pending_delete = None;
+        }
         if !w.root.is_nil() && !world.inventory.folders.contains_key(&w.root) {
             w.open = false;
             w.state.menu_editor.finish_inventory_frame(ctx, &mut prefs.context_menus);
@@ -2395,12 +2447,13 @@ pub fn show(
             w.state.view = Default::default();
         }
         bulk_permissions::show(ctx, p, &mut world.inventory, &mut w.state, world.agent_id, &mut actions);
+        bulk_review::show(ctx, p, &world.inventory, &mut w.state, prefs, &facts, &mut actions); // Folderstorm: Review bulk changes
         if w.id != listings::PANEL {
             finish_hidden_rename(&world.inventory, &mut w.state, &mut actions);
         }
         controls::dialogs(ctx, p, &mut w.state, prefs);
         folder_colors::show(ctx, p, &world.inventory, &mut w.state, prefs);
-        context_catalog::process_deferred(&mut world.inventory, &mut w.state, prefs, &facts);
+        context_catalog::process_deferred(&mut world.inventory, &mut w.state, prefs, &facts, &mut actions);
         dialogs::show(ctx, p, icons, &world.inventory, &mut w.state, prefs, &facts, images, &mut actions);
         move_to::show(ctx, p, icons, &mut world.inventory, &mut w.state, prefs, &facts, &mut actions);
         folder_jump::show(ctx, p, icons, &world.inventory, &mut w.state, prefs); // Folderstorm: Go to folder
@@ -2415,6 +2468,7 @@ pub fn show(
             images,
             prefs,
             script_settings,
+            facts.god_level,
             &mut actions,
         );
         w.state.thumbnail.show(

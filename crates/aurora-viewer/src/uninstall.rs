@@ -330,6 +330,7 @@ pub fn folder_candidates(chosen_cache: &[PathBuf], transcripts: Option<PathBuf>,
         (Kind::Settings, crate::settings::default_config_root()),
         (Kind::Cache, crate::settings::default_cache_root()),
     ];
+    out.push((Kind::Cache, crate::folderstorm_characters::profile::profile_caches())); // Folderstorm: --profile caches
     out.extend(chosen_cache.iter().map(|dir| (Kind::ChosenCache, dir.clone())));
     out.push((Kind::Logs, crate::logging::logs_dir()));
     out.push((Kind::MediaPlugins, crate::settings::media_plugins_dir()));

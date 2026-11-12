@@ -85,13 +85,15 @@ impl App {
     /// The 3D drawing pauses: behind past the driver's memory budget
     /// (texture_budget::Background), or behind on a busy card (this module).
     pub(super) fn drawing_paused(&self) -> bool {
-        self.scene.textures.drawing_paused() || self.busy_pause.paused()
+        // Folderstorm: or the Off policy behind another Folderstorm2 window
+        self.scene.textures.drawing_paused() || self.busy_pause.paused() || self.folderstorm_characters.paused
     }
 
     /// Every frame, after the render: the pause follows the GPU time.
     pub(super) fn busy_pause_frame(&mut self, vr: bool) {
         let mut timed = self.capture.is_some() || self.frame_profile.enabled();
-        let (mut behind, mut gpu_ms) = (!self.focused, self.last_render.gpu_ms);
+        // Folderstorm: folderstorm_in_front, was self.focused (the session host's active character)
+        let (mut behind, mut gpu_ms) = (!self.folderstorm_in_front(), self.last_render.gpu_ms);
         if self.demo && !self.busy_pause.demo_released && demo_from().is_some_and(|from| self.frame_count >= from) {
             // (a new measure each frame)
             let ms = SLOW_MS * 2.0 + (self.frame_count % 2) as f32;

@@ -4,8 +4,9 @@ Port of Folderstorm (C++)'s local assistant bridge (`doc/fs-mcp.md`,
 `doc/help.md` "The local assistant bridge", `doc/plans/assistant-*.md`,
 `tools/fs-mcp/README.md`) to Folderstorm2. FEATURES.md rows 4.1–4.6.
 
-Phase 1 (this branch) is **read-only**: nothing an assistant asks can change
-the inventory, the avatar, the camera or the world.
+Phase 1 is **read-only**: nothing an assistant asks can change the
+inventory, the avatar, the camera or the world. Phase 2 adds inventory and
+outfit changes, each behind its permission class (see "Phase 2" below).
 
 ## Architecture
 
@@ -101,12 +102,10 @@ Presets (derived from the levels, never stored):
 | Custom | any other combination | |
 
 Choosing a preset writes all the levels at once; editing a level shows
-Custom. Phase 1 only shows the Read row under Custom, since nothing else is
-gated yet; the other levels are stored so that phase 2 inherits the
-user's preset. Permanent delete and Empty Trash are never a class: always
-refused. In phase 2, Ask opens a viewer dialog (60 s, refused on timeout) on
-the frame thread before the change runs; until then a class set to Ask is
-refused like Never.
+Custom. Custom shows one row per class (phase 1 showed only Read; the
+other levels were stored so that phase 2 inherits the user's preset). Permanent delete and Empty Trash are never a class: always
+refused. Ask opens a viewer dialog (60 s, refused on timeout) on the frame
+thread before the change runs (phase 2).
 
 **Use these settings for this session only**: the switch and the
 permissions edit a session copy kept in memory; the saved settings resume
@@ -130,11 +129,74 @@ Paths are folder names joined with `/`, from My Inventory (`Clothes/Boots`)
 or from the Library (`Library/…`). Names are not unique: an ambiguous path
 returns an error listing the candidate ids.
 
-Phase 2 (changes, behind Edit / Move / Wear / Trash and Ask dialogs):
-create folders, rename, describe, move, copy, link, Trash and restore, wear
-and take off outfits and items, wait for the bake. Phase 3: camera presets
-and snapshots (4.4), then FEATURES.md 4.6 one group at a time (navigation,
+Phase 2 (changes): see "Phase 2" below. Phase 3: camera presets and
+snapshots (4.4), then FEATURES.md 4.6 one group at a time (navigation,
 chat, teleport, uploads, world observation…).
+
+## Phase 2: changes
+
+Every change goes through the path the inventory window or Appearance
+uses for the same click, with its rules: `world::inventory::actions`
+(`create_folder`, `patch`, `move_selection`, `paste`, `default_folder`)
+for the inventory, `world::appearance::Action` (through
+`App::apply_appearance_action`) for outfits. No new network message. A
+call is checked twice: when it arrives (a refusal needs no dialog) and
+again when it runs (the inventory may have changed during the dialog).
+
+| Tool | Class | Arguments | Returns | Refused when |
+|---|---|---|---|---|
+| `inventory_create_folder` | edit | `name`; `folder_id` or `path` of the parent (My Inventory when neither) | `folder_id`, `name`, `parent_id` | the parent takes no new entry (`actions::destination`: Library, Current Outfit, Received Items, Trash, My Outfits); a name the inventory refuses |
+| `inventory_rename` | edit | `id` (item or folder), `name` | `id`, `name` | `actions::renameable` says no: system folders, Library, Current Outfit, Received Items, links, calling cards, items without Modify |
+| `inventory_describe` | edit | `item_id`, `description` (≤ 127 characters) | `id` | folders and links; Library, Current Outfit, Received Items; items without Modify (the properties panel's rule) |
+| `inventory_move` | move | `ids` (1–50), `folder_id` or `path` | `moved` | `actions::move_selection` says no: system, locked, pinned or worn entries, a folder into itself, a closed destination; the Trash (that is `inventory_trash`) |
+| `inventory_copy` | move | `ids` (1–50), `folder_id` or `path` | `copied` | `actions::paste`: an item without Copy (Library items copy), a folder not fully loaded, a closed destination |
+| `inventory_link` | move | `ids` (1–50), `folder_id` or `path` | `linked` | `actions::paste` with links: originals in the Library or the Trash, calling cards and other types that are never linked |
+| `inventory_trash` | trash | `ids` (1–50) | `trashed` | the Delete rule (`actions::removable` and worn ancestors): system and locked folders, worn items and the folders holding them, the current outfit |
+| `inventory_restore` | trash | `ids` (1–50) of entries in the Trash | `restored`: each id with the folder it went to | an entry outside the Trash; "Restore item"'s rule (`default_folder` then `move_selection`) |
+| `outfit_wear` | wear | `outfit_id` or `path`, `mode` `replace` (default) or `add` | `done` | the outfit or the Current Outfit not loaded yet, `appearance::plan`'s other refusals, RLVa |
+| `outfit_take_off` | wear | `outfit_id` or `path` | `done` | as above; body parts always stay (takeOffOutfit) |
+| `items_wear` | wear | `item_ids` (1–50), `mode` `add` (default) or `replace` | `done` | not clothing, a body part or an object; Library and Trash items (copy them first); RLVa |
+| `items_take_off` | wear | `item_ids` (1–50) | `done` | an item not worn; body parts cannot be taken off, only replaced |
+| `wait_for_bake` | read | `timeout_seconds` (1–120, default 30) | `settled`, `outfit_change_pending`, `cof_version`, `appearance_cof_version` | never: a timeout answers `settled: false` |
+
+- Permanent delete, Purge and Empty Trash are never tools: the names
+  `inventory_delete`, `inventory_purge` and `empty_trash` are refused by
+  the bridge and the sidecar with `permission_denied`, whatever the levels.
+- The Marketplace Listings folder is left alone: a change that touches it
+  (source or destination) is refused. Its listing dialogs have no
+  assistant counterpart. Stricter than the window.
+- One change at a time, like the window: while the inventory window or
+  Appearance waits for the server, a change is refused with `busy`.
+- An inventory change answers when the server confirmed it (or with
+  `timeout` after 30 s, the change may still land); an outfit change when
+  the Current Outfit is written. `wait_for_bake` then waits until no outfit
+  change is pending and the server's appearance carries the Current
+  Outfit's version (in demo mode, or a region that does not bake, the
+  first condition alone).
+- Refusals by the viewer's rules use the new error code `not_allowed`; the
+  user's permission levels keep `permission_denied`. Messages from the
+  viewer's own rules are its interface text (in the user's language).
+
+### Ask
+
+A class set to Ask passes the bridge with an `ask` flag. The frame thread
+checks the call, then queues a dialog (`widgets::Modal`, Palette, shared
+buttons) that says in plain words which program asks what: "“Claude Code”
+asks to move “Boots” to “Clothes/Old”". The program's name is the
+`clientInfo.name` the MCP client gave the sidecar at `initialize`, passed
+on in an `X-Folderstorm-Client` header (printable, 48 characters at most);
+the dialog says it is the name the program gives itself. Allow runs the
+change; Refuse, Escape, a click outside and 60 s without an answer refuse
+it (`permission_denied`). Neither button is the dialog's default, so an
+Enter typed for something else allows nothing. Dialogs come one at a time, oldest first; each
+call's 60 s count from its arrival. Waiting never blocks the frame: the
+call stays in a queue polled once per frame. The bridge's wait for the
+viewer grows with the call: 10 s, plus 60 s when it asks, plus the tool's
+own time (30 s for a change, 120 s for `wait_for_bake`); the sidecar's
+socket timeout follows the same table.
+
+Preferences shows every class under Custom now, with Allow / Ask / Never
+(Read: Allow / Never).
 
 ## MCP sidecar: no SDK
 
@@ -160,7 +222,8 @@ success, 1 on failure, 2 on bad arguments.
 |---|---|
 | `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
 | `crates/folderstorm-mcp/` | binary `folderstorm-mcp`: `jsonrpc` (MCP), `diagnose`, `main` |
-| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check) |
+| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake), `ask` (the dialog) |
+| `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id |
 | `crates/aurora-viewer/src/ui/options/pages/local_assistant.rs` | the Preferences group |
 
 New dependencies: `getrandom` 0.4 (OS random source, MIT/Apache-2.0,
@@ -183,6 +246,11 @@ workspace uses them; `tempfile` for tests (already in the lock).
   the Go to folder block.
 - `README.md`: `--mcp-api` in the command-line section; `docs/TESTING.md`:
   the demo scenario.
+- Phase 2, `app.rs`: `mod local_assistant;`, the per-frame call becomes
+  `self.local_assistant_frame()`, one `mcp_bridge::observe(&ev)` at the top
+  of `on_app_event` (inventory and outfit answers), one
+  `mcp_bridge::ask::show(&ctx, &p)` beside the other confirmation dialogs
+  of `draw_ui`. The `fs-mcp-*` block of the catalogues grows.
 
 ## Tests
 
@@ -206,5 +274,27 @@ workspace uses them; `tempfile` for tests (already in the lock).
   `AURORA_DEMO_MCP=1` also starts the bridge (session only) so its status
   and port show. Listed in `docs/TESTING.md`.
 
-Not testable here: the look of the page (no display in the sandbox) and
-real MCP clients on Windows.
+- phase 2: each change tool on the demo inventory (applied with
+  `actions::demo_mutate` / `appearance::demo_mutate`), its refusals
+  (system, locked, worn, Current Outfit, Library, Marketplace, no copy, no
+  modify, links, body parts), the creators' permissions matrix (owner,
+  group-owned, someone else's, Library, no copy, no transfer, no modify,
+  full) for rename, describe and copy; the desk (Ask: client and summary,
+  refusal, 60 s timeout, queue; Allow runs at once; server answers in and
+  after the send, copies, failure, 30 s timeout; `wait_for_bake`); the
+  bridge (Ask flag and client name, Never refused, permanent delete never
+  allowed, the longer wait of an asking call); the sidecar (client name,
+  tools/list annotations, permanent delete refused); an end-to-end move
+  allowed and Trash refused in the dialog, from the sidecar to the demo
+  inventory.
+
+Not testable here: the look of the page and of the dialog (no display in
+the sandbox), real MCP clients on Windows, and the grid's answers (the
+bake wait against a real region).
+
+## Next: receipts, plans, login binding and operations
+
+The foundation the FEATURES.md 4.6 groups need (step 3 of the MCP parity
+order) is planned in [mcp-receipts.md](mcp-receipts.md): re-checking
+permissions while a call waits, binding each call to one login, capability
+versions, receipts, batch preview and execute plans, and guarded operations.

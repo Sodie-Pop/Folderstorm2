@@ -51,6 +51,8 @@ const BARE: &[&str] = &[
     "media-plugins-",
     "monitor-",
     "photo-quality-off-after-crash-help",
+    "ui-appearance-batch-how",
+    "ui-appearance-showcase-no-picture-hint",
     "ui-bars-aurora-menu",
     "ui-contacts-coming-soon-in-aurora",
     "ui-contacts-multi-person-conference-coming-soon-in-aurora",
