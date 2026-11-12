@@ -811,6 +811,10 @@ impl Window_ {
         if let Some(view) = self.view_mut(which) {
             view.redraw = again || !acts.is_empty();
         }
+        if which == Which::Bar {
+            // the compact window makes room for its menus and hovers
+            self.bar_fit(&context, &window);
+        }
         if !acts.is_empty() {
             self.apply(acts, Instant::now());
         }
@@ -1104,8 +1108,14 @@ mod tests {
 
     /// The same for any of the host's windows.
     pub(super) fn draw_in(app: &mut Window_, which: Which, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
+        draw_with(app, which, width, height, Vec::new())
+    }
+
+    /// The same, with what the user does in that frame.
+    pub(super) fn draw_with(app: &mut Window_, which: Which, width: u32, height: u32, events: Vec<egui::Event>) -> (Vec<String>, Vec<u32>) {
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32))),
+            events,
             ..Default::default()
         };
         let view = app.view_mut(which).expect("the window's view");

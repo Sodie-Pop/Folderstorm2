@@ -12,7 +12,9 @@
 //!   one row, with a pin (always on top) and "Dock". Its place and its
 //!   pin are remembered. Closing it docks the bar back: it never closes
 //!   the host or a character. A window that cannot be made leaves the bar
-//!   docked.
+//!   docked. Its menus and hovers are drawn in the window, as egui's are:
+//!   while one is open the window grows under the row to hold it, and
+//!   goes back to one row when it closes ([`wanted_height`]).
 //! - **The host's own window hides** while a bar is on screen to bring it
 //!   back (`bar::host_hidden`), once the user has left it: never while
 //!   they are in it, never when it was asked for from the bar (until they
@@ -67,6 +69,41 @@ pub(super) struct Bar {
     off_taskbar: bool,
     /// The window to bring forward at the next wait.
     raise: Option<Which>,
+    /// The compact window's height last asked for, in pixels, while it is
+    /// grown to hold a menu or a hover: none at one row.
+    grown: Option<u32>,
+}
+
+/// The compact window's row, in points (its height when nothing is open).
+const ROW: f32 = WINDOW_SIZE[1] as f32;
+/// The most the compact window grows under its row for a menu or a hover.
+const MENU_ROOM: f32 = 420.0;
+/// What is left under a menu or a hover once it is measured.
+const MENU_MARGIN: f32 = 6.0;
+
+/// The height, in points, the compact window wants for what its frame
+/// showed, `current` high: one row, or with a menu or a hover open, room
+/// under the row for it. egui keeps an open menu inside its window, so one
+/// that touches the window's bottom may be cut and its size is not known:
+/// the window then grows to the most it may, and the next frame, where the
+/// menu has its room, measures it and fits it.
+pub(super) fn wanted_height(ctx: &egui::Context, current: f32) -> f32 {
+    let bottom = ctx.memory(|memory| {
+        memory
+            .areas()
+            .visible_layer_ids()
+            .into_iter()
+            .filter(|layer| matches!(layer.order, egui::Order::Foreground | egui::Order::Tooltip))
+            .filter_map(|layer| memory.area_rect(layer.id))
+            .map(|rect| rect.bottom())
+            .reduce(f32::max)
+    });
+    let most = ROW + MENU_ROOM;
+    match bottom {
+        None => ROW,
+        Some(bottom) if bottom + MENU_MARGIN > current + 0.5 => most,
+        Some(bottom) => (bottom + MENU_MARGIN).clamp(ROW, most),
+    }
 }
 
 /// A change of the bar's settings, from its page.
@@ -218,6 +255,7 @@ impl Window_ {
                 Ok(view) => {
                     log::info!("session host: the bar in its own window");
                     self.bar.pinned = self.host.desk.bar().pinned;
+                    self.bar.grown = None;
                     self.bar.view = Some(view);
                     self.redraw_all();
                 }
@@ -333,8 +371,23 @@ impl Window_ {
                 self.redraw_all();
                 true
             }
+            WindowEvent::Focused(false) => {
+                // a menu left open in a window the user left would keep
+                // it grown: menus close with the keyboard's going
+                if let Some(view) = &mut self.bar.view {
+                    egui::Popup::close_all(&view.context);
+                    view.redraw = true;
+                }
+                false
+            }
             WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                if let Some(place) = self.bar.view.as_ref().and_then(place) {
+                if let Some(mut place) = self.bar.view.as_ref().and_then(place) {
+                    if self.bar.grown.is_some()
+                        && let Some(window) = self.bar.view.as_ref().and_then(|view| view.window.as_ref())
+                    {
+                        // remembered at one row, never grown for a menu
+                        place.size[1] = (ROW * window.scale_factor() as f32).round() as u32;
+                    }
                     self.host.desk.edit_bar(|bar| {
                         bar.placed(place);
                     });
@@ -352,8 +405,41 @@ impl Window_ {
         let home = Home::Host {
             pinned: self.host.desk.bar().pinned,
         };
-        let rect = ui.max_rect();
+        // the row at the top; under it, room for a menu while one is open
+        let window = ui.max_rect();
+        let rect = window.with_max_y(window.top() + ROW.min(window.height()));
         acts.extend(drawn::show_in(ui, &p, rect, &state, home).into_iter().map(Act::Bar));
+    }
+
+    /// After a frame of the compact window: it grows under its row for an
+    /// open menu or hover, and goes back to one row once it is closed. Its
+    /// width, place and pin are left as they are; the place it remembers
+    /// is the row's (`bar_event`).
+    pub(super) fn bar_fit(&mut self, ctx: &egui::Context, window: &Window) {
+        use winit::dpi::{LogicalSize, PhysicalSize};
+        let scale = ctx.pixels_per_point().max(0.1);
+        let size = window.inner_size();
+        let mut wanted = wanted_height(ctx, size.height as f32 / scale);
+        if wanted > ROW
+            && let (Some(screen), Ok(top)) = (window.current_monitor(), window.inner_position())
+        {
+            // never past the bottom of its screen
+            let below = (screen.position().y + screen.size().height as i32 - top.y) as f32 / scale;
+            wanted = wanted.min(below.max(ROW));
+        }
+        let grown = (wanted > ROW + 0.5).then(|| (wanted * scale).round() as u32);
+        if grown == self.bar.grown {
+            return;
+        }
+        let height = grown.unwrap_or_else(|| (ROW * scale).round() as u32);
+        if grown.is_some() {
+            window.set_max_inner_size(None::<PhysicalSize<u32>>);
+        }
+        let _ = window.request_inner_size(PhysicalSize::new(size.width, height));
+        if grown.is_none() {
+            window.set_max_inner_size(Some(LogicalSize::new(16_384, WINDOW_SIZE[1])));
+        }
+        self.bar.grown = grown;
     }
 
     pub(super) fn bar_edit(&mut self, edit: Edit) {
@@ -526,7 +612,7 @@ fn skip_taskbar(_window: &Window, _skip: bool) {}
 #[cfg(test)]
 mod tests {
     use super::super::super::chat_ui::tests::host;
-    use super::super::tests::{draw, draw_in, window};
+    use super::super::tests::{draw, draw_in, draw_with, window};
     use super::*;
     use ::folderstorm_session::host::Effect;
     use ::folderstorm_session::identity::Colour;
@@ -628,6 +714,99 @@ mod tests {
         keep("popped-1100-pinned", &pixels, 1100, 38);
         let accent = u32::from_be_bytes([0, p.violet.r(), p.violet.g(), p.violet.b()]);
         assert!(pixels.contains(&accent), "the pin is on the accent");
+    }
+
+    /// The compact window's height for what its last frame showed.
+    fn wanted(app: &Window_, current: f32) -> f32 {
+        let view = app.view(Which::Bar).expect("the compact window");
+        wanted_height(&view.context, current)
+    }
+
+    fn click(at: egui::Pos2) -> Vec<egui::Event> {
+        let button = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        vec![egui::Event::PointerMoved(at), button(true), button(false)]
+    }
+
+    #[test]
+    fn a_menu_of_the_compact_window_grows_it_and_is_painted_whole() {
+        let now = Instant::now();
+        let mut app = window(host());
+        running(&mut app, now);
+        app.host.demo_bar(None);
+        pop_out(&mut app, now);
+        let (width, row) = (1100, ROW as u32);
+        draw_in(&mut app, Which::Bar, width, row);
+        draw_in(&mut app, Which::Bar, width, row);
+        assert_eq!(wanted(&app, ROW), ROW, "nothing open: one row");
+        // the characters' list, opened by a click on its button (the
+        // row's first, at its left end)
+        let at = egui::pos2(40.0, ROW / 2.0);
+        draw_with(&mut app, Which::Bar, width, row, click(at));
+        let (drawn, _) = draw_in(&mut app, Which::Bar, width, row);
+        assert!(shows(&drawn, "2: Sam Resident"), "the list is open: {drawn:?}");
+        // one row high, the list does not fit (this was the bug: egui
+        // keeps it in its window and the rest was cut): the window asks
+        // for room
+        let list = app.view(Which::Bar).and_then(|view| {
+            view.context.memory(|memory| {
+                memory
+                    .areas()
+                    .visible_layer_ids()
+                    .into_iter()
+                    .filter(|layer| layer.order == egui::Order::Foreground)
+                    .filter_map(|layer| memory.area_rect(layer.id))
+                    .reduce(|a, b| a.union(b))
+            })
+        });
+        assert!(list.is_some_and(|list| list.height() > ROW), "{list:?}");
+        let grown = wanted(&app, ROW);
+        assert!(grown > ROW + 60.0, "grows for the list: {grown}");
+        // grown, the list is measured and the window fitted to it
+        let tall = grown.round() as u32;
+        draw_in(&mut app, Which::Bar, width, tall);
+        let fitted = wanted(&app, grown);
+        assert!(fitted > ROW + 60.0 && fitted <= grown, "{fitted} of {grown}");
+        let high = fitted.round() as u32;
+        let (drawn, pixels) = draw_in(&mut app, Which::Bar, width, high);
+        assert!(
+            shows(&drawn, "1: Main") && shows(&drawn, "2: Sam Resident") && shows(&drawn, "3: demo-3"),
+            "{drawn:?}"
+        );
+        assert!((wanted(&app, fitted) - fitted).abs() < 1.0, "fitted, it stays");
+        // the list is painted under the row, whole: its last line is not
+        // at the window's bottom
+        let background = pixels[(high as usize - 1) * width as usize];
+        let under = &pixels[(row as usize + 4) * width as usize..(high as usize - 2) * width as usize];
+        assert!(
+            under.iter().filter(|p| **p != background).count() > 2_000,
+            "the list is drawn under the row"
+        );
+        keep("popped-menu", &pixels, width, high);
+        // the row stays at the top, as it was
+        let (top, _) = draw_in(&mut app, Which::Bar, width, high);
+        assert!(shows(&top, tr!("folderstorm-bar-attention")));
+        // closed (Escape): one row again
+        draw_with(
+            &mut app,
+            Which::Bar,
+            width,
+            high,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        draw_in(&mut app, Which::Bar, width, high);
+        draw_in(&mut app, Which::Bar, width, high);
+        assert_eq!(wanted(&app, fitted), ROW, "closed: one row");
     }
 
     /// A viewer's bar as its pass draws it: the strip kept by the inset,
