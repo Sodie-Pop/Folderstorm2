@@ -37,6 +37,9 @@ const BAND_ROWS: f32 = 112.0;
 /// The height of a row's buttons and of the heading's menu.
 const ROW_BUTTON: Vec2 = Vec2::new(0.0, 22.0);
 
+/// Below this width a row's Dismiss is its icon alone.
+const NARROW_ROW: f32 = 560.0;
+
 /// What a click in a row asks for.
 enum RowAct {
     Switch,
@@ -195,11 +198,17 @@ fn inbox_row(ui: &mut egui::Ui, p: &Palette, face: &Face, waiting: &Waiting, now
             name.on_hover_text(real);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let dismiss = tr!("folderstorm-inbox-dismiss");
-            if widgets::action_button(ui, p, "bell-off", dismiss, ActionKind::Flat, ROW_BUTTON)
-                .on_hover_text(tr!("folderstorm-inbox-dismiss-help"))
-                .clicked()
-            {
+            // (narrow, Dismiss is its icon: the question keeps some room)
+            let dismissed = if ui.available_width() < NARROW_ROW {
+                let tip = format!("{}: {}", tr!("folderstorm-inbox-dismiss"), tr!("folderstorm-inbox-dismiss-help"));
+                widgets::icon_button(ui, p, "bell-off", &tip, true)
+            } else {
+                let dismiss = tr!("folderstorm-inbox-dismiss");
+                widgets::action_button(ui, p, "bell-off", dismiss, ActionKind::Flat, ROW_BUTTON)
+                    .on_hover_text(tr!("folderstorm-inbox-dismiss-help"))
+                    .clicked()
+            };
+            if dismissed {
                 asked = Some(RowAct::Dismiss);
             }
             let answer = tr!("folderstorm-chat-switch-to-answer");

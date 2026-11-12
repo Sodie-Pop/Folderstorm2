@@ -551,6 +551,26 @@ impl Window_ {
 
     fn footer(&self, ui: &mut egui::Ui, p: &Palette, now: Instant, acts: &mut Vec<Act>) {
         let desk = &self.host.desk;
+        let close_question = self.closing && self.drawing == Which::Main;
+        if self.quit_asked && desk.live() > 0 && !desk.quitting() && !close_question {
+            // (follow-ups to checkpoint 7: "Quit all" is confirmed, with
+            // how many characters it closes; the question on a line of
+            // its own, the buttons under it)
+            ui.vertical(|ui| {
+                let question = tr!("folderstorm-host-quit-all-question", count = desk.live());
+                ui.label(RichText::new(question).color(p.ink));
+                ui.horizontal(|ui| {
+                    let quit = tr!("folderstorm-host-quit-all");
+                    if widgets::action_button(ui, p, "power", quit, ActionKind::Danger, BUTTON).clicked() {
+                        acts.push(Act::QuitAll);
+                    }
+                    if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
+                        acts.push(Act::Dismiss);
+                    }
+                });
+            });
+            return;
+        }
         ui.horizontal_wrapped(|ui| {
             if desk.quitting() {
                 let text = if desk.quit_overdue(now) {
@@ -562,7 +582,7 @@ impl Window_ {
                 if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
                     acts.push(Act::CancelQuit);
                 }
-            } else if self.closing && self.drawing == Which::Main {
+            } else if close_question {
                 // (asked in the host's own window: the one being closed)
                 ui.label(RichText::new(tr!("folderstorm-host-close-question")).color(p.ink));
                 let quit = tr!("folderstorm-host-quit-all");
@@ -575,18 +595,6 @@ impl Window_ {
                     .clicked()
                 {
                     acts.push(Act::CloseHost);
-                }
-                if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
-                    acts.push(Act::Dismiss);
-                }
-            } else if self.quit_asked && desk.live() > 0 {
-                // (follow-ups to checkpoint 7: "Quit all" is confirmed,
-                // with how many characters it closes)
-                let question = tr!("folderstorm-host-quit-all-question", count = desk.live());
-                ui.label(RichText::new(question).color(p.ink));
-                let quit = tr!("folderstorm-host-quit-all");
-                if widgets::action_button(ui, p, "power", quit, ActionKind::Danger, BUTTON).clicked() {
-                    acts.push(Act::QuitAll);
                 }
                 if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
                     acts.push(Act::Dismiss);
