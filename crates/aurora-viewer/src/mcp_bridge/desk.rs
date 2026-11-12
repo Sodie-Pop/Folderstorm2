@@ -22,9 +22,9 @@
 use super::changes::{self, Planned, Work};
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
-use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT, ToolSpec};
+use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::server::Pending;
-use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
+use folderstorm_mcp_bridge::{Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -161,25 +161,15 @@ pub const LOGIN_CHANGED: &str =
 /// The user turned local assistant access off while the call waited.
 pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
 
-/// Every permission class a tool needs. One today; a tool needing two
-/// (a thumbnail from a picture: Edit and Camera) adds its second here.
-fn classes(spec: &ToolSpec) -> impl Iterator<Item = Class> {
-    spec.class.into_iter()
-}
-
-/// What the levels say of `call` now: any class on Never refuses, else any
-/// on Ask asks (once), else it runs. An unknown tool is refused.
+/// What the levels say of `call` now, for every class it needs
+/// (`ToolSpec::classes`: a thumbnail from a picture needs Edit and Camera):
+/// any class on Never refuses, else any on Ask asks (once), else it runs.
+/// An unknown tool is refused.
 pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
     let Some(spec) = protocol::tool(tool) else {
         return Decision::Refuse;
     };
-    classes(spec)
-        .map(|c| permissions.decide(c))
-        .fold(Decision::Run, |all, one| match (all, one) {
-            (Decision::Refuse, _) | (_, Decision::Refuse) => Decision::Refuse,
-            (Decision::Ask, _) | (_, Decision::Ask) => Decision::Ask,
-            _ => Decision::Run,
-        })
+    permissions.decide_all(spec.classes())
 }
 
 impl Desk {
