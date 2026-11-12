@@ -44,7 +44,7 @@ pub const HANDLE: f32 = 8.0;
 
 /// The size of the popped-out window's inside the first time it opens,
 /// and the smallest it takes, in the screen's points: one row.
-pub const WINDOW_SIZE: [u32; 2] = [980, 38];
+pub const WINDOW_SIZE: [u32; 2] = [1100, 38];
 pub const WINDOW_MIN_SIZE: [u32; 2] = [320, 38];
 
 /// What a button shows.

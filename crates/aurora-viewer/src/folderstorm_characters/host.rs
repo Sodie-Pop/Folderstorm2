@@ -19,6 +19,12 @@
 //! here), each character's colour and alias ([`faces`]; only ever in the
 //! settings file and in these windows) and the condensed layout.
 //!
+//! Checkpoint 8: the bar. Docked, every viewer the host manages draws it
+//! at the top of its own window from what the host tells it
+//! ([`Host::sync_bars`]) and sends its clicks back; popped out, the host
+//! shows it in a compact window of its own (`ui/bar.rs`). While a bar is
+//! on screen the host's own window hides.
+//!
 //! Every window is drawn on the processor, like the crash window
 //! (`crash/software.rs`): the host opens no graphics device, so it takes
 //! nothing from the characters' card and no driver trouble reaches it.
@@ -35,6 +41,7 @@ mod monitors;
 mod process;
 mod ui;
 
+use ::folderstorm_session::bar::{self, Placement, QuickAction};
 use ::folderstorm_session::chat::{self, Chat};
 use ::folderstorm_session::host::{Config, Desk, Effect, Note, Phase};
 use ::folderstorm_session::identity::Colour;
@@ -60,6 +67,21 @@ pub const DEMO_PANELS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_PANELS";
 /// characters that are in the world (the host's own samples: no viewer
 /// has them, and "Switch to answer" only switches).
 pub const DEMO_POLISH_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_POLISH";
+
+/// `AURORA_DEMO_SESSION_HOST_BAR=docked|popped`, demo only, with
+/// [`DEMO_VARIABLE`] (checkpoint 8): where the bar starts, at the top of
+/// the demo's viewers or in the host's compact window. Either way the
+/// demo's quick actions also have the two toggles.
+pub const DEMO_BAR_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_BAR";
+
+/// What [`DEMO_BAR_VARIABLE`] asks for.
+fn demo_bar(value: &str) -> Option<Placement> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "docked" | "1" => Some(Placement::Docked),
+        "popped" | "popped-out" | "out" => Some(Placement::Popped),
+        _ => None,
+    }
+}
 
 /// What [`DEMO_POLISH_VARIABLE`] asks for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -212,7 +234,16 @@ struct Host {
     unsaved: Option<Instant>,
     /// "Quit all" is done: the window closes.
     exit: bool,
+    /// Checkpoint 8: what each viewer was last told of the bar, with the
+    /// launch it was told to.
+    bar_sent: [Option<(u32, bar::State)>; MAX_SLOTS],
+    /// The clicks on the viewers' bars since the window looked.
+    bar_asked: Vec<bar::Request>,
 }
+
+/// The most clicks of the viewers' bars kept between two looks of the
+/// window: more can only be a viewer gone wrong.
+const MAX_BAR_ASKED: usize = 32;
 
 impl Host {
     fn new() -> Self {
@@ -233,6 +264,8 @@ impl Host {
             demo: demo.is_some(),
             unsaved: None,
             exit: false,
+            bar_sent: Default::default(),
+            bar_asked: Vec::new(),
         };
         if host.demo {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
@@ -246,8 +279,62 @@ impl Host {
                 host.desk.set_panel_out(panel, true);
             }
             host.demo_polish(demo_polish(&std::env::var(DEMO_POLISH_VARIABLE).unwrap_or_default()));
+            if let Ok(value) = std::env::var(DEMO_BAR_VARIABLE) {
+                host.demo_bar(demo_bar(&value));
+            }
         }
         host
+    }
+
+    /// Checkpoint 8, demo only: the bar where [`DEMO_BAR_VARIABLE`] asks,
+    /// with the two toggles among its quick actions.
+    fn demo_bar(&mut self, placement: Option<Placement>) {
+        self.desk.edit_bar(|bar| {
+            bar.placement = placement.unwrap_or(bar.placement);
+            bar.set_quick(6, QuickAction::MuteBackground);
+            bar.set_quick(7, QuickAction::VoiceFollows);
+        });
+    }
+
+    /// The bar as the host shows it now, in a viewer or in its own window.
+    fn bar_state(&self) -> bar::State {
+        self.desk.bar_state(self.inbox.count(), self.chat.total_unread())
+    }
+
+    /// The viewers that draw a bar and were not told this one yet, with
+    /// their launch.
+    fn bars_due(&self, state: &bar::State) -> Vec<(usize, u32)> {
+        self.desk
+            .slots()
+            .filter(|(_, s)| s.phase == Phase::Running)
+            .map(|(slot, s)| (slot, s.launch()))
+            .filter(|(slot, launch)| {
+                !self.bar_sent[*slot]
+                    .as_ref()
+                    .is_some_and(|(told, sent)| told == launch && sent == state)
+            })
+            .collect()
+    }
+
+    /// Checkpoint 8: every managed viewer holds the bar as it is now.
+    /// Told whole, when it changed; one that did not take it (its pipe is
+    /// full) is told at the next look.
+    fn sync_bars(&mut self) {
+        let state = self.bar_state();
+        for slot in 0..MAX_SLOTS {
+            if !self.desk.slot(slot).is_some_and(|s| s.phase == Phase::Running) {
+                self.bar_sent[slot] = None;
+            }
+        }
+        for (slot, launch) in self.bars_due(&state) {
+            let told = self.viewers[slot]
+                .as_ref()
+                .filter(|viewer| viewer.launch == launch)
+                .is_some_and(|viewer| viewer.send(ToViewer::Bar(Box::new(state.clone()))));
+            if told {
+                self.bar_sent[slot] = Some((launch, state.clone()));
+            }
+        }
     }
 
     /// Checkpoint 7, demo only: the look [`DEMO_POLISH_VARIABLE`] asks for.
@@ -309,7 +396,13 @@ impl Host {
                 process::Kind::Chat(batch) if managed => self.chat.batch(slot, launch, *batch),
                 process::Kind::Attention(list) if managed => self.chat.attention_list(slot, launch, *list),
                 process::Kind::SendResult(id, outcome) if managed => self.chat.result(slot, launch, id, outcome),
-                // (checkpoint 8: a click on a viewer's bar; the window's side comes next)
+                // a click on that viewer's bar: the window carries it out
+                // (`ui/bar.rs`), as it does its own clicks
+                process::Kind::Bar(request) if managed && request.valid() => {
+                    if self.bar_asked.len() < MAX_BAR_ASKED {
+                        self.bar_asked.push(request);
+                    }
+                }
                 process::Kind::Chat(_) | process::Kind::Attention(_) | process::Kind::SendResult(..) | process::Kind::Bar(_) => {}
                 process::Kind::Unreachable => self.desk.unreachable(slot, launch),
             }
@@ -337,6 +430,7 @@ impl Host {
         self.chat.tick(now);
         self.carry_out_chat();
         self.sync_inbox(now);
+        self.sync_bars();
         if self.unsaved.is_some_and(|since| now.duration_since(since) >= SAVE_AFTER) {
             self.save();
         }
@@ -507,6 +601,58 @@ mod tests {
         distinct.sort_unstable();
         distinct.dedup();
         assert_eq!(distinct.len(), numbers.len());
+    }
+
+    #[test]
+    fn the_demo_s_bar_is_docked_or_popped() {
+        assert_eq!(demo_bar("docked"), Some(Placement::Docked));
+        assert_eq!(demo_bar(" Popped "), Some(Placement::Popped));
+        assert_eq!(demo_bar("out"), Some(Placement::Popped));
+        for other in ["", "0", "floating"] {
+            assert_eq!(demo_bar(other), None, "{other}");
+        }
+        let mut host = chat_ui::tests::host();
+        host.demo_bar(Some(Placement::Popped));
+        assert_eq!(host.desk.bar().placement, Placement::Popped);
+        let quick = &host.desk.bar().quick;
+        assert!(quick.contains(&QuickAction::MuteBackground) && quick.contains(&QuickAction::VoiceFollows));
+        // an unknown value leaves the bar where it was
+        host.demo_bar(None);
+        assert_eq!(host.desk.bar().placement, Placement::Popped);
+    }
+
+    #[test]
+    fn each_running_viewer_is_told_the_bar_once_and_again_when_it_changes() {
+        let now = Instant::now();
+        let mut host = chat_ui::tests::host();
+        // no viewer runs: nobody to tell
+        let state = host.bar_state();
+        assert!(state.docked && state.characters.len() >= 2);
+        assert!(host.bars_due(&state).is_empty());
+        for slot in 0..2 {
+            host.desk.launch(slot, slot == 0);
+            host.desk.connected(slot, 1, now);
+        }
+        let state = host.bar_state();
+        assert_eq!(host.bars_due(&state), [(0, 1), (1, 1)]);
+        // told (as `sync_bars` notes it once the pipe took it)
+        host.bar_sent[0] = Some((1, state.clone()));
+        host.bar_sent[1] = Some((1, state.clone()));
+        assert!(host.bars_due(&state).is_empty());
+        // something the bar shows changed: both are told again
+        host.desk.set_mute_background(true);
+        let changed = host.bar_state();
+        assert_ne!(changed, state);
+        assert_eq!(host.bars_due(&changed).len(), 2);
+        // another launch of a slot was told nothing yet
+        host.bar_sent[0] = Some((1, changed.clone()));
+        host.bar_sent[1] = Some((7, changed.clone()));
+        assert_eq!(host.bars_due(&changed), [(1, 1)]);
+        // a viewer that ended is forgotten (no process here: `sync_bars`
+        // has nobody to write to, and notes nothing)
+        host.desk.exited(1, 1, true, now);
+        host.sync_bars();
+        assert!(host.bar_sent[1].is_none() && host.bar_sent[0].is_some());
     }
 
     #[test]
