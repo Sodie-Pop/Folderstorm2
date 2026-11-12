@@ -309,7 +309,8 @@ impl Host {
                 process::Kind::Chat(batch) if managed => self.chat.batch(slot, launch, *batch),
                 process::Kind::Attention(list) if managed => self.chat.attention_list(slot, launch, *list),
                 process::Kind::SendResult(id, outcome) if managed => self.chat.result(slot, launch, id, outcome),
-                process::Kind::Chat(_) | process::Kind::Attention(_) | process::Kind::SendResult(..) => {}
+                // (checkpoint 8: a click on a viewer's bar; the window's side comes next)
+                process::Kind::Chat(_) | process::Kind::Attention(_) | process::Kind::SendResult(..) | process::Kind::Bar(_) => {}
                 process::Kind::Unreachable => self.desk.unreachable(slot, launch),
             }
         }

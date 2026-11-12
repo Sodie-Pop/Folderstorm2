@@ -263,6 +263,8 @@ impl App {
                 HostEvent::Command(command @ (ipc::ToViewer::SendChat { .. } | ipc::ToViewer::MarkRead { .. })) => {
                     self.folderstorm_chat_command(command);
                 }
+                // (checkpoint 8: the bar to draw; the viewer's side comes next)
+                HostEvent::Command(ipc::ToViewer::Bar(_)) => {}
                 HostEvent::Command(ipc::ToViewer::Quit) => {
                     log::info!("session host: asked to quit");
                     self.folderstorm_characters.quit_by_host = true;

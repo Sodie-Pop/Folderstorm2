@@ -55,7 +55,16 @@
 //! - [`identity`]: a character's colour, fitted to the theme's contrast,
 //!   and its alias; both only ever in the host's settings file;
 //! - [`host`]: the condensed layout's choice, with the other settings.
+//!
+//! Checkpoint 8 (the docked bar, section 15):
+//! - [`bar`]: the row at the top of every managed viewer: its settings,
+//!   what the host tells a viewer to draw and what a click asks of the
+//!   host, when the host's own window hides, and what a background
+//!   window is on the taskbar;
+//! - [`host`]: "Mute background sound", "Voice follows active", what the
+//!   bar shows of the desk and what its clicks do.
 
+pub mod bar;
 pub mod behind;
 pub mod chat;
 pub mod copy;

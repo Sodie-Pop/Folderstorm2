@@ -396,6 +396,7 @@ mod tests {
             standby: Standby::Warm,
             sound_muted: true,
             voice_allowed: false,
+            off_taskbar: false,
         }
     }
 
