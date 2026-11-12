@@ -105,6 +105,9 @@ struct Window_ {
     ending: Option<usize>,
     /// The window's close button was pressed while characters run.
     closing: bool,
+    /// "Quit all" was pressed and waits for its confirmation (the close
+    /// question is one already: its "Quit all" is not asked again).
+    quit_asked: bool,
     /// The shared chat's panel.
     chat: ChatPanel,
     /// A narrow window shows the chat (true) or the characters.
@@ -139,6 +142,7 @@ impl Window_ {
             comfort: Default::default(),
             ending: None,
             closing: false,
+            quit_asked: false,
             chat: ChatPanel::default(),
             chat_page: false,
             identity: Default::default(),
@@ -175,6 +179,9 @@ enum Act {
     Stage(bool),
     ChatSound(bool),
     Add,
+    /// "Quit all" pressed: asked first.
+    AskQuitAll,
+    /// Confirmed: every character is closed.
     QuitAll,
     CancelQuit,
     CloseHost,
@@ -195,6 +202,12 @@ enum Act {
     /// Checkpoint 7 (`ui/condensed.rs`): one line per character, or the
     /// cards.
     Condensed(bool),
+    /// Follow-ups to checkpoint 7 (`ui/inbox.rs`): a question dismissed
+    /// from the host's inbox (character, its viewer's number), all of a
+    /// character's, all. The viewers are told nothing.
+    InboxDismiss(usize, u64),
+    InboxDismissSlot(usize),
+    InboxDismissAll,
 }
 
 impl Window_ {
@@ -566,13 +579,25 @@ impl Window_ {
                 if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
                     acts.push(Act::Dismiss);
                 }
+            } else if self.quit_asked && desk.live() > 0 {
+                // (follow-ups to checkpoint 7: "Quit all" is confirmed,
+                // with how many characters it closes)
+                let question = tr!("folderstorm-host-quit-all-question", count = desk.live());
+                ui.label(RichText::new(question).color(p.ink));
+                let quit = tr!("folderstorm-host-quit-all");
+                if widgets::action_button(ui, p, "power", quit, ActionKind::Danger, BUTTON).clicked() {
+                    acts.push(Act::QuitAll);
+                }
+                if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked() {
+                    acts.push(Act::Dismiss);
+                }
             } else if desk.live() > 0 {
                 let quit = tr!("folderstorm-host-quit-all");
                 if widgets::action_button(ui, p, "power", quit, ActionKind::Flat, BUTTON)
                     .on_hover_text(tr!("folderstorm-host-quit-all-help"))
                     .clicked()
                 {
-                    acts.push(Act::QuitAll);
+                    acts.push(Act::AskQuitAll);
                 }
             }
         });
@@ -613,8 +638,13 @@ impl Window_ {
                     }
                     Err(error) => self.add_error = Some(add_error(&self.new_profile, error)),
                 },
+                Act::AskQuitAll => {
+                    self.closing = false;
+                    self.quit_asked = true;
+                }
                 Act::QuitAll => {
                     self.closing = false;
+                    self.quit_asked = false;
                     self.host.desk.quit_all(now);
                 }
                 Act::CancelQuit => self.host.desk.cancel_quit(),
@@ -625,6 +655,7 @@ impl Window_ {
                 Act::Dismiss => {
                     self.ending = None;
                     self.closing = false;
+                    self.quit_asked = false;
                 }
                 Act::Refresh => {}
                 Act::Comfort(act) => self.comfort_apply(act, now),
@@ -635,6 +666,15 @@ impl Window_ {
                 Act::EditIdentity(slot) => self.identity_edit(slot),
                 Act::Colour(slot, colour) => self.host.desk.set_colour(slot, colour),
                 Act::Alias(slot, text) => self.identity_alias(slot, &text),
+                Act::InboxDismiss(slot, id) => {
+                    self.host.inbox.dismiss(slot, id);
+                }
+                Act::InboxDismissSlot(slot) => {
+                    self.host.inbox.dismiss_slot(slot);
+                }
+                Act::InboxDismissAll => {
+                    self.host.inbox.dismiss_all();
+                }
                 Act::Condensed(condensed) => {
                     self.host.desk.set_condensed(condensed);
                     // (the cards' pages have no way back from the lines)
@@ -646,6 +686,8 @@ impl Window_ {
             }
         }
         self.host.tick(now);
+        // (nothing left to quit: the question goes)
+        self.quit_asked &= self.host.desk.live() > 0;
         self.redraw_all();
     }
 
@@ -880,7 +922,9 @@ impl ApplicationHandler for Window_ {
                     event_loop.exit();
                 } else {
                     // characters run: the user says what becomes of them
+                    // (the close question replaces a "Quit all" asked)
                     self.closing = true;
+                    self.quit_asked = false;
                     self.redraw_all();
                 }
                 return;
@@ -1127,6 +1171,50 @@ mod tests {
         assert!(!shows(&drawn, "Each character runs in its own viewer"));
         // (wide again, for the picture a capture keeps)
         draw(&mut app, 1120, 760);
+    }
+
+    /// "Quit all" asks first, naming how many characters it closes; the
+    /// close question is a question already and does not ask again.
+    #[test]
+    fn quit_all_is_confirmed_once() {
+        let now = Instant::now();
+        let mut app = window(host());
+        for slot in 0..2 {
+            app.host.desk.launch(slot, slot == 0);
+            app.host.desk.connected(slot, 1, now);
+        }
+        app.host.desk.take_effects();
+        let shows = |drawn: &[String], text: &str| drawn.iter().any(|t| t.contains(text));
+        let question = tr!("folderstorm-host-quit-all-question", count = 2usize);
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(shows(&drawn, tr!("folderstorm-host-quit-all")) && !shows(&drawn, &question));
+        // pressed: asked, nothing closed yet
+        app.apply(vec![Act::AskQuitAll], now);
+        assert!(!app.host.desk.quitting());
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(shows(&drawn, &question), "{drawn:?}");
+        assert!(shows(&drawn, tr!("common-cancel")));
+        // cancelled: nothing happened
+        app.apply(vec![Act::Dismiss], now);
+        assert!(!app.host.desk.quitting() && !app.quit_asked);
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(!shows(&drawn, &question));
+        // the same in the condensed layout, then confirmed
+        app.host.desk.set_condensed(true);
+        app.apply(vec![Act::AskQuitAll], now);
+        let (drawn, _) = draw(&mut app, 420, 300);
+        assert!(shows(&drawn, &question), "{drawn:?}");
+        app.apply(vec![Act::QuitAll], now);
+        assert!(app.host.desk.quitting() && !app.quit_asked);
+        app.apply(vec![Act::CancelQuit], now);
+        app.host.desk.set_condensed(false);
+        // the close question's "Quit all" is the answer: no second question
+        app.closing = true;
+        let (drawn, _) = draw(&mut app, 1120, 760);
+        assert!(shows(&drawn, tr!("folderstorm-host-close-question")), "{drawn:?}");
+        assert!(!shows(&drawn, &question));
+        app.apply(vec![Act::QuitAll], now);
+        assert!(app.host.desk.quitting() && !app.closing);
     }
 
     /// Every icon the host's window names is one the viewer embeds: an

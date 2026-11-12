@@ -5,10 +5,18 @@
 //! viewer lists as [`AttentionItem`]s, checkpoint 3).
 //!
 //! The rules, all pure:
-//! - **Nothing is answered here.** The inbox has no way to accept, decline
-//!   or dismiss: it says which character is asked what and for how long,
-//!   and the host offers "Switch to answer". The answer is given in that
+//! - **Nothing is answered here.** The inbox has no way to accept or
+//!   decline: it says which character is asked what and for how long, and
+//!   the host offers "Switch to answer". The answer is given in that
 //!   character's own window.
+//! - **Dismissed is the host's own** (follow-ups to checkpoint 7): a
+//!   question dismissed here leaves the inbox and its counts, and its
+//!   viewer is told nothing (it still waits there, unanswered). It stays
+//!   out while that viewer lists it in the same login; what comes back is
+//!   only a new question (another number, or another login: a viewer
+//!   numbers its questions anew for each, never twice in one). Dismissing
+//!   every question of a character also leaves out how many more it has
+//!   than are listed, until that count grows. Kept in memory only.
 //! - **The viewers' lists are the truth.** A question is in the inbox
 //!   while its viewer lists it, and leaves when the viewer's next list
 //!   does not have it (answered there, or expired there), when that
@@ -79,7 +87,14 @@ pub struct Inbox {
     logins: [Option<Login>; MAX_SLOTS],
     /// How many more wait in each character's viewer than are listed.
     more: [u32; MAX_SLOTS],
+    /// The numbers of the questions dismissed, for each character's login.
+    dismissed: [Vec<u64>; MAX_SLOTS],
+    /// How many of `more` were dismissed with the rest.
+    more_dismissed: [u32; MAX_SLOTS],
 }
+
+/// The most dismissed numbers kept per character: more than it can list.
+const MAX_DISMISSED: usize = 4 * MAX_ATTENTION;
 
 impl Inbox {
     /// What that character's viewer lists now, whole: `login` is the login
@@ -98,18 +113,26 @@ impl Inbox {
         let (mut old, mut kept): (Vec<Waiting>, Vec<Waiting>) = std::mem::take(&mut self.waiting).into_iter().partition(|w| w.slot == slot);
         if !same_login {
             old.clear();
+            // another login's numbers are other questions
+            self.dismissed[slot].clear();
+            self.more_dismissed[slot] = 0;
         }
-        let mut listed = 0usize;
+        let mut listed: Vec<u64> = Vec::new();
+        let mut shown = 0usize;
         let mut over = 0u32;
         let mut replaced = false;
         if login.is_some() {
             for item in items {
-                if kept.iter().rev().take(listed).any(|w| w.item.id == item.id) {
+                if listed.contains(&item.id) {
                     // listed twice: one question
                     continue;
                 }
-                if listed == MAX_ATTENTION {
+                if listed.len() == MAX_ATTENTION {
                     over = over.saturating_add(1);
+                    continue;
+                }
+                listed.push(item.id);
+                if self.dismissed[slot].contains(&item.id) {
                     continue;
                 }
                 let known = old.iter().find(|w| w.item.id == item.id);
@@ -119,13 +142,20 @@ impl Inbox {
                     item: item.clone(),
                     since: known.map_or(now, |w| w.since),
                 });
-                listed += 1;
+                shown += 1;
             }
             self.more[slot] = more.saturating_add(over);
+            if self.more[slot] == 0 {
+                // the whole list: a dismissed question it does not have is
+                // gone for good (its number is never given again)
+                self.dismissed[slot].retain(|id| listed.contains(id));
+            }
         } else {
             self.more[slot] = 0;
         }
-        let gone = old.len() != listed;
+        // (fewer not listed than were dismissed: those went)
+        self.more_dismissed[slot] = self.more_dismissed[slot].min(self.more[slot]);
+        let gone = old.len() != shown;
         kept.sort_by_key(|w| (w.since, w.slot, w.item.id));
         self.waiting = kept;
         replaced || gone || before != (self.waiting.len(), self.more[slot])
@@ -137,7 +167,45 @@ impl Inbox {
             self.waiting.retain(|w| w.slot != slot);
             self.logins[slot] = None;
             self.more[slot] = 0;
+            self.dismissed[slot].clear();
+            self.more_dismissed[slot] = 0;
         }
+    }
+
+    /// Takes that character's question out of the inbox, in the host only:
+    /// nothing is said to its viewer. True when it was there.
+    pub fn dismiss(&mut self, slot: usize, id: u64) -> bool {
+        let Some(at) = self.waiting.iter().position(|w| w.slot == slot && w.item.id == id) else {
+            return false;
+        };
+        self.waiting.remove(at);
+        let dismissed = &mut self.dismissed[slot];
+        if dismissed.len() == MAX_DISMISSED {
+            dismissed.remove(0);
+        }
+        dismissed.push(id);
+        true
+    }
+
+    /// Dismisses every question of that character, those not listed
+    /// included. True when the inbox changed.
+    pub fn dismiss_slot(&mut self, slot: usize) -> bool {
+        if slot >= MAX_SLOTS {
+            return false;
+        }
+        let ids: Vec<u64> = self.waiting.iter().filter(|w| w.slot == slot).map(|w| w.item.id).collect();
+        let hidden = std::mem::replace(&mut self.more_dismissed[slot], self.more[slot]) != self.more[slot];
+        ids.into_iter().fold(hidden, |changed, id| self.dismiss(slot, id) | changed)
+    }
+
+    /// Dismisses everything. True when the inbox changed.
+    pub fn dismiss_all(&mut self) -> bool {
+        (0..MAX_SLOTS).fold(false, |changed, slot| self.dismiss_slot(slot) | changed)
+    }
+
+    /// That question of that character's login was dismissed here.
+    pub fn is_dismissed(&self, slot: usize, login: Option<Login>, id: u64) -> bool {
+        login.is_some() && self.logins.get(slot) == Some(&login) && self.dismissed[slot].contains(&id)
     }
 
     /// What waits, oldest first.
@@ -145,9 +213,13 @@ impl Inbox {
         &self.waiting
     }
 
-    /// How many more wait in that character's viewer than are listed.
+    /// How many more wait in that character's viewer than are listed
+    /// (and were not dismissed).
     pub fn more(&self, slot: usize) -> u32 {
-        self.more.get(slot).copied().unwrap_or(0)
+        match (self.more.get(slot), self.more_dismissed.get(slot)) {
+            (Some(more), Some(dismissed)) => more.saturating_sub(*dismissed),
+            _ => 0,
+        }
     }
 
     /// How many wait for that character, those not listed included.
@@ -302,6 +374,91 @@ mod tests {
         inbox.set(0, LOGIN, &many, u32::MAX, now);
         inbox.set(1, LOGIN, &many, u32::MAX, now);
         assert_eq!((inbox.more(0), inbox.count()), (u32::MAX, u32::MAX));
+    }
+
+    #[test]
+    fn a_dismissed_question_stays_out_until_it_is_a_new_one() {
+        let start = Instant::now();
+        let later = start + Duration::from_secs(30);
+        let mut inbox = Inbox::default();
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 0, start);
+        inbox.set(1, LOGIN, &[item(1, "Kim")], 0, start);
+        assert!(inbox.dismiss(0, 1));
+        assert!(!inbox.dismiss(0, 1), "once");
+        assert!(!inbox.dismiss(0, 9) && !inbox.dismiss(MAX_SLOTS, 1), "not there");
+        assert_eq!(order(&inbox), [(0, 2), (1, 1)]);
+        assert_eq!((inbox.count(), inbox.count_for(0)), (2, 1));
+        assert!(inbox.is_dismissed(0, LOGIN, 1));
+        assert!(!inbox.is_dismissed(1, LOGIN, 1), "the same number of another character");
+        assert!(!inbox.is_dismissed(0, Some((1, 2)), 1), "another login's");
+        // its viewer still lists it: it stays out, the next list changes nothing
+        assert!(!inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 0, later));
+        assert_eq!(order(&inbox), [(0, 2), (1, 1)]);
+        // even with new words
+        inbox.set(0, LOGIN, &[item(1, "Jane Doe"), item(2, "Sam")], 0, later);
+        assert_eq!(order(&inbox), [(0, 2), (1, 1)]);
+        // a new question of that viewer comes in
+        assert!(inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam"), item(3, "Lee")], 0, later));
+        assert_eq!(order(&inbox), [(0, 2), (1, 1), (0, 3)]);
+        // answered there, then the same number in a new login: a new question
+        inbox.set(0, Some((1, 2)), &[item(1, "someone else")], 0, later);
+        assert_eq!(order(&inbox), [(1, 1), (0, 1)]);
+        assert!(!inbox.is_dismissed(0, Some((1, 2)), 1));
+    }
+
+    #[test]
+    fn dismissing_all_or_one_character_s_leaves_the_rest() {
+        let now = Instant::now();
+        let mut inbox = Inbox::default();
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 3, now);
+        inbox.set(1, LOGIN, &[item(1, "Kim")], 0, now);
+        assert_eq!(inbox.count(), 6);
+        assert!(inbox.dismiss_slot(0));
+        assert!(!inbox.dismiss_slot(0), "nothing left of it");
+        assert!(!inbox.dismiss_slot(MAX_SLOTS));
+        assert_eq!(order(&inbox), [(1, 1)]);
+        // the questions not listed went with the rest
+        assert_eq!((inbox.count_for(0), inbox.more(0), inbox.count()), (0, 0, 1));
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 3, now);
+        assert_eq!(inbox.count_for(0), 0);
+        // one more not listed: that one is counted
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 4, now);
+        assert_eq!(inbox.more(0), 1);
+        // fewer, then more again: the new ones are counted
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 1, now);
+        assert_eq!(inbox.more(0), 0);
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 2, now);
+        assert_eq!(inbox.more(0), 1);
+        assert!(inbox.dismiss_all());
+        assert!(inbox.is_empty() && inbox.waiting().is_empty());
+        assert!(!inbox.dismiss_all());
+        // removed from the desk: nothing of it is remembered
+        inbox.clear(1);
+        inbox.set(1, LOGIN, &[item(1, "Kim")], 0, now);
+        assert_eq!(order(&inbox), [(1, 1)]);
+    }
+
+    #[test]
+    fn what_is_dismissed_is_bounded_and_forgotten_once_its_viewer_drops_it() {
+        let now = Instant::now();
+        let mut inbox = Inbox::default();
+        inbox.set(0, LOGIN, &[item(1, "Jane"), item(2, "Sam")], 0, now);
+        inbox.dismiss(0, 1);
+        // the whole list without it: answered there, forgotten here
+        inbox.set(0, LOGIN, &[item(2, "Sam")], 0, now);
+        assert!(!inbox.is_dismissed(0, LOGIN, 1));
+        // a list that does not tell everything forgets nothing
+        inbox.set(0, LOGIN, &[item(2, "Sam")], 0, now);
+        inbox.dismiss(0, 2);
+        inbox.set(0, LOGIN, &[item(3, "Lee")], 5, now);
+        assert!(inbox.is_dismissed(0, LOGIN, 2));
+        // many dismissed: the oldest number goes first
+        for id in 10..10 + MAX_DISMISSED as u64 + 1 {
+            inbox.set(0, LOGIN, &[item(id, "x")], 5, now);
+            assert!(inbox.dismiss(0, id));
+        }
+        assert!(!inbox.is_dismissed(0, LOGIN, 2));
+        assert!(inbox.is_dismissed(0, LOGIN, 10 + MAX_DISMISSED as u64));
     }
 
     #[test]

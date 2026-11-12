@@ -96,7 +96,7 @@ impl Window_ {
         let radius = ui.visuals().window_corner_radius;
         let slots: Vec<(usize, Slot)> = self.host.desk.slots().map(|(i, s)| (i, s.clone())).collect();
         // (the room under the lines: what the host asks, when it asks)
-        let asking = quitting || self.closing || self.host.desk.voice_waits_for().is_some();
+        let asking = quitting || self.closing || self.quit_asked || self.host.desk.voice_waits_for().is_some();
         let under = if asking { 76.0 } else { 34.0 };
         egui::ScrollArea::vertical()
             .id_salt("folderstorm-host-condensed")
