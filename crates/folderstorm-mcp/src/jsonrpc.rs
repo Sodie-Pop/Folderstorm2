@@ -408,4 +408,33 @@ mod tests {
         assert_eq!(a["result"]["isError"], false);
         assert_eq!(s.backend.0, vec!["inventory_types".to_owned()]);
     }
+
+    /// Folderstorm: phase 3, part 3 (world observation).
+    #[test]
+    fn lists_the_world_observations_as_reads() {
+        let mut s = Server::new(Fake(Vec::new()));
+        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+        let tools = a["result"]["tools"].as_array().expect("tools");
+        for name in [
+            "world_location",
+            "world_parcel",
+            "world_nearby_avatars",
+            "world_nearby_objects",
+            "world_audio_sources",
+            "world_media_sources",
+        ] {
+            let tool = tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("{name} listed"));
+            assert_eq!(tool["annotations"]["readOnlyHint"], true, "{name}");
+            assert_eq!(tool["inputSchema"]["additionalProperties"], false, "{name}");
+        }
+        let avatars = tools.iter().find(|t| t["name"] == "world_nearby_avatars").expect("listed");
+        assert_eq!(avatars["inputSchema"]["properties"]["limit"]["maximum"], 100);
+        // a call reaches the viewer like any other
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"world_location","arguments":{}}}"#,
+        );
+        assert_eq!(a["result"]["isError"], false);
+        assert_eq!(s.backend.0, vec!["world_location".to_owned()]);
+    }
 }

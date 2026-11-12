@@ -36,6 +36,9 @@ impl App {
                 target: self.camera.target,
                 fov: self.camera.fov_y,
             },
+            // phase 3, part 3: only what the viewer already holds, never fetched for it
+            object_props: vec![self.area_search_feed.props(), &self.interactions.props, &self.build.props],
+            sounds: Some(&self.scene.sounds.history),
         }
     }
 

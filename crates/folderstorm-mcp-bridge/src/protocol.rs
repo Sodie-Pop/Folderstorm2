@@ -15,6 +15,9 @@ use std::time::Duration;
 // Folderstorm: phase 3, part 2 (inventory gaps), its own catalogue
 pub mod inventory;
 
+// Folderstorm: phase 3, part 3 (world observation), its own catalogue
+pub mod world;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -632,7 +635,10 @@ pub fn tool(name: &str) -> Option<&'static ToolSpec> {
 
 /// Every tool: [`TOOLS`], then the groups phase 3 adds.
 pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
-    TOOLS.iter().chain(inventory::INVENTORY_TOOLS) // Folderstorm: phase 3 groups
+    TOOLS
+        .iter()
+        .chain(inventory::INVENTORY_TOOLS)
+        .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
 }
 
 #[cfg(test)]

@@ -59,6 +59,12 @@ impl Feed {
         };
     }
 
+    /// Folderstorm: the names and owners loaded so far, which the local
+    /// assistant's `world_nearby_objects` reads (never requests).
+    pub(super) fn props(&self) -> &HashMap<Uuid, ObjectProps> {
+        &self.props
+    }
+
     pub(super) fn on_closed_properties(&mut self, props: &[ObjectProps]) {
         for p in props.iter().filter(|p| p.full) {
             self.requests.remove(&p.object_id);
