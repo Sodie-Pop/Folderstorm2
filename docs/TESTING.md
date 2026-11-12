@@ -5529,7 +5529,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions; with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `updates`), the host's settings window opens on that section |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7230,9 +7230,9 @@ failure. Grid validation and any paid upload are performed by the human.
       as the wrong character.
     - **the bar's Monitors menu**: tick and untick each character, "Open
       all inactive monitors", "Cycling monitor", "Close all monitors"
-      (the cycling one too), "Monitor settings…" (the host's "Monitors"
-      page: what a new monitor opens with, the budget's note, and the
-      cycling monitor's choices; also a button under the cards).
+      (the cycling one too), "Monitor settings…" (the settings window's
+      "Monitors" section since checkpoint 10: what a new monitor opens
+      with, the budget's note, and the cycling monitor's choices).
     - close a monitor's window: that monitor closes (its box on the card
       is unticked), nothing else does. Outside the demo, each monitor's
       window is in `session-host.json` (`monitor_window` per character:
@@ -7240,11 +7240,62 @@ failure. Grid validation and any paid upload are performed by the human.
       the host and start it again, the windows open where they were,
       without taking the keyboard, and one whose screen is gone comes
       back on a connected one.
+  - **the host's settings in one window** (checkpoint 10).
+    `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (with
+    `AURORA_DEMO_SESSION_HOST`) opens it on `toolbar`, `characters`,
+    `chat`, `sound`, `monitors`, `hotkeys`, `advanced` or `updates`:
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_SETTINGS=characters AURORA_DEMO_SESSION_HOST_POLISH=colours cargo run -p aurora-viewer -- --title "Test host"`.
+    It also opens from "Settings…" under the cards, from each entry of
+    the bar's cog menu (on its section: "Bar and quick actions…" on
+    Toolbar, "Hotkeys…" on Hotkeys, "Monitor settings…" on Monitors) and
+    from a card's palette button (Characters, on that character). What to
+    look at:
+    - the sections' list on the left and a dense page on the right, at
+      the window's first size and narrowed to its least (480 points):
+      the groups that stand side by side go one under the other, nothing
+      is cut off;
+    - **Toolbar and windows**: where the bar is, the two label modes,
+      "Hide the host's window…", "One taskbar button", "The characters
+      share one window place", the twelve quick actions (two columns);
+    - **Characters**: pick a character at the top; its profile and the
+      name it is logged in as, its alias and colour (the card and the
+      bar follow at once), Warm / Economy, "Heard in the background",
+      "Include in Attention" (off: its questions leave the inbox and its
+      count), Move up / Move down (only between characters whose viewer
+      does not run and whose monitor is closed: they swap numbers, and
+      their hotkeys and quick actions follow), its alerts by kind with
+      Preview and Reset;
+    - **Chat and Attention**: untick a kind (for example Group chats):
+      its chips and lines leave the shared chat, "All" and the monitors,
+      its unread count goes from the badges; untick a kind of question
+      (with `AURORA_DEMO_SESSION_HOST_POLISH=inbox`): it leaves the inbox
+      and the Attention count of the bar; "Newest first" reverses the
+      inbox; "Mark displayed chats read" off: a conversation shown keeps
+      its unread count; "Auto-read the active character after 60 s": a
+      character left in front a minute has its counts cleared in the host
+      (its viewer's own are not touched);
+    - **Sound and voice**: "Voice follows active", "Mute all background
+      sound", the host's alert with its preview (Windows), each
+      character's "Heard in the background";
+    - **Monitors**, **Hotkeys**: the pages of checkpoints 9 and 4, moved;
+    - **Advanced**: "Open the settings folder" opens the folder of
+      `session-host.json`; "Recover window positions" (move a panel's or a
+      monitor's window half off the screen first) brings every window of
+      the host back, says how many, and moves no character's window;
+      "Show diagnostics" lists each character's phase, health, screen,
+      launch and monitor; the icons' credits show the Tabler licence;
+    - **Updates and support**: points to the viewer's Preferences pages
+      and its Help menu.
+    Outside the demo, the window's place and section and the new settings
+    are in `session-host.json` (`chat_shown`, `reading`, `attention`,
+    `settings_window`; per character `attention` and `alerts`). A file of
+    checkpoint 9 reads with nothing lost.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames, and each panel's own window to
   `<file>-chat.png`, `<file>-controls.png` or `<file>-inbox.png`, the
-  compact window to `<file>-bar.png`, each monitor's window to
+  compact window to `<file>-bar.png`, the settings window to
+  `<file>-settings.png`, each monitor's window to
   `<file>-monitor-<n>.png` (its picture included: demo viewers have no
   grid) and the cycling monitor's to `<file>-cycling.png`.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
