@@ -2252,34 +2252,130 @@ May be two small PRs: 1a profiles, 1b behind policy.
     window of its own; New IM and Friends once the link can start a
     conversation; pins kept beyond a login.
 
-### Checkpoint 10: settings redesign (placeholder)
+### Checkpoint 10: the host's settings in one window
 
-Not built. From the human's notes (2026-11-12), after Folderstorm
-(C++)'s "Host Preferences", without its sparse pages:
-
-- **Layout**: toolbar button labels and quick action labels (built in
-  checkpoint 8, to move here);
-- **Character settings**, per character: name, background mode (Warm /
-  Economy), alias, colour (C++ had a free colour), "Logged in as", card
-  position, "Include in Attention"; sounds: alerts while another
-  character is active (direct IM, group chat, conference,
-  notifications), a notification sound (WAV, built-in tone, preview,
-  reset);
-- **Chats and notifications**: what appears in the shared and monitor
-  chats (Nearby, direct IMs, group chats, conferences, viewer
-  notifications); which offers appear in Attention (teleport offers,
-  permission requests, inventory offers, notifications: no chats),
-  oldest first; reading: "Mark displayed chats read", "Auto-read the
-  active character" after a delay (60 s);
-- **Audio and voice**: Voice follows active, Mute background sound
-  (both built in checkpoint 8), alert volume;
-- **Controls**: the quick actions (checkpoint 8) and the hotkeys
-  (checkpoint 4 and its follow-ups);
-- **Advanced**: open the settings folder, icon credits, recover window
-  positions, show diagnostics;
-- **Updates and Support**: point to the viewer's own pages for now;
-- the MCP controller's page waits for the MCP session routing
-  (FEATURES 4.6).
+- **The human's notes and decisions (2026-11-12)**, from Folderstorm
+  (C++)'s "Folderstorm Host Preferences" (a list of sections on the left:
+  Layout & theme, Character settings, Chats & notifications, Audio &
+  voice, Switching & monitors, Controls, Accessibility, Advanced, MCP
+  controller, Updates, Support), redesigned so that **no page is nearly
+  empty**: the host's settings are gathered in **one settings window**,
+  a list of sections on the left and a dense page on the right, no tabs
+  inside a section. It opens from the bar's cog menu (each of its
+  entries on its own section) and from the host's window.
+- **Sections** (in this order):
+  1. **Toolbar and windows**: where the bar is (docked / popped out),
+     the toolbar buttons' labels and the quick actions' labels (icons
+     only / text only / icon and text), the twelve quick actions (each
+     Unused, Character 1 to 5, Attention, Mute background sound, Voice
+     follows active), "Hide the host's window while the bar is shown",
+     "One taskbar button" (checkpoint 8), and "The characters share one
+     window place" (the stage, until now on the host's characters'
+     page).
+  2. **Characters**: a character chosen at the top, then its profile and
+     the name it is logged in as (shown), its alias and its colour
+     (checkpoint 7), its background mode (Warm / Economy), "Heard in the
+     background" (checkpoint 4), "Include in Attention" (new: off, its
+     questions are left out of the inbox and its count), its card's
+     position (moved up or down: it takes that number, for its hotkey and
+     its quick action; only between characters that have no viewer and
+     no monitor open, so that nothing running changes number), and its
+     **alerts while another character is active** (new, each on its
+     own): direct IMs, group chats, conferences, notifications (offers
+     shown as cards in a conversation), with "Preview" (the alert as it
+     sounds) and "Reset".
+  3. **Chat and Attention**:
+     - *shown in the shared chat and the monitors' chat*, for every
+       character: nearby chat, direct IMs, group chats, conferences,
+       viewer notifications (the viewer's and the grid's own lines). A
+       kind that is off is not in the chips nor in "All", its lines count
+       nowhere, and it is never read by being shown (it is not);
+     - *listed in Attention* (the inbox, which lists questions only, no
+       chats, by the human's answer): viewer notifications (friendship
+       and group offers, scripts' dialogs, links, calls, the rest),
+       teleport offers, permission requests, inventory offers; oldest or
+       newest first; "Open the inbox";
+     - *reading*: "Mark displayed chats read" (on: what a window that has
+       the keyboard shows is read, checkpoint 6's rule; off: nothing is
+       read by being shown) and "Auto-read the active character after N
+       seconds" (on, 60 s by default; 5 s to 1 hour): a character that
+       has been in front for that long has its conversations read in the
+       host (its viewer is told nothing: what it has unread is its own),
+       and so for as long as it stays in front.
+  4. **Sound and voice**: "Voice follows active", "Mute all background
+     sound" (checkpoint 8), "Alert when a background character gets a
+     message" (the host's alert, until now on the characters' page),
+     with its preview, and each character's "Heard in the background"
+     together.
+  5. **Monitors**: checkpoint 9's page (a new monitor's size and rate,
+     the shared budget's note, the cycling monitor, its interval, size
+     and rate, "Pause cycling while typing").
+  6. **Hotkeys**: the global hotkeys (checkpoint 4 and its follow-ups).
+  7. **Advanced**: open the settings folder, recover window positions
+     (every window of the host, a panel's, a monitor's, the bar's and
+     the settings' own, brought onto a connected screen, at the size it
+     has), show diagnostics (what the host knows of each character: its
+     phase, its health, its link, its monitor), and the icons' credits
+     (Tabler Icons, MIT licence, its text).
+  8. **Updates and support**: points to the viewer's own Preferences
+     (its "Language and updates" and "Privacy" pages, and its Help menu
+     to report a bug): one place for those settings, until the fork has
+     its own updater, crash reports and bug tracker (a line in
+     `folderstorm/FOLLOW-UPS.md`).
+- **Left out, by the human's decision:** the theme, the buttons'
+  spacing, "Character cards in Expanded mode", minimal host controls,
+  "Retry saving", session sets, "Stop managing", the chat-and-alerts
+  report, the viewer settings / session / local assistant tabs of a
+  character, next / previous attention and "Restore controls" hotkeys,
+  and the MCP controller (later, with the MCP session routing,
+  FEATURES 4.6). "Require pause to chat" is checkpoint 9's "Pause
+  cycling while typing", on the Monitors section.
+- **What the window replaces** (nothing is lost, each setting has its
+  one place): checkpoint 8's "Bar and quick actions" page and checkpoint
+  9's "Monitor settings" page of the characters' panel, its "Hotkeys"
+  page, the stage's and the alert's boxes on the characters' page, and
+  the alias and colour editor opened on a card (the card's palette
+  button opens the Characters section on that character). The cards keep
+  their quick boxes (Economy, heard in the background, monitor). The
+  bar's menus are unchanged; their entries open the settings window on
+  the matching section (the link does not change: protocol 5).
+- **Settings** (`session-host.json`; absent fields read as the defaults,
+  everything checked when the file is read):
+  - per character: `attention` (included, true) and `alerts` (`ims`,
+    `groups`, `conferences`, `notifications`, all true);
+  - `chat_shown` (`nearby`, `ims`, `groups`, `conferences`, `notices`,
+    all true), `reading` (`mark_displayed` true, `auto_read` true,
+    `auto_read_after_s` 60), `attention` (`notices`, `teleports`,
+    `permissions`, `inventory`, all true; `newest_first` false),
+    `settings_window` (its place and the last section).
+  - **Migration:** a file of checkpoint 9 (or before) reads as it is,
+    with these defaults: everything shown and listed as before, every
+    character in Attention, the alert of each kind as the one alert was,
+    displayed chats read as before; auto-read is the one new behaviour.
+- **Link: unchanged** (protocol 5). The bar's count of Attention is what
+  the inbox lists.
+- **Upstream hooks: none planned.** Fork files, the locales and
+  `docs/TESTING.md`.
+- **Not built, by decision or for want of a small way:** a WAV of one's
+  own for the alerts and an alert volume (the host's alert is the
+  system's sound, `MessageBeep`, which has no volume and plays no file:
+  both need the viewer's sound engine in the host, a checkpoint of its
+  own); a free colour (the palette of checkpoint 7 stays).
+- **Acceptance:**
+  - every setting of checkpoints 4 to 9 is in the window, once, and
+    nowhere else but the cards' quick boxes and the bar's toggles;
+  - each section is readable at 520 and at 1000 points wide, without a
+    page that is nearly empty;
+  - a file of checkpoint 9 reads with nothing lost;
+  - a kind of chat that is off is neither shown nor read; a question of
+    a kind that is off, or of a character left out, is neither listed
+    nor counted; the active character's chats are read after the delay,
+    in the host only;
+  - recovering the windows moves no character's window (R2).
+- **Demo:** `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (with
+  `AURORA_DEMO_SESSION_HOST`): the settings window opens on that section
+  (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`,
+  `advanced`, `updates`).
 
 ## 16. Verified in code vs inferred
 
