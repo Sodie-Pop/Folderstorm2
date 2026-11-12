@@ -13,7 +13,7 @@ mod os_events;
 pub mod privacy;
 // Bug report form (disabled, see main.rs):
 // mod report;
-mod software;
+pub(crate) mod software; // Folderstorm: the characters' host draws with it too (folderstorm_characters/host)
 mod summary;
 mod threads;
 mod watchdog;

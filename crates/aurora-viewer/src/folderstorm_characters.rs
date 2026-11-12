@@ -9,9 +9,18 @@
 //! - [`State`]: what the frames keep of it (the `impl App` glue is in
 //!   `app/folderstorm_characters.rs`).
 //!
+//! Checkpoint 2, the session host:
+//! - [`host`]: `aurora-viewer --session-host`, the window that starts up to
+//!   five characters, switches between them and watches over them;
+//! - [`managed`]: `--managed`, a viewer's link to the host that started it;
+//! - [`transport`]: the private local endpoint between the two.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
+pub mod host;
+pub mod managed;
 pub mod profile;
+pub mod transport;
 
 use ::folderstorm_session::behind::{self, Behind3d};
 use serde::{Deserialize, Serialize};
@@ -57,6 +66,42 @@ pub struct State {
     pub loss_waiting: bool,
     /// A GPU stall behind whose box was held back has been logged.
     pub stall_held: bool,
+    /// The session host's hold on this viewer (`--managed`).
+    pub managed: ::folderstorm_session::managed::Managed,
+    /// What the host is told of this viewer.
+    pub report: Report,
+    /// The session host asked this viewer to quit.
+    pub quit_by_host: bool,
+    /// The window's own focus as last read from it. A frame takes the
+    /// window out of the app while it is drawn: the rules asked during the
+    /// frame go by what the window said just before.
+    pub window_focus: std::cell::Cell<Option<bool>>,
+}
+
+/// The window's focus for the session's rules: as the window says when it
+/// is there to ask (`window`: None while a frame holds it, or before it is
+/// made), which is then remembered; otherwise as it last said. None: no
+/// window ever said anything.
+pub fn window_focus(remembered: &std::cell::Cell<Option<bool>>, window: Option<bool>) -> Option<bool> {
+    if window.is_some() {
+        remembered.set(window);
+    }
+    remembered.get()
+}
+
+/// What a managed viewer keeps of its reports to the host.
+#[derive(Debug, Default)]
+pub struct Report {
+    /// Changes at every login and logout.
+    pub generation: u32,
+    /// Logged in (or logging in) as of the last report.
+    pub logged_in: bool,
+    /// The last status looked at, and when; the last one sent, and when.
+    pub checked: Option<std::time::Instant>,
+    pub sent: Option<(::folderstorm_session::ipc::Status, std::time::Instant)>,
+    /// The host asked for the window before there was one: brought forward
+    /// (on that stage, if any) as soon as it exists.
+    pub show: Option<Option<::folderstorm_session::ipc::Stage>>,
 }
 
 /// `AURORA_DEMO_SESSION_BEHIND=1|off|limited|normal`, demo only: the window
@@ -84,6 +129,19 @@ fn parse_demo(value: &str) -> Option<Option<Behind3d>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_s_focus_is_remembered_while_a_frame_holds_the_window() {
+        let remembered = std::cell::Cell::new(None);
+        // no window yet: nothing is known, never focused
+        assert_eq!(window_focus(&remembered, None), None);
+        // the window says it has the keyboard, then the frame takes it
+        assert_eq!(window_focus(&remembered, Some(true)), Some(true));
+        assert_eq!(window_focus(&remembered, None), Some(true), "during the frame: as it last said");
+        // it lost the keyboard between two frames
+        assert_eq!(window_focus(&remembered, Some(false)), Some(false));
+        assert_eq!(window_focus(&remembered, None), Some(false));
+    }
 
     #[test]
     fn the_demo_variable_keeps_or_replaces_the_policy() {

@@ -5373,6 +5373,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6630,6 +6631,52 @@ failure. Grid validation and any paid upload are performed by the human.
     receiving (the image stays as it was). A click (with the window really
     focused) recovers on a new window, `recovering on a new window and
     device, not counted`, with the settings unchanged.
+- **`AURORA_DEMO_SESSION_HOST=<1-5>`** (Folderstorm2, session host
+  checkpoint 2): with `AURORA_DEMO=1`, the program starts as the
+  characters' host (as `--session-host` does) with the characters `demo-1`
+  to `demo-<n>`, and starts their viewers, each a demo viewer of its own
+  (`--profile demo-<i> --managed`, the host's `--title` and `--language`
+  passed on). No grid, no login. Nothing of the demo is saved in the host's
+  settings; the profiles are in the demo's settings folder
+  (`config\demo\profiles\demo-<i>`).
+  `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 cargo run -p aurora-viewer -- --title "Test host"`.
+  What to look at:
+  - each row shows its character's state ("Starting…", then "In Aurora
+    Démo" or the like), and one row says **Active**. The active viewer's log
+    (`aurora-demo-demo-1-test-host.log`) says `session host: Active, Warm
+    standby, sound on, voice allowed`, the others `Background, …, sound
+    cut, voice off` and `3D paused: another Folderstorm2 window is in
+    front (policy Off)`, with the amber notice of checkpoint 1.
+  - **Switch** on another row: that window comes forward where the active
+    one was (same place and size, with "Keep the characters' windows in the
+    same place"), its 3D resumes, the one left pauses. Clicking a
+    character's window directly does the same and the host's **Active**
+    follows. With "Minimise in the background" on a row, that character's
+    window is minimised when another becomes active (Economy), and restored
+    by **Switch**. While the host's own window has the keyboard, the active
+    character keeps its full frame rate (its log never says `3D paused`).
+  - close a viewer with its own window button and Quit: its row says
+    "Closed" and offers **Restart**; the others do not change. End one in
+    the task manager: "Ended unexpectedly", **Restart** too.
+  - end the **host** in the task manager: every viewer stays open, its log
+    says `session host: gone, this viewer goes on by itself`, and each
+    follows its own focus and settings again (sound back, the 3D of the
+    focused one drawn).
+  - **Quit all**: each viewer quits, then the host closes. The host's
+    window close button, while characters run, asks: Quit all, Close only
+    this window, or Cancel.
+  - a second host on the same settings folder is refused with a message; a
+    profile already open outside the host is not started twice ("already
+    open in a window that this host did not start").
+  - combined with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST` (the
+    viewers inherit them): no graphics box and no close for the background
+    characters, whose rows say "Its graphics card does not answer for now"
+    or "It lost the graphics card, and recovers when its window is brought
+    forward"; the host itself draws on the processor and opens no graphics
+    device.
+  The host's log is `aurora-demo-session-host-test-host.log`.
+  `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
+  window's picture at each of its frames.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

@@ -35,6 +35,10 @@ pub struct Cli {
     // Folderstorm: `--profile <name>`, one character's own settings
     // (folderstorm_characters/profile.rs); checked there, never used raw
     pub profile: Option<String>,
+    // Folderstorm: `--session-host`, the characters' host instead of a viewer,
+    // and `--managed`, a viewer started by it (folderstorm_characters/host.rs)
+    pub session_host: bool,
+    pub managed: bool,
     /// Folderstorm: `--mcp-api`, local assistant access for this session only.
     pub mcp_api: bool,
     help: bool,
@@ -89,6 +93,7 @@ pub fn get() -> &'static Cli {
                 .join(", ");
             println!("{}", aurora_i18n::tr!("cli-help", languages = languages));
             println!("{}", aurora_i18n::tr!("folderstorm-cli-help-profile")); // Folderstorm: --profile
+            println!("{}", aurora_i18n::tr!("folderstorm-cli-help-session-host")); // Folderstorm: --session-host
             println!("{}", aurora_i18n::tr!("fs-mcp-cli-help")); // Folderstorm: --mcp-api
             std::process::exit(0);
         }
@@ -126,6 +131,10 @@ fn parse(args: impl Iterator<Item = String>) -> Cli {
             cli.profile = Some(v.to_owned()); // Folderstorm: --profile, before the bare SLURL below
         } else if a == "--profile" {
             cli.profile = args.next_if(|value| !value.starts_with('-')).or(Some(String::new())); // Folderstorm
+        } else if a == "--session-host" {
+            cli.session_host = true; // Folderstorm: the characters' host
+        } else if a == "--managed" {
+            cli.managed = true; // Folderstorm: started by the characters' host
         } else if a == "--vr" {
             cli.vr = true;
         } else if let Some(v) = a.strip_prefix("--fps-limit=") {
@@ -414,6 +423,20 @@ mod tests {
         assert_eq!(args(&["--profile"]).profile.as_deref(), Some(""));
         // nothing after the link is read: a web page cannot pick a profile
         assert_eq!(args(&["-url", url, "--profile", "Alt1"]).profile, None);
+    }
+
+    // Folderstorm: --session-host, --managed
+    #[test]
+    fn session_host_and_managed_are_switches_a_link_cannot_set() {
+        let cli = args(&["--session-host", "--title", "T"]);
+        assert!(cli.session_host && !cli.managed);
+        assert_eq!(cli.title.as_deref(), Some("T"));
+        let cli = args(&["--profile", "Alt1", "--managed"]);
+        assert!(cli.managed && !cli.session_host);
+        assert_eq!(cli.profile.as_deref(), Some("Alt1"));
+        let cli = args(&["-url", "secondlife://Region/1/2/3", "--managed", "--session-host"]);
+        assert!(!cli.managed && !cli.session_host);
+        assert!(!args(&[]).managed && !args(&[]).session_host);
     }
 
     #[test]
