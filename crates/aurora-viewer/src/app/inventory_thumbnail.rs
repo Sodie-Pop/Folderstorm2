@@ -402,6 +402,10 @@ impl App {
                             }
                         }
                         Prepared::Upload(data) => {
+                            // Folderstorm: the local assistant's thumbnail is decided again just before it is sent
+                            if outfit && self.local_assistant_thumbnail_stopped(reply.request) {
+                                continue;
+                            }
                             self.inventory_ui.pending = Some(reply.request);
                             self.inventory_ui.begin_thumbnail_upload(reply.request);
                             self.inventory_ui.pending_refresh = vec![parent];

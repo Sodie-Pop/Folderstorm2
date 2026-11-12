@@ -922,6 +922,7 @@ fs-mcp-ask-snapshot-huds = Take a picture of what the camera shows, with your HU
 fs-mcp-ask-snapshot-interface = Take a picture of the whole window with the viewer's windows: what you have open, chat included, will be in it
 fs-mcp-ask-snapshot-saved = It is also saved in your photo folder.
 fs-mcp-ask-thumbnail = Set the picture of “{ $name }” from what the camera shows
+fs-mcp-thumbnail-stopped = The local assistant's snapshot was stopped: its permission or the login changed before it was saved.
 inventory-folder-jump-menu = Go to folder…
 inventory-folder-jump-menu-tip = Find a folder by its name or its parent's name and open it (Ctrl+J).
 inventory-folder-jump-title = Go to inventory folder

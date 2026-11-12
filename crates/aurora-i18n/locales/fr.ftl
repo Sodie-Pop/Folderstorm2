@@ -925,6 +925,7 @@ fs-mcp-ask-snapshot-huds = Prendre une photo de ce que montre la caméra, avec v
 fs-mcp-ask-snapshot-interface = Prendre une photo de toute la fenêtre avec les fenêtres du viewer : ce que vous avez ouvert, chat compris, y figurera
 fs-mcp-ask-snapshot-saved = Elle est aussi enregistrée dans votre dossier de photos.
 fs-mcp-ask-thumbnail = Remplacer l'image de « { $name } » par ce que montre la caméra
+fs-mcp-thumbnail-stopped = La photo de l'assistant local a été arrêtée : son autorisation ou la connexion a changé avant qu'elle soit enregistrée.
 inventory-folder-jump-menu = Aller au dossier…
 inventory-folder-jump-menu-tip = Trouver un dossier par son nom ou celui de son parent, puis l'ouvrir (Ctrl+J).
 inventory-folder-jump-title = Aller à un dossier de l'inventaire

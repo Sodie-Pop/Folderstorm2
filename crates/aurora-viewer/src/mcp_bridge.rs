@@ -13,7 +13,10 @@
 //!
 //! The camera, pictures and thumbnails (phase 3) are planned in [`camera`],
 //! sized and encoded in [`picture`], and wait in [`studio::Studio`] for the
-//! camera to stop, for their photo or for the gallery's snapshot.
+//! camera to stop, for their photo or for the gallery's snapshot. The studio
+//! decides its waiting calls again by the desk's rules, on every frame,
+//! just before a photo starts ([`photo_step`]) and just before a thumbnail
+//! is sent ([`thumbnail_send`]).
 //!
 //! The desk decides every waiting call again with the permissions and the
 //! login in force ([`desk`], [`login`]). The bridge names each login with a
@@ -91,6 +94,38 @@ struct Runtime {
 }
 
 static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
+
+impl Runtime {
+    /// The login in force now, told to the bridge: its generation and
+    /// `viewer_session`. None: the bridge is not running.
+    fn rebind(&mut self, view: &View) -> Option<(u64, Option<String>)> {
+        let running = self.running.as_ref()?;
+        let generation = self.logins.observe(view.world.login.as_ref());
+        running.bridge.set_login(generation, view.logged_in());
+        Some((generation, running.bridge.viewer_session()))
+    }
+
+    /// Folderstorm: just before a studio call acts, with the login in force
+    /// now: the studio decides its waiting calls again by the desk's rules,
+    /// and those that ask now go back to the desk's dialog.
+    fn review_studio(&mut self, view: &View, now: Instant) {
+        let session = self.rebind(view).map(|(generation, session)| {
+            self.desk.set_login(generation, session.clone());
+            session
+        });
+        let back = self.studio.review(&self.desk);
+        if back.is_empty() {
+            return;
+        }
+        let cx = tools::Ctx {
+            viewer_session: session.flatten(),
+            ..view.context()
+        };
+        for call in back {
+            self.desk.take(call, &cx, now);
+        }
+    }
+}
 
 fn with<R>(f: impl FnOnce(&mut Runtime) -> R) -> R {
     let mut guard = RUNTIME.lock().unwrap_or_else(PoisonError::into_inner);
@@ -244,7 +279,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 }
             }
             rt.desk.close();
-            rt.studio.drop_calls();
+            rt.studio.close();
             return Vec::new();
         }
         if rt.running.is_none() && rt.failure.is_none() {
@@ -279,6 +314,10 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             viewer_session: session.clone(),
             ..view.context()
         };
+        // the studio's waiting calls follow the desk's rules too
+        for call in rt.studio.review(&rt.desk) {
+            rt.desk.take(call, cx.get_or_insert_with(context), now);
+        }
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
             if world::answers(&call.tool) {
@@ -364,13 +403,10 @@ pub fn image_finished(request: Uuid, error: Option<&str>) {
 pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)> {
     let cx = view.context();
     let call = with(|rt| {
-        let Some(running) = &rt.running else {
+        let Some((generation, session)) = rt.rebind(view) else {
             call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
             return None;
         };
-        let generation = rt.logins.observe(view.world.login.as_ref());
-        running.bridge.set_login(generation, view.logged_in());
-        let session = running.bridge.viewer_session();
         rt.desk.recheck(call, generation, session, &cx, Instant::now())
     })?;
     match changes::plan(&call.tool, &call.arguments, &cx) {
@@ -433,19 +469,25 @@ fn log_demo_answer(tool: &str, result: &Result<serde_json::Value, ToolError>) {
     }
 }
 
-/// A camera move was made: its call answers once the camera stops.
+/// A camera move was made: its call answers once the camera stops. Bound,
+/// as the calls below, to the login it was decided under (`replan`).
 pub fn wait_move(call: Pending, reply: serde_json::Value) {
-    with(|rt| rt.studio.wait_move(call, reply, Instant::now()));
+    with(|rt| rt.studio.wait_move(call, reply, rt.desk.login(), Instant::now()));
 }
 
 /// A picture to take once the camera stops.
 pub fn queue_photo(call: Pending, request: picture::Request) {
-    with(|rt| rt.studio.queue_photo(call, request, Instant::now()));
+    with(|rt| rt.studio.queue_photo(call, request, rt.desk.login(), Instant::now()));
 }
 
-/// In the frame's drawing: whether to start a picture's photo now.
-pub fn photo_step(drawing: bool) -> studio::PhotoStep {
-    with(|rt| rt.studio.photo_step(drawing, Instant::now()))
+/// In the frame's drawing: whether to start a picture's photo now, decided
+/// again just before with the login in force.
+pub fn photo_step(drawing: bool, view: &View) -> studio::PhotoStep {
+    with(|rt| {
+        let now = Instant::now();
+        rt.review_studio(view, now);
+        rt.studio.photo_step(drawing, now)
+    })
 }
 
 /// The picture's photo started, planned as `plan`.
@@ -462,7 +504,17 @@ pub fn photo_drawn(size: (u32, u32), pixels: Vec<u8>, folder: std::path::PathBuf
 
 /// A thumbnail of the assistant started through the gallery's snapshot.
 pub fn thumbnail_started(call: Pending, reply: serde_json::Value) {
-    with(|rt| rt.studio.thumbnail_started(call, reply, Instant::now()));
+    with(|rt| rt.studio.thumbnail_started(call, reply, rt.desk.login(), Instant::now()));
+}
+
+/// Folderstorm: just before the gallery's snapshot is sent as an entry's
+/// picture: decided again with the login in force. False: it is the
+/// assistant's thumbnail, refused or asking again, and the app stops it.
+pub fn thumbnail_send(view: &View) -> bool {
+    with(|rt| {
+        rt.review_studio(view, Instant::now());
+        rt.studio.thumbnail_send()
+    })
 }
 
 /// Whether the assistant's thumbnail is under way.

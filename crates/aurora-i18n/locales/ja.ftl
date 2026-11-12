@@ -910,6 +910,7 @@ fs-mcp-ask-snapshot-huds = カメラに映っているものを HUD 付きで撮
 fs-mcp-ask-snapshot-interface = ビューアーのウィンドウを含めてウィンドウ全体を撮影する：開いているもの（チャットを含む）が写ります
 fs-mcp-ask-snapshot-saved = 写真フォルダーにも保存されます。
 fs-mcp-ask-thumbnail = 「{ $name }」の画像をカメラに映っているものにする
+fs-mcp-thumbnail-stopped = ローカルアシスタントのスナップショットを中止しました。保存される前に権限またはログインが変わりました。
 inventory-folder-jump-menu = フォルダへ移動…
 inventory-folder-jump-menu-tip = フォルダ名または親フォルダ名でフォルダを探して開きます（Ctrl+J）。
 inventory-folder-jump-title = インベントリのフォルダへ移動

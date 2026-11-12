@@ -217,11 +217,25 @@ impl App {
         mcp_bridge::thumbnail_started(call, reply);
     }
 
+    /// Just before the gallery's snapshot `request` is sent as an entry's
+    /// picture (`poll_inventory_images`): the assistant's thumbnail is
+    /// decided again with the login and the levels in force. True: it was
+    /// refused, or asks the user again, and the snapshot stops here
+    /// (Appearance says so, as for any snapshot that fails).
+    pub(super) fn local_assistant_thumbnail_stopped(&mut self, request: Uuid) -> bool {
+        if mcp_bridge::thumbnail_send(&self.local_assistant_view()) {
+            return false;
+        }
+        self.finish_inventory_image(request, Some(aurora_i18n::tr!("fs-mcp-thumbnail-stopped").into()));
+        true
+    }
+
     /// In the frame's drawing, beside the gallery's snapshot
     /// (`poll_outfit_photo`): a picture's photo starts once no other photo
     /// is being drawn and the camera has stopped.
     pub(super) fn local_assistant_photo(&mut self, renderer: &aurora_render::Renderer) {
-        if let PhotoStep::Start(request) = mcp_bridge::photo_step(self.snapshots.drawing()) {
+        // decided again just before: the login or the levels may have changed
+        if let PhotoStep::Start(request) = mcp_bridge::photo_step(self.snapshots.drawing(), &self.local_assistant_view()) {
             let window = renderer.size();
             let world = self.world_viewport(window).map(|[_, _, w, h]| (w, h));
             let plan = crate::mcp_bridge::picture::plan(&request, window, world);

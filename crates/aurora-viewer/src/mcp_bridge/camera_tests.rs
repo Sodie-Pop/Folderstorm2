@@ -556,7 +556,7 @@ fn a_camera_move_answers_once_the_camera_stops() {
     let t0 = Instant::now();
     studio.observe(pose(0.0), t0);
     let (c, answer) = call("camera_preset", json!({}), false);
-    studio.wait_move(c, json!({"preset": "portrait", "done": true}), t0);
+    studio.wait_move(c, json!({"preset": "portrait", "done": true}), 0, t0);
     // the camera glides
     for i in 1..10 {
         let t = t0 + Duration::from_millis(16 * i);
@@ -577,7 +577,7 @@ fn a_camera_move_answers_once_the_camera_stops() {
     assert!(reply["fov_degrees"].as_f64().is_some_and(|f| (f - 57.296).abs() < 0.01));
     // a camera that never stops (it follows a walking avatar): 3 s at most
     let (c, answer) = call("camera_reset", json!({}), false);
-    studio.wait_move(c, json!({"done": true}), t0);
+    studio.wait_move(c, json!({"done": true}), 0, t0);
     let mut t = t0;
     while t < t0 + SETTLE_MAX {
         t += Duration::from_millis(100);
@@ -594,7 +594,7 @@ fn a_picture_waits_for_the_camera_and_other_photos_then_comes_back_as_an_image()
     studio.observe(pose(0.0), t0);
     let r = request(json!({"width": 128, "height": 64, "save": false}));
     let (c, answer) = call("camera_snapshot", json!({}), false);
-    studio.queue_photo(c, r, t0);
+    studio.queue_photo(c, r, 0, t0);
     assert_eq!(studio.photo_step(false, t0), PhotoStep::Idle, "the camera just moved");
     let still = t0 + STILL;
     studio.observe(pose(0.0), still);
@@ -639,7 +639,7 @@ fn a_picture_whose_photo_is_lost_or_late_fails() {
     studio.observe(pose(0.0), t0);
     let r = request(json!({}));
     let (c, answer) = call("camera_snapshot", json!({}), false);
-    studio.queue_photo(c, r, t0);
+    studio.queue_photo(c, r, 0, t0);
     // the camera keeps moving: it starts after 3 s all the same
     let late = t0 + SETTLE_MAX;
     studio.observe(pose(1.0), late);
@@ -650,7 +650,7 @@ fn a_picture_whose_photo_is_lost_or_late_fails() {
     assert_eq!(answer.try_recv().expect("answered").expect_err("lost").code, ErrorCode::Failed);
     // one that never starts: given up before the bridge's wait ends
     let (c, answer) = call("camera_snapshot", json!({}), false);
-    studio.queue_photo(c, r, t0);
+    studio.queue_photo(c, r, 0, t0);
     studio.tick(&pose(0.0), t0 + super::studio::PHOTO_DEADLINE);
     assert_eq!(answer.try_recv().expect("answered").expect_err("late").code, ErrorCode::Timeout);
     // pixels arriving for a picture given up are dropped
@@ -663,7 +663,7 @@ fn the_thumbnail_answers_when_the_gallery_snapshot_ends() {
     let mut studio = Studio::default();
     let t0 = Instant::now();
     let (c, answer) = call("inventory_snapshot_thumbnail", json!({}), false);
-    studio.thumbnail_started(c, json!({"id": COP_OUTFIT}), t0);
+    studio.thumbnail_started(c, json!({"id": COP_OUTFIT}), 0, t0);
     assert!(studio.thumbnail_busy());
     studio.thumbnail_done(None);
     let reply = answer.try_recv().expect("answered").expect("done");
@@ -671,13 +671,13 @@ fn the_thumbnail_answers_when_the_gallery_snapshot_ends() {
     // the user's own gallery snapshot ending is not the assistant's
     studio.thumbnail_done(Some("ignored"));
     let (c, answer) = call("inventory_snapshot_thumbnail", json!({}), false);
-    studio.thumbnail_started(c, json!({}), t0);
+    studio.thumbnail_started(c, json!({}), 0, t0);
     studio.thumbnail_done(Some("This item can no longer be modified"));
     let e = answer.try_recv().expect("answered").expect_err("failed");
     assert_eq!(e.code, ErrorCode::Failed);
     assert!(e.message.contains("no longer be modified"));
     let (c, answer) = call("inventory_snapshot_thumbnail", json!({}), false);
-    studio.thumbnail_started(c, json!({}), t0);
+    studio.thumbnail_started(c, json!({}), 0, t0);
     studio.tick(&pose(0.0), t0 + super::studio::THUMBNAIL_DEADLINE);
     assert_eq!(answer.try_recv().expect("answered").expect_err("late").code, ErrorCode::Timeout);
     assert!(!studio.thumbnail_busy());
