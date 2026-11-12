@@ -173,7 +173,7 @@ fn every_tool_is_listed_whatever_the_viewer() {
     .expect("json");
     assert_eq!(
         a["result"]["tools"].as_array().expect("tools").len(),
-        folderstorm_mcp_bridge::protocol::TOOLS.len()
+        folderstorm_mcp_bridge::protocol::all().count()
     );
 }
 

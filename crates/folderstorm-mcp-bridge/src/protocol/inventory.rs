@@ -31,6 +31,7 @@ const fn spec(name: &'static str, description: &'static str, class: Class, schem
         class: Some(class),
         also: None,
         schema,
+        group: crate::binding::INVENTORY_GAPS,
         wait,
     }
 }

@@ -27,11 +27,22 @@ pub const INVENTORY: &str = "inventory";
 /// `viewer_session`, `CallRequest::session` and `session_changed`, with the
 /// capability negotiation itself (`CallRequest::features`, `unsupported`).
 pub const LOGIN_BINDING: &str = "login_binding";
+/// Phase 3, part 1: the camera, pictures and thumbnails (#21).
+pub const CAMERA: &str = "camera";
+/// Phase 3, part 2: the inventory gaps (#25).
+pub const INVENTORY_GAPS: &str = "inventory_gaps";
+/// Phase 3, part 3: the world observations (#27).
+pub const WORLD: &str = "world";
 
-/// What this build implements. Later groups add theirs: `camera` (#21),
-/// `inventory_gaps` (#25), `world` (#27), then `receipts`, `plans`,
-/// `operations`…
-pub const CAPABILITIES: &[(&str, u32)] = &[(INVENTORY, 1), (LOGIN_BINDING, 1)];
+/// What this build implements. Later groups add theirs: `receipts`,
+/// `plans`, `operations`…
+pub const CAPABILITIES: &[(&str, u32)] = &[
+    (INVENTORY, 1),
+    (CAMERA, 1),
+    (INVENTORY_GAPS, 1),
+    (WORLD, 1),
+    (LOGIN_BINDING, 1),
+];
 
 /// [`CAPABILITIES`] as a map.
 pub fn capabilities() -> Capabilities {
@@ -144,7 +155,7 @@ impl Binding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{self, CallRequest, Health, TOOLS};
+    use crate::protocol::{self, CallRequest, Health};
     use serde_json::json;
 
     #[test]
@@ -174,28 +185,28 @@ mod tests {
     #[test]
     fn this_build_supports_its_own_catalogue() {
         let mine = capabilities();
-        assert!(TOOLS.iter().all(|t| supports(&mine, t)), "every tool has a group of this build");
-        assert!(TOOLS.iter().all(|t| supports(&assumed(), t)), "phases 1 and 2 only, for now");
+        assert!(protocol::all().all(|t| supports(&mine, t)), "every tool has a group of this build");
+        assert!(
+            protocol::all().filter(|t| t.group == INVENTORY).all(|t| supports(&assumed(), t)),
+            "phases 1 and 2 for a viewer that advertises nothing"
+        );
+        assert!(!protocol::all().all(|t| supports(&assumed(), t)), "not the later groups");
         assert!(missing(&mine).is_empty());
-        assert_eq!(missing(&assumed()), vec![LOGIN_BINDING]);
+        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING]);
         // a newer viewer: a later version and a group this build lacks
-        let newer: Capabilities = [
-            ("inventory".to_owned(), 2),
-            ("plans".to_owned(), 1),
-            ("login_binding".to_owned(), 1),
-        ]
-        .into_iter()
-        .collect();
-        assert!(TOOLS.iter().all(|t| supports(&newer, t)));
+        let mut newer = capabilities();
+        newer.insert("inventory".to_owned(), 2);
+        newer.insert("plans".to_owned(), 1);
+        assert!(protocol::all().all(|t| supports(&newer, t)));
         assert!(missing(&newer).is_empty());
         // a tool of a group the viewer lacks
-        let camera = ToolSpec {
-            name: "camera_look",
-            group: "camera",
+        let navigation = ToolSpec {
+            name: "navigation_teleport",
+            group: "navigation",
             ..*protocol::tool("worn_items").expect("a tool")
         };
-        assert!(!supports(&mine, &camera));
-        let e = unsupported(&camera);
+        assert!(!supports(&mine, &navigation));
+        let e = unsupported(&navigation);
         assert_eq!(e.code, ErrorCode::Unsupported);
         assert!(e.message.contains("Update"), "{e}");
     }

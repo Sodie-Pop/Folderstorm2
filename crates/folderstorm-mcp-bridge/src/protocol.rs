@@ -698,6 +698,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Camera),
         also: None,
         schema: camera_preset_schema,
+        group: binding::CAMERA,
         wait: CAMERA_WAIT,
     },
     ToolSpec {
@@ -706,6 +707,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Camera),
         also: None,
         schema: camera_shot_schema,
+        group: binding::CAMERA,
         wait: CAMERA_WAIT,
     },
     ToolSpec {
@@ -714,6 +716,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Camera),
         also: None,
         schema: no_arguments,
+        group: binding::CAMERA,
         wait: CAMERA_WAIT,
     },
     ToolSpec {
@@ -722,6 +725,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Camera),
         also: None,
         schema: snapshot_schema,
+        group: binding::CAMERA,
         wait: SNAPSHOT_WAIT,
     },
     ToolSpec {
@@ -730,6 +734,7 @@ pub const TOOLS: &[ToolSpec] = &[
         class: Some(Class::Edit),
         also: Some(Class::Camera),
         schema: thumbnail_schema,
+        group: binding::CAMERA,
         wait: Duration::from_secs(SNAPSHOT_WAIT.as_secs() + CHANGE_WAIT.as_secs()),
     },
 ];

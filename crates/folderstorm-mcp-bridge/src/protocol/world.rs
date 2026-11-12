@@ -29,6 +29,7 @@ const fn read(name: &'static str, description: &'static str, schema: fn() -> Val
         class: Some(Class::Read),
         also: None,
         schema,
+        group: crate::binding::WORLD,
         wait: Duration::ZERO,
     }
 }
