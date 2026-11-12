@@ -1257,6 +1257,13 @@ exe before publishing; the local build also writes it to `version.txt`.
   pinned above the others; "Collapse" shrinks it to a thin handle. On
   Windows only the active character's window is on the taskbar ("One
   taskbar button", in the bar's settings).
+  A **monitor** shows a background character's own view in a small
+  window of its own, a few pictures a second at most: its **Switch**
+  brings that character forward and shows the one that was active in its
+  place, **Chat** adds that character's conversations and a box that
+  speaks as it, a pin keeps the window above the others. The **cycling
+  monitor** shows each background character in turn, and waits while you
+  type in it. Nothing of a picture is recorded.
   Closing or losing the host closes no viewer: they stay logged in and go
   back to their own settings. The list is saved in
   `…\config\session-host.json`; the log is `aurora-session-host.log`.
