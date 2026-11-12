@@ -474,7 +474,9 @@ available.
   (Checkpoint 7 built the colours and aliases, the attention inbox and
   the condensed mode, and decided against the bird's-eye effect as C++
   had it: see its "As built". Its follow-ups added the inbox's host-only
-  Dismiss, a confirmation for Quit all and new default hotkeys.)
+  Dismiss, a confirmation for Quit all and new default hotkeys.
+  Checkpoint 8 put the quick actions in a bar at the top of every
+  managed viewer, with up to twelve positions of the user's choice.)
 - **Creators' permissions:** none of this shows, copies or exports assets or
   asset ids. Monitors show what that character's viewer shows and are never
   saved. Profile copy moves the user's own settings files only.
@@ -507,6 +509,10 @@ Upstream hooks (estimate: about 30 marked lines in about 12 files):
 | `app/gpu_stall.rs` | Notice deferral; loss policy behind |
 | UI | One options-page registration; one notice call |
 | Docs and locales | Rows in `README.md` (command line) and `docs/TESTING.md`; en/fr/ja entries (append-only) |
+
+(Checkpoint 8 added two lines to `app.rs`: the bar's strip, given to the
+interface's pass as egui's safe-area inset, and the room of the viewer's
+own bars under it.)
 
 No upstream file is restructured. If a hook grows beyond a line or two (for
 example the loss policy), stop and propose an upstream-friendly extension
@@ -1702,7 +1708,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
     drawing only).
   - A viewer that loses the host drops the bar's state: the strip goes
     and its interface takes the whole window again.
-- **Upstream hook (one, in `app.rs`):** before the interface's pass,
+- **Upstream hook (one planned, in `app.rs`; two as built, see below):**
+  before the interface's pass,
   `raw.safe_area_insets = self.folderstorm_bar_inset(); // Folderstorm:
   …`. egui's own "safe area" keeps the top strip out of
   `content_rect()`, which every screen of the viewer lays itself out in
@@ -1736,6 +1743,157 @@ May be two small PRs: 1a profiles, 1b behind policy.
     actions.
 - **Demo:** `AURORA_DEMO_SESSION_HOST_BAR=docked|popped` (with
   `AURORA_DEMO_SESSION_HOST`), listed in `docs/TESTING.md`.
+
+- **As built (branch `claude/session-checkpoint-8`, on top of the
+  follow-ups to checkpoint 7):** the rules are pure and tested in
+  `crates/folderstorm-session` (`bar`: the settings and their reading,
+  the state and the requests, which quick actions show, the label
+  modes, when the host's window hides, what a window is on the taskbar;
+  `host`: the two desk rules, `bar_state`, `bar_request`,
+  `Assignment::off_taskbar`, in `host/bar_tests.rs`; `ipc`: protocol 4).
+  In the viewer: `folderstorm_characters/bar.rs` (the row's drawing,
+  one code for both homes), `folderstorm_characters/taskbar.rs` (the
+  window's own taskbar tab and tool-window bit),
+  `app/folderstorm_characters/bar.rs` (a managed viewer's side),
+  `host/ui/bar.rs` (the compact window, the host's window hiding, the
+  page).
+  - **Upstream hooks (new): two lines, both in `app.rs`.** (The plan
+    above counted one; the second was found while building.)
+    1. After the frame's `take_egui_input`:
+       `self.folderstorm_bar_inset(&mut raw); // Folderstorm: the session
+       host's bar keeps a strip at the top`. It sets egui's safe-area
+       inset for the pass, in a viewer a host started only (never
+       otherwise: the input is not touched). `content_rect()` then
+       starts under the strip, and what lays itself out in it follows
+       without a change: the login and loading screens, the windows and
+       their room, the notices.
+    2. Where the bars are given their room:
+       `let viewport_bars = crate::folderstorm_characters::bar::
+       bars_room(&ctx, viewport_bars); // Folderstorm: under the session
+       host's bar`, between the two lines the custom world viewport
+       (FEATURES 1.1) already has there. Needed because egui's root `Ui`
+       spans the whole window whatever the inset, and upstream's bars of
+       both styles are laid out in it (`ui.max_rect()`, root panels):
+       they are handed the room under the strip through the child `Ui`
+       that place already makes for a custom viewport. Without a strip
+       the function returns what it was given.
+    The bar itself is drawn from `folderstorm_characters_notice`, the
+    hook checkpoint 1 put before the screens are drawn: no third line.
+    The viewer's world ↔ screen mapping goes by the window's pixels, not
+    by `content_rect()` (checked by reading), so picking is unchanged;
+    the top 30 points of the 3D view are under the bar, as they are
+    under Firestorm's bars. The bar is an area of its own in the
+    windows' order, as upstream's islands are, so that the pointer over
+    it is over the interface and a click on it is never also a click in
+    the world (tested).
+  - **Decisions taken while building.**
+    - *The characters' list always names who is in front*, whatever the
+      toolbar's label mode: it is the one place that says it. A
+      character's quick action keeps its number with icons only (five
+      identical icons would say nothing). With too little room the
+      toolbar's labels go first, then the quick actions', then the
+      active character's name (its number stays); what is left of the
+      quick actions scrolls with the wheel. A name longer than 16
+      characters is cut with an ellipsis, whole in the hover (with the
+      real name behind an alias).
+    - *The monitors' menu ticks the open ones* and greys what cannot be
+      watched (not in the world, or in front). Opening one from the bar
+      also gives the monitors their own window (checkpoint 6's), since
+      the host's window may be hidden; "Monitor settings…" shows the
+      host's window on the characters' cards, where each monitor's size
+      and rate are (the condensed layout is left for it). "Cycling
+      monitor" is a greyed entry: its place.
+    - *"Open a login" never switches*: it only acts on a character that
+      is not logged in.
+    - *The settings' menu also has the two toggles*, so they are at hand
+      without being quick actions.
+    - *The host's window hides once the user leaves it*, not under
+      their hands: with a bar on screen it stays while it has the
+      keyboard, hides when a character's window takes it, and stays
+      when it was asked for from the bar, until its close button. The
+      choice and "One taskbar button" are on the bar's page. Hidden, its
+      monitors ask nothing (as minimised). Where the system cannot hide
+      a window (Wayland), it simply stays.
+    - *The compact window is one row high* (its height is fixed, its
+      width free, 320 points at least, 1100 the first time); its pin is
+      winit's window level. A row with no room even for its two ends
+      (a very narrow viewer) scrolls as a whole instead of laying one
+      end over the other.
+    - *A click is heard at once*: the reader thread of the viewer that
+      was clicked wakes the host's loop (an event-loop proxy), instead
+      of waiting for the window's next look (200 ms). The viewer that
+      was clicked lets the answering window take the foreground
+      (`AllowSetForegroundWindow(ASFW_ANY)`): the host is not the
+      foreground process when a bar is clicked. **(verify on Windows)**
+    - *The page is the characters' panel's third page* ("Bar and quick
+      actions…", beside "Hotkeys…"), until checkpoint 10 gives the
+      settings their own place.
+  - **Not done, by decision:** the panels' windows (chat, monitors,
+    inbox) keep their taskbar buttons: "one taskbar button" is the
+    characters' and the host's own window. The shared chat's button
+    shows or hides its window; it does not raise a window that is
+    behind (checkpoint 9's pin is the answer to that). No voice status
+    line (decided). No free order of the toolbar's buttons.
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_BAR=docked|popped`
+    (`docs/TESTING.md`).
+  - **Checked here:** the rules' tests; the row drawn by the
+    processor's painter without a window, in both homes: the compact
+    window (wide, narrow, narrower than its two ends, pinned) and a
+    viewer's pass with the safe-area inset and the bars' room (the
+    strip, the viewer's own bar starting under it, collapsed, popped
+    out), with the texts, the colours and the backgrounds looked for in
+    the pixels, and the pictures looked at; the page; the host's window
+    hiding and coming back; the requests from a queue of clicks to the
+    desk; the pointer over the strip and under it; a guard on the
+    sources that the bar's state is read by the bar's drawing only. The
+    real host under X11 (Xvfb), popped out and docked: the compact
+    window opened, drawn and captured, the host's own window hidden
+    while it is there, its page reached; the demo's viewers linked
+    (protocol 4) and then ended, as before, for want of a graphics card.
+    The Windows-only code (`taskbar.rs`, `foreground.rs`, the host's
+    `set_skip_taskbar`) is type-checked and linted for
+    `x86_64-pc-windows-gnu` against `windows-sys` and winit, in a
+    scratch crate that includes the real files. **Not run here:** a
+    viewer drawing the bar in its own window (no graphics card), and
+    nothing of Win32.
+  - **To verify on Windows:**
+    1. the bar at the top of each character's window on the login
+       screen, while loading and in the world, with the islands and with
+       Firestorm's bars; nothing of the viewer's interface under it, the
+       windows' room and the snapping start under it; mouselook and
+       "hide interface" take it away and bring it back;
+    2. every button of the row, from the active viewer and from a
+       background one that has the keyboard: the list, "Open a login"
+       and its right click, Chat, the monitors' menu, the settings'
+       menu, each quick action, Pop out, Collapse and the handle; the
+       window asked for comes to the front instead of flashing;
+    3. the host's window hides when a character takes the keyboard and
+       comes back from the bar; "Quit…" asks its question; with every
+       viewer closed it is back by itself;
+    4. popped out: the compact window, its pin above a full-screen-size
+       viewer, its place remembered across a restart and brought back
+       after a screen is unplugged; closing it docks the bar;
+    5. **one taskbar button**: only the active character on the taskbar
+       and in Alt-Tab; a switch (button, bar, hotkey) swaps them at
+       once; a Warm background window keeps its usual title bar (no
+       small tool-window caption) and comes back whole; an Economy
+       (minimised) one leaves **no small title bar above the taskbar**
+       and is restored by a switch; Win+D and Win+M and back; Explorer
+       restarted (`taskkill /f /im explorer.exe`, then start it);
+       the setting off, the bar popped out, the host closed or ended in
+       the Task Manager, a viewer "let go": every window has its button
+       again. If Alt-Tab still lists the background characters on this
+       version of Windows (the list may only follow a style change when
+       a window is shown), say so: the fallback is in "Follow-ups";
+    6. "Mute background sound" with a character "Heard in the
+       background"; "Voice follows active" off with real voice: the
+       character left keeps talking and is heard, the new active one
+       has no voice; on again, one voice only at every moment.
+  - **Follow-ups, if the Windows test asks for them:** Alt-Tab through
+    a short hide and show around the style change (against R2 as
+    written: only with the human's word, and only for a window whose 3D
+    is off); the panels' windows off the taskbar too; a free order of
+    the toolbar.
 
 ### Checkpoint 9: monitor windows (placeholder)
 
