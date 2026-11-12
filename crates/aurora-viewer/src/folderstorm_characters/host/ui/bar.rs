@@ -663,6 +663,9 @@ mod tests {
                 ..Default::default()
             };
             app.host.desk.status(slot, 1, status, now);
+            // (with its heartbeat, as over a live link: a slow run stays
+            // within the silence limit)
+            app.host.desk.heartbeat(slot, 1, 0, now);
         }
         app.host.desk.set_colour(0, Colour::Teal);
         app.host.desk.set_colour(1, Colour::Orange);
