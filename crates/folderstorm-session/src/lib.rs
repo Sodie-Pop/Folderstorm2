@@ -48,6 +48,13 @@
 //! - [`panels`]: which of the host's panels have a window of their own
 //!   and where, a saved place brought back onto a connected screen,
 //!   "closing a panel docks it", and the monitors seen window by window.
+//!
+//! Checkpoint 7 (polish, section 13):
+//! - [`inbox`]: one list across all characters of what waits for an
+//!   answer in their own windows; nothing is answered from the host;
+//! - [`identity`]: a character's colour, fitted to the theme's contrast,
+//!   and its alias; both only ever in the host's settings file;
+//! - [`host`]: the condensed layout's choice, with the other settings.
 
 pub mod behind;
 pub mod chat;
@@ -56,6 +63,8 @@ pub mod export;
 pub mod gpu;
 pub mod host;
 pub mod hotkeys;
+pub mod identity;
+pub mod inbox;
 pub mod ipc;
 pub mod managed;
 pub mod monitor;

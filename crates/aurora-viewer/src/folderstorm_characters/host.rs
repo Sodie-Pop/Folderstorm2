@@ -14,6 +14,11 @@
 //! each have a window of their own (`ui/panels.rs`), remembered in the
 //! settings file.
 //!
+//! Checkpoint 7: the attention inbox (what waits for an answer in the
+//! characters' own windows, across all of them; nothing is answered
+//! here), each character's colour and alias ([`faces`]; only ever in the
+//! settings file and in these windows) and the condensed layout.
+//!
 //! Every window is drawn on the processor, like the crash window
 //! (`crash/software.rs`): the host opens no graphics device, so it takes
 //! nothing from the characters' card and no driver trouble reaches it.
@@ -24,6 +29,7 @@
 
 mod chat_ui;
 mod comfort;
+mod faces;
 mod hotkeys;
 mod monitors;
 mod process;
@@ -31,7 +37,9 @@ mod ui;
 
 use ::folderstorm_session::chat::{self, Chat};
 use ::folderstorm_session::host::{Config, Desk, Effect, Note, Phase};
-use ::folderstorm_session::ipc::{MAX_SLOTS, Screen, ToViewer};
+use ::folderstorm_session::identity::Colour;
+use ::folderstorm_session::inbox::Inbox;
+use ::folderstorm_session::ipc::{AttentionItem, AttentionKind, MAX_SLOTS, Screen, ToViewer};
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -44,6 +52,53 @@ pub const DEMO_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST";
 /// demo only, with [`DEMO_VARIABLE`]: the host starts with those panels
 /// in windows of their own (checkpoint 6).
 pub const DEMO_PANELS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_PANELS";
+
+/// `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`),
+/// demo only, with [`DEMO_VARIABLE`] (checkpoint 7): the demo's
+/// characters have colours and the first two an alias; the host starts
+/// in its condensed layout; the inbox lists sample questions for the
+/// characters that are in the world (the host's own samples: no viewer
+/// has them, and "Switch to answer" only switches).
+pub const DEMO_POLISH_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_POLISH";
+
+/// What [`DEMO_POLISH_VARIABLE`] asks for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct DemoPolish {
+    colours: bool,
+    condensed: bool,
+    inbox: bool,
+}
+
+fn demo_polish(list: &str) -> DemoPolish {
+    let names: Vec<String> = list.split(',').map(|name| name.trim().to_ascii_lowercase()).collect();
+    let has = |wanted: &[&str]| names.iter().any(|name| name == "all" || wanted.contains(&name.as_str()));
+    DemoPolish {
+        colours: has(&["colours", "colors"]),
+        condensed: has(&["condensed"]),
+        inbox: has(&["inbox"]),
+    }
+}
+
+/// The demo's sample questions for one character: the host's own, to
+/// show the inbox without anyone sending an offer.
+fn sample_questions(slot: usize) -> Vec<AttentionItem> {
+    // (numbers no viewer's notification has)
+    let id = |n: u64| u64::MAX - (slot as u64) * 8 - n;
+    let item = |n: u64, kind, title: &str, text: &str| AttentionItem {
+        id: id(n),
+        kind,
+        title: title.to_owned(),
+        text: text.to_owned(),
+    };
+    match slot % 3 {
+        0 => vec![item(0, AttentionKind::Teleport, "Jane Doe", "Join me at the harbour")],
+        1 => vec![
+            item(0, AttentionKind::Friendship, "Sam Resident", "Shall we be friends?"),
+            item(1, AttentionKind::Script, "Door", "Open, close or lock?"),
+        ],
+        _ => vec![item(0, AttentionKind::Inventory, "Kim Resident", "offers you \"Lantern\"")],
+    }
+}
 
 /// How long a change of the settings waits before it is written (a window
 /// being dragged moves the stage many times).
@@ -137,6 +192,11 @@ struct Host {
     desk: Desk,
     /// The characters' conversations and what is typed for them here.
     chat: Chat,
+    /// Checkpoint 7: what waits for an answer in the characters' own
+    /// windows, across all of them. Only ever shown.
+    inbox: Inbox,
+    /// The demo's sample questions are listed in the inbox.
+    sample_inbox: bool,
     /// A message came for a background character since the window looked.
     alert: bool,
     /// Checkpoint 4: the global hotkeys.
@@ -162,6 +222,8 @@ impl Host {
         let mut host = Self {
             desk: Desk::new(config),
             chat: Chat::default(),
+            inbox: Inbox::default(),
+            sample_inbox: false,
             alert: false,
             comfort: Default::default(),
             viewers: Default::default(),
@@ -183,8 +245,45 @@ impl Host {
             for panel in ::folderstorm_session::panels::parse_list(&out) {
                 host.desk.set_panel_out(panel, true);
             }
+            host.demo_polish(demo_polish(&std::env::var(DEMO_POLISH_VARIABLE).unwrap_or_default()));
         }
         host
+    }
+
+    /// Checkpoint 7, demo only: the look [`DEMO_POLISH_VARIABLE`] asks for.
+    fn demo_polish(&mut self, polish: DemoPolish) {
+        let slots: Vec<usize> = self.desk.slots().map(|(slot, _)| slot).collect();
+        if polish.colours {
+            for (slot, colour) in slots
+                .iter()
+                .zip([Colour::Teal, Colour::Orange, Colour::Violet, Colour::Green, Colour::Pink])
+            {
+                self.desk.set_colour(*slot, colour);
+            }
+            for (slot, alias) in slots.iter().zip(["Main", "Shop keeper"]) {
+                // (two names that pass the alias's check)
+                let _ = self.desk.set_alias(*slot, alias);
+            }
+        }
+        self.desk.set_condensed(polish.condensed);
+        self.sample_inbox = polish.inbox;
+    }
+
+    /// The inbox follows what the chat keeps of each viewer's list: the
+    /// chat already drops a list of another launch or login, and empties
+    /// a character's when it logs out, ends or is let go.
+    fn sync_inbox(&mut self, now: Instant) {
+        for slot in 0..MAX_SLOTS {
+            let (items, more) = self.chat.attention(slot);
+            let login = self.chat.login(slot);
+            if self.sample_inbox && self.demo {
+                let mut shown = items.to_vec();
+                shown.extend(sample_questions(slot));
+                self.inbox.set(slot, login, &shown, more, now);
+            } else {
+                self.inbox.set(slot, login, items, more, now);
+            }
+        }
     }
 
     /// What happened since the last call, then what the desk asks for.
@@ -236,6 +335,7 @@ impl Host {
         self.chat.set_active(self.desk.active());
         self.chat.tick(now);
         self.carry_out_chat();
+        self.sync_inbox(now);
         if self.unsaved.is_some_and(|since| now.duration_since(since) >= SAVE_AFTER) {
             self.save();
         }
@@ -377,6 +477,35 @@ mod tests {
         for bad in ["0", "6", "-1", "", "three", "3.5"] {
             assert_eq!(demo_count(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn the_demo_s_polish_is_a_list_of_names() {
+        assert_eq!(demo_polish(""), DemoPolish::default());
+        assert_eq!(demo_polish("nothing,1"), DemoPolish::default());
+        assert_eq!(
+            demo_polish(" Colours , inbox"),
+            DemoPolish {
+                colours: true,
+                condensed: false,
+                inbox: true
+            }
+        );
+        assert_eq!(demo_polish("colors").colours, demo_polish("colours").colours);
+        assert_eq!(
+            demo_polish("all"),
+            DemoPolish {
+                colours: true,
+                condensed: true,
+                inbox: true
+            }
+        );
+        // the samples of two characters never share a number
+        let numbers: Vec<u64> = (0..MAX_SLOTS).flat_map(sample_questions).map(|item| item.id).collect();
+        let mut distinct = numbers.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), numbers.len());
     }
 
     #[test]

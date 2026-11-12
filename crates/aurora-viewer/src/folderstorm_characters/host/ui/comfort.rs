@@ -63,7 +63,7 @@ pub(super) enum Act {
 const QUICK_NAME: usize = 16;
 
 /// What a quick action's button shows, and what it says it will do.
-fn quick_face(quick: Quick, name: String) -> (&'static str, String) {
+pub(super) fn quick_face(quick: Quick, name: String) -> (&'static str, String) {
     match quick {
         Quick::Switch => ("arrows-exchange", tr!("folderstorm-quick-switch-help", name = name)),
         Quick::Show => ("eye-filled", tr!("folderstorm-quick-show-help", name = name)),
@@ -149,6 +149,11 @@ impl Window_ {
                     let keys = desk.hotkeys().text(Action::Character(slot)).to_owned();
                     help.push_str(&tr!("folderstorm-quick-hotkey", keys = keys));
                 }
+                if state.alias.is_some() {
+                    // (checkpoint 7: the name behind the alias)
+                    help.push('\n');
+                    help.push_str(&super::super::faces::real_name(state));
+                }
                 let kind = if desk.active() == Some(slot) {
                     ActionKind::Primary
                 } else {
@@ -156,11 +161,12 @@ impl Window_ {
                 };
                 let label = format!("{} · {short}", slot + 1);
                 let enabled = quick != Quick::Nothing;
-                if widgets::action_button_if(ui, p, icon, &label, kind, BUTTON, enabled)
-                    .on_hover_text(help)
-                    .clicked()
-                    && enabled
-                {
+                let button = widgets::action_button_if(ui, p, icon, &label, kind, BUTTON, enabled);
+                // (checkpoint 7: the character's colour under its button)
+                if let Some(tint) = super::super::faces::tint(p, state.colour) {
+                    super::super::faces::underline(ui, button.rect, tint);
+                }
+                if button.on_hover_text(help).clicked() && enabled {
                     acts.push(super::Act::Comfort(Act::Quick(slot)));
                 }
             }

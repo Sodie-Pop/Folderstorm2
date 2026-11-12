@@ -9,7 +9,7 @@
 //! crate's `chat::Chat`; this file only shows it.
 
 use super::Host;
-use super::ui::shown_name;
+use super::faces::{self, Face};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::chat::{Blocked, Chat, Entry, Note, Thread, Viewing};
@@ -39,6 +39,10 @@ pub(super) struct ChatPanel {
     /// In "All": the conversation the box writes to, chosen by a click on
     /// one of its lines. Never chosen by what arrives.
     target: Option<(usize, Conversation)>,
+    /// Checkpoint 7: the attention inbox is drawn in this same window, so
+    /// "All" leaves what waits for an answer to it. Elsewhere (or
+    /// nowhere), "All" lists it itself, as before.
+    pub inbox_beside: bool,
 }
 
 /// What the panel asks of the window.
@@ -75,7 +79,7 @@ fn refusal(reason: SendRefusal) -> &'static str {
     }
 }
 
-fn attention_kind(kind: AttentionKind) -> &'static str {
+pub(super) fn attention_kind(kind: AttentionKind) -> &'static str {
     match kind {
         AttentionKind::Teleport => tr!("folderstorm-chat-attention-teleport"),
         AttentionKind::Friendship => tr!("folderstorm-chat-attention-friendship"),
@@ -106,8 +110,11 @@ impl ChatPanel {
 
     pub(super) fn show(&mut self, ui: &mut egui::Ui, p: &Palette, host: &mut Host, now: Instant) -> Asked {
         let mut asked = Asked::default();
-        let names: Vec<(usize, String)> = host.desk.slots().map(|(slot, s)| (slot, shown_name(s))).collect();
-        let name = |slot: usize| names.iter().find(|(s, _)| *s == slot).map(|(_, n)| n.clone()).unwrap_or_default();
+        // (the alias where the character has one; its colour beside it)
+        let names: Vec<(usize, Face)> = host.desk.slots().map(|(slot, s)| (slot, faces::face(p, s))).collect();
+        let face = |slot: usize| names.iter().find(|(s, _)| *s == slot).map(|(_, face)| face);
+        let name = |slot: usize| face(slot).map(|face| face.name.clone()).unwrap_or_default();
+        let tint = |slot: usize| face(slot).and_then(|face| face.tint);
         // a character removed from the desk has no tab
         if let Tab::Character(slot) = self.tab
             && !names.iter().any(|(s, _)| *s == slot)
@@ -125,10 +132,18 @@ impl ChatPanel {
             if widgets::pill_tab(ui, p, "", tr!("folderstorm-chat-all"), count(all), true, self.tab == Tab::All, true).clicked() {
                 self.tab = Tab::All;
             }
-            for (slot, label) in &names {
+            for (slot, face) in &names {
                 let unread = host.chat.unread(*slot);
                 let selected = self.tab == Tab::Character(*slot);
-                if widgets::pill_tab(ui, p, "", label, count(unread), true, selected, true).clicked() {
+                let mut tab = widgets::pill_tab(ui, p, "", &face.name, count(unread), true, selected, true);
+                if let Some(tint) = face.tint {
+                    faces::underline(ui, tab.rect, tint);
+                }
+                if let Some(real) = &face.real {
+                    // the name behind the alias
+                    tab = tab.on_hover_text(real);
+                }
+                if tab.clicked() {
                     self.tab = Tab::Character(*slot);
                 }
             }
@@ -155,7 +170,7 @@ impl ChatPanel {
                     .max_height(room - 20.0)
                     .stick_to_bottom(true)
                     .show(ui, |ui| match self.tab {
-                        Tab::All => self.feed(ui, p, &host.chat, &name, &mut asked),
+                        Tab::All => self.feed(ui, p, &host.chat, &name, &tint, &mut asked),
                         Tab::Character(slot) => match host.chat.thread(slot, self.shown[slot]) {
                             Some(thread) => {
                                 if thread.trimmed {
@@ -178,7 +193,11 @@ impl ChatPanel {
             });
         ui.add_space(6.0);
         match target {
-            Some((slot, conversation)) => compose(ui, p, &mut host.chat, slot, conversation, &name(slot), now, &mut asked),
+            Some((slot, conversation)) => {
+                // who will say it: the real name too, behind an alias
+                let said_as = face(slot).map(Face::full).unwrap_or_default();
+                compose(ui, p, &mut host.chat, slot, conversation, &name(slot), &said_as, now, &mut asked);
+            }
             None => {
                 let hint = match self.tab {
                     Tab::All => tr!("folderstorm-chat-pick"),
@@ -221,6 +240,8 @@ impl ChatPanel {
     /// answered here: the button brings that window forward.
     fn attention(&self, ui: &mut egui::Ui, p: &Palette, chat: &Chat, name: &dyn Fn(usize) -> String, asked: &mut Asked) {
         let slots: Vec<usize> = match self.tab {
+            // (the inbox beside the chat lists them all, once)
+            Tab::All if self.inbox_beside => Vec::new(),
             Tab::All => (0..MAX_SLOTS).collect(),
             Tab::Character(slot) => vec![slot],
         };
@@ -269,7 +290,15 @@ impl ChatPanel {
     /// The "All" tab: every character's lines as they came, each with the
     /// character and the conversation it belongs to; a click on a line
     /// makes its conversation the one the box writes to.
-    fn feed(&mut self, ui: &mut egui::Ui, p: &Palette, chat: &Chat, name: &dyn Fn(usize) -> String, asked: &mut Asked) {
+    fn feed(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Palette,
+        chat: &Chat,
+        name: &dyn Fn(usize) -> String,
+        tint: &dyn Fn(usize) -> Option<egui::Color32>,
+        asked: &mut Asked,
+    ) {
         if chat.feed().len() == 0 {
             ui.label(RichText::new(tr!("folderstorm-chat-all-empty")).color(p.muted));
         }
@@ -279,7 +308,7 @@ impl ChatPanel {
                 None => name(item.slot),
             };
             let chosen = self.target == Some((item.slot, item.conversation));
-            match entry_row(ui, p, &item.entry, Some((&place, chosen))) {
+            match entry_row(ui, p, &item.entry, Some((&place, chosen, tint(item.slot)))) {
                 Clicked::Nothing => {}
                 Clicked::Place => self.target = Some((item.slot, item.conversation)),
                 Clicked::Answer => asked.switch = Some(item.slot),
@@ -299,9 +328,10 @@ enum Clicked {
 }
 
 /// One entry, as one text that wraps as a whole. `place`: the character
-/// and conversation label of the "All" tab, and whether the box writes
-/// there; a click on the row then chooses that conversation.
-fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str, bool)>) -> Clicked {
+/// and conversation label of the "All" tab, whether the box writes there
+/// and the character's colour; a click on the row then chooses that
+/// conversation.
+fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str, bool, Option<egui::Color32>)>) -> Clicked {
     let body = egui::TextStyle::Body.resolve(ui.style());
     let small = egui::FontId::new(body.size * 0.85, body.family.clone());
     let part = |font: &egui::FontId, color: egui::Color32, italics: bool| egui::TextFormat {
@@ -311,8 +341,8 @@ fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str,
         ..Default::default()
     };
     let mut job = egui::text::LayoutJob::default();
-    if let Some((label, chosen)) = place {
-        let color = if chosen { p.violet_light } else { p.muted };
+    if let Some((label, chosen, tint)) = place {
+        let color = if chosen { p.violet_light } else { tint.unwrap_or(p.muted) };
         job.append(&format!("[{label}] "), 0.0, part(&small, color, false));
     }
     let mut card = false;
@@ -400,12 +430,13 @@ fn compose(
     slot: usize,
     conversation: Conversation,
     name: &str,
+    said_as: &str,
     now: Instant,
     asked: &mut Asked,
 ) {
     let place = chat.thread(slot, conversation).map(title).unwrap_or_default();
     ui.label(
-        RichText::new(tr!("folderstorm-chat-send-as", name = name.to_owned(), place = place))
+        RichText::new(tr!("folderstorm-chat-send-as", name = said_as.to_owned(), place = place))
             .strong()
             .color(p.violet_light),
     );
@@ -493,6 +524,8 @@ pub(super) mod tests {
             comfort: Default::default(),
             viewers: Default::default(),
             screens: Default::default(),
+            inbox: Default::default(),
+            sample_inbox: false,
             events,
             events_tx,
             demo: true,
@@ -675,5 +708,64 @@ pub(super) mod tests {
         assert!(shows(&drawn, "It is not sent unless you take it up again"), "{drawn:?}");
         assert!(shows(&drawn, "Use it as demo-1 now"));
         assert!(!shows(&drawn, "Type as demo-1"), "no field while the draft is held");
+    }
+
+    #[test]
+    fn an_alias_names_the_tab_and_the_place_and_the_real_name_is_said_where_a_line_is_sent() {
+        let (ctx, mut panel, mut host) = (egui::Context::default(), ChatPanel::default(), host());
+        assert_eq!(host.desk.set_alias(0, "Main"), Ok(()));
+        host.desk.set_colour(0, ::folderstorm_session::identity::Colour::Green);
+        heard(
+            &mut host,
+            0,
+            Conversation::Nearby,
+            1,
+            LineKind::Said,
+            "Jane Doe",
+            "hello neighbours",
+        );
+        heard(&mut host, 1, JANE, 1, LineKind::Said, "Jane Doe", "a private word");
+        let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
+        assert!(shows(&drawn, "[Main › Nearby chat]"), "{drawn:?}");
+        assert!(shows(&drawn, "[demo-2 › Jane Doe]"));
+        assert!(!shows(&drawn, "[demo-1"), "the alias stands for the name");
+        // who will say a line: the alias and, with it, the real name
+        panel.tab = Tab::Character(0);
+        let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
+        assert!(shows(&drawn, "Send as Main (demo-1)"), "{drawn:?}");
+        // a character without an alias is said as before
+        panel.tab = Tab::Character(1);
+        let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
+        assert!(shows(&drawn, "Send as demo-2 — Jane Doe"), "{drawn:?}");
+    }
+
+    #[test]
+    fn beside_the_inbox_all_leaves_what_waits_for_an_answer_to_it() {
+        let (ctx, mut panel, mut host) = (egui::Context::default(), ChatPanel::default(), host());
+        host.chat.attention_list(
+            0,
+            1,
+            AttentionList {
+                generation: 1,
+                items: vec![AttentionItem {
+                    id: 1,
+                    kind: AttentionKind::Teleport,
+                    title: "Jane Doe".into(),
+                    text: "Join me".into(),
+                }],
+                more: 0,
+            },
+        );
+        // no inbox in this window: "All" lists it, as it always did
+        let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
+        assert!(shows(&drawn, "Attention: demo-1 has something to answer"), "{drawn:?}");
+        // the inbox is drawn in this window: once is enough
+        panel.inbox_beside = true;
+        let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
+        assert!(!shows(&drawn, "has something to answer"), "{drawn:?}");
+        // the character's own tab keeps its own list either way
+        panel.tab = Tab::Character(0);
+        let (drawn, _) = frame(&ctx, &mut panel, &mut host, 1100.0);
+        assert!(shows(&drawn, "Teleport — Jane Doe: Join me"), "{drawn:?}");
     }
 }
