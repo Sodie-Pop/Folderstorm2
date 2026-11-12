@@ -12,19 +12,6 @@
 //!   never shows a box over the active character, never lowers its saved
 //!   graphics and never closes it (rules R4 and R5 of section 6.3).
 
-//!
-//! Checkpoint 2 (the session host):
-//! - [`ipc`]: what the host and a viewer it manages say to each other, and
-//!   its framing (section 8);
-//! - [`managed`]: what a managed viewer makes of the host's assignments:
-//!   role over focus, sound and voice (sections 6.3 and 10);
-//! - [`host`]: the host's desk: slots, the active character, voice given
-//!   up before it is given, liveness without false deaths, restart and
-//!   "Quit all" (sections 10 and 11).
-
 pub mod behind;
 pub mod gpu;
-pub mod host;
-pub mod ipc;
-pub mod managed;
 pub mod profile;

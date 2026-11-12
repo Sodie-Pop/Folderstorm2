@@ -42,9 +42,7 @@ impl App {
     /// start of a demo run (in the demo's own settings): `1` keeps the
     /// right two thirds of the window, `bars-window` the same with the bars
     /// over the whole window, `middle` the middle third (as the middle one
-    /// of three monitors), `mouselook-full` drops it in mouselook,
-    /// `inventory` keeps the right 40 % and opens Inventory in the left
-    /// margin, half the window wide: wider than the world, and kept so.
+    /// of three monitors), `mouselook-full` drops it in mouselook.
     pub(super) fn viewport_demo(&mut self, size: (u32, u32)) {
         static APPLIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !self.demo || APPLIED.swap(true, std::sync::atomic::Ordering::Relaxed) {
@@ -55,23 +53,12 @@ impl App {
         let s = &mut self.settings.folderstorm_viewport;
         *s = viewport::ViewportSettings {
             enabled: true,
-            left: if mode == "inventory" { size.0 / 5 * 3 } else { third },
+            left: third,
             right: if mode == "middle" { third } else { 0 },
             in_mouselook: mode != "mouselook-full",
             bars_in_viewport: mode != "bars-window",
             ..Default::default()
         };
-        if mode == "inventory" {
-            let ppp = self.egui_ctx.pixels_per_point();
-            let (width, height) = (size.0 as f32 / ppp, size.1 as f32 / ppp);
-            self.panels.inventory = true;
-            crate::ui::widgets::place_floater(
-                &self.egui_ctx,
-                "inventory",
-                egui::pos2(8.0, 48.0),
-                egui::vec2(width * 0.5, (height * 0.7).max(300.0)),
-            );
-        }
     }
 
     /// Width over height of the world's part of the window, when it has one.
@@ -83,36 +70,25 @@ impl App {
 }
 
 /// Tells Preferences where the window and the monitors are, about once a
-/// second (listing the monitors is a system call): the "Fit to a monitor"
-/// buttons and the diagram. In a demo run, `AURORA_DEMO_MONITORS` pretends
-/// the monitors (`crate::folderstorm::diagram::parse_demo_monitors`).
+/// second (listing the monitors is a system call).
 pub(super) fn publish_monitors(ctx: &egui::Context, window: &winit::window::Window, frame: u64) {
-    use crate::folderstorm::diagram::{self, Desktop, Monitor};
     if !frame.is_multiple_of(60) {
         return;
     }
+    // (Wayland gives no window position: no "Fit to a monitor" there)
+    let Ok(at) = window.inner_position() else { return };
     let size = window.inner_size();
-    let size = (size.width, size.height);
-    let desktop = match diagram::demo_monitors() {
-        Some(demo) => demo.desktop(size),
-        None => Desktop {
-            window: size,
-            // (Wayland gives no window position: the diagram shows the
-            // window alone, and there is no "Fit to a monitor")
-            position: window.inner_position().ok().map(|at| (at.x, at.y)),
-            monitors: window
-                .available_monitors()
-                .map(|m| Monitor {
-                    rect: [m.position().x, m.position().y, m.size().width as i32, m.size().height as i32],
-                    scale: m.scale_factor() as f32,
-                })
-                .collect(),
+    let monitors = window
+        .available_monitors()
+        .map(|m| [m.position().x, m.position().y, m.size().width as i32, m.size().height as i32])
+        .collect();
+    viewport::set_monitors(
+        ctx,
+        viewport::MonitorLayout {
+            window: [at.x, at.y, size.width as i32, size.height as i32],
+            monitors,
         },
-    };
-    if let Some(layout) = desktop.monitor_layout() {
-        viewport::set_monitors(ctx, layout);
-    }
-    diagram::set_desktop(ctx, desktop);
+    );
 }
 
 /// The camera's view-projection carried into window coordinates: points the

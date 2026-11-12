@@ -114,53 +114,13 @@ pub fn bars_rect(s: &ViewportSettings, world: Option<[u32; 4]>, pixels_per_point
     ))
 }
 
-/// Remembers the bars' area for this frame (`bars_screen`, `floater_room`).
+fn bars_id() -> egui::Id {
+    egui::Id::unique("folderstorm_viewport_bars")
+}
+
+/// Remembers the bars' area for this frame (`bars_screen`).
 pub fn set_bars_area(ctx: &egui::Context, rect: Option<egui::Rect>) {
-    let frame = ctx.cumulative_frame_nr();
-    ctx.data_mut(|d| d.insert_temp(bars_frame_id(), BarsArea { frame, rect }));
-}
-
-/// The bars' area and the frame it was set in: a screen that draws no bars
-/// (login, the full-frame photo view) leaves an old one behind.
-#[derive(Clone, Copy, Debug)]
-struct BarsArea {
-    frame: u64,
-    rect: Option<egui::Rect>,
-}
-
-fn bars_frame_id() -> egui::Id {
-    egui::Id::unique("folderstorm_viewport_bars_frame")
-}
-
-/// The bars' area when they are confined to the world viewport this frame
-/// or the last one (a window shown before the bars this frame reads the
-/// last one), None when they follow the whole window.
-fn confined_bars(ctx: &egui::Context) -> Option<egui::Rect> {
-    let now = ctx.cumulative_frame_nr();
-    ctx.data(|d| d.get_temp::<BarsArea>(bars_frame_id()))
-        .filter(|area| area.frame.saturating_add(1) >= now)
-        .and_then(|area| area.rect)
-}
-
-/// The room a floating window has to fit in: a larger resizable one is
-/// shrunk to it, and the shrunk size becomes its size (Aurora's
-/// `ui::widgets::Floater`). That room is Aurora's work area `work`, the
-/// window between the bars; with the bars inside the world viewport
-/// (`bars`), that work area is the world, so the room is the whole viewer
-/// window (`window`) instead: a window in the margins keeps its size while
-/// the world is narrower than it, as when the viewer window goes from two
-/// monitors to one. Where windows open, and how large, is still the work
-/// area's business; their positions follow Aurora's anchors as before.
-pub fn fit_room(work: egui::Rect, bars: Option<egui::Rect>, window: egui::Rect) -> egui::Rect {
-    match bars {
-        Some(_) if window.is_finite() && window.is_positive() => window,
-        _ => work,
-    }
-}
-
-/// [`fit_room`] for this frame, from the work area Aurora gives a floater.
-pub fn floater_room(ctx: &egui::Context, work: egui::Rect) -> egui::Rect {
-    fit_room(work, confined_bars(ctx), ctx.content_rect())
+    ctx.data_mut(|d| d.insert_temp::<Option<egui::Rect>>(bars_id(), rect));
 }
 
 /// The window and the monitors on the desktop, as (x, y, width, height)
@@ -188,7 +148,8 @@ pub fn monitors(ctx: &egui::Context) -> Option<MonitorLayout> {
 /// The rectangle the bars are laid out in: the world viewport's when they
 /// stay inside it, the window's otherwise.
 pub fn bars_screen(ctx: &egui::Context) -> egui::Rect {
-    confined_bars(ctx).unwrap_or_else(|| ctx.content_rect())
+    ctx.data(|d| d.get_temp::<egui::Rect>(bars_id()))
+        .unwrap_or_else(|| ctx.content_rect())
 }
 
 #[cfg(test)]
@@ -264,151 +225,6 @@ mod tests {
         assert_eq!(bars_rect(&s, None, 1.0), None, "no viewport this frame");
         s.bars_in_viewport = false;
         assert_eq!(bars_rect(&s, Some([1920, 0, 1920, 1080]), 1.0), None);
-    }
-
-    fn rect(x: f32, y: f32, w: f32, h: f32) -> egui::Rect {
-        egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, h))
-    }
-
-    #[test]
-    fn floaters_fit_the_whole_window_while_the_bars_are_in_the_world() {
-        let window = rect(0.0, 0.0, 2560.0, 1080.0);
-        // the world on the right 640 px, the bars and the work area inside it
-        let world = rect(1920.0, 0.0, 640.0, 1080.0);
-        let work = rect(1928.0, 48.0, 624.0, 980.0);
-        assert_eq!(fit_room(work, Some(world), window), window);
-        // viewport off, bars over the whole window, or a world filling the
-        // window (no bars area then): Aurora's work area as before
-        let between_bars = rect(8.0, 48.0, 2544.0, 980.0);
-        assert_eq!(fit_room(between_bars, None, window), between_bars);
-        // a window with no size yet keeps the work area
-        assert_eq!(fit_room(work, Some(world), egui::Rect::NOTHING), work);
-        assert_eq!(fit_room(work, Some(world), rect(0.0, 0.0, 0.0, 1080.0)), work);
-    }
-
-    #[test]
-    fn the_bars_area_is_forgotten_by_screens_without_bars() {
-        let ctx = egui::Context::default();
-        let screen = rect(0.0, 0.0, 1200.0, 800.0);
-        let work = rect(808.0, 40.0, 384.0, 720.0);
-        let run = |set: Option<Option<egui::Rect>>| {
-            let mut room = egui::Rect::NOTHING;
-            let mut output = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| {
-                    if let Some(bars) = set {
-                        set_bars_area(ui.ctx(), bars);
-                    }
-                    room = floater_room(ui.ctx(), work);
-                },
-            );
-            output.textures_delta.clear();
-            room
-        };
-        assert_eq!(run(None), work, "nothing set yet");
-        assert_eq!(run(Some(Some(rect(800.0, 0.0, 400.0, 800.0)))), screen);
-        // a window shown before the bars reads the last frame's area
-        assert_eq!(run(None), screen);
-        // then a screen without bars (login) no longer has one
-        assert_eq!(run(None), work);
-        assert_eq!(run(Some(None)), work, "bars over the whole window");
-    }
-
-    #[test]
-    fn the_side_bars_are_laid_out_in_the_world_while_confined_to_it() {
-        let ctx = egui::Context::default();
-        let screen = rect(0.0, 0.0, 1200.0, 800.0);
-        let world = rect(800.0, 0.0, 400.0, 800.0);
-        let run = |set: Option<Option<egui::Rect>>| {
-            let mut area = egui::Rect::NOTHING;
-            let mut output = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| {
-                    if let Some(bars) = set {
-                        set_bars_area(ui.ctx(), bars);
-                    }
-                    area = bars_screen(ui.ctx());
-                },
-            );
-            output.textures_delta.clear();
-            area
-        };
-        assert_eq!(run(None), screen, "nothing set yet: the whole window");
-        assert_eq!(run(Some(Some(world))), world);
-        assert_eq!(run(Some(None)), screen, "bars over the whole window");
-    }
-
-    /// The case of the plan's checkpoint 1 (folderstorm/plans/workspaces.md
-    /// section 5): Inventory in the left margin, 800 points wide; the
-    /// viewer window goes from 1920 to 1280 points with a 960-point left
-    /// margin, leaving a 320-point world (a quarter, still kept).
-    #[test]
-    fn a_floater_in_a_margin_keeps_its_size_when_the_world_is_narrower() {
-        const ID: &str = "folderstorm_margin_floater";
-        let shown = |ctx: &egui::Context, width: f32, viewport: bool, place: bool| {
-            let screen = rect(0.0, 0.0, width, 1080.0);
-            let world = rect(960.0, 0.0, width - 960.0, 1080.0);
-            let mut output = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| {
-                    let ctx = ui.ctx();
-                    let p = crate::theme::Theme::default().palette();
-                    // what app.rs does: the bars, and the work area, inside
-                    // the world when the viewport is on
-                    set_bars_area(ctx, viewport.then_some(world));
-                    crate::ui::layout::set_work_area(ctx, world.shrink2(egui::vec2(8.0, 40.0)));
-                    crate::ui::layout::set_move_area(ctx, screen);
-                    if place {
-                        crate::ui::widgets::place_floater(ctx, ID, egui::pos2(8.0, 60.0), egui::vec2(800.0, 600.0));
-                    }
-                    crate::ui::widgets::Floater::new(ID, "Inventory", egui::pos2(8.0, 60.0), egui::vec2(800.0, 600.0)).show(
-                        ctx,
-                        &p,
-                        &mut true,
-                        |ui| ui.label("folders"),
-                    );
-                },
-            );
-            output.textures_delta.clear();
-            ctx.memory(|m| m.area_rect(egui::Id::unique(ID))).expect("shown")
-        };
-        for viewport in [true, false] {
-            let ctx = egui::Context::default();
-            ctx.all_styles_mut(|s| s.animation_time = 0.0);
-            shown(&ctx, 1920.0, viewport, true);
-            let mut before = egui::Rect::NOTHING;
-            for _ in 0..4 {
-                before = shown(&ctx, 1920.0, viewport, false);
-            }
-            assert!(before.width() > 700.0, "placed at its size: {before:?}");
-            let mut after = egui::Rect::NOTHING;
-            for _ in 0..4 {
-                after = shown(&ctx, 1280.0, viewport, false);
-            }
-            if viewport {
-                assert_eq!(after.size(), before.size(), "kept its size in the margin");
-                assert_eq!(after.min, before.min, "and its place");
-                // and that size is still the one it comes back with
-                let mut grown = egui::Rect::NOTHING;
-                for _ in 0..4 {
-                    grown = shown(&ctx, 1920.0, viewport, false);
-                }
-                assert_eq!(grown.size(), before.size());
-            } else {
-                // without the viewport Aurora's rule is untouched: brought
-                // down to the work area
-                assert!(after.width() <= 304.5, "shrunk to the work area: {after:?}");
-            }
-        }
     }
 
     #[test]

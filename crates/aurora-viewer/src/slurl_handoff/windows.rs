@@ -250,13 +250,5 @@ fn create_pipe(name: &str, security: Option<&security::Attributes>) -> io::Resul
     Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
 }
 
-// Folderstorm: the pipe a viewer reports to its session host on
-// (folderstorm_characters/transport.rs): inbound, first instance, local
-// clients of this logon only, as the links' pipe above; no pipe without
-// that security.
-pub fn folderstorm_session_pipe(name: &str) -> io::Result<OwnedHandle> {
-    create_pipe(name, Some(&security::Attributes::new()?))
-}
-
 #[cfg(test)]
 mod tests;

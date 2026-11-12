@@ -35,17 +35,13 @@ pub fn current() -> Option<&'static ProfileName> {
     }
     static PROFILE: OnceLock<Option<ProfileName>> = OnceLock::new();
     PROFILE
-        .get_or_init(|| {
-            // (the session host is the main profile's: it has no character)
-            let raw = crate::cli::get().profile.as_deref().filter(|_| !super::host::wanted())?;
-            ProfileName::parse(raw).ok()
-        })
+        .get_or_init(|| crate::cli::get().profile.as_deref().and_then(|raw| ProfileName::parse(raw).ok()))
         .as_ref()
 }
 
 /// The `--profile` value refused, with why.
 fn refused() -> Option<(&'static str, NameError)> {
-    let raw = crate::cli::get().profile.as_deref().filter(|_| !super::host::wanted())?;
+    let raw = crate::cli::get().profile.as_deref()?;
     ProfileName::parse(raw).err().map(|e| (raw, e))
 }
 
@@ -68,7 +64,7 @@ pub fn check() -> bool {
 
 /// A message before the window: on the console, and in a native box (a
 /// Windows release build has no console). None in automated runs.
-pub(super) fn tell(text: &str) {
+fn tell(text: &str) {
     eprintln!("{text}");
     if std::env::var_os("AURORA_CAPTURE").is_some() || std::env::var_os("AURORA_PROFILE").is_some() {
         return;
@@ -144,13 +140,6 @@ pub fn bus_suffix() -> String {
 /// The log's name for a named profile (`aurora-alt1`); None for the main
 /// profile.
 pub fn log_stem(base: &str) -> Option<String> {
-    if super::host::wanted() {
-        // the session host's own log: `aurora-session-host`
-        return Some(match crate::cli::title_slug() {
-            Some(title) => format!("{base}-session-host-{title}"),
-            None => format!("{base}-session-host"),
-        });
-    }
     rules::log_stem(base, current(), crate::cli::title_slug().as_deref())
 }
 
@@ -179,10 +168,6 @@ static LEASE: OnceLock<std::fs::File> = OnceLock::new();
 /// before). False when this launch must end: the viewer of this profile
 /// was brought forward, or it could not be reached nor taken over.
 pub fn take_lease() -> bool {
-    if super::host::wanted() {
-        // one session host per settings folder
-        return super::host::take_lock();
-    }
     if current().is_none() {
         return true;
     }
@@ -207,9 +192,6 @@ pub fn take_lease() -> bool {
         match file.try_lock() {
             Ok(()) => {
                 let _ = LEASE.set(file);
-                // the profile is this process's: its link to the session
-                // host, if the host started it
-                super::managed::start();
                 return true;
             }
             Err(std::fs::TryLockError::WouldBlock) => {}
@@ -229,16 +211,4 @@ pub fn take_lease() -> bool {
         }
         std::thread::sleep(Duration::from_millis(250));
     }
-}
-
-/// Whether a viewer runs the profile `name` now (its lease is held): the
-/// session host does not start a second one, which would only bring the
-/// first forward and end.
-pub fn lease_held(name: &ProfileName) -> bool {
-    let dir = rules::config_dir(main_config_dir(), Some(name));
-    let Ok(file) = std::fs::OpenOptions::new().write(true).open(dir.join(LEASE_FILE)) else {
-        // no lease file: the profile never ran
-        return false;
-    };
-    matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock))
 }

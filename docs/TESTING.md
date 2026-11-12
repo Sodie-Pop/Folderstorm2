@@ -157,44 +157,6 @@ Check that the world, its HUDs and its name tags stay in the rectangle, the
 margins are dark, the bars sit inside it (except with `bars-window`), a click
 in a margin selects nothing, windows can be dragged into the margins, and the
 settings are under Preferences › Layout › Bars and windows › World viewport.
-`inventory` keeps the right 40 % for the world and opens Inventory in the left
-margin, half the window wide: wider than the world, it keeps its size (it is
-no longer shrunk to the world's width). Make the viewer window narrower and
-wider again: Inventory keeps its size unless it is wider than the whole window,
-and comes back to its place.
-
-**Viewport diagram (Folderstorm2).** Preferences › Layout › Bars and windows ›
-World viewport, behind the cog of "Use a custom world viewport", starts with a
-diagram of the viewer window, the world and the monitors.
-`AURORA_DEMO_MONITORS` pretends a monitor layout: monitors separated by commas
-or semicolons, each `WxH[+X+Y][@scale]` (X11 geometry: `-1920+0` puts one left
-of the main monitor; `@1.5` or `@150%` gives its scale). A monitor without a
-position goes right of the previous one, tops aligned. An optional
-`window+X+Y` item puts the inside of the viewer window there (by default the
-top-left corner of all the monitors); `wayland` pretends the window's position
-is unknown. The window keeps its real size: choose it with
-`AURORA_WINDOW_SIZE`. Add `AURORA_DEMO_VIEWPORT=1` to turn the viewport on and
-`AURORA_DEMO_OPTIONS=layout/0:cogs` to open the group:
-
-```bash
-AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_OPTIONS=layout/0:cogs \
-  AURORA_WINDOW_SIZE=3840,1080 AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
-  cargo run -p aurora-viewer -- --title "Test viewport diagram"
-```
-
-Other layouts: three equal monitors `1920x1080,1920x1080,1920x1080` (window
-`5760,1080`); unequal ones with mixed scales `1920x1080,2560x1440+1920-180@150%`
-(window `4480,1080`); a monitor left of the main one
-`1920x1080-1920+0,1920x1080+0+0`; the window partly over a monitor
-`1920x1080,1920x1080,window+960+0` (window `1920,1080`); `wayland`. Check that
-dragging an edge of the world moves its margin and the sliders below follow,
-that it snaps to the monitor borders and the window's sides, stops before the
-world gets under a quarter of the window, and that Escape during the drag puts
-it back; that a click selects a monitor (outlined) and a double click or "Put
-the world on monitor N" puts the world on it; that a monitor away from the
-window or barely under it says why it cannot; that margins set too large with
-the sliders show a dashed outline and the note that the world fills the
-window; and that with `wayland` the window is drawn alone.
 
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
@@ -5404,15 +5366,13 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MAP=1`, `mini` or words among `search:<text>`, `drawer:<tab>`, `landmarks`, `friend`, `legacy`, `switch`, `show-on-map`, `show-link`, `coordinates`, `beacon[-click|-offscreen]` | Maps, search, drawer, landmarks, followed friend, side panel layout, layout switched with the map open, Show on map, coordinate entry and clickable 3D beacon |
 | `AURORA_DEMO_NOTIF=1`, `AURORA_DEMO_STATUSMENU=1` or `invisible`, `AURORA_DEMO_MICMENU=1`, `AURORA_DEMO_NAVEDIT=1` | Notification list, status menu, microphone panel, location field |
 | `AURORA_DEMO_PARCEL_NAME=<text>` | Any parcel name in the place island (odd names, line breaks) |
-| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world) |
+| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
-| `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -6255,19 +6215,6 @@ failure. Grid validation and any paid upload are performed by the human.
   cancel), the folder named in the question, and that an item's Wear entry and
   a folder's Wear objects entry are greyed in their menus until Preferences ›
   Inventory › Enable "Wear" in inventory menus is on.
-- **`AURORA_DEMO_INVENTORY=custom-tabs|aurora-custom-tabs`** (Folderstorm2):
-  two sample custom tabs, "Textures and sounds" (shown) and "Demo items" (the
-  search "demo"), after the built-in tabs of the Legacy or Aurora inventory
-  (Aurora's shortcuts column from ~720 px wide). Check that "Customize tab…"
-  appears beside the search box only while a custom tab is shown (a sliders
-  button in Aurora) and opens "Customize tab: <name>" with no "Keep by
-  default"; a filter or search typed on one tab is still there after visiting
-  the other tabs, and after restarting the viewer. Right-click a custom tab:
-  Customize tab… (selects an inactive tab first), Rename… (empty and repeated
-  names are refused), Clone (the copy is shown), Delete… (asks first, Cancel
-  focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
-  a custom tab with that tab's finder and search. The `aurora-` mode starts with
-  the narrow window; widen it to see the shortcuts column.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory
@@ -6683,52 +6630,6 @@ failure. Grid validation and any paid upload are performed by the human.
     receiving (the image stays as it was). A click (with the window really
     focused) recovers on a new window, `recovering on a new window and
     device, not counted`, with the settings unchanged.
-- **`AURORA_DEMO_SESSION_HOST=<1-5>`** (Folderstorm2, session host
-  checkpoint 2): with `AURORA_DEMO=1`, the program starts as the
-  characters' host (as `--session-host` does) with the characters `demo-1`
-  to `demo-<n>`, and starts their viewers, each a demo viewer of its own
-  (`--profile demo-<i> --managed`, the host's `--title` and `--language`
-  passed on). No grid, no login. Nothing of the demo is saved in the host's
-  settings; the profiles are in the demo's settings folder
-  (`config\demo\profiles\demo-<i>`).
-  `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 cargo run -p aurora-viewer -- --title "Test host"`.
-  What to look at:
-  - each row shows its character's state ("Starting…", then "In Aurora
-    Démo" or the like), and one row says **Active**. The active viewer's log
-    (`aurora-demo-demo-1-test-host.log`) says `session host: Active, Warm
-    standby, sound on, voice allowed`, the others `Background, …, sound
-    cut, voice off` and `3D paused: another Folderstorm2 window is in
-    front (policy Off)`, with the amber notice of checkpoint 1.
-  - **Switch** on another row: that window comes forward where the active
-    one was (same place and size, with "Keep the characters' windows in the
-    same place"), its 3D resumes, the one left pauses. Clicking a
-    character's window directly does the same and the host's **Active**
-    follows. With "Minimise in the background" on a row, that character's
-    window is minimised when another becomes active (Economy), and restored
-    by **Switch**. While the host's own window has the keyboard, the active
-    character keeps its full frame rate (its log never says `3D paused`).
-  - close a viewer with its own window button and Quit: its row says
-    "Closed" and offers **Restart**; the others do not change. End one in
-    the task manager: "Ended unexpectedly", **Restart** too.
-  - end the **host** in the task manager: every viewer stays open, its log
-    says `session host: gone, this viewer goes on by itself`, and each
-    follows its own focus and settings again (sound back, the 3D of the
-    focused one drawn).
-  - **Quit all**: each viewer quits, then the host closes. The host's
-    window close button, while characters run, asks: Quit all, Close only
-    this window, or Cancel.
-  - a second host on the same settings folder is refused with a message; a
-    profile already open outside the host is not started twice ("already
-    open in a window that this host did not start").
-  - combined with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST` (the
-    viewers inherit them): no graphics box and no close for the background
-    characters, whose rows say "Its graphics card does not answer for now"
-    or "It lost the graphics card, and recovers when its window is brought
-    forward"; the host itself draws on the processor and opens no graphics
-    device.
-  The host's log is `aurora-demo-session-host-test-host.log`.
-  `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
-  window's picture at each of its frames.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

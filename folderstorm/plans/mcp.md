@@ -291,3 +291,10 @@ workspace uses them; `tempfile` for tests (already in the lock).
 Not testable here: the look of the page and of the dialog (no display in
 the sandbox), real MCP clients on Windows, and the grid's answers (the
 bake wait against a real region).
+
+## Next: receipts, plans, login binding and operations
+
+The foundation the FEATURES.md 4.6 groups need (step 3 of the MCP parity
+order) is planned in [mcp-receipts.md](mcp-receipts.md): re-checking
+permissions while a call waits, binding each call to one login, capability
+versions, receipts, batch preview and execute plans, and guarded operations.

@@ -316,8 +316,8 @@ pub(super) fn show(
     }
     // The shortcuts.
     let everything = st.tab == 0 && st.browse == inv.root;
-    if !scoped {
-        let all = entry(
+    if !scoped
+        && entry(
             ui,
             p,
             "briefcase-filled",
@@ -326,12 +326,10 @@ pub(super) fn show(
             0,
             everything,
             8.0,
-        );
-        if all.clicked() {
-            browse(st, prefs, inv.root);
-        }
-        // Folderstorm: Clone of All makes a custom tab (custom_tabs.rs)
-        menu::context_menu(&all, p, |ui| custom_tabs::tab_menu(ui, p, st, prefs, 0));
+        )
+        .clicked()
+    {
+        browse(st, prefs, inv.root);
     }
     let unseen = super::toolbar::unseen_received(inv, st);
     for (tab, icon, label, count, shown) in if scoped {
@@ -373,31 +371,9 @@ pub(super) fn show(
             continue;
         }
         let waiting = if tab == RECEIVED_TAB { unseen } else { 0 };
-        let response = entry(ui, p, icon, label, Some(count), waiting, st.tab == tab, 8.0);
-        if response.clicked() {
+        if entry(ui, p, icon, label, Some(count), waiting, st.tab == tab, 8.0).clicked() {
             set_tab(st, prefs, tab);
         }
-        if custom_tabs::has_menu(tab) {
-            // Folderstorm: Clone makes a custom tab (custom_tabs.rs)
-            menu::context_menu(&response, p, |ui| custom_tabs::tab_menu(ui, p, st, prefs, tab));
-        }
-    }
-    // Folderstorm: the custom tabs follow the built-in shortcuts (custom_tabs.rs)
-    for (slot, name) in if scoped { Vec::new() } else { custom_tabs::entries(prefs) } {
-        let response = entry(
-            ui,
-            p,
-            "bookmark-filled",
-            &name,
-            None,
-            0,
-            custom_tabs::selected(st, prefs, slot),
-            8.0,
-        );
-        if response.clicked() {
-            custom_tabs::select(st, prefs, slot);
-        }
-        menu::context_menu(&response, p, |ui| custom_tabs::tab_menu(ui, p, st, prefs, slot));
     }
     let saved = if scoped { Vec::new() } else { super::super::smart_store::list() };
     if !saved.is_empty() || (st.finding_similar() && !scoped) {

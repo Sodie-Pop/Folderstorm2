@@ -597,7 +597,6 @@ impl<'a> Floater<'a> {
         let opening = self
             .cascade
             .and_then(|group| cascade::prepare(ctx, window_id, group, egui::Rect::from_min_size(self.default_pos, expanded), work));
-        let work = crate::folderstorm::viewport::floater_room(ctx, work); // Folderstorm: fit the viewer window, not the world
         // A window as tall as its content (fixed, or of automatic height)
         // whose content is taller than the room scrolls it, from the frame
         // after the one that showed it too tall, and for as long as it is.
@@ -1831,24 +1830,7 @@ pub fn stretched_tabs(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labe
 }
 
 fn tabs_row(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labels: &[(&str, bool)], stretched: bool, compact: bool) -> bool {
-    tabs_row_responses(ui, p, selected, labels, stretched, compact).0
-}
-
-// Folderstorm: `tabs` that also gives each tab's response (right-click menus, custom_tabs.rs)
-pub fn tabs_with_responses(ui: &mut egui::Ui, p: &Palette, selected: &mut usize, labels: &[(&str, bool)]) -> (bool, Vec<egui::Response>) {
-    tabs_row_responses(ui, p, selected, labels, false, false)
-}
-
-fn tabs_row_responses(
-    ui: &mut egui::Ui,
-    p: &Palette,
-    selected: &mut usize,
-    labels: &[(&str, bool)],
-    stretched: bool,
-    compact: bool,
-) -> (bool, Vec<egui::Response>) {
     let mut changed = false;
-    let mut responses = Vec::with_capacity(labels.len());
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         let n = labels.len().max(1) as f32;
@@ -1905,10 +1887,9 @@ fn tabs_row_responses(
                 *selected = i;
                 changed = true;
             }
-            responses.push(resp);
         }
     });
-    (changed, responses)
+    changed
 }
 
 /// Height of a `segmented` choice, room around its segments, and room

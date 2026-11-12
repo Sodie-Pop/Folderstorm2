@@ -57,7 +57,7 @@ fn details_button(ui: &mut egui::Ui, p: &Palette, prefs: &mut InventoryPreferenc
 
 /// The tabs of the narrow width: an icon over a short name each; the
 /// Received tab counts deliveries not looked at yet.
-pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
+pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut InventoryUi, prefs: &InventoryPreferences) {
     let mut entries = vec![(0, "briefcase-filled", aurora_i18n::tr!("inventory-tab-all"))];
     for (tab, icon, label, shown) in [
         (2, "clock-filled", aurora_i18n::tr!("inventory-tab-recent"), prefs.show_recent),
@@ -70,11 +70,6 @@ pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inv
             entries.push((tab, icon, label));
         }
     }
-    // Folderstorm: the custom tabs follow the built-in ones (custom_tabs.rs)
-    let custom = custom_tabs::entries(prefs);
-    for (slot, name) in &custom {
-        entries.push((*slot, "bookmark-filled", name.as_str()));
-    }
     let unseen = unseen_received(inv, st);
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), Sense::hover());
     let width = (rect.width() - 2.0 * (entries.len() as f32 - 1.0)) / entries.len() as f32;
@@ -84,7 +79,7 @@ pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inv
             Vec2::new(width, rect.height()),
         );
         let response = ui.interact(cell, ui.scope_id().with(("inventory_tab", tab)), Sense::click());
-        let selected = custom_tabs::selected(st, prefs, tab); // Folderstorm: custom Inventory tabs
+        let selected = st.tab == tab;
         let hot = response.hovered();
         if selected || hot {
             let fill = if selected { p.raised } else { p.raised.gamma_multiply(0.6) };
@@ -110,10 +105,7 @@ pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inv
         }
         response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, label));
         if response.clicked() {
-            custom_tabs::select(st, prefs, tab); // Folderstorm: custom Inventory tabs
-        }
-        if custom_tabs::has_menu(tab) {
-            menu::context_menu(&response, p, |ui| custom_tabs::tab_menu(ui, p, st, prefs, tab));
+            set_tab(st, prefs, tab);
         }
     }
 }
@@ -142,9 +134,7 @@ fn search_hint(prefs: &InventoryPreferences, short: bool) -> &'static str {
 fn search(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut InventoryUi, prefs: &InventoryPreferences, width: f32, layout: Layout) {
     // the switch to the advanced search sits inside the width, so the rows'
     // arithmetic stays theirs
-    // Folderstorm: "Customize tab…" takes a button's room while a custom tab is shown
-    let customize = custom_tabs::active(st).is_some();
-    let width = (width - BAR - 6.0 - if customize { BAR + 6.0 } else { 0.0 }).max(40.0);
+    let width = (width - BAR - 6.0).max(40.0);
     let tip = if st.advanced {
         aurora_i18n::tr!("inventory-search-quick")
     } else {
@@ -161,18 +151,6 @@ fn search(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut InventoryUi,
         } else {
             st.enter_advanced(prefs.search_field);
         }
-    }
-    if customize
-        && tool_button(
-            ui,
-            p,
-            "adjustments-filled",
-            aurora_i18n::tr!("inventory-custom-tab-customize-tip"),
-            st.filters_open,
-        )
-        .clicked()
-    {
-        custom_tabs::customize(st); // Folderstorm: custom Inventory tabs
     }
 }
 
@@ -557,9 +535,7 @@ fn tab_name(tab: usize) -> &'static str {
 fn breadcrumb(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut InventoryUi) {
     ui.spacing_mut().item_spacing.x = 4.0;
     if st.tab != 0 {
-        // Folderstorm: a custom tab is named after itself
-        let name = custom_tabs::name_of(st).unwrap_or_else(|| tab_name(st.tab)).to_owned();
-        ui.add(egui::Label::new(sheet::semibold(ui, &name, 13.0, p.ink)).truncate());
+        ui.add(egui::Label::new(sheet::semibold(ui, tab_name(st.tab), 13.0, p.ink)).truncate());
         return;
     }
     let base = super::base(inv, st);
