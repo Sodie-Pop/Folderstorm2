@@ -318,8 +318,9 @@ available.
 - **Launch.** The host spawns `current_exe --profile <name> --managed`. It
   never passes `--login` and never sees passwords: each character logs in on
   its own viewer's login screen, which may use its remembered password.
-- **Bootstrap.** The child's **stdin is an anonymous pipe** held only by the
-  host and that child. The host writes one bounded line (control pipe name
+- **Bootstrap.** The child's **stdin is a pipe** held only by the host and
+  that child (anonymous on Linux and macOS; on Windows Rust makes a randomly
+  named pipe whose ends are connected as it is made). The host writes one bounded line (control pipe name
   and a one-time 128-bit token) and closes it; the viewer reads it in the CLI
   hook and drops stdin. Nothing on the command line or in the environment.
   Std's `Command` passes stdin to GUI-subsystem processes through
@@ -368,7 +369,8 @@ available.
   (`world.social.ims`). Their `LineClock` numbers lines (`first`, `revision`,
   `token`, in `world/transcripts.rs`), so the adapter sends only new lines and
   restarts cleanly when `token` changes. No change to upstream chat code.
-  Group chat and conference coverage is to be checked during checkpoint 3.
+  Group chats and conferences are sessions of `world.social.ims` too, so
+  they are covered the same way (checkpoint 3, "As built").
 - **Restrictions.** Export only what the viewer's own window would show
   (RLVa names and text redaction, receive restrictions), rechecked at export
   time.
@@ -468,6 +470,9 @@ available.
   list and New IM in the host, session sets (launch several profiles
   together, with no auto-login), the bird's-eye switch effect,
   condensed or minimal host modes, MCP session routing (FEATURES 4.6).
+  (Checkpoint 7 built the colours and aliases, the attention inbox and
+  the condensed mode, and decided against the bird's-eye effect as C++
+  had it: see its "As built".)
 - **Creators' permissions:** none of this shows, copies or exports assets or
   asset ids. Monitors show what that character's viewer shows and are never
   saved. Profile copy moves the user's own settings files only.
@@ -571,6 +576,109 @@ May be two small PRs: 1a profiles, 1b behind policy.
   Close one viewer: the others are unaffected and Restart works. Measure Warm
   against Economy (VRAM, switch time).
 
+- **As built (branch `claude/session-checkpoint-2`):** the rules are pure
+  and tested in `crates/folderstorm-session` (`ipc`: messages, framing,
+  token and hello checks; `managed`: role over focus, sound and voice in a
+  viewer; `host`: the desk, its slots, liveness, voice hand-over, restart,
+  Quit all). In the viewer: `folderstorm_characters/host.rs` and `host/`
+  (the host's processes and window), `managed.rs` (a viewer's link),
+  `transport.rs` (the endpoint), and `app/folderstorm_characters.rs` (the
+  glue). Differences from sections 4, 7, 8 and 10 above:
+  - **The host's window is drawn on the processor** (softbuffer and the
+    crash window's painter, `crash/software.rs`), not with egui-wgpu: the
+    host opens no graphics device, so it takes no video memory from the
+    characters and no driver reset or stall reaches it. This is the "most
+    stable" form of decision 2. Monitors (checkpoint 5) will upload frames
+    to that painter or move the host to wgpu then.
+  - **IPC: two one-way channels instead of one two-way pipe.** Host to
+    viewer is the viewer's standard input for the whole session, not only
+    for the bootstrap: only the host and that child hold it, and its end
+    is exactly "the host is gone" (unmanaged fallback) on every system,
+    with no Windows-only code. On Linux and macOS it is an anonymous pipe.
+    On Windows, Rust's piped standard input is a named pipe with a random
+    name (`\\.\pipe\__rust_anonymous_pipe1__.<pid>.<random>`, first
+    instance only, remote clients rejected) whose other end is opened as
+    soon as it is made, so there is no moment when another process could
+    join it, but it does have a name.
+    Viewer to host is the private endpoint of section 8, inbound only. A
+    blocking two-way named pipe would also have needed overlapped I/O (a
+    blocked read holds a write on the same synchronous handle). The
+    Windows pipe is made by the `secondlife://` hand-over's own tested code
+    through one hook (`slurl_handoff::folderstorm_session_pipe`): first
+    instance, remote clients refused, this logon only. The host checks the
+    client's process id, then the launch's token (244 random bits from two
+    version 4 UUIDs, compared in constant time), protocol and build; the
+    viewer checks that the pipe is served by the host's process.
+  - **Linux and macOS:** a socket named `s` in a folder made for it with
+    mode 0700 (`$XDG_RUNTIME_DIR`, or the temporary folder when that path
+    is too long for a socket), the client's uid and pid checked with
+    `SO_PEERCRED` on Linux; on macOS the folder's permissions and the token
+    alone.
+  - **One whole assignment instead of `SetRole`, `SetSound` and
+    `SetVoice`:** `Assign{seq, role, behind, standby, sound_muted,
+    voice_allowed}` is the full wanted state; the viewer keeps the highest
+    `seq` and reports it, the host sends it again until it is reported. A
+    lost or late message cannot leave a viewer half set. `Show{stage}`
+    (restore, place, focus), `Minimise` and `Quit` are the one-shot
+    commands; `Quit` always logs out (no `logout` flag). The slot is in the
+    bootstrap and the hello, not in every message: each launch has its own
+    two channels, and the host tags what it reads with the slot's launch
+    number and drops what comes from an earlier launch. The login
+    generation is in the status (used from checkpoint 3). `Exiting` is not
+    sent: the process handle says how a viewer ended. `SendChat`,
+    `MarkRead`, `ChatLine`, monitor frames: later checkpoints.
+  - **Voice hand-over is strict:** the new active character is allowed
+    voice only when every other viewer has reported an assignment without
+    it **and** that its voice is off, or has ended. A viewer turns its voice
+    off as soon as its link reads such an assignment (not at its next
+    frame, which may be far off while minimised), and reports it given up
+    only once its voice module is disconnected. A viewer that does not
+    answer keeps the voice waiting (it may still be transmitting); the host
+    says whom it waits for.
+  - **The viewer moves its own window.** The host never touches another
+    process's window: `Show` and `Minimise` are carried out by the viewer
+    with winit (the host only calls `AllowSetForegroundWindow` for it
+    first, as the link hand-over does). No cross-process `SetWindowPos`,
+    and the same code on X11.
+  - **The stage is the active window's rectangle** ("Keep the characters'
+    windows in the same place", on by default): the window brought forward
+    takes the outer position and size (or the maximised state) of the one
+    that was active; moving the active window moves the stage. Nothing is
+    computed from monitors by the host, so mixed-DPI layouts are whatever
+    the user arranged; a stage that is on no screen any more is not taken.
+  - **The host follows the user:** a background window that gets the
+    keyboard (a click, Alt-Tab, the taskbar) becomes the active character
+    (only a change to focused counts, so a switch from the host is never
+    undone by a late report).
+  - **A viewer the host cannot manage is let go:** when its hello is
+    refused, or it never reaches the endpoint (only other clients came),
+    the host closes its command pipe, so the viewer sees the host gone and
+    goes on by itself; the slot shows "not managed" until that process
+    ends. A viewer still starting after a minute is noted and End is
+    offered; nothing ends it by itself.
+  - **R2:** only "behind" and "minimised" are used. Commands and reports
+    run from `about_to_wait`, not from the frame, so a minimised viewer
+    still obeys and reports even if its frames are rare; the main-loop
+    counter of R6 counts those turns.
+  - **R3:** `App::folderstorm_in_front()` (focus, or the host's active
+    character) replaces `self.focused` at the five sites of section 6.4.
+    The GPU rules of checkpoint 1 (R4, R5) still go by the real focus: a
+    stall box or a recovery of the active character waits for a click on
+    its own window while the user is in the host's window. The real focus
+    is the window's own (`gpu::has_keyboard`: a window that exists and has
+    the focus), not the viewer's focus flag, which starts true before any
+    focus event; it is also what the status reports.
+  - **Background sound** rides Aurora's "mute when minimised" transient
+    mute (never saved); **voice** is `voice_enabled && allowed` where the
+    voice session is fed, and the microphone is released by the same mute.
+  - **A host's Quit while the card holds a frame** is not recorded as a
+    close in GPU trouble: the next start keeps its graphics (R4, R5).
+  - Not done here: the host does not adopt viewers already running
+    (section 11), the per-character sound choice "alerts only / all"
+    (section 10), the same-account refusal (the host only warns: the login
+    happens in the viewer), the updater's "quit all and update"
+    (section 5), global hotkeys and profile copy (checkpoint 4).
+
 ### Checkpoint 3: shared chat
 
 - Section 9. Optional host sound for a background IM.
@@ -580,6 +688,127 @@ May be two small PRs: 1a profiles, 1b behind policy.
   doubled; RLVa receive and send restrictions hold; offers show as "Switch to
   answer".
 
+- **As built (branch `claude/session-checkpoint-3`, on top of checkpoint
+  2):** the rules are pure and tested in `crates/folderstorm-session`
+  (`ipc`: protocol 2 and its new messages; `export`: which lines are new by
+  the viewer's `LineClock`, and "said at most once"; `chat`: the host's
+  model). In the viewer: `folderstorm_characters/chat_export.rs` (what a
+  managed viewer tells), `app/folderstorm_characters/chat.rs` (the `impl
+  App` glue: saying a line, the demo), `folderstorm_characters/host/chat_ui.rs`
+  (the panel). **No new upstream hook**: the export only reads
+  `World::chat`, `World::social.ims`, their clocks and
+  `World::notifications`, and runs from checkpoint 2's
+  `folderstorm_managed_pump` call in `about_to_wait`.
+  - **Coverage.** Nearby chat, instant messages, group chats and
+    conferences: Aurora keeps all three kinds of session in
+    `World::social.ims`, so they are told and written to the same way. A
+    line is told with the sender's name and the text the conversation shows
+    (`ui::chat::sender_name`, `line_body`, `resolved_text`). Only lines of
+    this session are told (`Origin::Live`): the transcript's history and a
+    group's server history stay in the viewer. An instant message that the
+    viewer also repeats in its nearby chat is told once, in its
+    conversation. The host starts no conversation: it writes to those a
+    viewer has open (a closed one answers "closed in the character's
+    window"). No typing notices, no chat volume choice (a nearby line is
+    said at normal volume; "/5 text" goes to channel 5 as in the chat bar).
+  - **IPC, protocol 2** (a host and a viewer of different protocols refuse
+    each other, as for builds). Viewer to host: `Chat(ChatBatch{generation,
+    conversation, kind, title, restart, missed, unread, lines})`,
+    `Attention(AttentionList)` (whole, latest replaces),
+    `SendResult{id, Accepted | Refused(reason)}`. Host to viewer:
+    `SendChat{id, generation, conversation, text}`,
+    `MarkRead{generation, conversation}`. `ChatGap` is the batch's `missed`
+    count; "uncertain" is never on the wire: it is what the host concludes
+    when no answer comes. Every text is bounded and stripped of control
+    characters on arrival, on both sides (line 2048 characters, text to say
+    1024, title 80, 32 lines a batch, 16 attention items); a full batch is
+    proven under the 64 KiB frame. A message that is not one ends the link
+    (viewer) or the reading of that viewer (host), as in checkpoint 2.
+  - **Never as another character.** A line to say travels only on the
+    standard input of the one viewer it was typed for (the effect names the
+    slot and its launch; the host writes to that launch's pipe or not at
+    all), carries that viewer's login generation, and names no character:
+    there is nothing in a message that could make viewer B speak for A. In
+    the host a draft is bound to (slot, launch, login generation,
+    conversation). The launch is part of it because a restarted viewer
+    counts its logins from 1 again. After a logout, a login or a restart
+    the draft is **held**: shown, not sent, until the user presses "Use it
+    as <name> now" or discards it. A character removed from the desk leaves
+    nothing behind for the next profile in its slot.
+  - **Never twice.** The host hands a line to a pipe once and never again.
+    Not queued (the viewer does not read, its queue is full): "not sent",
+    text back in the box. Queued and no answer (the process ended, or 15 s
+    of silence): "uncertain", with the text, **not** put back in the box.
+    The viewer says each `id` at most once (ids grow; an id not above the
+    last is refused as repeated) and keeps its answers until the link takes
+    them. A refusal is noted in its own conversation and the text goes back
+    to that draft.
+  - **Sending uses the viewer's own paths.** Nearby: `App::send_local_chat`
+    (channel prefix, gestures, chat bar commands, then `App::send` with
+    RLVa's `outgoing_chat`). Conversations: **deviation**: the
+    conversations window's send is not a function but a loop inside
+    `App::handle_actions` (`for (to, text) in a.ims`), which runs once per
+    frame with the whole frame's actions; the pump runs outside frames
+    (a minimised character has few). Its steps are repeated in
+    `App::folderstorm_send_im` (":" emote, emoji shortcodes, group or
+    conference session, unblock notice, `World::own_im`, `App::send` with
+    RLVa's `sendim` rules), with a comment to keep both alike at upstream
+    merges. Options if this drifts: (a) ask upstream to make that loop body
+    a method (the clean fix, about 20 moved lines); (b) do it in the fork
+    (a conflict at each upstream change of those lines).
+  - **RLVa.** Receive restrictions are applied by Aurora before a line is
+    stored, so a refused line never reaches the export (tested with
+    `@recvchat`, `@recvim`). Names and places are replaced by Aurora
+    partly when a line is stored and partly when it is drawn; the export
+    uses the drawing's own functions at export time, and while
+    RLVa is on it checks every 2 s that the last 200 lines told per
+    conversation still read as the window shows them: when one does not (a
+    restriction came, a hidden resident's name was learnt) the conversation
+    is told again (`restart`) and the host **replaces** its copy, in the
+    conversation and in "All" (tested with `@shownames`). Send restrictions
+    hold because the viewer's own send path applies them; what RLVa makes
+    of the line (redirected, replaced, dropped) shows in the viewer's
+    conversation and comes back from there. `Refused(Restricted)` exists in
+    the protocol but nothing sends it yet: Aurora's paths do not report a
+    refusal to their caller.
+  - **Host model:** a tab per character and "All"; in a character's tab
+    its conversations (nearby chat first); "Send as <name> — <place>" above
+    the box; in "All" the box writes to the conversation of the line that was
+    clicked (each line starts with "[character › conversation]"), never to
+    "the latest";
+    500 lines and 50 host notices per conversation, 64 conversations per
+    character (the one heard of longest ago leaves; never the nearby chat
+    or the one on screen), 1000 entries in "All"; gap markers for lines the
+    viewer dropped first, and "older lines are in the character's own
+    window" for what the host dropped; unread per conversation and
+    character, cleared when on screen in a focused host window, and the
+    viewer is told (`MarkRead`) so its own counter and bell follow.
+  - **Attention:** the viewer's notifications that need an answer
+    (`Notification::interactive`: teleport offers and requests, friendship,
+    inventory offers, group invitations, script dialogs, permissions,
+    links, calls) are listed per character with **Switch to answer**; the
+    cards of offers inside a conversation have the same button. The host
+    has no message that answers anything. A payment received is a plain
+    line (nothing to answer).
+  - **Sound:** the viewers' interface sounds are grid assets and the host
+    never logs in, so it cannot play them. "Sound when a background
+    character gets a message" (off by default, saved in
+    `session-host.json`) plays the system's notification sound
+    (`MessageBeep`, Windows only) for an instant message, a group or
+    conference line or an offer to a character that is not the active one;
+    the host's taskbar button flashes either way. The per-character
+    "alerts only / all" of section 10 is still open.
+  - **Window:** still drawn on the processor (egui through the crash
+    window's software painter, no graphics device); the chat is the same
+    egui with the shared widgets, beside the characters (side by side from
+    about 940 points of width, two pages below).
+  - **Demo:** each demo character hears a neighbour, gets an instant
+    message and one teleport offer (`AURORA_DEMO_SESSION_HOST`,
+    `docs/TESTING.md`).
+  - Not done: starting a conversation from the host, typing notices,
+    shout / whisper, a line's links as links (plain text), names coloured
+    per character, the chat as its own window (checkpoint 6).
+
 ### Checkpoint 4: comfort
 
 - Quick-action buttons and global hotkeys; profile copy (section 13); voice
@@ -587,6 +816,127 @@ May be two small PRs: 1a profiles, 1b behind policy.
 - **Acceptance:** hotkeys switch even while a viewer has focus; a copied
   profile starts with the main profile's interface but no accounts; only the
   active character is heard (two test accounts, live voice).
+
+- **As built (branch `claude/session-checkpoint-4`, on top of checkpoint
+  3):** the rules are pure and tested in `crates/folderstorm-session`
+  (`hotkeys`: the hotkeys' texts, what is wrong with a choice, the numbers
+  `RegisterHotKey` takes; `copy`: what a new profile takes and never
+  takes; `host`: the quick action, next and previous, what is heard in
+  the background, who holds the voice; their tests are in
+  `host/comfort_tests.rs`). In the viewer:
+  `folderstorm_characters/host/hotkeys.rs` (the keys taken from Windows),
+  `host/comfort.rs` (the host's side), `host/ui/comfort.rs` (the window's
+  side: the strip, the two pages), `profile_copy.rs` (the files). **No new
+  upstream hook**: everything is in the host's own files, and the host's
+  event loop is built with winit's message hook, as `raw_mouse.rs` does.
+  - **Quick actions.** `Desk::quick(slot)` is the decision table: Switch
+    (runs behind the active one), Show (is the active one), LogIn (waits at
+    its login screen: its window comes forward and it becomes the active
+    one), Wait (starting: it comes forward when it reports), Launch,
+    Restart, Nothing (closing, a viewer the host let go that still runs,
+    "Quit all" under way, empty slot).
+    `quick_act` is `switch` behind that table, so a slot never gets a
+    second process: a live slot is never launched. In the window: a strip
+    of numbered buttons above the rows ("1 · name"), the icon and the
+    tooltip saying what the button will do; the rows keep their own
+    buttons.
+  - **Global hotkeys, Windows only.** `RegisterHotKey` with no window:
+    `WM_HOTKEY` comes to the host's main thread whichever program has the
+    keyboard, and winit's message hook hands it to the desk
+    (`Desk::hotkey`) in the same turn of the loop. A character's hotkey is
+    its quick action (it starts a stopped character); next and previous go
+    round the characters that run and never start one. Defaults
+    Ctrl+Alt+1–5, Ctrl+Alt+PageDown (next), Ctrl+Alt+PageUp (previous);
+    "Hotkeys…" changes them as text ("Ctrl+Shift+F5": digits, letters,
+    F1–F24, arrows, PageUp, PageDown, Home, End, Insert, Num0–Num9; Ctrl or
+    Alt needed, and a second modifier unless the key is a function key;
+    Alt+F4 refused), turns them off, or puts the defaults back. Saved as
+    texts under `hotkeys` in `session-host.json`. **Deviation: no key
+    capture**, the keys are typed as text (the host's window draws egui on
+    the processor and a capture field would need its own key handling).
+  - **Conflicts are told.** Each hotkey shows its state on the page: in
+    use, refused by Windows (another program holds it), not a hotkey (with
+    why), the same keys as an earlier action (the first keeps them); the
+    characters' page says "n hotkeys do not work" while one is refused.
+    **Added to the plan: AltGr.** On keyboards with an AltGr key, AltGr is
+    Ctrl+Alt, so the default Ctrl+Alt+digit would take `#`, `{`, `[`…
+    from every program on many European layouts (AZERTY among them).
+    Before registering a Ctrl+Alt chord the host asks the current layout
+    whether it types a character (`ToUnicodeEx`, keyboard state left as it
+    is) and refuses it if so, with "On this keyboard these keys type a
+    character". On such a keyboard some defaults therefore start refused
+    and the user picks others (Ctrl+Shift+digit, function keys).
+    **(verify on Windows)**: the check itself, and whether the layout of
+    the host's thread is the one the user types with.
+  - **The foreground from a hotkey.** The path is checkpoint 2's: the desk
+    emits `AllowForeground` (the host calls `AllowSetForegroundWindow` for
+    that viewer), then `Show`, and the viewer brings itself forward with
+    winit's `focus_window`. The process that receives a hotkey may set the
+    foreground, so the grant holds; the key-ups that follow go to the
+    viewer that had the keyboard and may end it before the new viewer has
+    acted, but winit's `focus_window` on Windows does not depend on it
+    (it sends itself an Alt key press, which lifts the foreground lock,
+    then calls `SetForegroundWindow`). **(verify on Windows)**: a switch by
+    hotkey while a viewer has the keyboard brings the other window forward
+    with the keyboard, not a flashing taskbar button; no key stays held in
+    the viewer left (checkpoint 2's acceptance, now by hotkey).
+  - **Linux and macOS:** no global hotkeys (X11 would need a key grab on
+    the root window and an event connection of its own; a Wayland program
+    cannot take a key from the others). The page says so, the choices are
+    kept. In the demo every hotkey has a "Try" button that does what the
+    key would, on every system.
+  - **Profile copy.** "New character profile…": a name (checkpoint 1's
+    rules), and what it starts from: the main profile, the defaults, or an
+    existing profile. Refused while the target runs (its lease is held, or
+    this host has it starting or running) and when the target exists:
+    **an existing profile is never written into**, so "only while the
+    target is not running" only ever bars a folder that is there (stricter
+    than section 13, which did not say what becomes of an existing
+    profile). Copied, by an allow-list (`copy::part`): `settings.json`
+    through `copy::strip_settings`, `ui_layout.ron`, `skins/` (plain files
+    only, links never followed, bounded depth, count and size). The key
+    bindings are in `settings.json`. Never: `accounts/` (per-account files
+    and transcripts), `login_accounts.json`, `rlva-login.json`, the cache
+    key's file, caches, locks, the other profiles, the host's file, and
+    anything the list does not name. The system's credential store is not
+    read. Stripped from the preferences: the login (`username`,
+    `remember_username`, `last_login`, `remember_password`), the window
+    (`window_*`), `cache_location` (the new profile keeps its own cache
+    folder), `folderstorm_characters` (a named profile's defaults differ),
+    `local_assistant` (granted per profile by the user), the GIF service
+    keys, and **every setting kept per account** (a value that is an
+    account id, a list of them, or an object keyed by them: hover
+    heights, bridge, movements, parcel radio…), whatever it is called. A
+    test in the viewer checks that the names stripped are still the names
+    of Aurora's settings. The copy is made in `profiles/.new-<name>-<random>`
+    (no profile name starts with a dot) and renamed into place; a failure
+    removes it. A source whose `settings.json` does not read is not copied
+    as it is: the profile starts with the defaults and the user is told.
+    The new profile joins the list when a slot is free. Not done: the
+    selective groups (graphics, interface, keys) of Folderstorm (C++),
+    spelling dictionaries and autoreplace (not in section 13's list).
+  - **Voice follows the active character.** The mechanism is checkpoint
+    2's with its review fixes (a viewer reports its voice off only once it
+    is off, and the host gives the voice to the new active character only
+    then). Added here: `Desk::voice(slot)` (allowed here, waits for that
+    other character, giving it up, off) and its tests under hotkey presses
+    faster than the viewers answer (never two characters told they may use
+    voice); in the window the active row says **Voice** once its viewer
+    reports it allowed, the row left says "Releasing voice…", and the line
+    "Voice stays off until … has released it" stays. Live voice with two
+    accounts is the human's test.
+  - **Sound per character:** "Heard in the background" on a row
+    (`BackgroundSound::All`, saved per slot): that character's viewer is
+    not muted while another is active; its voice stays off. Section 10's
+    **"alerts only" is not done**: Aurora's transient mute cuts everything
+    at once, and telling alert sounds from the world's would need a change
+    in upstream's audio paths. Options when wanted: (a) ask upstream for a
+    mute that spares interface sounds; (b) keep the host's own
+    notification sound (checkpoint 3) as the alert, which exists today.
+  - **Demo:** `AURORA_DEMO_SESSION_HOST` as before, with the strip, the
+    hotkeys (real ones on Windows, "Try" everywhere; choices not saved)
+    and "New character profile…" working on the demo's settings folder
+    (`docs/TESTING.md`).
 
 ### Checkpoint 5: monitors (3D becomes Limited)
 
@@ -597,6 +947,168 @@ May be two small PRs: 1a profiles, 1b behind policy.
   barely changes (measure the added GPU and CPU cost); a busy card lowers the
   monitor rate instead of resetting the GPU.
 
+- **As built (branch `claude/session-checkpoint-5`, on top of checkpoint
+  4):** the rules are pure and tested in `crates/folderstorm-session`
+  (`monitor`: sizes, rates, the budget, when a viewer takes a picture and
+  how it lowers its rate, the picture's size and its header's checks,
+  "latest only"; `ipc`: protocol 3; `managed`: the role; `host`: which
+  characters are watched, in `host/monitor_tests.rs`). In the viewer:
+  `app/folderstorm_characters/monitor.rs` (a managed viewer takes its
+  pictures), `folderstorm_characters/managed.rs` (the link sends the
+  latest), `host/process.rs` (the host's reader takes them),
+  `host/monitors.rs` and `host/ui/monitors.rs` (the host keeps and shows
+  the latest).
+  - **Upstream hooks (new):** `aurora-render` `main_thread.rs`:
+    `Renderer::snapshot_wait` (how long the frame that carries a photo
+    waits for the card, instead of `CAPTURE_WAIT`'s 10 s) and
+    `Renderer::snapshot_pending()` (a photo's frame is still on the card);
+    `app.rs`: one call after `photo_frame` (`folderstorm_monitor_frame`)
+    and one before `photo_drawn` (`folderstorm_monitor_drawn`). Nothing
+    else of Aurora's photo path changes: a monitor's picture is a
+    `Renderer::snapshot_request` like a photo's part, asked only when no
+    photo is drawn, and its answer is taken before `photo_drawn` would
+    drop it.
+  - **Role.** `Role::Monitor(Order{size, interval_ms})` beside `Active`
+    and `Background`, in the one `Assign` (so idempotent, acknowledged and
+    sent again like the rest). A watched viewer is a background character
+    in everything (3D Off, sound, voice): the 3D pause of checkpoint 1
+    stays on between two pictures and only the frame that carries a
+    picture draws the scene (`App::scene_paused` is false for a frame
+    whose `snapshots.capturing` is set, as for a photo). A window the user
+    clicks takes no pictures (it draws for itself), and the host then
+    makes it the active character as before.
+  - **Watched only while seen.** The desk asks pictures of a character
+    only while it runs in the background, its monitor is open **and that
+    monitor's box is on screen in the host's window**: each drawing of the
+    window notes which boxes are visible (`ui.is_rect_visible`), and none
+    is while the window is minimised or covered (`WindowEvent::Occluded`,
+    `Window::is_minimized`), on the chat's page of a narrow window, or
+    scrolled away. Otherwise the viewer gets a plain `Background`
+    assignment: closing or hiding a monitor returns that viewer to Off.
+    Monitors are saved per character in `session-host.json` (`monitor`:
+    size and rate). At most 4 run at once (decision 3).
+  - **Budget.** 1 200 000 pixels a second for all monitors together
+    (four 640 × 360 monitors at 1 a second, or one at 5 a second, pass).
+    Past it every monitor's interval is stretched by the same factor
+    (`monitor::grant`), and the monitor says "n pictures a second: the
+    monitors share one budget".
+  - **A picture has the window's proportions** (`monitor::fit`): the
+    largest even size with the proportions of the world's part of the
+    viewer's window inside the monitor's 16:9 box, so it is the
+    character's own view scaled down (a 4:3 window gives 480 × 360 in the
+    large box), drawn with the frame's own camera and field of view and
+    shown in the host with bars, never stretched. Rows come from the top,
+    as the photo path reads them back.
+  - **Frame transport: raw RGB on the viewer's own endpoint, after a
+    checked header.** A `ToHost::Frame(FrameHeader{generation, seq,
+    width, height, bytes})` message (JSON, within the 64 KiB frame) is
+    followed at once by exactly `bytes` raw bytes, written in one write by
+    the link's out thread, the endpoint's only writer. The host's reader
+    checks the header before it allocates or reads anything: both sides
+    between 16 and 640 × 360, and `bytes == width × height × 3`; so at
+    most 691 200 bytes are ever read for a picture, and anything else ends
+    the reading of that viewer (as any message that is not one does). Why
+    this and not the alternatives: **(a)** no codec: JPEG or WebP would fit
+    most pictures in 64 KiB but not all (an adaptive quality loop), cost
+    more processor time than a 0.7 MB local copy, and put an image decoder
+    in front of bytes from another process; **(b)** no chunks: one length,
+    one read, nothing to reassemble or to bound twice; **(c)** no shared
+    memory: no new system object and no Windows-only unsafe code to
+    secure and test; the picture uses the endpoint that already exists,
+    with its security as it is (this logon only, first instance, remote
+    clients refused, the launch's process id and one-time token, protocol
+    and build). The plan's section 8 said "binary, 2 MiB at most, latest
+    only": it is binary, 691 200 bytes at most, latest only. At the
+    budget's most, the pipes carry about 3.6 MB a second in all.
+  - **Latest only, three times** (`monitor::Latest`, a place for one):
+    the viewer's main thread leaves the pixels for the out thread and
+    never waits (one not written yet is replaced); the host's reader
+    leaves the image for the window (one not looked at yet is replaced);
+    the window replaces its texture whole. Nothing is queued anywhere, so
+    a slow host or a slow pipe costs pictures, never memory. A viewer
+    never has two pictures on its card: the schedule asks one at a time.
+  - **Never a long wait on the card.** The frame that carries a picture
+    waits 60 ms for it (`snapshot_wait`) instead of 10 s; a picture not
+    back by then comes through the renderer's existing late answer
+    (`snapshot_sent`) with a later frame, and ordinary paused frames go on
+    meanwhile; one not back after 1.5 s is given up
+    (`Renderer::drop_snapshot`: its answer is not kept) and nothing more
+    is asked until the card has answered it.
+  - **A busy card lowers the rate** (`monitor::Schedule`), and the
+    monitor says so. A picture that took 150 ms or more (the busy
+    pause's own measure) doubles the time to the next one; one given up
+    quadruples it; up to 32 times the order's interval, 60 s at most; four
+    quick pictures in a row bring it back one step ("fewer pictures: the
+    graphics card is busy"). While Aurora's busy pause is on: one picture
+    every 10 s at most. While the card holds a frame (stall), is lost,
+    out of video memory or past the driver's budget behind: none
+    ("paused: the graphics card does not answer"). Checkpoint 1's rules
+    are untouched: a loss behind still waits for the window to come
+    forward, a stall behind shows no box, and a monitor asks nothing of a
+    card in either state. Not on a timed run, with a headset, or while a
+    photo of the user's is drawn (the photo comes first).
+  - **RLVa.** A picture is drawn by the same `FrameParams` as the frame
+    on screen, so what the renderer does for RLVa applies as on screen:
+    vision spheres (`rlva_spheres`), overlays (`rlva_overlays`), the
+    resolution divisor, restricted textures, hidden avatars. Checked in
+    code: `App::scene_paused` is false for the picture's frame, so the
+    divisor is RLVa's and not the pause's, and the snapshot target is the
+    frame's own surface view, where spheres and overlays are drawn. The
+    picture carries **no interface**, so nothing the interface shows can
+    leak past a restriction (name tags, hover text, the map, the
+    location): stricter than the screen. **Not** covered by a pixel test
+    here (no graphics device in the sandbox): to check on Windows with
+    `@setsphere` and `@setoverlay`.
+  - **Minimised windows.** A minimised viewer gave its textures back
+    (Economy) and gets few frames: it takes no picture and its monitor
+    says so ("Switch to it once…"). A character whose monitor is open is
+    therefore **not minimised behind** even with "Minimise in the
+    background" (`Slot::waits`: Warm while its monitor is open); the
+    choice itself is kept. Restoring a minimised window without giving it
+    the keyboard is not done (winit's restore activates the window).
+  - **In the host:** in a character's card, a **Monitor** checkbox; while
+    it is open, the size (320 × 180, 480 × 270, 640 × 360) and the rate
+    (0.5, 1, 2, 5 a second), the picture in its 16:9 box (1:1 when the
+    card is wide enough, scaled down otherwise), and under it "name · n s
+    ago · how its viewer does". The picture senses no click and no key;
+    the card's **Switch** is the way to act. The host keeps the latest
+    picture of each monitor in memory only, and drops it when the monitor
+    closes, the character comes to the front or leaves the world, or its
+    viewer ends; a hidden monitor keeps its last picture, with its age.
+    No file, no log line holds a picture. (`AURORA_SESSION_HOST_CAPTURE`,
+    demo only, writes the whole host window, monitors included: demo
+    viewers have no grid.) The window is still drawn on the processor;
+    the texture is replaced whole and the window is painted off screen
+    and presented in one piece: no flicker.
+  - **Cost (estimated, not measured: no graphics card here).** In a
+    watched viewer, a picture is one offscreen frame of the scene at
+    640 × 360 at most (a ninth of a 1080p frame's pixels; the shadow and
+    reflection passes do not shrink with it), 230 400 pixels read back
+    (0.9 MB) and 0.7 MB written to the pipe: at 1 picture a second about
+    one small frame a second per monitor, against the active character's
+    60 or more full frames. Its main thread waits 60 ms at most per
+    picture. In the host: 0.7 MB read and one image made per picture, off
+    the window's thread, and the pictures' pixels painted by the
+    processor at the window's 5 drawings a second. To measure on Windows:
+    the watched viewer's log says `session monitor: off … (n pictures
+    sent, x ms a picture)` when a monitor closes; compare the active
+    viewer's frame rate with 0 and 4 monitors open.
+  - **Fixed on the way (checkpoint 2's code):** `App::frame` takes the
+    window out of the app while it draws, so `folderstorm_focused`, asked
+    during the frame, saw no window and answered "no keyboard" every
+    time: a focused viewer was capped as a background one, could be
+    paused by the busy pause, and its GPU loss in front was left to wait.
+    The window's answer is now remembered from just before the frame
+    (`folderstorm_characters::window_focus`).
+  - **Demo:** `AURORA_DEMO_SESSION_HOST` opens every demo character's
+    monitor; the demo viewers draw their demo scene (`docs/TESTING.md`).
+  - Not done: the world viewport of section 12 (a "Limited" window
+    drawing only a small world rectangle, a large active window with the
+    host's panels beside it): not small, it needs the host to place
+    panels over another process's window; HUD attachments in the picture
+    (off, as in a photo by default); a picture for a minimised window.
+    (Monitors in a window of their own: checkpoint 6.)
+
 ### Checkpoint 6: pop-out panels and fitted layout (optional)
 
 - Chat, controls and monitors as separate host windows; an opt-in fitted
@@ -605,9 +1117,375 @@ May be two small PRs: 1a profiles, 1b behind policy.
 - **Acceptance:** dialogs, IME, Alt-Tab, minimise and restore, and DPI
   changes leave no vanished world and no stolen focus.
 
+- **As built (branch `claude/session-checkpoint-6`, on top of checkpoint
+  5):** the rules are pure and tested in `crates/folderstorm-session`
+  (`panels`: which panels are out and where, the file's checks, a saved
+  place brought back onto a connected screen, "closing a panel docks
+  it", the monitors seen window by window; `host`: the desk keeps the
+  panels with the rest of the settings, in `host/panel_tests.rs`). In the
+  viewer: `host/ui/panels.rs` (a `View` is one window with its own
+  interface, painter and pixels; the panels' windows are opened, placed
+  and closed there), `host/ui.rs` (which window draws what),
+  `host/ui/monitors.rs` (the monitors' own window), `host/monitors.rs`
+  (the latest picture stays with the host, for the window that draws it).
+  - **Upstream hooks (new): none.** winit's several windows in one event
+    loop and the crash window's processor painter were enough as they
+    are: no upstream file changes in this checkpoint (locales and
+    `docs/TESTING.md` apart, append-only).
+  - **Decision: no fitted borderless stage.** The human validated
+    checkpoint 2's arrangement (separate top-level windows, the one
+    brought forward taking the stage's place) as working well. The fitted
+    stage was only ever "if that is not enough", it is the form that
+    failed in Folderstorm (C++) (the world vanishing when the host's
+    controls or another program were used, focus and IME trouble), and it
+    cannot exist on Wayland. It is **not built** and no code prepares it.
+    Should it be wanted later, it is a checkpoint of its own.
+  - **Three panels:** the chat, the characters (their cards, the choices,
+    the hotkeys' and the new profile's pages, "Quit all"), the monitors
+    (every open monitor's picture, side by side while there is room, each
+    with its label and "Switch"). At the top of the host's window, "In a
+    window of its own:" and a box per panel; in a panel's window, "Dock
+    back". With the monitors out, a character's card keeps its monitor's
+    box, size and rate and says where the picture is. With the chat or
+    the characters out, the host's window gives its whole width to the
+    other; with both out it lists what is out, each with "Dock back".
+  - **Closing a panel's window docks the panel** (`panels::Config::closed`,
+    `Desk::panel_closed`): no question, no character closed, never the
+    host's end. Only the host's own window closes the host, and its
+    question (Quit all, Close only this window, Cancel) is always asked
+    in that window, also when the characters' panel is out. A panel's
+    window that cannot be made or drawn is docked back, with a line in
+    the log: the host does not close for it.
+  - **Every window is drawn on the processor.** A panel's window has its
+    own egui context (theme, fonts, icons), its own `egui_winit::State`
+    (keys, IME, DPI, cursor: per window, as winit gives them) and its own
+    softbuffer surface and painter. The host still opens no graphics
+    device. (One context per window, and not egui's viewports: a viewport
+    of the host's context would need an integration that hands the frames
+    of several windows to one context, which the crash window's loop is
+    not; separate contexts need nothing new. The cost is one font atlas
+    and one set of icons per open panel, made when it opens.)
+  - **Remembered** in `session-host.json`, `panels`: for each of `chat`,
+    `controls` and `monitors`, `out` and `place` (`position`, the outer
+    corner, absent where the system does not tell, as on Wayland; `size`,
+    the inside; physical pixels). A place is noted when its window is
+    moved or resized, not while it is minimised or maximised, and kept
+    while the panel is docked. **Checked when read:** a size or a
+    position no window can have is dropped (the panel is still out, at
+    its first size); an older file has no `panels` and reads as all
+    docked. **Checked when opened** (`panels::on_screen`): a window keeps
+    its place when a connected screen shows enough of its top edge to
+    catch it (120 × 24 pixels, the title bar not above the screen);
+    otherwise it opens whole on the nearest connected screen, no larger
+    than it. A minimised window's place as Windows tells it (−32000) is
+    never noted and would be corrected anyway.
+  - **No stolen focus, by construction.** A panel the user pops out opens
+    in front, as a window they asked for. The panels found out when the
+    host starts open after the host's own window and without taking the
+    keyboard (`with_active(false)`). After that nothing in the host asks
+    for the foreground: no `focus_window`, no raise; a message for a
+    background character flashes the chat's window in the taskbar
+    (`request_user_attention`), as the host's window did. Nothing here
+    sends anything to a viewer: popping out, docking, moving or closing a
+    panel changes no assignment, no stage and no window of a character
+    (the desk's `panel_*` calls only ask for a save), so no world can
+    vanish for it. The global hotkeys belong to the thread, not to a
+    window, and work whichever window has the keyboard.
+  - **Monitors pause per window** (`panels::seen`): each window notes
+    which monitors its last drawing showed; a window that is minimised or
+    covered whole sees none; a monitor is asked for pictures while any
+    window that draws it is in view. So minimising the monitors' window
+    returns the watched viewers to 3D Off although the host's window is
+    in view, and minimising the host's window does not pause the
+    monitors' window. One window draws the pictures at a time (the
+    monitors' own, or the one with the cards); the host keeps the latest
+    picture (one per monitor, in memory only, as before) so that it moves
+    with its monitor at once when a panel is popped out or docked.
+  - **Chat read state per window:** what the chat shows is read only
+    while the window that draws the chat has the keyboard, and is told
+    at once when that window loses it (a minimised window is not drawn
+    again).
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors`
+    (or `all`) starts the demo's host with those panels out;
+    `AURORA_SESSION_HOST_CAPTURE` also writes each panel's window
+    (`docs/TESTING.md`).
+  - **Checked here:** the rules' tests; each panel's window drawn by the
+    processor's painter without a window (`host/ui/panels.rs`); the three
+    windows opened, drawn and captured under X11 (Xvfb).
+  - **To verify on Windows** (nothing of Win32 runs here): a panel popped
+    out comes in front and takes the keyboard, and no viewer moves, is
+    raised or changes role; the panels restored at start do not take the
+    keyboard from the host's window; Alt-Tab lists each panel's window
+    and switching among the host's windows and the viewers leaves the
+    active character's world drawn; a native dialog of a viewer (file
+    picker) and the host's windows do not fight over the foreground;
+    IME (Japanese) composes in the chat's own window, the candidate box
+    beside its text field; minimise and restore each window, the
+    monitors pausing with the window that draws them (`session monitor:
+    off` / `on` in the viewers' logs); a panel dragged between two
+    screens of different scale is redrawn sharp at the new scale, and
+    its place is restored on the right screen; a place on an unplugged
+    screen comes back onto a connected one; the taskbar flash for a
+    background message is on the chat's window and never brings it
+    forward; global hotkeys work with a panel's window focused.
+  - Not done: the fitted borderless stage (above); the host's own
+    window's place is not remembered (it never was; only the panels'
+    are); a panel's window has no "always on top" choice; one monitors'
+    window for all monitors, not one window per monitor.
+
 ### Checkpoint 7: polish picked by the human
 
-- See section 13.
+- **The human's picks (2026-11-11)** from section 13 and from what
+  checkpoint 6 left: an attention inbox, character colours and aliases, a
+  condensed host mode, and the bird's-eye switch effect *if it can be done
+  without risk for the viewers' graphics*. MCP session routing (FEATURES
+  4.6) is not part of it: it waits for the MCP receipts plan's login
+  binding.
+- **Acceptance:** nothing is answered from the host; an alias and a colour
+  never leave the host (not to a viewer, not to a grid); a colour is
+  readable on any skin; the condensed layout works with panels popped out;
+  no viewer draws more than its policy allows, and checkpoint 1's rules
+  (R4, R5) are untouched.
+
+- **As built (branch `claude/session-checkpoint-7`, on top of checkpoint
+  6):** the rules are pure and tested in `crates/folderstorm-session`
+  (`inbox`: one list across characters, its order, its bounds, one entry
+  per question, what leaves it; `identity`: the colours, how one is fitted
+  to a theme's contrast, what an alias may be; `host`: colour, alias and
+  the condensed choice among the settings, checked when the file is read,
+  in `host/polish_tests.rs`; `panels`: the inbox is a fourth panel). In
+  the viewer: `host/faces.rs` (how a character is shown: alias, real
+  name, colour as this theme draws it), `host/ui/inbox.rs`,
+  `host/ui/identity.rs`, `host/ui/condensed.rs`.
+  - **Upstream hooks (new): none.** Everything is in the fork's own
+    files; the locales and `docs/TESTING.md` get lines, as before. The
+    viewer's side of the link is unchanged: no new message, the protocol
+    number stays.
+  - **Attention inbox.** One list of what waits for an answer in the
+    characters' own windows: whatever a viewer lists as attention items
+    since checkpoint 3: the notifications of its list that ask for an
+    answer (teleport, friendship, inventory, group, scripts' dialogs and
+    permission questions, links, calls, and the rest as "Other"). What
+    only informs, such as a payment's notice, asks nothing and is not
+    listed, there or here. Each row: the character (colour,
+    alias or name), the question in a line, its age, **Switch to
+    answer**.
+    - **Nothing is answered from the host**, as in checkpoint 3: the
+      inbox has no accept, decline or dismiss, and its only act is the
+      desk's switch. Nothing about a question is ever written to a
+      viewer (tested: drawing and switching leave the chat's effects
+      empty).
+    - **The viewers' lists are the truth** (`inbox::Inbox::set`, fed
+      from what the chat keeps of each viewer's list, which already
+      drops another launch's or login's): a question is listed while its
+      viewer lists it; it leaves when the viewer's next list does not
+      have it (answered or expired there), when the character logs out
+      or in again, when its viewer ends or is let go, when the character
+      is removed. The host expires nothing by itself: what is shown
+      still waits there. A viewer that stops answering keeps its last
+      list, with ages that grow, and its card says it does not answer.
+    - **Age** counts from when the host first saw the question listed
+      (the link carries no time): "just now", minutes, hours; the hover
+      says so. **Order:** oldest first (the nearest to expiring in its
+      viewer), then by character, then by the viewer's number.
+      **One entry per question:** a question is one login's number in
+      one viewer; listed twice it is one row, and the same number after
+      another login is another question with a new age.
+      **Bounded:** 16 per character (the link's own bound), 80 in all;
+      what a viewer has beyond that is counted ("3 more wait in …'s own
+      window"), not listed. Counts saturate.
+    - **A panel of its own, the fourth** (decision). Docked, it is a
+      band at the top of the host's window, drawn only while something
+      waits, above whichever page the window shows (characters, chat, or
+      "these panels are elsewhere"), so a question is in sight whatever
+      else is popped out; it scrolls within about four rows. "In a
+      window of its own: Inbox" gives it a window (remembered and
+      brought back on screen like the others; closing it docks it),
+      whose title says how many wait. Why not a section of the chat or
+      of the characters: either of those can be out, on another page of
+      a narrow window, or (the characters) condensed; a list whose point
+      is to be seen must not depend on them. Why not only a window: with
+      nothing popped out the host is one window, and stays so.
+    - **Count badge:** beside "Inbox" in the host's window's top strip
+      ("Inbox (3)", in the warning colour), wherever the inbox is; in the
+      inbox's heading; in its own window's title; and per character in
+      the condensed lines (a bell and a count).
+    - **The chat keeps its own lists** (checkpoint 3): a character's tab
+      still shows what waits for it. "All" leaves it to the inbox when
+      the inbox is drawn in the same window, and lists it itself, as
+      before, when the inbox is in its own window or the chat is.
+  - **Character colours and aliases.**
+    - **Colour:** none, or one of eight (red, orange, yellow, green,
+      teal, blue, violet, pink). What is drawn is the colour **fitted to
+      the theme** (`identity::Colour::fitted`): the palette's own when it
+      has a contrast of 4.5 : 1 (WCAG AA for text) with the panel, the
+      field and the raised backgrounds of the skin in use; otherwise
+      moved towards white (dark skins) or black (light ones) just as far
+      as needed. Tested on the default skin, a light one, the high
+      contrast palette and the worst background there is; the eight stay
+      apart from one another after the move. Colour is never the only
+      cue: the alias or name is always beside it.
+    - **Alias:** at most 24 characters, on one line, nothing invisible
+      (control characters, direction overrides, zero-width characters
+      are refused, so an alias cannot pass for another name); the spaces
+      around it go; empty takes it away. The editor refuses a text that
+      is no alias and says why; a file's alias that is none is dropped,
+      never cut into another.
+    - **Where:** the cards (dot, alias, then the real name and the
+      profile in grey), the quick-action buttons (alias, a line in the
+      colour, the real name in the hover), the chat's tabs (alias, a
+      line in the colour, the real name on hover) and its "All" lines
+      (`[alias › conversation]` in the colour), the monitors' labels
+      (dot, alias), the inbox's rows, the condensed lines.
+      **"Send as" always says the real name too**: `Send as Main (Jane
+      Doe) — Nearby chat`. Not on the title of a panel's window: those
+      are named after the panel, not after a character (the inbox's
+      title has its count). Not on the viewers' own windows or taskbar
+      buttons: they are the viewers', and nothing of this is told to
+      them.
+    - **Kept** in `session-host.json`, per slot: `colour` (a name; one
+      this build does not know reads as none, so a later build's file
+      still reads) and `alias` (absent when there is none). An older file
+      has neither. Removing a character from the desk takes both with
+      it.
+    - **Never sent anywhere:** `Desk::set_colour` and `set_alias` ask
+      for a save and nothing else (tested: no message for a viewer); no
+      message of the link carries either; the host has no connection to
+      a grid at all.
+    - Chosen in a card: the palette button beside the name ("Alias and
+      colour") opens a field and the swatches (each drawn as this theme
+      draws it, named on hover).
+  - **Condensed host mode.** "Condensed" at the top of the characters'
+    panel turns the cards into one line per character; "Cards" turns
+    back. Remembered (`condensed` in `session-host.json`).
+    - **A line:** the colour (a ring without one), the slot's number and
+      the alias or name (the active character's in the accent; hover:
+      real name, profile, where it is), then on the right its **quick
+      action** (checkpoint 4's `Desk::quick`, worded: Switch, Show, Log
+      in, Starting, Start, Restart), what waits for an answer (bell and
+      count), its unread lines in the shared chat (count), its monitor
+      (open), the voice (held, or being given up), what is wrong (one
+      warning sign, everything said on hover) and where its viewer is
+      (in the world, at its login screen, starting, stopped, crashed,
+      not managed).
+    - **What the cards alone have** (standby, sound, monitor, alias and
+      colour, Close, End process, Remove, adding a character, the
+      hotkeys' and the new profile's pages, the two host choices) is one
+      click away; the lines only switch. The host's own questions
+      (closing it while characters run, "Quit all" under way, the voice
+      waiting) are asked in this layout as in the other.
+    - **With panels popped out:** it is the characters' panel drawn
+      another way, so it is condensed wherever that panel is (the host's
+      window, or its own). With the chat out, the host's window is the
+      lines alone and can be made small: its least size goes from
+      440 × 360 to 340 × 200 points while condensed. Beside the chat,
+      the characters' column is 380 points wide instead of 500, and
+      the window that shows the lines keeps 8 points around them instead
+      of 18.
+    - **Monitors:** the pictures are in the cards or in the monitors'
+      own window. Condensed with the monitors docked, no window draws
+      them, so by checkpoint 5's rule ("asked only while on screen") the
+      watched viewers go back to 3D Off; the line's monitor sign says
+      so. With the monitors in their own window nothing changes for
+      them. (Tested.)
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox`
+    (or `all`), with `AURORA_DEMO_SESSION_HOST`: the demo's characters
+    get colours and the first two an alias; the host starts condensed;
+    the inbox lists sample questions for the characters in the world
+    (the host's own samples, demo only: no viewer has them).
+    `AURORA_DEMO_SESSION_HOST_PANELS` knows `inbox`
+    (`docs/TESTING.md`).
+  - **Checked here:** the rules' tests; each new view drawn by the
+    processor's painter without a window (the inbox docked and in its
+    own window, the editor and its swatches, the condensed lines in the
+    host's window at its least size and in the characters' own window),
+    with the colours looked for in the pixels; the host's window
+    (condensed, with colours and aliases) and the inbox's own window
+    opened, drawn and captured under X11 (Xvfb). The demo's viewers do
+    not start here (no graphics card), so the inbox with questions in it
+    was only seen in the tests' drawings, not in a real window.
+  - **To verify on Windows** (nothing of Win32 runs here): the inbox
+    with real offers (a teleport offer, a friendship request, an
+    inventory offer and a script's dialog to two characters): each
+    appears within a second, oldest first, with its character; "Switch
+    to answer" brings that character's window forward and nothing is
+    accepted; answering or letting it expire there takes the row away;
+    the inbox's own window's title follows the count in the taskbar.
+    Colours on the skin in use and with Preferences › Accessibility's
+    high contrast; an alias typed with the IME (Japanese) in the card's
+    field; `session-host.json` after a change, and that no viewer's log
+    or window shows an alias. The condensed host's window made small
+    beside the stage, with the chat in its own window; the global
+    hotkeys with it.
+  - Not done: no sound or taskbar flash for a new question (the chat's
+    alert for a message is unchanged); no dismiss or "seen" in the inbox
+    (it would be a second truth beside the viewer's); a colour is one of
+    the eight, not a free one; no automatic colour for a new character;
+    the condensed lines have no End process (it is in the cards, where
+    its confirmation is); the host's own window's place is still not
+    remembered.
+
+- **Bird's-eye switch effect: not built (decision), design note.**
+  - **What Folderstorm (C++) meant** (its `doc/plans/
+    multi-character-sessions.md` section 7, `multi-character-
+    usability.md` section 5, PR #17): off by default; on a switch the
+    outgoing character's camera rises to a bounded bird's-eye view, the
+    hand-over happens, and the incoming character's camera comes down
+    from its own bird's-eye view to its saved camera, about a second per
+    leg (later 250–2000 ms, 16–96 m, and an optional fade instead). A
+    renderer-only camera override: the avatar never moves, nothing is
+    sent to the simulator, the exact camera is restored on completion,
+    Escape, restriction, disconnect or region change; mouselook, scripted
+    and follow cameras, camera restrictions and reduced motion fall back
+    to an instant switch.
+  - **Why it is not built here.**
+    1. *It lives in the viewer's renderer, in upstream's files.* The
+       effect is a camera override inside the frame: the camera's
+       controller, the frustum and what follows it (culling, level of
+       detail, interest list, the minimap's and the sound's listener
+       position, mouselook, the RLVa camera restrictions) are upstream
+       code with no extension point for "draw from another eye for this
+       frame only". That is a deep change to upstream code, which the
+       fork's rules stop at: propose first.
+    2. *It would hold the outgoing viewer in front past the user's
+       click.* Today a switch is one assignment: the old character goes
+       behind (3D Off, voice given up) at once. The rising leg needs it
+       drawn at full rate for a second more, and it then draws *more*
+       than usual: from above, the whole draw distance is in the frustum
+       while the incoming viewer is being woken up at the same moment
+       (textures back from Economy, a full first frame). Two viewers at
+       full load on one card is the very moment the busy pause and the
+       device-loss rules (section 6.2, R4, R5, R7) exist for; widening
+       it for decoration is the wrong trade.
+    3. *It would have to reorder the voice hand-over or run beside it*
+       ("given up before it is given", section 10): either the effect
+       delays the switch the user asked for, or the outgoing character
+       is animated while no longer active, which is drawing beyond its
+       policy.
+    4. *A host-side effect cannot stand in for it.* The host draws its
+       own windows on the processor and never draws over a viewer's (no
+       overlay, no hidden or layered window: R2). A flourish inside the
+       host's window would not be what was asked.
+  - **Options for the human, if it is wanted later** (a checkpoint of
+    its own, off by default, with "instant" always the fallback):
+    - **A. Incoming leg only, viewer-side.** After the role change, the
+      new active viewer comes down from above for under a second. No
+      viewer draws beyond its role (it is Active by then), nothing
+      delays the switch or the voice. Still needs the camera extension
+      point in upstream (best sent upstream as a generic "presentation
+      camera offset" that honours mouselook, scripted cameras and RLVa),
+      and must be skipped when that viewer reports a busy, stalled or
+      lost card, in its first seconds after Economy, and with reduced
+      motion.
+    - **B. A fade instead** (C++'s later alternative): the incoming
+      viewer draws a full-window veil in its interface layer that clears
+      over a few hundred milliseconds once it is Active. No camera, no
+      extra 3D, one small hook where the managed role is applied. The
+      cheapest and the safest; it is not a bird's-eye view.
+    - **C. Both legs, as in C++.** Needs a hand-over in two steps in the
+      desk (announce, then assign), a bound on the outgoing leg, and the
+      measurements of section 4.3 on a real card first. Not recommended
+      before A has been lived with.
 
 ## 16. Verified in code vs inferred
 

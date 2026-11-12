@@ -12,6 +12,61 @@
 //!   never shows a box over the active character, never lowers its saved
 //!   graphics and never closes it (rules R4 and R5 of section 6.3).
 
+//!
+//! Checkpoint 2 (the session host):
+//! - [`ipc`]: what the host and a viewer it manages say to each other, and
+//!   its framing (section 8);
+//! - [`managed`]: what a managed viewer makes of the host's assignments:
+//!   role over focus, sound and voice (sections 6.3 and 10);
+//! - [`host`]: the host's desk: slots, the active character, voice given
+//!   up before it is given, liveness without false deaths, restart and
+//!   "Quit all" (sections 10 and 11).
+//!
+//! Checkpoint 3 (shared chat, section 9):
+//! - [`export`]: which lines of a viewer's conversations are new, by
+//!   observation of the viewer's own line numbers, and a line to say said
+//!   at most once;
+//! - [`chat`]: the host's chat: conversations per character and "All",
+//!   drafts bound to their character, login and conversation, bounded
+//!   history with gaps, unread counts, uncertain sends, attention items.
+
+//!
+//! Checkpoint 4 (comfort, section 13):
+//! - [`hotkeys`]: the host's global hotkeys: which keys, for what, and
+//!   what is wrong with a choice;
+//! - [`copy`]: "New character profile…": what a new profile takes from
+//!   the one it is made from, and what it never takes;
+//! - [`host`]: quick actions, next and previous, who holds the voice.
+//!
+//! Checkpoint 5 (monitors, section 12):
+//! - [`monitor`]: sizes, rates and the budget all monitors share, when a
+//!   viewer takes a picture and how it lowers its rate on a busy card,
+//!   the picture's size and its header's checks, "latest only";
+//! - [`host`]: which characters are watched, and what each is asked.
+//!
+//! Checkpoint 6 (pop-out panels, section 7):
+//! - [`panels`]: which of the host's panels have a window of their own
+//!   and where, a saved place brought back onto a connected screen,
+//!   "closing a panel docks it", and the monitors seen window by window.
+//!
+//! Checkpoint 7 (polish, section 13):
+//! - [`inbox`]: one list across all characters of what waits for an
+//!   answer in their own windows; nothing is answered from the host;
+//! - [`identity`]: a character's colour, fitted to the theme's contrast,
+//!   and its alias; both only ever in the host's settings file;
+//! - [`host`]: the condensed layout's choice, with the other settings.
+
 pub mod behind;
+pub mod chat;
+pub mod copy;
+pub mod export;
 pub mod gpu;
+pub mod host;
+pub mod hotkeys;
+pub mod identity;
+pub mod inbox;
+pub mod ipc;
+pub mod managed;
+pub mod monitor;
+pub mod panels;
 pub mod profile;

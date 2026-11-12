@@ -5,12 +5,13 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Folderstorm2 multi-character session: the pure rules (profile names and folders, the policy behind another window, background-safe GPU decisions)"
+description = "Folderstorm2 multi-character session: the pure rules (profile names and folders, the policy behind another window, background-safe GPU decisions, the session host's protocol, desk and shared chat)"
 
 [dependencies]
 folderstorm-brand = { path = "../folderstorm-brand" }
 # the same version as aurora-viewer
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 
 [lints]
 workspace = true

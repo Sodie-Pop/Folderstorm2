@@ -1162,6 +1162,7 @@ exe before publishing; the local build also writes it to `version.txt`.
 | `-V`, `--version` | Prints the built version then exits, with no window, log or network |
 | `--uninstall` | Removes what Aurora registered on this computer, prints it and the folders left, then exits, with no window |
 | `--profile <name>` (Folderstorm2) | Runs a separate character profile: its own settings, cache, log and window title; one window per profile |
+| `--session-host` (Folderstorm2) | Opens the characters' host instead of a viewer: up to five character profiles, each in its own viewer, one active at a time |
 | `--mcp-api` | Folderstorm2: allows local assistant access (the MCP bridge) for this session only, without saving it |
 
 - `--title`: the build profile ends the title (Dev, Release, Debug); the log
@@ -1223,6 +1224,41 @@ exe before publishing; the local build also writes it to `version.txt`.
   to Off (Preferences › Graphics › Frames per second): a window behind
   another Folderstorm2 window stops drawing the world and keeps its chat and
   connection at a few frames per second, until it is clicked.
+- `--session-host` (Folderstorm2): opens the characters' host, a small
+  window, instead of a viewer. Add up to five profile names; **Start** opens
+  that character's own viewer (`--profile <name> --managed`), where it logs
+  in as usual: the host never sees a password. One character is active; the
+  others wait with their 3D off, their sound cut and voice off, behind the
+  active window or minimised ("Minimise in the background"), and keep
+  receiving chat, IMs and teleports. **Switch** brings another one forward,
+  in the same place and size when "Keep the characters' windows in the same
+  place" is on; clicking a character's window does the same. A viewer that
+  closed or crashed shows **Restart**; one that is slow or silent is only
+  marked, never closed by the host. **Quit all** asks each to log out.
+  The window's **Chat** shows what every character hears and reads (nearby
+  chat, instant messages, group chats and conferences), per character and
+  in "All", with unread counts; a line typed there is said by the character
+  named above the box ("Send as …") through that character's own viewer,
+  with its rules and restrictions. Offers, requests and script dialogs are
+  only listed ("Switch to answer"): they are answered in the character's
+  window. Transcripts stay in each viewer.
+  A numbered button per character does the right thing for where its
+  viewer is (switch, start, bring its login screen forward), and so do the
+  global hotkeys, on Windows: Ctrl+Alt+1 to 5, Ctrl+Alt+PageDown (next) and
+  Ctrl+Alt+PageUp (previous), from any program, even while a viewer has
+  the keyboard. **Hotkeys…** changes them and says which ones Windows
+  refused (keys of another program, or keys that type a character with
+  AltGr on this keyboard). **New character profile…** makes a profile with
+  the interface of the main profile or of another one (preferences, key
+  bindings, layout, skin) and no account: no saved login, no password, no
+  transcript, no cache; an existing profile is never overwritten. Only the
+  active character may use voice; "Heard in the background" keeps a
+  background character's sounds.
+  Closing or losing the host closes no viewer: they stay logged in and go
+  back to their own settings. The list is saved in
+  `…\config\session-host.json`; the log is `aurora-session-host.log`.
+  `--managed` is what the host passes to its viewers and does nothing by
+  hand.
 
 ### Demo mode and test switches
 

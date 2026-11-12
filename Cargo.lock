@@ -2237,6 +2237,7 @@ version = "0.1.0"
 dependencies = [
  "folderstorm-brand",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

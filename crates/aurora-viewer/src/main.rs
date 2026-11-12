@@ -220,7 +220,12 @@ fn main() -> anyhow::Result<()> {
     // they are named in the log when they arrive
     overlay_hooks::start();
 
-    let result = run_viewer();
+    // Folderstorm: `--session-host` is the characters' host, not a viewer (folderstorm_characters/host.rs)
+    let result = if folderstorm_characters::host::wanted() {
+        folderstorm_characters::host::run()
+    } else {
+        run_viewer()
+    };
     if let Err(error) = &result {
         crash::failure(&format!("Viewer startup / event loop error: {error:#}"));
     }
