@@ -552,6 +552,7 @@ impl App {
         let textures = &self.scene.textures;
         let (paused, pending, passes) = (textures.drawing_paused(), textures.pending_in_view(), textures.wants_passes());
         let occlusion = self.settings.ssao > 0;
+        let photo_window = self.photo_window(renderer); // Folderstorm: the world viewport
         let s = &mut self.snapshots;
         s.capturing = None;
         let job = s.job.as_mut()?;
@@ -609,7 +610,7 @@ impl App {
             }
             job.waited += 1;
         }
-        let scale = snapshot::viewfinder_scale(job.size, renderer.size(), self.settings.render_scale_percent);
+        let scale = snapshot::viewfinder_scale(job.size, photo_window, self.settings.render_scale_percent);
         if let ContextPass::Pending((width, height)) = job.context {
             // the whole photo, for the tiles' occlusion: nothing of it is kept
             let spec = SnapshotSpec {
@@ -1105,7 +1106,7 @@ impl App {
 
     /// Start a photo of the destination's size.
     pub(super) fn photo_job(&mut self, purpose: Purpose, renderer: &Renderer) {
-        let window = renderer.size();
+        let window = self.photo_window(renderer); // Folderstorm: the world viewport
         let outfit = purpose.outfit();
         let full = if purpose == (Purpose::Portrait { preview: false }) {
             // (the HD picture is chosen once the photo is shown)
@@ -1163,7 +1164,8 @@ impl App {
         }
         // an outfit's picture shows the outfit: never the interface, the
         // HUDs or the photo's looks, whatever the Photo window has chosen
-        let interface = !outfit && s.interface && snapshot::same_proportions(full, window);
+        // Folderstorm: not with photo mode in the world viewport (the interface is the window's)
+        let interface = !outfit && s.interface && snapshot::same_proportions(full, window) && self.photo_rect(renderer).is_none();
         // (with the ambient occlusion on: GTAO may be forced over its method)
         let context = ContextPass::plan(size, tiles.len(), self.settings.ssao > 0);
         // (the outfit's photo mode keeps the viewfinder's looks: the
@@ -1245,9 +1247,9 @@ impl App {
     fn photo_tiles(&self, renderer: &Renderer, size: (u32, u32)) -> Vec<snapshot::TilePass> {
         let bloom = if self.settings.bloom { self.settings.bloom_strength } else { 0.0 };
         let dof = self
-            .photo_dof_max_coc(size, renderer.size())
+            .photo_dof_max_coc(size, self.photo_window(renderer)) // Folderstorm: the world viewport
             .map_or(0, aurora_render::dof_tile_reach);
-        let scale = snapshot::viewfinder_scale(size, renderer.size(), self.settings.render_scale_percent);
+        let scale = snapshot::viewfinder_scale(size, self.photo_window(renderer), self.settings.render_scale_percent); // Folderstorm: the world viewport
         let contact = aurora_render::contact_tile_reach(self.settings.contact_shadows, scale);
         let guard = snapshot::TILE_GUARD
             .max(aurora_render::bloom_tile_reach(bloom))
@@ -1380,7 +1382,7 @@ impl App {
         if self.photo_busy() {
             return;
         }
-        let view = self.photo_inventory_view(renderer.size());
+        let view = self.photo_inventory_view(self.photo_window(renderer)); // Folderstorm: the world viewport
         let Some(cost) = view.cost.filter(|_| view.connected) else {
             return;
         };
@@ -1735,7 +1737,7 @@ impl App {
         if !self.panels.snapshot || s.held.is_some() || viewfinder {
             return;
         }
-        let window = renderer.size();
+        let window = self.photo_window(renderer); // Folderstorm: the world viewport
         let key = (
             self.photo_size(window),
             self.settings.snapshot.interface,
@@ -2207,7 +2209,7 @@ LUT_3D_SIZE {n}
         if self.snapshots.capturing.is_some_and(|c| c.interface) {
             return;
         }
-        let window = renderer.size();
+        let window = self.photo_window(renderer); // Folderstorm: the world viewport
         let photo = self.photo_size(window);
         // (not while it climbs: it is on its way up, not held back)
         let quality_reduced = self.settings.photo_held.is_some() && self.snapshots.fit.as_ref().is_some_and(|f| f.step > 0 && !f.climbing);

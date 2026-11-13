@@ -39,12 +39,11 @@ impl App {
     /// The AF point in window pixels: the crosshair in mouselook, else the
     /// point chosen (the screen's centre at first).
     fn vf_point_px(&self, renderer: &Renderer) -> (f32, f32) {
-        let (w, h) = renderer.size();
         let at = match self.snapshots.vf.point {
             Some(p) if !self.camera.mouselook() => p,
             _ => Pos2::new(0.5, 0.5),
         };
-        (at.x * w as f32, at.y * h as f32)
+        crate::folderstorm::photo_viewport::px_at(self.photo_px(renderer), at) // Folderstorm: the world viewport
     }
 
     /// Each frame, before it is laid out: the depth that came back under
@@ -181,15 +180,14 @@ impl App {
             PhotoFocus::Pointer => {
                 let over_ui = self.egui_ctx.is_pointer_over_egui();
                 let (x, y) = if self.camera.mouselook() {
-                    let (w, h) = renderer.size();
-                    (w as f32 * 0.5, h as f32 * 0.5)
+                    self.world_center(renderer.size()) // Folderstorm: the world viewport
                 } else {
                     self.cursor_pos
                 };
                 if !over_ui && let Some(p) = renderer.hover_pick(x, y) {
-                    let (w, h) = renderer.size();
                     if !self.camera.mouselook() {
-                        self.snapshots.vf.point = Some(Pos2::new(x / w.max(1) as f32, y / h.max(1) as f32));
+                        // Folderstorm: in the world viewport's frame
+                        self.snapshots.vf.point = Some(crate::folderstorm::photo_viewport::unit_at(self.photo_px(renderer), (x, y)));
                     }
                     self.snapshots.vf.af.track(dof::distance_along(eye, at, p), now);
                 }
@@ -501,6 +499,9 @@ impl App {
         if !self.viewfinder_on() || self.camera.mouselook() || self.alt || self.object_view {
             return false;
         }
+        if !self.photo_takes_pointer() {
+            return true; // Folderstorm: nothing of photo mode in a margin of the world viewport
+        }
         if self.ctrl && !self.shift {
             // The viewfinder's interaction shortcut acts like an ordinary
             // left click (LLToolPie::handleMouseDown, indra/newview/lltoolpie.cpp).
@@ -535,8 +536,11 @@ impl App {
             return true;
         };
         let add = self.shift && self.settings.snapshot.dof.focus == PhotoFocus::Click;
-        let (w, h) = gfx.renderer.size();
-        self.snapshots.vf.point = Some(Pos2::new(self.cursor_pos.0 / w.max(1) as f32, self.cursor_pos.1 / h.max(1) as f32));
+        // Folderstorm: in the world viewport's frame
+        self.snapshots.vf.point = Some(crate::folderstorm::photo_viewport::unit_at(
+            self.photo_px(&gfx.renderer),
+            self.cursor_pos,
+        ));
         if !add {
             self.snapshots.vf.subjects.clear();
         }
@@ -554,6 +558,9 @@ impl App {
     /// aperture, with Alt + Ctrl the exposure. True when taken.
     pub(super) fn viewfinder_wheel(&mut self, steps: f32) -> bool {
         let tilt = self.ctrl && self.shift && !self.alt;
+        if self.viewfinder_on() && !self.photo_takes_pointer() {
+            return true; // Folderstorm: nothing of photo mode in a margin of the world viewport
+        }
         if !self.viewfinder_on() || steps == 0.0 || !(self.alt || tilt) {
             return false;
         }
@@ -901,8 +908,8 @@ impl App {
         view: &crate::ui::snapshot::View,
     ) {
         let now = self.vf_now();
-        let screen = ctx.content_rect();
-        let window = renderer.size();
+        let screen = crate::folderstorm::photo_viewport::screen(ctx); // Folderstorm: the world viewport
+        let window = self.photo_window(renderer); // Folderstorm: the world viewport
         let photo = self.photo_size(window);
         // the AF point: the subject's face, else the point chosen
         let mut point = match self.snapshots.vf.point {
