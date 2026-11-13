@@ -474,7 +474,9 @@ available.
   (Checkpoint 7 built the colours and aliases, the attention inbox and
   the condensed mode, and decided against the bird's-eye effect as C++
   had it: see its "As built". Its follow-ups added the inbox's host-only
-  Dismiss, a confirmation for Quit all and new default hotkeys.)
+  Dismiss, a confirmation for Quit all and new default hotkeys.
+  Checkpoint 8 put the quick actions in a bar at the top of every
+  managed viewer, with up to twelve positions of the user's choice.)
 - **Creators' permissions:** none of this shows, copies or exports assets or
   asset ids. Monitors show what that character's viewer shows and are never
   saved. Profile copy moves the user's own settings files only.
@@ -507,6 +509,10 @@ Upstream hooks (estimate: about 30 marked lines in about 12 files):
 | `app/gpu_stall.rs` | Notice deferral; loss policy behind |
 | UI | One options-page registration; one notice call |
 | Docs and locales | Rows in `README.md` (command line) and `docs/TESTING.md`; en/fr/ja entries (append-only) |
+
+(Checkpoint 8 added two lines to `app.rs`: the bar's strip, given to the
+interface's pass as egui's safe-area inset, and the room of the viewer's
+own bars under it.)
 
 No upstream file is restructured. If a hook grows beyond a line or two (for
 example the loss policy), stop and propose an upstream-friendly extension
@@ -1519,6 +1525,38 @@ May be two small PRs: 1a profiles, 1b behind policy.
     viewer, dimmed in the host) would need a field on the attention items
     and a protocol change: not done.
 
+- **A splash per character (branch `claude/splash-characters`,
+  2026-11-12, after the upstream sync that brought the startup splash,
+  PR #35).** Every viewer the host starts shows upstream's startup splash
+  (the human wants it: a start takes a while and looked broken without
+  it); the host has none. No new message on the link.
+  - The viewer passes its splash process `--profile=<name>` (named
+    profiles only; `folderstorm_characters/splash.rs`): the splash reads
+    that profile's settings, so it speaks the character's language, and
+    its label and window title name it ("Folderstorm2 — Alt1"). The alias
+    is a host-only name (kept in `session-host.json`, never passed to the
+    viewer), so the splash shows the profile's name, as the viewer's own
+    window title does.
+  - The host passes each viewer `--folderstorm-slot=<n>`, which a managed
+    viewer passes on to its splash: each splash is moved right and down
+    by 36 points per slot from the centre of the screen, so that three
+    characters started at once show three splashes, not one. The viewer's
+    link still takes its slot from the bootstrap only. Both arguments are
+    single `--name=value` words, which the command-line parser skips.
+  - The main profile's splash and the updater's window get nothing more
+    and are drawn as upstream draws them.
+  - The host's card and condensed line already said "Starting…" (with
+    the hourglass and "Wait") from the click on; they now count the
+    seconds until the viewer's first frame ("Starting… · 12 s"), without
+    a spinner, which would redraw the host on the processor every frame
+    while the viewers compile their shaders.
+  - Upstream hooks: `splash/mod.rs` (`spawn` takes the extra arguments),
+    `splash/window.rs` (the label, the offset).
+  - **(verify on Windows)**: the host starting three characters shows
+    three splashes, each naming its character, not stacked; a plain
+    `--profile Alt1` launch's splash names Alt1 in Alt1's language; the
+    updater's window over a restart is unchanged.
+
 - **Bird's-eye switch effect: not built (decision), design note.**
   - **What Folderstorm (C++) meant** (its `doc/plans/
     multi-character-sessions.md` section 7, `multi-character-
@@ -1580,6 +1618,955 @@ May be two small PRs: 1a profiles, 1b behind policy.
       desk (announce, then assign), a bound on the outgoing leg, and the
       measurements of section 4.3 on a real card first. Not recommended
       before A has been lived with.
+
+### Checkpoint 8: docked bar and compact controls
+
+- **The human's notes and decision (2026-11-12)**, from screenshots of
+  Folderstorm (C++)'s host: the characters are driven from **one row at
+  the top of the active viewer**, not from a second window. **Option (a)
+  is decided:** each managed viewer draws the bar itself, at the top of
+  its own window; the host feeds it over the link that exists and every
+  click goes back to the host as a request. (Not chosen: a host window
+  laid over or glued to the viewer's, which is rule R2's and section 7's
+  "fitted" trouble again.) Popped out, the bar leaves every viewer and
+  the host shows it as its own compact window, "Character controls".
+- **The bar, one row, left to right:**
+  - *profile dropdown*: "n: name" for the active character; its list has
+    every character with "Active", "Inactive" or nothing (not logged
+    in). Picking one is that character's quick action (section 13):
+    switch when it runs, bring it forward at its login screen, start it
+    when it has no viewer;
+  - *open a login*: the first character that is not logged in (its
+    viewer is started, or brought forward at its login screen); a right
+    click lists the characters to choose from;
+  - *shared chat*: shows or hides the host's chat in its own window;
+  - *monitors*: a menu with each character (greyed when it is not in the
+    world, or is the active one), "Open all inactive monitors", "Close
+    all monitors", "Monitor settings…". (A place is kept for "Cycling
+    monitor": checkpoint 9.);
+  - *settings*: a menu to the host's pages (the bar's and quick actions'
+    page, the hotkeys), "Show the host's window" and "Quit…";
+  - *middle, the quick actions*: up to 12 positions the user fills in
+    the host's settings, each Unused, Character 1 to 5, Attention (with
+    the count; opens the inbox; shown even at zero), Mute background
+    sound (a toggle, new) or Voice follows active (a toggle, new). A
+    character's button carries its alias and its colour (checkpoint 7);
+  - *right*: pop out, collapse (the bar becomes a thin handle that
+    opens it again).
+  - Label modes, two settings: the quick actions' (icon and text by
+    default) and the toolbar buttons' (icons only by default), each
+    icons only / text only / icon and text.
+  - No voice status line.
+- **New rules of the desk** (both saved, both also quick actions):
+  - **Mute background sound**: every character that is not the active
+    one is cut, whatever its own "heard in the background"; each
+    character's own choice is kept and applies again when the toggle is
+    off.
+  - **Voice follows active** (on by default: today's behaviour). Off:
+    the voice stays with the character that holds it when another one
+    becomes active, until that character's viewer ends (the active one
+    then takes it and keeps it). "Given up before it is given" is
+    unchanged: never two voices. The character that holds the voice in
+    the background is heard there (its voice is one of its viewer's
+    sounds, and a viewer that is cut cannot transmit), unless "Mute
+    background sound" is on, which cuts it too.
+- **The host's windows.**
+  - *Docked* (the default): while a viewer shows the bar, **the host's
+    own window is hidden** (setting "Hide the host's window while the
+    bar is shown", on by default). It comes back from the bar ("Show
+    the host's window", or any entry that opens one of its pages), and
+    by itself as soon as no viewer shows a bar (none runs, or all were
+    let go): the host is never out of reach. Shown that way, its close
+    button hides it again; "Quit…" in the bar's menu asks the usual
+    question (Quit all / Close only the host / Cancel) in it. Nothing
+    about a hidden host changes for the viewers: the host's loop does
+    not depend on its window being drawn.
+  - *Popped out*: the compact "Character controls" window, the same row
+    in one line, with a **pin** (always on top: a filled pin on the
+    accent when pinned, a plain pin when not, said in its tooltip) and
+    "Dock back". Its close button docks the bar back: closing it never
+    quits anything. Docked or popped, the pin and the window's place
+    are remembered (`session-host.json`), and a place is brought back
+    onto a connected screen as the panels' are.
+  - The chat, the monitors and the inbox are the panels of checkpoint 6:
+    the bar opens them in their own windows (the host's window may be
+    hidden).
+- **One taskbar button (Windows only, setting, on by default).** While
+  the bar is docked: the host's window is hidden (or, shown from the
+  bar, off the taskbar); a background character's window is taken off
+  the taskbar and out of Alt-Tab; the active character's is on both.
+  Switching swaps them.
+  - Each viewer does it to **its own window**, in its own process, on
+    the host's word (`Assignment::off_taskbar`): the taskbar's tab
+    through winit's `set_skip_taskbar` (`ITaskbarList::DeleteTab` /
+    `AddTab`, which winit also puts back when Explorer restarts), the
+    Alt-Tab list through the `WS_EX_TOOLWINDOW` bit of the window's
+    extended style. **No window is hidden, cloaked or re-parented**
+    (rule R2), and no window is owned across processes (section 7).
+  - **Minimised windows (Economy).** Windows parks a minimised window
+    off screen only when it is a taskbar window by its style; a
+    minimised tool window is left as a small title bar above the
+    taskbar. So the tool-window bit is only ever set on a window that
+    is not minimised and that the host does not minimise (Warm standby
+    or an open monitor), and it is taken away before the window is
+    minimised or shown. An Economy window loses its taskbar tab only:
+    it may stay in Alt-Tab. **(verify on Windows)**
+  - **Always put back:** when the character becomes the active one, when
+    its window gets the keyboard, when the host goes away (the link
+    ends), when the viewer is let go, when the setting is turned off or
+    the bar is popped out. The decision is a pure function of what the
+    viewer holds, applied whenever it changes and again on a new window
+    (the one a GPU recovery makes).
+  - Elsewhere than Windows nothing changes.
+- **Link (protocol 4).** `Assignment` gains `off_taskbar`.
+  `ToViewer::Bar(State)`: the bar as the host wants it drawn, whole, the
+  latest replacing the others: docked or not, collapsed, the characters
+  (slot, shown name, real name behind an alias, colour, presence, what
+  picking it does, its monitor), the inbox's count, the chat's window
+  and unread count, the two toggles, the quick actions and the two
+  label modes. `ToHost::Bar(Request)`: one click (pick a character,
+  open a login, the chat, a monitor, all or no monitors, a page of the
+  host, show the host, quit, the inbox, a toggle, pop out, collapse).
+  A request only ever does what the same click does in the host's own
+  window: nothing is answered, no line is said, no process is ended
+  from the bar. Every text is bounded and cleaned on arrival, both
+  ways.
+  - **Checkpoint 7's rule, restated:** an alias and a colour now reach
+    the viewers the host manages, on their own private pipe, **for the
+    bar and nothing else**: the viewer keeps them in the bar's state,
+    draws them and forgets them with the link. They are never written
+    to a viewer's settings, logs, chat or window title, and nothing of
+    them goes to a grid (tested: the bar's state is used by the bar's
+    drawing only).
+  - A viewer that loses the host drops the bar's state: the strip goes
+    and its interface takes the whole window again.
+- **Upstream hook (one planned, in `app.rs`; two as built, see below):**
+  before the interface's pass,
+  `raw.safe_area_insets = self.folderstorm_bar_inset(); // Folderstorm:
+  …`. egui's own "safe area" keeps the top strip out of
+  `content_rect()`, which every screen of the viewer lays itself out in
+  (login, loading, world, both styles of bars, the windows' work area),
+  so nothing of upstream's layout is edited. The bar is drawn in that
+  strip by the hook that draws the "3D paused" notice already
+  (`folderstorm_characters_notice`, ours). None in a viewer that no
+  host manages. The bar is hidden with the interface and in mouselook.
+- **Settings** (`session-host.json`, absent fields read as the
+  defaults, checked when the file is read): `bar` (docked or popped,
+  collapsed, pinned, the popped window's place, the 12 quick actions,
+  the two label modes, `one_taskbar_button`, `hide_host`),
+  `mute_background`, `voice_follows`. A file of before has none of them
+  and reads as: docked, the five characters and Attention as quick
+  actions, nothing muted more than before, voice follows.
+- **Acceptance:**
+  - the bar shows in every managed viewer while docked, in none while
+    popped out, and in none that lost its host; an unmanaged viewer is
+    as upstream's, to the pixel;
+  - every click of the bar does what the host's own window does for it,
+    and nothing else; a slot never gets a second process;
+  - never two voices, with "Voice follows active" on or off;
+  - the host is always reachable: its window is hidden only while a bar
+    is on screen;
+  - closing the popped-out window docks the bar; closing a viewer or
+    the host restores every window's taskbar tab and style;
+  - no window is hidden, cloaked, re-parented or minimised by this
+    checkpoint (R2), and checkpoint 1's rules (R4, R5) are untouched;
+  - long names are cut with the full name in the hover; the row fits a
+    narrow window by dropping the labels, then scrolling the quick
+    actions.
+- **Demo:** `AURORA_DEMO_SESSION_HOST_BAR=docked|popped` (with
+  `AURORA_DEMO_SESSION_HOST`), listed in `docs/TESTING.md`.
+
+- **As built (branch `claude/session-checkpoint-8`, on top of the
+  follow-ups to checkpoint 7):** the rules are pure and tested in
+  `crates/folderstorm-session` (`bar`: the settings and their reading,
+  the state and the requests, which quick actions show, the label
+  modes, when the host's window hides, what a window is on the taskbar;
+  `host`: the two desk rules, `bar_state`, `bar_request`,
+  `Assignment::off_taskbar`, in `host/bar_tests.rs`; `ipc`: protocol 4).
+  In the viewer: `folderstorm_characters/bar.rs` (the row's drawing,
+  one code for both homes), `folderstorm_characters/taskbar.rs` (the
+  window's own taskbar tab and tool-window bit),
+  `app/folderstorm_characters/bar.rs` (a managed viewer's side),
+  `host/ui/bar.rs` (the compact window, the host's window hiding, the
+  page).
+  - **Upstream hooks (new): two lines, both in `app.rs`.** (The plan
+    above counted one; the second was found while building.)
+    1. After the frame's `take_egui_input`:
+       `self.folderstorm_bar_inset(&mut raw); // Folderstorm: the session
+       host's bar keeps a strip at the top`. It sets egui's safe-area
+       inset for the pass, in a viewer a host started only (never
+       otherwise: the input is not touched). `content_rect()` then
+       starts under the strip, and what lays itself out in it follows
+       without a change: the login and loading screens, the windows and
+       their room, the notices.
+    2. Where the bars are given their room:
+       `let viewport_bars = crate::folderstorm_characters::bar::
+       bars_room(&ctx, viewport_bars); // Folderstorm: under the session
+       host's bar`, between the two lines the custom world viewport
+       (FEATURES 1.1) already has there. Needed because egui's root `Ui`
+       spans the whole window whatever the inset, and upstream's bars of
+       both styles are laid out in it (`ui.max_rect()`, root panels):
+       they are handed the room under the strip through the child `Ui`
+       that place already makes for a custom viewport. Without a strip
+       the function returns what it was given.
+    The bar itself is drawn from `folderstorm_characters_notice`, the
+    hook checkpoint 1 put before the screens are drawn: no third line.
+    The viewer's world ↔ screen mapping goes by the window's pixels, not
+    by `content_rect()` (checked by reading), so picking is unchanged;
+    the top 30 points of the 3D view are under the bar, as they are
+    under Firestorm's bars. The bar is an area of its own in the
+    windows' order, as upstream's islands are, so that the pointer over
+    it is over the interface and a click on it is never also a click in
+    the world (tested).
+  - **Decisions taken while building.**
+    - *The characters' list always names who is in front*, whatever the
+      toolbar's label mode: it is the one place that says it. A
+      character's quick action keeps its number with icons only (five
+      identical icons would say nothing). With too little room the
+      toolbar's labels go first, then the quick actions', then the
+      active character's name (its number stays); what is left of the
+      quick actions scrolls with the wheel. A name longer than 16
+      characters is cut with an ellipsis, whole in the hover (with the
+      real name behind an alias).
+    - *The monitors' menu ticks the open ones* and greys what cannot be
+      watched (not in the world, or in front). Opening one from the bar
+      also gives the monitors their own window (checkpoint 6's), since
+      the host's window may be hidden; "Monitor settings…" shows the
+      host's window on the characters' cards, where each monitor's size
+      and rate are (the condensed layout is left for it). "Cycling
+      monitor" is a greyed entry: its place. (Checkpoint 9 gave each
+      monitor its own window, made the cycling monitor real and gave
+      "Monitor settings…" a page of its own.)
+    - *"Open a login" never switches*: it only acts on a character that
+      is not logged in.
+    - *The settings' menu also has the two toggles*, so they are at hand
+      without being quick actions.
+    - *The host's window hides once the user leaves it*, not under
+      their hands: with a bar on screen it stays while it has the
+      keyboard, hides when a character's window takes it, and stays
+      when it was asked for from the bar, until its close button. The
+      choice and "One taskbar button" are on the bar's page. Hidden, its
+      monitors ask nothing (as minimised). Where the system cannot hide
+      a window (Wayland), it simply stays.
+    - *The compact window is one row high* (its height is fixed, its
+      width free, 320 points at least, 1100 the first time); its pin is
+      winit's window level. A row with no room even for its two ends
+      (a very narrow viewer) scrolls as a whole instead of laying one
+      end over the other.
+    - **Fixed after review: its menus and hovers had no room.** egui
+      draws a menu inside the window that opens it and keeps it in that
+      window: one row high (38 points), the characters' list, the
+      monitors' and the settings' menus and the hovers were cut to a
+      strip (confirmed by a drawing: the list's area was taller than the
+      window). Now, while a menu or a hover is open, the window grows
+      under its row to hold it, and goes back to one row once it
+      closes: the first frame grows it to the most (420 points under
+      the row, never past the bottom of its screen), the next measures
+      what is open and fits it with 6 points to spare. The row stays at
+      the top, the width, the place and the pin are not touched, and the
+      place it remembers is the row's, never the grown window's. A menu
+      closes when the window loses the keyboard, so a window the user
+      left is never left grown. Tested: the list opened by a click is
+      painted whole under the row in a grown window, and the window is
+      one row again once it is closed (Escape). A window at the very
+      bottom of a screen has no room under it: its menus are cut there
+      (to move it up while a menu is open is a follow-up if asked).
+    - *A click is heard at once*: the reader thread of the viewer that
+      was clicked wakes the host's loop (an event-loop proxy), instead
+      of waiting for the window's next look (200 ms). The viewer that
+      was clicked lets the answering window take the foreground
+      (`AllowSetForegroundWindow(ASFW_ANY)`): the host is not the
+      foreground process when a bar is clicked. **(verify on Windows)**
+    - *The page is the characters' panel's third page* ("Bar and quick
+      actions…", beside "Hotkeys…"), until checkpoint 10 gives the
+      settings their own place.
+  - **Not done, by decision:** the panels' windows (chat, monitors,
+    inbox) keep their taskbar buttons: "one taskbar button" is the
+    characters' and the host's own window. The shared chat's button
+    shows or hides its window; it does not raise a window that is
+    behind (checkpoint 9's pin is the answer to that). No voice status
+    line (decided). No free order of the toolbar's buttons.
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_BAR=docked|popped`
+    (`docs/TESTING.md`).
+  - **Checked here:** the rules' tests; the row drawn by the
+    processor's painter without a window, in both homes: the compact
+    window (wide, narrow, narrower than its two ends, pinned) and a
+    viewer's pass with the safe-area inset and the bars' room (the
+    strip, the viewer's own bar starting under it, collapsed, popped
+    out), with the texts, the colours and the backgrounds looked for in
+    the pixels, and the pictures looked at; the page; the host's window
+    hiding and coming back; the requests from a queue of clicks to the
+    desk; the pointer over the strip and under it; a guard on the
+    sources that the bar's state is read by the bar's drawing only. The
+    real host under X11 (Xvfb), popped out and docked: the compact
+    window opened, drawn and captured, the host's own window hidden
+    while it is there, its page reached; the demo's viewers linked
+    (protocol 4) and then ended, as before, for want of a graphics card.
+    The Windows-only code (`taskbar.rs`, `foreground.rs`, the host's
+    `set_skip_taskbar`) is type-checked and linted for
+    `x86_64-pc-windows-gnu` against `windows-sys` and winit, in a
+    scratch crate that includes the real files. **Not run here:** a
+    viewer drawing the bar in its own window (no graphics card), and
+    nothing of Win32.
+  - **To verify on Windows:**
+    1. the bar at the top of each character's window on the login
+       screen, while loading and in the world, with the islands and with
+       Firestorm's bars; nothing of the viewer's interface under it, the
+       windows' room and the snapping start under it; mouselook and
+       "hide interface" take it away and bring it back;
+    2. every button of the row, from the active viewer and from a
+       background one that has the keyboard: the list, "Open a login"
+       and its right click, Chat, the monitors' menu, the settings'
+       menu, each quick action, Pop out, Collapse and the handle; the
+       window asked for comes to the front instead of flashing;
+    3. the host's window hides when a character takes the keyboard and
+       comes back from the bar; "Quit…" asks its question; with every
+       viewer closed it is back by itself;
+    4. popped out: the compact window, its pin above a full-screen-size
+       viewer, its place remembered across a restart and brought back
+       after a screen is unplugged; closing it docks the bar; each menu
+       (the list, "Open a login"'s right click, the monitors, the
+       settings) and the hovers open whole under the row, the window
+       grows for them and is one row again when they close, also after
+       a click in another window;
+    5. **one taskbar button**: only the active character on the taskbar
+       and in Alt-Tab; a switch (button, bar, hotkey) swaps them at
+       once; a Warm background window keeps its usual title bar (no
+       small tool-window caption) and comes back whole; an Economy
+       (minimised) one leaves **no small title bar above the taskbar**
+       and is restored by a switch; Win+D and Win+M and back; Explorer
+       restarted (`taskkill /f /im explorer.exe`, then start it);
+       the setting off, the bar popped out, the host closed or ended in
+       the Task Manager, a viewer "let go": every window has its button
+       again. If Alt-Tab still lists the background characters on this
+       version of Windows (the list may only follow a style change when
+       a window is shown), say so: the fallback is in "Follow-ups";
+    6. "Mute background sound" with a character "Heard in the
+       background"; "Voice follows active" off with real voice: the
+       character left keeps talking and is heard, the new active one
+       has no voice; on again, one voice only at every moment.
+  - **Follow-up: the bar over the custom world viewport.** With a
+    custom world viewport (FEATURES 1.1: the window over several
+    monitors, the world in one rectangle, windows in the margins) the
+    strip spanned the whole window and took 30 points from the margins'
+    windows too. Now, by default, it stays over the world viewport: at
+    the world's top, as wide as the world. The bar's settings gain
+    "Span the whole window" (`session-host.json`, `bar.span_window`,
+    off by default; a checkbox on the bar's page, since checkpoint 10
+    in the settings window's Toolbar section), sent in the bar's state
+    (`State::span_window`, read as off when absent: host and viewers
+    are one binary, so no new protocol number).
+    - *Where the strip goes* is a pure rule
+      (`folderstorm_characters::bar::strip_place`): over the world when
+      the viewer has a custom viewport this frame (the viewport
+      module's own `world_rect`, not a copy), its own bars stay inside
+      it ("Keep the bars inside the viewport": the bar goes with the
+      viewer's bars, so the two never overlap) and the option is off;
+      across the window otherwise, exactly as before: no viewport (or
+      none this frame: login, loading), the option on, or the bars
+      over the whole window. (In mouselook and the full-frame photo
+      view there is no bar at all, as before.)
+    - *Over the world*, nothing is taken from the interface's room (the
+      safe-area inset is zero), so the margins' windows keep the
+      window's whole height; the world's own rectangle moves down by
+      the strip (`App::world_viewport`, the fork's function the renderer,
+      the HUDs, the mouselook centre and the camera's proportions
+      already read), so the 3D view and the HUDs start under the bar,
+      and the viewer's bars, laid out in the world's rectangle, follow
+      without a change; `bars_room` returns them as they are (no inset),
+      and `bars_screen` and the floaters' room read the same area.
+    - **Upstream hooks: unchanged**, the same two lines; the rest is in
+      `app/folderstorm_viewport.rs` and `app/folderstorm_characters/
+      bar.rs`.
+    - *Tested:* the rule (a left and a right margin, a top margin, the
+      scale, collapsed, the option, no viewport, bars over the window,
+      a world too low, popped out); a pass over two monitors with the
+      world on either: the strip drawn at the world's top and width,
+      the interface's room the whole window, the floaters' room as high
+      as the window, the world and the viewer's bars under the strip and
+      `bars_screen` agreeing, the pointer on the bar over the interface;
+      with the option, all as before; the picture painted by the
+      processor (nothing of the bar over the margin, the bar in the
+      world's strip, the world under it); the setting on the page and
+      in the state.
+    - *To verify on Windows:* a window over two monitors, the world on
+      one (`AURORA_DEMO_VIEWPORT=1` with the bar's demo, or the
+      viewport's "Fit to a monitor"): the bar over the world only, the
+      3D view, the HUDs and the viewer's bars under it, a window in the
+      margin as high as the window; "Span the whole window" on: the bar
+      across the whole window, everything under it as before; the
+      viewport off: as before; the world on the left monitor too.
+  - **Follow-ups, if the Windows test asks for them:** Alt-Tab through
+    a short hide and show around the style change (against R2 as
+    written: only with the human's word, and only for a window whose 3D
+    is off); the panels' windows off the taskbar too; a free order of
+    the toolbar.
+
+### Checkpoint 9: monitors in their own windows
+
+- **The human's notes and decisions (2026-11-12)**, from Folderstorm
+  (C++)'s monitors: **each monitor is a window of its own**, compact, and
+  there is a **cycling monitor** that goes round the background
+  characters. This replaces checkpoint 6's one "Monitors" window, and the
+  pictures in the characters' cards.
+- **A monitor's window** (one per monitored character, at most
+  `MAX_SLOTS`; at most 4 are asked for pictures at once, as before):
+  - *a thin header*: the character's colour and its alias or name (the
+    real name and how the monitor does in the hover), then icon buttons,
+    each with a tooltip: **Switch** (`arrows-exchange`), **Chat** (shows
+    or hides the chat part), **Pin** (always on top: a filled pin on the
+    accent when pinned, a plain pin when not, as the "Character
+    controls" window's), **Options**;
+  - *the picture*, in the room under the header, never stretched; no
+    "read-only" text; it still senses neither clicks nor keys. Without a
+    picture, why, in its place (the texts of checkpoint 5);
+  - *the options*, a sheet inside the window (a window this small cannot
+    show a menu that is taller than itself): the sizes 320 × 180 /
+    480 × 270 / 640 × 360, the rates 0.5 / 1 / 2 / 5 a second, the note
+    that all monitors share one budget (with the rate granted when it was
+    lowered), "Show chat", and "Use this size and rate as monitor
+    defaults";
+  - *the chat part* (off at first): that character's conversations as
+    chips, the lines of the one chosen, and a box that says a line **as
+    that character** (the shared chat's own sending: a line is handed to
+    its viewer once, is uncertain on a broken pipe, and the viewer's RLVa
+    rules decide; the draft is the one the shared chat shows for that
+    character and conversation).
+- **Switch swaps.** The monitored character becomes the active one, and
+  the window then shows the character that was active: a monitor's window
+  follows *the character that is not in front*. The same holds however
+  the switch is made (the window's button, the bar, a hotkey, a click in
+  the character's own window): when a character whose monitor is open
+  comes to the front and the one that leaves the front has none, the
+  monitor (its size and rate, its window with its place, pin and chat)
+  moves to the one that left. Nothing moves when no character was in
+  front, or when the one that left has a monitor already; the monitor of
+  the character in front then says so, as in checkpoint 5.
+- **Chips** (the monitor's chat and the shared chat, one code):
+  - one chip per conversation: its kind's icon, its name, its unread
+    count, and a close × on every chip but Nearby;
+  - **order**: Nearby, then pinned, then unread, then the most recent;
+  - **names shrink to fit**: all chips are cut to the same length, the
+    longest that fits, never under 6 characters and an ellipsis; a cut
+    name is whole in the hover;
+  - **at most two rows**; what does not fit at the least length goes
+    behind a "+N" chip at the end of the second row, which lists the
+    rest in the lines' place (a list, not a menu: it scrolls in a small
+    window); "+N" says how many of them have something unread. A new
+    message makes its conversation unread, so it comes out of "+N" by
+    the order above; the conversation on screen is never hidden;
+  - **close** takes the conversation out of the host's chips only:
+    nothing is said to the viewer, where it stays open; its lines stay in
+    "All", and a new line from someone else or a notice of the host
+    about a line of the user's brings the chip back;
+  - **pin** (a right click on a chip: Pin / Unpin, Close): host only,
+    for this login of the character, not saved.
+  - **New IM and Friends are not built**: the shared chat cannot start a
+    conversation (the link has no message for it, and the host knows no
+    friends list). They stay in FEATURES' "left for the human to pick".
+- **Cycling monitor**: one more window that shows each background
+  character in turn (in the world, behind the active one; slot order),
+  each for the interval chosen (5 s at first; 2 s to 10 min). Its header
+  says who is shown; besides Switch, Chat, Pin and Options it has
+  **previous**, **pause** and **next**. Its options add the interval and
+  "Pause cycling while typing". Only the character shown is asked for
+  pictures.
+  - **"Pause cycling while typing"** (on by default; C++'s "Require
+    pause to chat"): while the box of the cycling monitor's chat has the
+    keyboard, or holds a text typed there that is not sent yet, the turn
+    does not pass; it passes a whole interval after the line is sent or
+    erased. So the character never changes between composing and
+    sending.
+  - **Never the wrong character, whatever the setting**: a draft
+    belongs to one character and one conversation (checkpoint 3). With
+    the setting off, a turn that passes while a text is typed leaves the
+    text with the character it was typed for; the box then shows the
+    next character's own (empty) draft, and Enter sends nothing.
+  - Its Switch brings the character shown to the front and shows the one
+    that was in front.
+- **The bar's monitors menu** (checkpoint 8): each character (ticked
+  when its monitor is open; greyed when it is not in the world or is in
+  front, unless its monitor is open, which can always be closed), "Open
+  all inactive monitors", "Cycling monitor" (now real: a tick), "Close
+  all monitors" (the cycling one too), "Monitor settings…" (a page of
+  the host: the defaults for a new monitor, the cycling monitor's
+  interval and "Pause cycling while typing", the budget's note).
+- **Kept from checkpoints 5 and 6, unchanged:** the budget
+  (1 200 000 pixels a second for all monitors together; the cycling
+  monitor's character counts as one monitor); a monitor is asked for
+  pictures only while a window that draws it is on screen (a window that
+  is minimised, hidden or covered whole asks nothing, window by window;
+  so does a window whose options or list covers the picture); a busy
+  card lowers the rate, a lost or stalled one gets no request; nothing
+  of a picture is written anywhere (the latest one per character, in
+  memory, dropped when no monitor shows that character). A character
+  shown by two windows (its own and the cycling one) is asked once, for
+  the larger size and the faster rate of the two. While a monitor of a
+  character is open, or the cycling monitor is, that character is not
+  minimised behind (Economy is kept as the choice, as before).
+- **What checkpoint 6's Monitors window becomes:** it is gone. The
+  panels are the chat, the characters and the inbox. A character's card
+  keeps the **Monitor** box (it opens and closes that character's
+  window) and the size and rate; the picture is in the window.
+- **Settings** (`session-host.json`; absent fields read as the
+  defaults, everything checked when the file is read):
+  - per character, beside `monitor` (open, with its size and rate, as
+    before): `monitor_window` (`place`, `pinned`, `chat`);
+  - `monitors`: `defaults` (size and rate of a monitor that is opened),
+    `cycling` (`open`, `interval_s`, `pause_typing`, `spec`, `window`).
+  - **Migration:** a file of checkpoints 5 to 8 reads as it is: its open
+    monitors are open (each in a window of its own now, at its first
+    size, where the system puts it), `panels.monitors` (the old window:
+    out or not, its place) is read past and not written again, the
+    cycling monitor is closed, the defaults are 480 × 270 at 1 a second.
+  - A place is kept when its window is moved or resized, not while it is
+    minimised or maximised, and brought back onto a connected screen
+    when it opens (`panels::on_screen`, checkpoint 6's).
+- **Link (protocol 5).** `bar::State` gains `cycling` (the cycling
+  monitor is open); `bar::Request` gains `Cycling(bool)`. Nothing else:
+  a monitor's window is the host's own, and what it sends a viewer
+  (`Assign` with the monitor's order, `SendChat`, `MarkRead`) exists.
+- **Upstream hooks: none planned.** Everything is in the fork's files;
+  the locales and `docs/TESTING.md` get lines.
+- **Acceptance:**
+  - each open monitor has its own window, remembered with its place, pin
+    and chat, and brought back on screen; closing a window closes that
+    monitor (its viewer goes back to 3D Off) and nothing else;
+  - Switch swaps: the window shows the character that was in front, with
+    the same place, size, pin and chat; no window ever takes a second
+    character while it shows one;
+  - a line typed in a monitor is said by the character whose name the
+    header shows, once; the cycling monitor never changes character
+    under a text being typed (setting on), and never sends a text as
+    another character (either way);
+  - the chips never take more than two rows, never hide the
+    conversation on screen, and no name is cut under 6 characters while
+    another is still whole;
+  - a monitor nobody can see asks nothing; never more than 4 viewers
+    are asked, within the budget;
+  - no window opened here takes the keyboard unless the user asked for
+    it; no viewer's window is moved, hidden or re-parented (R2), and
+    checkpoint 1's rules (R4, R5) are untouched.
+- **Demo:** `AURORA_DEMO_SESSION_HOST_MONITORS=windows|cycling` (with
+  `AURORA_DEMO_SESSION_HOST`), listed in `docs/TESTING.md`.
+
+- **As built (branch `claude/session-checkpoint-9`, on top of checkpoint
+  8):** the rules are pure and tested in `crates/folderstorm-session`
+  (`chips`: the order, the cut, two rows and "+N"; `monitor_windows`: what
+  is remembered of a window, the monitor that follows the character not
+  in front, one order for a character two windows show, the cycling
+  monitor's turns and its hold, a window's first size; `chat`: a
+  conversation closed or pinned in the host, several windows that show
+  the chat; `host`: the monitors' settings, the swap in `activate`, what
+  the cycling monitor asks, in `host/monitor_window_tests.rs`; `bar`:
+  `cycling`; `panels`: the monitors are no panel; `ipc`: protocol 5). In
+  the viewer: `host/chips.rs` (the chips drawn, for both chats),
+  `host/ui/monitor_windows.rs` (the windows, the cycling monitor, the
+  options and the page), `host/ui/monitors.rs` (a picture's texture per
+  window, the card's box), `host/chat_ui.rs` (the lines' rows and the box
+  shared with the monitors), `folderstorm_characters/bar.rs` (the menu).
+  - **Upstream hooks (new): none.** No upstream file changes but the
+    locales, `docs/TESTING.md` and the README's `--session-host` entry
+    (append-only lines, as before). The viewer's side of the link only
+    gains what `bar::State` and `bar::Request` gained.
+  - **Decisions taken while building.**
+    - *The swap is the desk's, for every switch.* `Desk::activate`, which
+      every way to the front goes through (the window's button, the
+      bar, a hotkey, a click in a viewer, a character that starts with
+      "bring forward"), moves the monitor; the host's windows follow
+      (`Desk::take_monitor_moves`): the view, with its window, goes to
+      the other character's place in the table, so the system's window is
+      never closed and opened again, and is never moved while it is
+      being drawn. The character that left is asked for pictures at once
+      (the window is on screen as it was). What the character that left
+      remembered of a window of its own goes to the one that came
+      forward: the two swap whole.
+    - *The options are a sheet and "+N" opens a list, both inside the
+      window.* A monitor's window can be 220 × 120 points: a menu of the
+      interface cannot be taller than the window that draws it. The sheet
+      and the list scroll. While the sheet covers the picture, the
+      monitor asks nothing (it is not on screen). While the list is open
+      it takes what the least picture leaves of the window, and nothing
+      is read.
+    - *No picture in the cards any more.* A card keeps the **Monitor**
+      box (it opens the window with the defaults) and the size and rate.
+      The host's own window is hidden most of the time since checkpoint
+      8; one picture per monitor, in its window, is simpler to reason
+      about (seen or not, asked or not).
+    - *The header says who, the hover says how.* The picture's age and
+      the viewer's state ("live", "fewer pictures…", "paused…") left the
+      space under the picture for the hover of the name and of the
+      picture; a warning sign shows in the header when it is something to
+      notice. Without a picture the reason is in its place, as before.
+    - *The chat part is off at first.* Showing or hiding it grows or
+      shrinks the window by its height (190 points) and keeps the width
+      the user gave; choosing a size gives the window the size that shows
+      it 1:1. Too low a window for both keeps the picture.
+    - *In a monitor the box does not take the keyboard back after a
+      line* (the shared chat's does): the cycling monitor's hold ends
+      when the line is sent, and a monitor is first of all a picture.
+    - *The cycling monitor's hold*: its box has the keyboard in a window
+      that has it, or a text was typed there for the character shown and
+      is still that character's draft. A draft typed elsewhere (the
+      shared chat) does not hold it, and "previous" or "next" lets go of
+      it (the text stays its character's draft). The pause button is
+      lit while it holds, and says why.
+    - *The nearby chat's chip keeps its label*; the others are cut
+      together. A cut name is at least six characters and "…"; a name one
+      character longer than the cut is left whole (the ellipsis would
+      save nothing).
+    - *Closing a conversation in the host* drops what was typed for it
+      there and its pin, keeps its lines (they are in "All", and come
+      back with the chip), and is undone by the next line of someone
+      else or by a notice of the host (a line of the user's refused,
+      uncertain or not sent is always said where it was typed).
+    - *What a window shows is read while that window has the keyboard*
+      (checkpoint 6's rule, per window: `Chat::look_from`): a pinned
+      monitor that only shows a conversation does not mark it read.
+    - *The cycling monitor keeps one picture*: the character whose turn
+      passed keeps none (unless its own monitor is open).
+    - *The monitors' windows have their taskbar buttons*, as the panels'
+      (checkpoint 8's "one taskbar button" is the characters' and the
+      host's own window).
+    - *The demo opens no monitor by itself any more*: five windows more
+      would be in the way of what the other variables show;
+      `AURORA_DEMO_SESSION_HOST_MONITORS` asks for them.
+    - *"Quit…" from the bar* shows the characters' page again: its
+      question is asked under the characters, and was not seen behind
+      one of their pages (found with the new page).
+    - *Icons fixed on the way*: the shared chat's Send button and the
+      nearby chat's chip named icons the viewer does not embed (`send`,
+      `message-circle`) and showed none; they are `send-filled` and
+      `message-circle-filled`.
+  - **Found here, fixed in checkpoint 8: the compact "Character
+    controls" window was one row high and its menus had no room.** A
+    drawing of it at 1100 × 38, clicked along its row, never painted a
+    text of the monitors' menu. Confirmed with a drawing in checkpoint
+    8's branch (the list's area was taller than the window) and fixed
+    there: the window grows under its row while a menu or a hover is
+    open (checkpoint 8, "Decisions taken while building"); merged here.
+  - **Not built, by decision:** New IM and Friends (above); a pin that
+    lasts beyond a login (a conversation's number is its viewer's, per
+    login); a menu for the options (above); a monitor of the character
+    in front.
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_MONITORS=windows|cycling` (or
+    both, or `all`; `docs/TESTING.md`). `AURORA_SESSION_HOST_CAPTURE`
+    also writes each monitor's window (`<file>-monitor-<n>.png`,
+    `<file>-cycling.png`).
+  - **Checked here:** the rules' tests (the chips' order, cut and
+    overflow with a made-up font; the swap, alone and through a hotkey,
+    the bar and a click in a viewer; the cycling monitor's turns and its
+    hold; a settings file of checkpoint 8 read with its monitor open and
+    its old `panels.monitors` read past). Each window drawn by the
+    processor's painter without a window, and the pictures looked at: a
+    monitor's window at 480 × 300, 240 × 165 and 220 × 120, waiting,
+    with a picture (counted to the pixel, never stretched), pinned, with
+    its options at 480 and 320 wide, with its chat part; the chips at
+    320, 480 and 640 wide with four and thirteen conversations, and the
+    "+N" list; the shared chat's chips at 380, 620 and 1400 wide; the
+    cycling monitor with a picture, with nobody behind, with its options
+    and held by a text; the monitors' page. With a pointer and a keyboard
+    made up frame by frame: a line typed in a monitor's box and sent
+    with Enter goes once to the viewer of the character the header
+    names, in the conversation shown, and is uncertain when no answer
+    comes; the cycling monitor does not move for 40 seconds of typing,
+    sends as the character shown, and moves a whole turn after; with the
+    setting off, a turn that passes leaves the text with its character
+    and Enter says nothing as the next one. Closing a monitor's window
+    closes that monitor only. The real host under X11 (Xvfb) with
+    `AURORA_DEMO_SESSION_HOST_MONITORS=all`: two monitors' windows and
+    the cycling monitor's opened at their first sizes (480 × 300, and
+    480 × 490 with the chat part), drawn and captured; the demo's
+    viewers linked (protocol 5) and ended, as before, for want of a
+    graphics card. (Each window's interface, its fonts and icons, is
+    made when it opens: about half a second each in this unoptimised
+    build, one after the other.)
+    **Not run here:** a viewer that sends real pictures or says a real
+    line (no graphics card: the demo's viewers link and end), and
+    nothing of Win32. Nothing in this checkpoint is Windows-only code:
+    the windows are winit's (`with_active`, `set_window_level`,
+    `request_inner_size`), as the panels' and the compact window's.
+  - **To verify on Windows:**
+    1. open a monitor from the bar's menu and from a card: its window
+       comes in front, compact, with its name, the picture within a
+       second or two; its title in the taskbar is "<name> — Monitor";
+       the picture senses nothing;
+    2. **Switch** in a monitor's window, then by hotkey, by the bar and
+       by a click in a viewer: the window stays where it is and shows
+       the character that was in front; nothing flashes, closes or opens;
+       with "Open all inactive monitors" and five characters, every
+       switch leaves four pictures, never the active one's;
+    3. **Pin**: above a full-screen-size viewer, and above the other
+       monitors; the two looks of the button; kept across a restart;
+    4. **Options**: each size (the window takes it), each rate, the
+       budget's note with two large monitors at 5 a second, "Use this
+       size and rate as monitor defaults", then open another monitor;
+    5. **Chat** in a monitor: a line typed there is said once by that
+       character, in nearby chat and in an IM; a restricted character
+       (RLVa `@sendchat=n`) refuses it and the text comes back; a line
+       typed in the shared chat for that character shows in the
+       monitor's box; the IME (Japanese) composes in the monitor's box;
+       unread counts fall only while that window has the keyboard;
+    6. **chips** with real conversations (a dozen IMs and groups):
+       names cut together with the whole name in the hover, two rows then
+       "+N" and its list, the cross (the conversation stays open in the
+       viewer, and comes back here with its next message), right-click
+       Pin / Unpin; the same in the shared chat;
+    7. **the cycling monitor**: each background character for 5 s,
+       previous / pause / next, its Switch; type in its box for longer
+       than a turn: it waits, the pause button is lit, the line is said
+       by the character shown, and the next turn comes a whole interval
+       later; with "Pause cycling while typing" off, the text stays with
+       its character;
+    8. minimise a monitor's window, cover it, open its options: that
+       viewer's log says `session monitor: off`, then `on` again; a busy
+       card (`AURORA_DEMO_BUSY_PAUSE`) still lowers the rate;
+    9. places: close the host and start it again, every monitor's window
+       is where it was, with its pin and chat part, without taking the
+       keyboard; unplug the screen one was on: it comes back on a
+       connected one; a window dragged between two screens of different
+       scale is redrawn sharp;
+    10. a `session-host.json` of before this checkpoint with monitors
+        open: each opens in its own window; nothing of the old Monitors
+        window is left.
+  - **Follow-ups, if the Windows test asks for them:** the monitors'
+    windows off the taskbar while the bar is docked (they would then be
+    reached from the bar's menu only); the options as a real menu in a
+    window of its own; New IM and Friends once the link can start a
+    conversation; pins kept beyond a login.
+
+### Checkpoint 10: the host's settings in one window
+
+- **The human's notes and decisions (2026-11-12)**, from Folderstorm
+  (C++)'s "Folderstorm Host Preferences" (a list of sections on the left:
+  Layout & theme, Character settings, Chats & notifications, Audio &
+  voice, Switching & monitors, Controls, Accessibility, Advanced, MCP
+  controller, Updates, Support), redesigned so that **no page is nearly
+  empty**: the host's settings are gathered in **one settings window**,
+  a list of sections on the left and a dense page on the right, no tabs
+  inside a section. It opens from the bar's cog menu (each of its
+  entries on its own section) and from the host's window.
+- **Sections** (in this order):
+  1. **Toolbar and windows**: where the bar is (docked / popped out),
+     the toolbar buttons' labels and the quick actions' labels (icons
+     only / text only / icon and text), the twelve quick actions (each
+     Unused, Character 1 to 5, Attention, Mute background sound, Voice
+     follows active), "Hide the host's window while the bar is shown",
+     "One taskbar button" (checkpoint 8), and "The characters share one
+     window place" (the stage, until now on the host's characters'
+     page).
+  2. **Characters**: a character chosen at the top, then its profile and
+     the name it is logged in as (shown), its alias and its colour
+     (checkpoint 7), its background mode (Warm / Economy), "Heard in the
+     background" (checkpoint 4), "Include in Attention" (new: off, its
+     questions are left out of the inbox and its count), its card's
+     position (moved up or down: it takes that number, for its hotkey and
+     its quick action; only between characters that have no viewer and
+     no monitor open, so that nothing running changes number), and its
+     **alerts while another character is active** (new, each on its
+     own): direct IMs, group chats, conferences, notifications (offers
+     shown as cards in a conversation), with "Preview" (the alert as it
+     sounds) and "Reset".
+  3. **Chat and Attention**:
+     - *shown in the shared chat and the monitors' chat*, for every
+       character: nearby chat, direct IMs, group chats, conferences,
+       viewer notifications (the viewer's and the grid's own lines). A
+       kind that is off is not in the chips nor in "All", its lines count
+       nowhere, and it is never read by being shown (it is not);
+     - *listed in Attention* (the inbox, which lists questions only, no
+       chats, by the human's answer): viewer notifications (friendship
+       and group offers, scripts' dialogs, links, calls, the rest),
+       teleport offers, permission requests, inventory offers; oldest or
+       newest first; "Open the inbox";
+     - *reading*: "Mark displayed chats read" (on: what a window that has
+       the keyboard shows is read, checkpoint 6's rule; off: nothing is
+       read by being shown) and "Auto-read the active character after N
+       seconds" (on, 60 s by default; 5 s to 1 hour): a character that
+       has been in front for that long has its conversations read in the
+       host (its viewer is told nothing: what it has unread is its own),
+       and so for as long as it stays in front.
+  4. **Sound and voice**: "Voice follows active", "Mute all background
+     sound" (checkpoint 8), "Alert when a background character gets a
+     message" (the host's alert, until now on the characters' page),
+     with its preview, and each character's "Heard in the background"
+     together.
+  5. **Monitors**: checkpoint 9's page (a new monitor's size and rate,
+     the shared budget's note, the cycling monitor, its interval, size
+     and rate, "Pause cycling while typing").
+  6. **Hotkeys**: the global hotkeys (checkpoint 4 and its follow-ups).
+  7. **Advanced**: open the settings folder, recover window positions
+     (every window of the host, a panel's, a monitor's, the bar's and
+     the settings' own, brought onto a connected screen, at the size it
+     has), show diagnostics (what the host knows of each character: its
+     phase, its health, its link, its monitor), and the icons' credits
+     (Tabler Icons, MIT licence, its text).
+  8. **Updates and support**: points to the viewer's own Preferences
+     (its "Language and updates" and "Privacy" pages, and its Help menu
+     to report a bug): one place for those settings, until the fork has
+     its own updater, crash reports and bug tracker (a line in
+     `folderstorm/FOLLOW-UPS.md`).
+- **Left out, by the human's decision:** the theme, the buttons'
+  spacing, "Character cards in Expanded mode", minimal host controls,
+  "Retry saving", session sets, "Stop managing", the chat-and-alerts
+  report, the viewer settings / session / local assistant tabs of a
+  character, next / previous attention and "Restore controls" hotkeys,
+  and the MCP controller (later, with the MCP session routing,
+  FEATURES 4.6). "Require pause to chat" is checkpoint 9's "Pause
+  cycling while typing", on the Monitors section.
+- **What the window replaces** (nothing is lost, each setting has its
+  one place): checkpoint 8's "Bar and quick actions" page and checkpoint
+  9's "Monitor settings" page of the characters' panel, its "Hotkeys"
+  page, the stage's and the alert's boxes on the characters' page, and
+  the alias and colour editor opened on a card (the card's palette
+  button opens the Characters section on that character). The cards keep
+  their quick boxes (Economy, heard in the background, monitor). The
+  bar's menus are unchanged; their entries open the settings window on
+  the matching section (the link does not change: protocol 5).
+- **Settings** (`session-host.json`; absent fields read as the defaults,
+  everything checked when the file is read):
+  - per character: `attention` (included, true) and `alerts` (`ims`,
+    `groups`, `conferences`, `notifications`, all true);
+  - `chat_shown` (`nearby`, `ims`, `groups`, `conferences`, `notices`,
+    all true), `reading` (`mark_displayed` true, `auto_read` true,
+    `auto_read_after_s` 60), `attention` (`notices`, `teleports`,
+    `permissions`, `inventory`, all true; `newest_first` false),
+    `settings_window` (its place and the last section).
+  - **Migration:** a file of checkpoint 9 (or before) reads as it is,
+    with these defaults: everything shown and listed as before, every
+    character in Attention, the alert of each kind as the one alert was,
+    displayed chats read as before; auto-read is the one new behaviour.
+- **Link: unchanged** (protocol 5). The bar's count of Attention is what
+  the inbox lists.
+- **Upstream hooks: none planned.** Fork files, the locales and
+  `docs/TESTING.md`.
+- **Not built, by decision or for want of a small way:** a WAV of one's
+  own for the alerts and an alert volume (the host's alert is the
+  system's sound, `MessageBeep`, which has no volume and plays no file:
+  both need the viewer's sound engine in the host, a checkpoint of its
+  own); a free colour (the palette of checkpoint 7 stays).
+- **Acceptance:**
+  - every setting of checkpoints 4 to 9 is in the window, once, and
+    nowhere else but the cards' quick boxes and the bar's toggles;
+  - each section is readable at 520 and at 1000 points wide, without a
+    page that is nearly empty;
+  - a file of checkpoint 9 reads with nothing lost;
+  - a kind of chat that is off is neither shown nor read; a question of
+    a kind that is off, or of a character left out, is neither listed
+    nor counted; the active character's chats are read after the delay,
+    in the host only;
+  - recovering the windows moves no character's window (R2).
+- **Demo:** `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (with
+  `AURORA_DEMO_SESSION_HOST`): the settings window opens on that section
+  (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`,
+  `advanced`, `updates`).
+
+- **As built (branch `claude/session-checkpoint-10`, on top of
+  checkpoint 9):** the rules are pure and tested in
+  `crates/folderstorm-session` (`settings`: the sections and their names,
+  what the chats show, what Attention lists, the alerts by kind, reading
+  and the auto-read's count; `chat`: a kind not shown is in no chip, not
+  in "All", counts nowhere and is never read, "Mark displayed chats read"
+  off, the host-only read, the alert that says its kind; `host`: the new
+  settings saved and read, a file of checkpoint 9, `attention_lists`,
+  `alert_wanted`, the cards' swap, in `host/settings_tests.rs`). In the
+  viewer: `host/ui/settings.rs` (the window, its list and its pages, the
+  Characters, Chat and Attention, Sound and voice, Advanced and Updates
+  sections), with the sections that were pages drawn by their own files
+  (`ui/bar.rs` `toolbar_settings`, `ui/comfort.rs` `hotkeys_settings`,
+  `ui/monitor_windows.rs` `monitors_settings`, `ui/identity.rs`
+  `identity_fields`); `host.rs` applies the chats' and reading's rules at
+  each tick, lists in the inbox only what Attention lists, and sounds an
+  alert by the character's choice.
+  - **Upstream hooks (new): none.** The locales and `docs/TESTING.md`
+    get lines.
+  - **Decisions taken while building.**
+    - *Eight sections, no tabs.* "Updates" and "Support" are one section
+      (two lines each would have been two near-empty pages); "Sound and
+      voice" also lists each character's "Heard in the background", so
+      that what is heard of everyone is seen at once (the same box as
+      the Characters section's and the cards'). Groups stand in two
+      columns from 640 points of page, one under the other below.
+    - *The window is the host's, separate from its own window*, so that
+      it opens while the host's window is hidden behind a docked bar, and
+      the bar's entries do not bring the host's window back. It opens in
+      front when asked for, and its place and last section are kept.
+    - *The card position swaps two cards* (move up / move down): each
+      character takes the other's number, its hotkey and its quick
+      action with it. Only between characters that have no viewer and no
+      monitor open, and each place keeps its own count of launches (what
+      comes late from an earlier launch of a place is still dropped by
+      its number). The host's memory of the chat and the inbox of both is
+      cleared, as when a character is removed.
+    - *A character left out of Attention, or a kind left out*, is not
+      given to the inbox at all: the inbox, its count on the bar and in
+      the panels' titles, and the questions beside a character's chat
+      all follow. A question that comes back into the list is new to the
+      inbox (its age counts again).
+    - *"Viewer notifications" in the chats* are the viewer's and the
+      grid's own lines (`LineKind::System`); hidden, they leave "All" and
+      each conversation, and do not count as unread (they never did).
+    - *The alert by kind*: a conversation's line of someone else sounds
+      by its kind (IM, group, conference), an offer shown as a card by
+      "Notifications". A kind the chats do not show never alerts. The
+      taskbar's flash follows the same choice; the sound also needs the
+      host's alert on (Sound and voice), as before.
+    - *Preview* plays the host's alert as it sounds: the system's
+      notification sound, on Windows (nothing elsewhere, as the alert).
+    - *Recover window positions* moves a window of the host only when no
+      connected screen shows enough of its top edge to catch it
+      (`panels::on_screen`, the rule a saved place is read with), and
+      says how many moved. It never resizes one, and never touches a
+      character's window (R2).
+    - *Show diagnostics* is a block in the Advanced section (the build,
+      the link's protocol, each character's phase, health, screen,
+      launch and monitor), not a window: it is for a report, copied by
+      hand.
+  - **Found and fixed on the way:** starting a character's viewer again
+    dropped its colour, its alias and its monitor's window
+    (`Desk::launch` rebuilt the slot from its profile and kept only its
+    sound and monitor); they are kept now, as are this checkpoint's
+    settings. The "Settings…" button stays under the cards with five
+    characters (the hotkeys' button was hidden with the field that adds
+    one).
+  - **Removed:** the characters' panel's "Hotkeys…", "Bar and quick
+    actions…" and "Monitor settings…" buttons and pages (one "Settings…"
+    button), the stage's and the alert's boxes of the characters' page,
+    the alias and colour editor under a card (its palette button opens
+    the Characters section).
+  - **Not done:** a WAV of one's own and an alert volume (above); the
+    MCP controller's page (later).
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>`
+    (`docs/TESTING.md`); `AURORA_SESSION_HOST_CAPTURE` also writes the
+    settings window (`<file>-settings.png`).
+  - **Checked here:** the rules' tests; every section drawn by the
+    processor's painter without a window at 520 × 700 and 1000 × 760,
+    and the pictures looked at; what each section holds; the ways to the
+    window (the bar's entries, the card's palette, "Settings…"); a kind
+    of chat and of question turned off, a character left out, newest
+    first, auto-read after 60 s in the host only, an alert by kind, two
+    cards swapped and a running one refused, the diagnostics and the
+    licence. **Not run here:** the real window under Windows.
+  - **To verify on Windows:**
+    1. the window from "Settings…", from each entry of the bar's cog
+       menu (docked, the host's window hidden: it stays hidden) and from
+       a card's palette; its place and section kept across a restart;
+    2. each section at the first size and at the least (480 × 360);
+    3. Characters: alias and colour follow on the card, the bar and the
+       chat at once; Warm / Economy; "Include in Attention" off with a
+       real teleport offer to that character: not in the inbox, not in
+       the bar's count; Move up / Move down with two characters not
+       started, then their hotkeys; the alerts by kind with real IMs,
+       group lines and an inventory offer to a background character;
+       Preview;
+    4. Chat and Attention: each kind off and on in the shared chat and a
+       monitor's chat; each kind of question; newest first; "Mark
+       displayed chats read" off; auto-read after 60 s (the counts in the
+       host clear, the viewer's own unread stays until read there);
+    5. Advanced: "Open the settings folder" (Explorer opens on it);
+       "Recover window positions" after moving a monitor's window and a
+       panel's off screen (or unplugging a screen); diagnostics; the
+       licence;
+    6. a `session-host.json` of checkpoint 9: everything as it was.
 
 ## 16. Verified in code vs inferred
 

@@ -5,6 +5,7 @@
 //! probes, so the viewer does not list them as an assistant's activity.
 
 use crate::connect::{self, NotFound};
+use folderstorm_mcp_bridge::binding;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -14,10 +15,11 @@ pub fn run(dir: Option<&Path>, pid: Option<u32>) -> (Value, bool) {
         "ok": false,
         "product": folderstorm_brand::PRODUCT,
         "sidecar_version": env!("CARGO_PKG_VERSION"),
+        "sidecar_capabilities": binding::capabilities(),
         "discovery_dir": dir.map(|d| d.display().to_string()),
     });
     let (client, found_pid) = match connect::find(dir, pid, true) {
-        Ok(found) => found,
+        Ok(found) => (found.client, found.pid),
         Err(e) => {
             report["stage"] = json!(match e {
                 NotFound::NoFolder | NotFound::NoFile => "discovery",
@@ -35,6 +37,12 @@ pub fn run(dir: Option<&Path>, pid: Option<u32>) -> (Value, bool) {
             report["api"] = json!(health.api);
             report["viewer_version"] = json!(health.version);
             report["read_allowed"] = json!(health.read_allowed);
+            let capabilities = health.capabilities();
+            // what this sidecar knows and the viewer lacks: those tools
+            // answer `unsupported` until the viewer is updated
+            report["missing_capabilities"] = json!(binding::missing(&capabilities));
+            report["viewer_capabilities"] = json!(capabilities);
+            report["login_bound"] = json!(health.viewer_session.is_some());
         }
         Err(e) => {
             report["stage"] = json!("health");

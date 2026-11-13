@@ -10,14 +10,20 @@
 //! monitors each in a window of their own) in `ui/panels.rs`, checkpoint
 //! 7's in `ui/inbox.rs` (the attention inbox), `ui/identity.rs` (a
 //! character's alias and colour) and `ui/condensed.rs` (one line per
-//! character).
+//! character), checkpoint 8's in `ui/bar.rs` (the bar's compact window, its
+//! page, and the host's own window hiding while a bar is on screen),
+//! checkpoint 9's in `ui/monitor_windows.rs` (each monitor in a window of
+//! its own, the cycling monitor, and the monitors' page).
 
+mod bar;
 mod comfort;
 mod condensed;
 mod identity;
 mod inbox;
+mod monitor_windows;
 mod monitors;
 mod panels;
+mod settings;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
@@ -32,6 +38,7 @@ use ::folderstorm_session::panels::Panel;
 use ::folderstorm_session::profile::{self, NameError};
 use aurora_i18n::tr;
 use egui::{RichText, Vec2};
+use monitor_windows::Seat;
 use panels::{Look, View, Which};
 use std::{
     num::NonZeroU32,
@@ -58,6 +65,12 @@ pub fn run(mut host: Host) -> anyhow::Result<()> {
     host.comfort.hotkeys = super::hotkeys::Registrar::install(&mut builder);
     host.apply_hotkeys();
     let event_loop = builder.build()?;
+    // (checkpoint 8: a click on a viewer's bar is heard at once, not at
+    // the window's next look at its viewers)
+    let proxy = event_loop.create_proxy();
+    super::process::set_waker(move || {
+        let _ = proxy.send_event(());
+    });
     let settings = crate::settings::Settings::load();
     // (drawn on events and ticks: the system font scan is waited for here)
     fonts::fallback::wait();
@@ -117,6 +130,13 @@ struct Window_ {
     identity: identity::Editor,
     /// The count the inbox's own window has in its title.
     inbox_titled: u32,
+    /// Checkpoint 8: the bar's compact window, and the host's own window
+    /// hidden while a bar is on screen.
+    bar: bar::Bar,
+    /// Checkpoint 9: each monitor's own window, and the cycling monitor.
+    monitors: monitor_windows::Monitors,
+    /// Checkpoint 10: the settings' window.
+    settings: settings::Settings,
 }
 
 impl Window_ {
@@ -147,6 +167,9 @@ impl Window_ {
             chat_page: false,
             identity: Default::default(),
             inbox_titled: 0,
+            bar: Default::default(),
+            monitors: Default::default(),
+            settings: Default::default(),
         }
     }
 }
@@ -194,9 +217,8 @@ enum Act {
     Monitor(usize, Option<::folderstorm_session::monitor::Spec>),
     /// Checkpoint 6: a panel leaves for its own window, or comes back.
     Panel(Panel, bool),
-    /// Checkpoint 7 (`ui/identity.rs`): a character's alias and colour
-    /// are chosen (None: no more), its colour, its alias.
-    EditIdentity(Option<usize>),
+    /// Checkpoint 7 (`ui/identity.rs`): a character's colour, its alias
+    /// (chosen in the settings' window since checkpoint 10).
     Colour(usize, ::folderstorm_session::identity::Colour),
     Alias(usize, String),
     /// Checkpoint 7 (`ui/condensed.rs`): one line per character, or the
@@ -208,6 +230,16 @@ enum Act {
     InboxDismiss(usize, u64),
     InboxDismissSlot(usize),
     InboxDismissAll,
+    /// Checkpoint 8 (`ui/bar.rs`): a click on the bar, from the host's
+    /// compact window or its page; a change of the bar's settings.
+    Bar(::folderstorm_session::bar::Request),
+    BarEdit(bar::Edit),
+    /// Checkpoint 9 (`ui/monitor_windows.rs`): a click in a monitor's
+    /// window, or on the monitors' page.
+    Monitors(monitor_windows::Act),
+    /// Checkpoint 10 (`ui/settings.rs`): a click in the settings' window,
+    /// or a way to it.
+    Settings(settings::Act),
 }
 
 impl Window_ {
@@ -237,10 +269,30 @@ impl Window_ {
                 egui::CentralPanel::default().frame(frame).show(ui, |ui| match panel {
                     Panel::Chat => self.chat_part(ui, now, &mut acts),
                     Panel::Controls => self.characters(ui, now, &mut acts),
-                    Panel::Monitors => self.monitors_window(ui, &p, now, &mut acts),
                     Panel::Inbox => self.inbox_window(ui, &p, now, &mut acts),
                 });
                 panel == Panel::Chat
+            }
+            Which::Bar => {
+                // the compact window: the row, and nothing else
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::new().fill(p.panel))
+                    .show(ui, |ui| self.bar_window(ui, &mut acts));
+                false
+            }
+            Which::Monitor(_) | Which::Cycling => {
+                // a monitor's window: its header, its picture, its chat
+                if let Some(seat) = Seat::of(self.drawing) {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::new().fill(p.panel))
+                        .show(ui, |ui| self.monitor_window(ui, seat, now, &mut acts));
+                }
+                false
+            }
+            Which::Settings => {
+                // (checkpoint 10) the sections' list, then a page
+                self.settings_window(ui, &mut acts);
+                false
             }
         };
         if self.home(Panel::Chat) == self.drawing {
@@ -366,21 +418,8 @@ impl Window_ {
         ui.add_space(2.0);
         ui.label(RichText::new(tr!("folderstorm-host-intro")).color(p.muted));
         ui.add_space(10.0);
-        let mut stage = self.host.desk.stage();
-        if widgets::checkbox(ui, &p, &mut stage, tr!("folderstorm-host-stage"))
-            .on_hover_text(tr!("folderstorm-host-stage-help"))
-            .changed()
-        {
-            acts.push(Act::Stage(stage));
-        }
-        let mut sound = self.host.desk.chat_sound();
-        if widgets::checkbox(ui, &p, &mut sound, tr!("folderstorm-chat-sound"))
-            .on_hover_text(tr!("folderstorm-chat-sound-help"))
-            .changed()
-        {
-            acts.push(Act::ChatSound(sound));
-        }
-        ui.add_space(10.0);
+        // (checkpoint 10: the stage's and the alert's boxes are in the
+        // settings' window)
         self.quick_strip(ui, &p, acts);
         egui::ScrollArea::vertical()
             .id_salt("folderstorm-host-characters")
@@ -402,8 +441,7 @@ impl Window_ {
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 self.character(ui, &p, *slot, state, now, quitting, acts);
-                                self.identity_editor(ui, &p, *slot, state, acts);
-                                self.monitor_panel(ui, &p, *slot, state, now, acts);
+                                self.monitor_panel(ui, &p, *slot, state, acts);
                             });
                     });
                     ui.add_space(8.0);
@@ -433,6 +471,9 @@ impl Window_ {
             if let Some(error) = &self.add_error {
                 ui.label(RichText::new(error).color(p.danger));
             }
+        }
+        if !quitting {
+            // (checkpoint 10: "Settings…" is there with five characters too)
             self.comfort_buttons(ui, &p, acts);
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
@@ -469,7 +510,7 @@ impl Window_ {
             // (checkpoint 7: its alias and colour)
             self.identity_button(ui, p, slot, acts);
         });
-        ui.label(RichText::new(status_line(state)).color(p.muted));
+        ui.label(RichText::new(status_now(&self.host.desk, slot, state, now)).color(p.muted));
         for (text, serious) in warnings(&self.host.desk, slot, state, now) {
             ui.label(RichText::new(text).color(if serious { p.danger } else { p.amber }));
         }
@@ -671,7 +712,6 @@ impl Window_ {
                 // (its window opens or closes before the next wait:
                 // `sync_panes`)
                 Act::Panel(panel, out) => self.host.desk.set_panel_out(panel, out),
-                Act::EditIdentity(slot) => self.identity_edit(slot),
                 Act::Colour(slot, colour) => self.host.desk.set_colour(slot, colour),
                 Act::Alias(slot, text) => self.identity_alias(slot, &text),
                 Act::InboxDismiss(slot, id) => {
@@ -683,6 +723,10 @@ impl Window_ {
                 Act::InboxDismissAll => {
                     self.host.inbox.dismiss_all();
                 }
+                Act::Bar(request) => self.bar_apply(request, now),
+                Act::BarEdit(edit) => self.bar_edit(edit),
+                Act::Monitors(act) => self.monitors_apply(act, now),
+                Act::Settings(act) => self.settings_apply(act),
                 Act::Condensed(condensed) => {
                     self.host.desk.set_condensed(condensed);
                     // (the cards' pages have no way back from the lines)
@@ -694,6 +738,10 @@ impl Window_ {
             }
         }
         self.host.tick(now);
+        // (checkpoint 9: a monitor whose character came to the front
+        // shows the one that left it, in the same window; its window
+        // follows before the next wait, `sync_monitors`, never here: this
+        // may be the very frame of that window, its pixels still out)
         // (nothing left to quit: the question goes)
         self.quit_asked &= self.host.desk.live() > 0;
         self.redraw_all();
@@ -786,6 +834,10 @@ impl Window_ {
         if let Some(view) = self.view_mut(which) {
             view.redraw = again || !acts.is_empty();
         }
+        if which == Which::Bar {
+            // the compact window makes room for its menus and hovers
+            self.bar_fit(&context, &window);
+        }
         if !acts.is_empty() {
             self.apply(acts, Instant::now());
         }
@@ -796,11 +848,16 @@ impl Window_ {
 /// Where the demo's capture of a window goes: the file named for the
 /// host's own window, `<name>-<panel>.<ext>` for a panel's.
 fn capture_path(path: &std::path::Path, which: Which) -> std::path::PathBuf {
-    let Which::Pane(panel) = which else {
-        return path.to_owned();
+    let key = match which {
+        Which::Main => return path.to_owned(),
+        Which::Pane(panel) => panel.key().to_owned(),
+        Which::Bar => "bar".to_owned(),
+        Which::Monitor(slot) => Seat::Slot(slot).key(),
+        Which::Cycling => Seat::Cycling.key(),
+        Which::Settings => "settings".to_owned(),
     };
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let mut name = format!("{stem}-{}", panel.key());
+    let mut name = format!("{stem}-{key}");
     if let Some(extension) = path.extension() {
         name.push('.');
         name.push_str(&extension.to_string_lossy());
@@ -848,6 +905,17 @@ fn status_line(slot: &Slot) -> String {
                 }
             },
         },
+    }
+}
+
+/// Where a character is, with how long its viewer has been starting: a
+/// start that takes a while counts up instead of looking stuck (the
+/// viewer's own splash shows on screen meanwhile).
+fn status_now(desk: &::folderstorm_session::host::Desk, slot: usize, state: &Slot, now: Instant) -> String {
+    let line = status_line(state);
+    match desk.starting_for(slot, now).map(|d| d.as_secs()) {
+        Some(seconds) if seconds > 0 => format!("{line} · {}", tr!("folderstorm-host-starting-for", seconds = seconds)),
+        _ => line,
     }
 }
 
@@ -912,7 +980,13 @@ impl ApplicationHandler for Window_ {
         match made {
             // the panels that were out when the host closed, after the
             // host's own window and without taking the keyboard from it
-            Ok(()) => self.sync_panes(event_loop),
+            Ok(()) => {
+                self.sync_panes(event_loop);
+                // (checkpoint 10, demo only) the settings, on a section
+                if let Some(section) = self.host.demo_settings.take() {
+                    self.open_settings(section, None);
+                }
+            }
             Err(error) => {
                 self.error = Some(error.to_string());
                 event_loop.exit();
@@ -926,7 +1000,10 @@ impl ApplicationHandler for Window_ {
         };
         match which {
             Which::Main if matches!(event, WindowEvent::CloseRequested) => {
-                if self.host.desk.live() == 0 {
+                if self.bar_closes_host() {
+                    // (checkpoint 8) a bar brings it back: it only hides
+                    self.redraw_all();
+                } else if self.host.desk.live() == 0 {
                     event_loop.exit();
                 } else {
                     // characters run: the user says what becomes of them
@@ -939,6 +1016,12 @@ impl ApplicationHandler for Window_ {
             }
             // a panel's window closed docks the panel: the host stays
             Which::Pane(panel) if self.pane_event(panel, &event) => return,
+            // the compact window closed docks the bar: the host stays
+            Which::Bar if self.bar_event(&event) => return,
+            // a monitor's window closed closes that monitor: the host stays
+            Which::Monitor(_) | Which::Cycling if Seat::of(which).is_some_and(|seat| self.monitor_event(seat, &event)) => return,
+            // the settings' window closed: nothing else
+            Which::Settings if self.settings_event(&event) => return,
             _ => {}
         }
         if let WindowEvent::Focused(focused) = event
@@ -978,15 +1061,48 @@ impl ApplicationHandler for Window_ {
                     log::warn!("session host: {}'s window is not drawn ({error}): docked", panel.key());
                     self.host.desk.panel_closed(panel);
                 }
+                Which::Bar => {
+                    // nor the bar's: it goes back into the viewers
+                    log::warn!("session host: the bar's window is not drawn ({error}): docked");
+                    self.host
+                        .desk
+                        .edit_bar(|bar| bar.placement = ::folderstorm_session::bar::Placement::Docked);
+                }
+                Which::Monitor(_) | Which::Cycling => {
+                    // nor a monitor's: that monitor closes
+                    if let Some(seat) = Seat::of(which) {
+                        self.monitor_failed(seat, &error);
+                    }
+                }
+                Which::Settings => {
+                    // nor the settings': they close
+                    log::warn!("session host: the settings' window is not drawn ({error}): closed");
+                    self.settings_event(&WindowEvent::CloseRequested);
+                }
             }
         }
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         self.main.detach();
-        for pane in self.panes.iter_mut().flatten() {
+        for pane in self
+            .panes
+            .iter_mut()
+            .flatten()
+            .chain(&mut self.bar.view)
+            .chain(&mut self.settings.view)
+        {
             pane.detach();
         }
+        for view in self.monitors.views_mut() {
+            view.detach();
+        }
+    }
+
+    /// A viewer's reader thread has something the window should not leave
+    /// waiting (a click on that viewer's bar): looked at now.
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        self.next_tick = Instant::now();
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -999,6 +1115,10 @@ impl ApplicationHandler for Window_ {
         if now >= self.next_tick {
             self.monitors_watch(now);
             self.host.tick(now);
+            // (checkpoint 8) what the viewers' bars asked for since
+            if self.bar_pump(now) {
+                self.host.tick(now);
+            }
             let tick = if self.host.desk.live() > 0 { TICK } else { IDLE_TICK };
             self.next_tick = now + tick;
             self.redraw_all();
@@ -1022,8 +1142,20 @@ impl ApplicationHandler for Window_ {
         }
         // a panel popped out or docked back gets or loses its window
         self.sync_panes(event_loop);
+        // (checkpoint 9) and so does each monitor that opened or closed
+        self.sync_monitors(event_loop);
+        // (checkpoint 10) and the settings' window
+        self.sync_settings(event_loop);
+        // (checkpoint 8) and the bar's compact window; the host's own
+        // window hides or shows; what a bar asked for comes forward
+        self.sync_bar(event_loop);
         self.inbox_retitle();
-        for view in std::iter::once(&mut self.main).chain(self.panes.iter_mut().flatten()) {
+        for view in std::iter::once(&mut self.main)
+            .chain(self.panes.iter_mut().flatten())
+            .chain(&mut self.bar.view)
+            .chain(self.monitors.views_mut())
+            .chain(&mut self.settings.view)
+        {
             if std::mem::take(&mut view.redraw)
                 && let Some(window) = &view.window
             {
@@ -1049,8 +1181,17 @@ mod tests {
 
     /// The same for any of the host's windows.
     pub(super) fn draw_in(app: &mut Window_, which: Which, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
+        draw_with(app, which, width, height, Vec::new())
+    }
+
+    /// The same, with what the user does in that frame (a click, a key, a
+    /// text). What the frame asks of the window (its `Act`s) is not carried
+    /// out: the tests do that themselves.
+    pub(super) fn draw_with(app: &mut Window_, which: Which, width: u32, height: u32, events: Vec<egui::Event>) -> (Vec<String>, Vec<u32>) {
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32))),
+            events,
+            focused: true,
             ..Default::default()
         };
         let view = app.view_mut(which).expect("the window's view");
@@ -1118,9 +1259,15 @@ mod tests {
             std::path::Path::new("shots/host-chat.png")
         );
         assert_eq!(
-            capture_path(std::path::Path::new("host"), Which::Pane(Panel::Monitors)),
-            std::path::Path::new("host-monitors")
+            capture_path(std::path::Path::new("host"), Which::Pane(Panel::Inbox)),
+            std::path::Path::new("host-inbox")
         );
+        // each monitor's window, and the cycling monitor's
+        assert_eq!(
+            capture_path(path, Which::Monitor(1)),
+            std::path::Path::new("shots/host-monitor-2.png")
+        );
+        assert_eq!(capture_path(path, Which::Cycling), std::path::Path::new("shots/host-cycling.png"));
     }
 
     #[test]

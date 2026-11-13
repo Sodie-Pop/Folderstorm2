@@ -4,8 +4,9 @@
 //! fitted to the theme, what an alias may be) are the
 //! `folderstorm-session` crate's `identity`; this file draws them.
 //!
-//! Neither is ever told to a viewer: they are read from the desk and
-//! painted here, nothing else.
+//! They are read from the desk and painted here, nothing else. (Since
+//! checkpoint 8 the desk also puts them in the bar's state, which the
+//! viewers this host manages draw their bar from: `bar.rs`.)
 
 use crate::theme::Palette;
 use ::folderstorm_session::host::Slot;
@@ -37,15 +38,12 @@ impl Face {
 
 /// The avatar's name once logged in, the profile's before.
 pub(super) fn real_name(slot: &Slot) -> String {
-    match slot.status.as_ref().filter(|s| !s.name.is_empty()) {
-        Some(status) => status.name.clone(),
-        None => slot.profile.shown().to_owned(),
-    }
+    slot.real_name().to_owned()
 }
 
 /// The name a character is shown by: its alias when it has one.
 pub(super) fn shown_name(slot: &Slot) -> String {
-    slot.alias.clone().unwrap_or_else(|| real_name(slot))
+    slot.shown_name().to_owned()
 }
 
 pub(super) fn face(p: &Palette, slot: &Slot) -> Face {

@@ -4,7 +4,7 @@
 //! `tools/list`, `tools/call`. Notifications get no answer.
 
 use folderstorm_mcp_bridge::ToolError;
-use folderstorm_mcp_bridge::protocol::TOOLS;
+use folderstorm_mcp_bridge::protocol;
 use serde_json::{Value, json};
 
 /// The protocol revisions this server speaks, newest first; a client
@@ -113,9 +113,16 @@ impl<B: Backend> Server<B> {
             _ => return Err("`arguments` must be an object".into()),
         };
         Ok(match self.backend.call(name, arguments) {
-            Ok(value) => {
+            Ok(mut value) => {
+                // a picture goes as MCP image content, the rest as text
+                let image = take_image(&mut value);
                 let text = serde_json::to_string_pretty(&value).unwrap_or_default();
-                let mut out = json!({"content": [{"type": "text", "text": text}], "isError": false});
+                let mut content = Vec::new();
+                if let Some((mime, data)) = image {
+                    content.push(json!({"type": "image", "data": data, "mimeType": mime}));
+                }
+                content.push(json!({"type": "text", "text": text}));
+                let mut out = json!({"content": content, "isError": false});
                 if value.is_object() {
                     out["structuredContent"] = value;
                 }
@@ -126,6 +133,16 @@ impl<B: Backend> Server<B> {
     }
 }
 
+/// The picture of a result (`protocol::IMAGE_KEY`: its MIME type and its
+/// base64 data), taken out of it. Only JPEG and PNG are passed on.
+fn take_image(value: &mut Value) -> Option<(String, String)> {
+    let object = value.as_object_mut()?;
+    let image = object.remove(folderstorm_mcp_bridge::protocol::IMAGE_KEY)?;
+    let mime = image["mime_type"].as_str().filter(|m| matches!(*m, "image/jpeg" | "image/png"))?;
+    let data = image["data"].as_str().filter(|d| !d.is_empty())?;
+    Some((mime.to_owned(), data.to_owned()))
+}
+
 fn initialize(params: &Value) -> Value {
     let asked = params["protocolVersion"].as_str().unwrap_or_default();
     let version = PROTOCOL_VERSIONS.iter().find(|v| **v == asked).unwrap_or(&PROTOCOL_VERSIONS[0]);
@@ -134,15 +151,14 @@ fn initialize(params: &Value) -> Value {
         "capabilities": {"tools": {"listChanged": false}},
         "serverInfo": {"name": "folderstorm-mcp", "title": format!("{} local assistant", folderstorm_brand::PRODUCT), "version": env!("CARGO_PKG_VERSION")},
         "instructions": format!(
-            "Reads and organises the inventory and outfits of the {} viewer running on this computer. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake.",
+            "Reads and organises the inventory and outfits of the {} viewer running on this computer, moves its camera and takes pictures. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake before a picture. Frame the avatar with camera_preset or camera_shot, then camera_snapshot returns the picture; inventory_snapshot_thumbnail sets it as an outfit's or folder's picture. Calls are bound to the login the viewer was on at the first call: after a logout, another login or a viewer restart a call answers session_changed and is not run; call viewer_status and look again before retrying. A tool that answers unsupported needs a newer viewer.",
             folderstorm_brand::PRODUCT
         )
     })
 }
 
 fn tools_list() -> Value {
-    let tools: Vec<Value> = TOOLS
-        .iter()
+    let tools: Vec<Value> = protocol::all()
         .map(|t| {
             json!({
                 "name": t.name,
@@ -175,6 +191,8 @@ mod tests {
             self.0.push(tool.to_owned());
             if tool == "worn_items" {
                 Err(ToolError::new(ErrorCode::PermissionDenied, "not allowed"))
+            } else if tool == "camera_snapshot" {
+                Ok(json!({"width": 2, "height": 1, "image": {"mime_type": arguments["mime"].clone(), "data": "AAAA"}}))
             } else {
                 Ok(json!({"tool": tool, "arguments": arguments}))
             }
@@ -241,7 +259,7 @@ mod tests {
             .iter()
             .map(|t| t["name"].clone())
             .collect();
-        assert_eq!(names.len(), TOOLS.len());
+        assert_eq!(names.len(), protocol::all().count());
         for name in [
             "inventory_search",
             "inventory_move",
@@ -252,11 +270,21 @@ mod tests {
             assert!(names.contains(&json!(name)), "{name}");
         }
         assert!(!names.contains(&json!("inventory_delete")));
+        for name in [
+            "camera_preset",
+            "camera_shot",
+            "camera_reset",
+            "camera_snapshot",
+            "inventory_snapshot_thumbnail",
+        ] {
+            assert!(names.contains(&json!(name)), "{name}");
+        }
         let tools = a["result"]["tools"].as_array().expect("tools");
         let hint = |name: &str| tools.iter().find(|t| t["name"] == name).expect("listed")["annotations"]["readOnlyHint"].clone();
         assert_eq!(hint("inventory_search"), true);
         assert_eq!(hint("wait_for_bake"), true);
         assert_eq!(hint("inventory_rename"), false);
+        assert_eq!(hint("camera_preset"), false, "the camera moves");
         assert_eq!(a["result"]["tools"][0]["inputSchema"]["type"], "object");
     }
 
@@ -275,6 +303,31 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"viewer_status"}}"#,
         );
         assert_eq!(a["result"]["structuredContent"]["arguments"], json!({}));
+    }
+
+    #[test]
+    fn a_picture_is_image_content() {
+        let mut s = Server::new(Fake(Vec::new()));
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"camera_snapshot","arguments":{"mime":"image/jpeg"}}}"#,
+        );
+        let content = a["result"]["content"].as_array().expect("content");
+        assert_eq!(content[0], json!({"type": "image", "data": "AAAA", "mimeType": "image/jpeg"}));
+        assert_eq!(content[1]["type"], "text");
+        assert!(
+            !content[1]["text"].as_str().expect("text").contains("AAAA"),
+            "no base64 in the text"
+        );
+        assert_eq!(a["result"]["structuredContent"], json!({"width": 2, "height": 1}));
+        // anything but JPEG or PNG is not passed on as an image
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"camera_snapshot","arguments":{"mime":"text/html"}}}"#,
+        );
+        let content = a["result"]["content"].as_array().expect("content");
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "text");
     }
 
     #[test]
@@ -314,5 +367,74 @@ mod tests {
         assert_eq!(a["error"]["code"], INVALID_PARAMS);
         assert_eq!(ask(&mut s, r#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#)["result"], json!({}));
         assert!(s.backend.0.is_empty(), "nothing reached the viewer");
+    }
+
+    /// Folderstorm: phase 3, part 2 (inventory gaps).
+    #[test]
+    fn lists_the_inventory_gap_tools_with_their_hints() {
+        let mut s = Server::new(Fake(Vec::new()));
+        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+        let tools = a["result"]["tools"].as_array().expect("tools");
+        let hint = |name: &str| {
+            tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("{name} listed"))["annotations"]["readOnlyHint"].clone()
+        };
+        for read in [
+            "inventory_get_many",
+            "inventory_system_folder",
+            "inventory_types",
+            "inventory_protected_folders",
+            "inventory_changes",
+            "inventory_landmark",
+            "appearance_outfit_items",
+        ] {
+            assert_eq!(hint(read), true, "{read}");
+        }
+        for change in [
+            "inventory_create_item",
+            "inventory_set_favorite",
+            "inventory_batch_rename",
+            "inventory_set_thumbnail",
+        ] {
+            assert_eq!(hint(change), false, "{change}");
+        }
+        assert!(!tools.iter().any(|t| t["name"] == "inventory_next_owner_set"));
+        let search = tools.iter().find(|t| t["name"] == "inventory_search").expect("search");
+        assert!(search["inputSchema"]["properties"]["filter_links"].is_object());
+        // a call reaches the viewer like any other
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"inventory_types","arguments":{}}}"#,
+        );
+        assert_eq!(a["result"]["isError"], false);
+        assert_eq!(s.backend.0, vec!["inventory_types".to_owned()]);
+    }
+
+    /// Folderstorm: phase 3, part 3 (world observation).
+    #[test]
+    fn lists_the_world_observations_as_reads() {
+        let mut s = Server::new(Fake(Vec::new()));
+        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+        let tools = a["result"]["tools"].as_array().expect("tools");
+        for name in [
+            "world_location",
+            "world_parcel",
+            "world_nearby_avatars",
+            "world_nearby_objects",
+            "world_audio_sources",
+            "world_media_sources",
+        ] {
+            let tool = tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("{name} listed"));
+            assert_eq!(tool["annotations"]["readOnlyHint"], true, "{name}");
+            assert_eq!(tool["inputSchema"]["additionalProperties"], false, "{name}");
+        }
+        let avatars = tools.iter().find(|t| t["name"] == "world_nearby_avatars").expect("listed");
+        assert_eq!(avatars["inputSchema"]["properties"]["limit"]["maximum"], 100);
+        // a call reaches the viewer like any other
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"world_location","arguments":{}}}"#,
+        );
+        assert_eq!(a["result"]["isError"], false);
+        assert_eq!(s.backend.0, vec!["world_location".to_owned()]);
     }
 }

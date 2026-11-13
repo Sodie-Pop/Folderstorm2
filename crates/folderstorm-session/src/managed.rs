@@ -89,6 +89,13 @@ impl Managed {
         self.assignment.is_some_and(|a| a.sound_muted)
     }
 
+    /// The host asks this window off the taskbar and out of Alt-Tab while
+    /// it is behind (checkpoint 8). Never without a host: `bar::taskbar`
+    /// decides with what the window is doing.
+    pub fn off_taskbar(&self) -> bool {
+        self.linked && self.assignment.is_some_and(|a| a.off_taskbar)
+    }
+
     /// Voice may connect and transmit: always without a host; with one,
     /// only when its assignment says so.
     pub fn voice_allowed(&self) -> bool {
@@ -123,6 +130,7 @@ mod tests {
             standby: Standby::Warm,
             sound_muted: false,
             voice_allowed: true,
+            off_taskbar: false,
         }
     }
 
@@ -134,6 +142,7 @@ mod tests {
             standby: Standby::Economy,
             sound_muted: true,
             voice_allowed: false,
+            off_taskbar: false,
         }
     }
 
@@ -147,6 +156,27 @@ mod tests {
         assert!(!m.sound_muted());
         assert!(m.voice_allowed());
         assert_eq!(m.seq(), 0);
+    }
+
+    #[test]
+    fn the_taskbar_is_asked_only_by_a_host_that_is_there() {
+        let mut m = Managed::default();
+        assert!(!m.off_taskbar());
+        m.link();
+        assert!(!m.off_taskbar(), "nothing asked yet");
+        assert!(m.assign(Assignment {
+            off_taskbar: true,
+            ..background(1)
+        }));
+        assert!(m.off_taskbar());
+        assert!(m.assign(background(2)));
+        assert!(!m.off_taskbar());
+        assert!(m.assign(Assignment {
+            off_taskbar: true,
+            ..background(3)
+        }));
+        m.release();
+        assert!(!m.off_taskbar(), "the host is gone: as any window");
     }
 
     #[test]

@@ -34,6 +34,11 @@ impl Editor {
             *self = Self::default();
         }
     }
+
+    /// The character whose alias is being typed.
+    pub fn slot(&self) -> Option<usize> {
+        self.slot
+    }
 }
 
 pub(super) fn colour_name(colour: Colour) -> &'static str {
@@ -87,10 +92,12 @@ fn swatch(ui: &mut egui::Ui, p: &Palette, colour: Colour, chosen: bool) -> egui:
 impl Window_ {
     /// Beside a character's name: opens or closes its alias and colour
     /// (lit while they are open).
+    /// Checkpoint 10: the card's palette opens the settings window on
+    /// that character, where its alias and colour are chosen.
     pub(super) fn identity_button(&self, ui: &mut egui::Ui, p: &Palette, slot: usize, acts: &mut Vec<Act>) {
-        let open = self.identity.slot == Some(slot);
-        if widgets::icon_toggle_sized(ui, p, "palette-filled", tr!("folderstorm-identity-help"), open, 18.0) {
-            acts.push(Act::EditIdentity((!open).then_some(slot)));
+        if widgets::icon_toggle_sized(ui, p, "palette-filled", tr!("folderstorm-identity-help"), false, 18.0) {
+            let open = super::settings::Act::Open(::folderstorm_session::settings::Section::Characters, Some(slot));
+            acts.push(Act::Settings(open));
         }
     }
 
@@ -119,11 +126,9 @@ impl Window_ {
     }
 
     /// Under a character's row while "Alias and colour" is open.
-    pub(super) fn identity_editor(&mut self, ui: &mut egui::Ui, p: &Palette, slot: usize, state: &Slot, acts: &mut Vec<Act>) {
-        if self.identity.slot != Some(slot) {
-            return;
-        }
-        ui.add_space(6.0);
+    /// The character's alias and colour (checkpoint 10: in the settings
+    /// window's Characters section).
+    pub(super) fn identity_fields(&mut self, ui: &mut egui::Ui, p: &Palette, slot: usize, state: &Slot, acts: &mut Vec<Act>) {
         ui.label(RichText::new(tr!("folderstorm-identity")).strong().color(p.ink));
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(tr!("folderstorm-alias")).color(p.muted));
@@ -195,15 +200,25 @@ mod tests {
     }
 
     #[test]
-    fn the_editor_offers_the_palette_and_refuses_what_is_no_alias() {
+    fn the_settings_offer_the_palette_and_refuse_what_is_no_alias() {
+        use super::super::panels::Which;
+        use super::super::tests::draw_in;
+        use ::folderstorm_session::settings::Section;
         let now = std::time::Instant::now();
         let mut app = window(host());
         let (drawn, _) = draw(&mut app, 1120, 760);
-        assert!(!shows(&drawn, tr!("folderstorm-identity")));
-        assert!(!shows(&drawn, tr!("folderstorm-identity-note")));
-        app.apply(vec![Act::EditIdentity(Some(0))], now);
-        draw(&mut app, 1120, 900);
-        let (drawn, pixels) = draw(&mut app, 1120, 900);
+        assert!(
+            !shows(&drawn, tr!("folderstorm-identity-note")),
+            "the cards have no editor any more"
+        );
+        // the card's palette opens the settings on that character
+        app.apply(
+            vec![Act::Settings(super::super::settings::Act::Open(Section::Characters, Some(0)))],
+            now,
+        );
+        app.settings.view = Some(app.look.view());
+        draw_in(&mut app, Which::Settings, 1000, 900);
+        let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 900);
         assert!(
             shows(&drawn, tr!("folderstorm-alias")) && shows(&drawn, tr!("folderstorm-colour")),
             "{drawn:?}"
@@ -221,21 +236,19 @@ mod tests {
         // a text that is no alias: said, and nothing changes
         app.apply(vec![Act::Alias(0, "two\nlines".into())], now);
         assert_eq!(app.host.desk.slot(0).and_then(|s| s.alias.clone()), None);
-        let (drawn, _) = draw(&mut app, 1120, 900);
+        let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 900);
         assert!(shows(&drawn, tr!("folderstorm-alias-character")), "{drawn:?}");
         app.apply(vec![Act::Alias(0, "x".repeat(MAX_ALIAS + 1))], now);
-        let (drawn, _) = draw(&mut app, 1120, 900);
+        let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 900);
         assert!(shows(&drawn, &tr!("folderstorm-alias-too-long", max = MAX_ALIAS)), "{drawn:?}");
-        // a good one clears the error; closing the editor forgets the text
+        // a good one clears the error
         app.apply(vec![Act::Alias(0, "Main".into())], now);
-        let (drawn, _) = draw(&mut app, 1120, 900);
+        let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 900);
         assert!(!shows(&drawn, tr!("folderstorm-alias-character")));
         assert!(shows(&drawn, "Main"));
-        app.apply(vec![Act::EditIdentity(None)], now);
-        let (drawn, _) = draw(&mut app, 1120, 900);
-        assert!(!shows(&drawn, tr!("folderstorm-identity-note")));
-        // a character removed takes its editor with it
-        app.apply(vec![Act::EditIdentity(Some(1)), Act::Remove(1)], now);
+        // a character removed takes its typed alias with it
+        app.identity_edit(Some(1));
+        app.apply(vec![Act::Remove(1)], now);
         assert_eq!(app.identity.slot, None);
     }
 

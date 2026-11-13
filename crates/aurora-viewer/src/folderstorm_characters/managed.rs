@@ -180,6 +180,20 @@ impl Link {
         self.send(ToHost::Status(Box::new(status)))
     }
 
+    /// A click on the bar this viewer draws (checkpoint 8), for the host
+    /// to carry out; false when it was not queued (the user clicks again).
+    /// When the click shows another window of the session, that window may
+    /// take the foreground from this one.
+    pub fn request(&self, request: ::folderstorm_session::bar::Request) -> bool {
+        if !request.valid() {
+            return false;
+        }
+        if request.shows_a_window() {
+            super::foreground::allow_others();
+        }
+        self.send(ToHost::Bar(request))
+    }
+
     /// Queues anything for the host (chat lines, the answer to a line it
     /// asked for); false when the queue is full or the link is over: the
     /// caller keeps it and tries again, nothing is dropped here.
@@ -396,6 +410,7 @@ mod tests {
             standby: Standby::Warm,
             sound_muted: true,
             voice_allowed: false,
+            off_taskbar: false,
         }
     }
 

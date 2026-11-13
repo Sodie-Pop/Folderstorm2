@@ -62,6 +62,8 @@ fn ctx(inv: &Inventory) -> Ctx<'_> {
         inventory_locked: false,
         protected: HashSet::new(),
         outfit_points: HashMap::new(),
+        stage: Default::default(),
+        viewer_session: None,
     }
 }
 

@@ -139,17 +139,23 @@ impl Window_ {
         self.inbox_list(ui, p, now, room, acts);
     }
 
-    /// What waits, oldest first: the character, the question, its age
+    /// What waits, oldest first (or the latest first): the character, the question, its age
     /// and the way to that character's window.
     fn inbox_list(&self, ui: &mut egui::Ui, p: &Palette, now: Instant, room: f32, acts: &mut Vec<Act>) {
         let shown = self.faces();
         let inbox = &self.host.inbox;
+        let newest_first = self.host.desk.attention().newest_first;
         egui::ScrollArea::vertical()
             .id_salt("folderstorm-host-inbox-rows")
             .auto_shrink([false, true])
             .max_height(room)
             .show(ui, |ui| {
-                for waiting in inbox.waiting() {
+                // (checkpoint 10: or the latest first, as chosen)
+                let mut waiting: Vec<_> = inbox.waiting().iter().collect();
+                if newest_first {
+                    waiting.reverse();
+                }
+                for waiting in waiting {
                     let Some(face) = shown.get(waiting.slot).and_then(Option::as_ref) else {
                         continue;
                     };
