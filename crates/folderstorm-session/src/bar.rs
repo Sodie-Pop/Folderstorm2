@@ -185,6 +185,10 @@ pub struct Config {
     pub one_taskbar_button: bool,
     /// The host's own window hides while a bar is on screen.
     pub hide_host: bool,
+    /// In a viewer with a custom world viewport, the docked bar spans
+    /// the whole window; off (the default), it stays over the world
+    /// viewport. Without a custom viewport it spans the window either way.
+    pub span_window: bool,
 }
 
 impl Default for Config {
@@ -203,6 +207,7 @@ impl Default for Config {
             toolbar_labels: LabelMode::IconOnly,
             one_taskbar_button: true,
             hide_host: true,
+            span_window: false,
         }
     }
 }
@@ -318,6 +323,11 @@ pub struct State {
     pub quick: Vec<QuickAction>,
     pub quick_labels: LabelMode,
     pub toolbar_labels: LabelMode,
+    /// [`Config::span_window`]. (Absent, as from a host before it: over
+    /// the world viewport. Host and viewers are one binary, so no new
+    /// protocol number.)
+    #[serde(default)]
+    pub span_window: bool,
 }
 
 /// A quick action as the bar shows it now.
@@ -595,6 +605,7 @@ mod tests {
         assert_eq!(config.quick_labels, LabelMode::IconAndText);
         assert_eq!(config.toolbar_labels, LabelMode::IconOnly);
         assert!(config.one_taskbar_button && config.hide_host);
+        assert!(!config.span_window, "over the world viewport by default");
         assert_eq!(config.clone().cleaned(), config);
     }
 
@@ -650,7 +661,7 @@ mod tests {
         );
         assert_eq!(read.quick_labels, LabelMode::IconAndText);
         assert_eq!(read.toolbar_labels, LabelMode::TextOnly);
-        assert!(read.pinned && read.one_taskbar_button && read.hide_host);
+        assert!(read.pinned && read.one_taskbar_button && read.hide_host && !read.span_window);
         // what is written reads back the same
         let text = serde_json::to_string(&read).expect("json");
         assert!(

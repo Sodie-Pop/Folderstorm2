@@ -821,6 +821,11 @@ mod tests {
             read_frame::<ToHost>(&mut rest).expect("read"),
             ToHost::Bar(bar::Request::Show(bar::Page::Quit))
         );
+        // a bar's state without the word on spanning the window: over the
+        // world viewport, as the default is
+        let without = r#"{"docked":true,"collapsed":false,"characters":[],"inbox":0,"chat_open":false,"chat_unread":0,"mute_background":false,"voice_follows":false,"quick":[],"quick_labels":"icon-only","toolbar_labels":"icon-only"}"#;
+        let read = serde_json::from_str::<bar::State>(without).expect("reads");
+        assert!(read.docked && !read.span_window);
         // an assignment of before protocol 4 has no word on the taskbar
         let old = r#"{"seq":3,"role":"Background","behind":"Off","standby":"Warm","sound_muted":true,"voice_allowed":false}"#;
         assert!(!serde_json::from_str::<Assignment>(old).expect("reads").off_taskbar);

@@ -5,6 +5,14 @@
 //! the drawing is `crate::folderstorm_characters::bar`, the rules the
 //! `folderstorm-session` crate's.
 //!
+//! - **Over the world viewport, or across the window.** With a custom
+//!   world viewport (`folderstorm::viewport`) whose bars stay inside it,
+//!   the strip is at the world's top and as wide as the world, unless the
+//!   host's settings say span the whole window (`bar.span_window`): the
+//!   world's top moves down by the strip (`App::world_viewport`), so the
+//!   3D view, the HUDs and the viewer's bars (laid out in the world) sit
+//!   under it, and the margins' windows keep the whole window's height.
+//!   Otherwise, as follows, across the window.
 //! - **The strip is egui's "safe area".** Before the interface's pass the
 //!   strip's height is given as the top inset of the input
 //!   ([`App::folderstorm_bar_inset`], a hook in `App::frame`): egui then
@@ -43,15 +51,29 @@ impl App {
         state.bar.as_ref().filter(|bar| state.managed.linked() && bar.docked && !hidden)
     }
 
-    /// Before the interface's pass: the bar's strip is kept out of the
-    /// room the interface lays itself out in. Nothing in a viewer that no
-    /// host started.
+    /// Where the bar's strip is this frame in a window of `size` pixels:
+    /// over the custom world viewport (from its own rule,
+    /// `folderstorm::viewport`, before the strip moves the world down),
+    /// or across the window (`drawn::strip_place`).
+    pub(in crate::app) fn folderstorm_bar_strip(&self, size: (u32, u32)) -> Option<drawn::Strip> {
+        let state = self.folderstorm_bar_state()?;
+        let world = self.whole_world_viewport(size);
+        let bars_in_viewport = self.settings.folderstorm_viewport.bars_in_viewport;
+        drawn::strip_place(state, world, bars_in_viewport, self.egui_ctx.pixels_per_point())
+    }
+
+    /// Before the interface's pass: a strip across the window is kept out
+    /// of the room the interface lays itself out in (one over the world
+    /// viewport takes nothing from it: the world moves down instead,
+    /// `world_viewport`). Nothing in a viewer that no host started.
     pub(in crate::app) fn folderstorm_bar_inset(&self, raw: &mut egui::RawInput) {
         if managed::link().is_none() {
             return;
         }
+        let window = raw.screen_rect.unwrap_or_else(|| self.egui_ctx.viewport_rect());
+        let strip = self.folderstorm_bar_strip(drawn::window_pixels(window, self.egui_ctx.pixels_per_point()));
         // (always said: egui keeps the last inset it was given)
-        raw.safe_area_insets = Some(drawn::inset(self.folderstorm_bar_state()));
+        raw.safe_area_insets = Some(drawn::inset(strip));
     }
 
     /// Draws the bar in its strip and sends its clicks to the host.
@@ -59,7 +81,11 @@ impl App {
         let (Some(state), Some(link)) = (self.folderstorm_bar_state(), managed::link()) else {
             return;
         };
-        for request in drawn::show_strip(ctx, p, state) {
+        let size = drawn::window_pixels(ctx.viewport_rect(), ctx.pixels_per_point());
+        let Some(strip) = self.folderstorm_bar_strip(size) else {
+            return;
+        };
+        for request in drawn::show_strip(ctx, p, state, strip) {
             if !link.request(request) {
                 log::warn!("session host: a click on the bar was not sent ({request:?})");
             }

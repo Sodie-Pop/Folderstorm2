@@ -870,6 +870,7 @@ impl Desk {
             quick: self.bar.quick.clone(),
             quick_labels: self.bar.quick_labels,
             toolbar_labels: self.bar.toolbar_labels,
+            span_window: self.bar.span_window,
         }
         .cleaned()
     }

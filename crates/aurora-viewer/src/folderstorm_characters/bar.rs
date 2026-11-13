@@ -6,10 +6,14 @@
 //! processor). What the row is made of, which quick actions show and how
 //! a button is labelled are the `folderstorm-session` crate's (`bar`).
 //!
-//! In a viewer the bar has a strip of its own at the top of the window:
-//! [`inset`] keeps it out of the room the interface lays itself out in,
-//! [`bars_room`] puts the viewer's own bars under it, [`show_strip`]
-//! draws the bar in it.
+//! In a viewer the bar has a strip of its own ([`strip_place`]): at the
+//! top of the custom world viewport, as wide as the world, when the
+//! viewer has one (unless the host's settings say span the window), and
+//! across the top of the window otherwise. Across the window, [`inset`]
+//! keeps it out of the room the interface lays itself out in and
+//! [`bars_room`] puts the viewer's own bars under it; over the world, the
+//! world's top moves down by the strip ([`world_under`]) and the margins
+//! keep their height. [`show_strip`] draws the bar in it.
 //!
 //! This file only draws a [`State`] and returns the clicks as
 //! [`Request`]s. It keeps nothing: the names, aliases and colours it
@@ -648,22 +652,86 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home) -> Vec<Re
     asked
 }
 
-/// The strip a viewer keeps for the bar at the top of its window, as the
-/// inset its interface's pass is given: egui takes it out of the room the
-/// interface lays itself out in (`Context::content_rect`). None of it
-/// without a bar.
-pub fn inset(state: Option<&State>) -> egui::SafeAreaInsets {
+/// Where a viewer's strip is this frame ([`strip_place`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Strip {
+    /// Across the top of the window, this many points high: the
+    /// interface's pass keeps it out of its room ([`inset`]), so the
+    /// screens, the windows and the viewer's bars start under it.
+    Window(f32),
+    /// Over the custom world viewport only: the strip's rectangle in
+    /// window pixels (x, y, width, height), at the world's top and as wide
+    /// as the world. The world starts under it ([`world_under`]); the
+    /// rest of the window, where windows sit in the margins, keeps its
+    /// whole height.
+    World([u32; 4]),
+}
+
+/// Where the strip of a viewer goes: over the world viewport when the
+/// viewer has one this frame (`world`, from `folderstorm::viewport`, in
+/// window pixels), its own bars stay inside it (`bars_in_viewport`, the
+/// viewport's "Keep the bars inside the viewport") and the host did not
+/// ask for the whole window ([`State::span_window`]); across the window
+/// otherwise, as without a custom viewport. None without a strip
+/// (popped out). A world too low to keep anything under the strip gets
+/// the window's strip.
+pub fn strip_place(state: &State, world: Option<[u32; 4]>, bars_in_viewport: bool, pixels_per_point: f32) -> Option<Strip> {
+    let height = state.strip();
+    if height <= 0.0 {
+        return None;
+    }
+    let ppp = if pixels_per_point.is_finite() && pixels_per_point > 0.0 {
+        pixels_per_point
+    } else {
+        1.0
+    };
+    let over = world.filter(|_| bars_in_viewport && !state.span_window).and_then(|[x, y, w, h]| {
+        let strip = ((height * ppp).round() as u32).max(1);
+        (strip < h && w > 0).then_some([x, y, w, strip])
+    });
+    Some(over.map_or(Strip::Window(height), Strip::World))
+}
+
+/// The world viewport under a strip over it ([`Strip::World`]): the same
+/// width, its top moved down by the strip.
+pub fn world_under(world: [u32; 4], strip: [u32; 4]) -> [u32; 4] {
+    let [x, y, w, h] = world;
+    let cut = strip[3].min(h.saturating_sub(1));
+    [x, y.saturating_add(cut), w, h - cut]
+}
+
+/// A window of `rect` points in pixels, as the renderer has it.
+pub fn window_pixels(rect: egui::Rect, pixels_per_point: f32) -> (u32, u32) {
+    let ppp = if pixels_per_point.is_finite() && pixels_per_point > 0.0 {
+        pixels_per_point
+    } else {
+        1.0
+    };
+    let size = rect.size() * ppp;
+    (size.x.max(0.0).round() as u32, size.y.max(0.0).round() as u32)
+}
+
+/// The inset a viewer's interface pass is given for the bar: egui takes
+/// it out of the room the interface lays itself out in
+/// (`Context::content_rect`). The strip's height across the window;
+/// nothing for a strip over the world viewport only (the world itself
+/// moves down: [`world_under`]) or without a bar.
+pub fn inset(strip: Option<Strip>) -> egui::SafeAreaInsets {
     egui::SafeAreaInsets(egui::epaint::MarginF32 {
-        top: state.map_or(0.0, State::strip),
+        top: match strip {
+            Some(Strip::Window(height)) => height,
+            _ => 0.0,
+        },
         ..Default::default()
     })
 }
 
 /// The room the viewer's own bars are laid out in, under the bar's strip:
 /// `bars` (the custom world viewport's, if any: `folderstorm::viewport`)
-/// as it is when the pass kept no strip, so a viewer without a bar is as
-/// it was; otherwise the interface's room, or what of `bars` is in it.
-/// (egui's root `Ui` spans the whole window whatever the inset: the
+/// as it is when the pass kept no strip, so a viewer without a bar, or
+/// with the bar over the world viewport (whose top is already under it),
+/// is as it was; otherwise the interface's room, or what of `bars` is in
+/// it. (egui's root `Ui` spans the whole window whatever the inset: the
 /// viewer's bars, which are laid out in it, are given this instead.)
 pub fn bars_room(ctx: &egui::Context, bars: Option<egui::Rect>) -> Option<egui::Rect> {
     let (window, room) = (ctx.viewport_rect(), ctx.content_rect());
@@ -673,12 +741,30 @@ pub fn bars_room(ctx: &egui::Context, bars: Option<egui::Rect>) -> Option<egui::
     Some(bars.map_or(room, |bars| bars.intersect(room)))
 }
 
-/// Draws the bar of a viewer in the strip its pass was given ([`inset`]):
-/// what the window has above the interface's room. Nothing when the pass
-/// kept no strip.
-pub fn show_strip(ctx: &egui::Context, p: &Palette, state: &State) -> Vec<Request> {
+/// The strip's rectangle in points: what the window has above the
+/// interface's room ([`Strip::Window`]), or the rectangle over the world
+/// viewport.
+fn strip_rect(ctx: &egui::Context, strip: Strip) -> egui::Rect {
     let (window, room) = (ctx.viewport_rect(), ctx.content_rect());
-    let strip = egui::Rect::from_min_max(window.min, egui::pos2(window.right(), room.top()));
+    match strip {
+        Strip::Window(_) => egui::Rect::from_min_max(window.min, egui::pos2(window.right(), room.top())),
+        Strip::World([x, y, w, h]) => {
+            let ppp = ctx.pixels_per_point();
+            let ppp = if ppp.is_finite() && ppp > 0.0 { ppp } else { 1.0 };
+            egui::Rect::from_min_size(
+                window.min + egui::vec2(x as f32 / ppp, y as f32 / ppp),
+                egui::vec2(w as f32 / ppp, h as f32 / ppp),
+            )
+            .intersect(window)
+        }
+    }
+}
+
+/// Draws the bar of a viewer in its strip ([`strip_place`]). Nothing when
+/// the pass kept no room for it.
+pub fn show_strip(ctx: &egui::Context, p: &Palette, state: &State, strip: Strip) -> Vec<Request> {
+    let window = ctx.viewport_rect();
+    let strip = strip_rect(ctx, strip);
     if strip.height() < 1.0 || strip.width() < 1.0 {
         return Vec::new();
     }
@@ -774,7 +860,7 @@ mod tests {
     #[test]
     fn the_strip_is_the_bar_s_height_and_nothing_without_one() {
         use ::folderstorm_session::bar::{HANDLE, HEIGHT};
-        let top = |state: Option<&State>| inset(state).0.top;
+        let top = |state: Option<&State>| inset(state.and_then(|state| strip_place(state, None, true, 1.0))).0.top;
         assert_eq!(top(None), 0.0);
         assert_eq!(top(Some(&sample())), HEIGHT);
         let collapsed = State {
@@ -784,7 +870,7 @@ mod tests {
         assert_eq!(top(Some(&collapsed)), HANDLE);
         let popped = State { docked: false, ..sample() };
         assert_eq!(top(Some(&popped)), 0.0);
-        let all = inset(Some(&sample())).0;
+        let all = inset(Some(Strip::Window(HEIGHT))).0;
         assert_eq!((all.left, all.right, all.bottom), (0.0, 0.0, 0.0));
     }
 
@@ -796,7 +882,7 @@ mod tests {
             let ctx = egui::Context::default();
             let raw = egui::RawInput {
                 screen_rect: Some(window),
-                safe_area_insets: Some(inset(state)),
+                safe_area_insets: Some(inset(state.and_then(|state| strip_place(state, None, true, 1.0)))),
                 ..Default::default()
             };
             let mut output = ctx.run_ui(raw, |ui| check(ui.ctx()));
@@ -807,7 +893,8 @@ mod tests {
         pass(None, &mut |ctx| {
             assert_eq!(bars_room(ctx, None), None);
             assert_eq!(bars_room(ctx, Some(viewport)), Some(viewport));
-            assert!(show_strip(ctx, &crate::theme::Theme::default().skin_palette(), &sample()).is_empty());
+            let p = crate::theme::Theme::default().skin_palette();
+            assert!(show_strip(ctx, &p, &sample(), Strip::Window(30.0)).is_empty());
         });
         // a bar: the room under the strip, and a custom viewport's part of it
         let state = sample();
@@ -817,6 +904,198 @@ mod tests {
             let inside = bars_room(ctx, Some(viewport)).expect("a room");
             assert_eq!((inside.left(), inside.right(), inside.top()), (400.0, 900.0, 30.0));
         });
+    }
+
+    #[test]
+    fn the_strip_is_over_the_world_viewport_unless_asked_to_span_the_window() {
+        use ::folderstorm_session::bar::{HANDLE, HEIGHT};
+        let state = sample();
+        // two 1920-pixel monitors, the world on the right one (a left
+        // margin) or on the left one (a right margin)
+        let right_one = Some([1920, 0, 1920, 1080]);
+        let left_one = Some([0, 0, 1920, 1080]);
+        assert_eq!(strip_place(&state, right_one, true, 1.0), Some(Strip::World([1920, 0, 1920, 30])));
+        assert_eq!(strip_place(&state, left_one, true, 1.0), Some(Strip::World([0, 0, 1920, 30])));
+        // a top margin too: the strip is at the world's top
+        assert_eq!(
+            strip_place(&state, Some([1920, 100, 1920, 980]), true, 1.0),
+            Some(Strip::World([1920, 100, 1920, 30]))
+        );
+        // in pixels: the interface's scale
+        assert_eq!(strip_place(&state, right_one, true, 1.5), Some(Strip::World([1920, 0, 1920, 45])));
+        let collapsed = State {
+            collapsed: true,
+            ..sample()
+        };
+        assert_eq!(strip_place(&collapsed, left_one, true, 2.0), Some(Strip::World([0, 0, 1920, 16])));
+        // the option: across the whole window, as without a viewport
+        let span = State {
+            span_window: true,
+            ..sample()
+        };
+        assert_eq!(strip_place(&span, right_one, true, 1.0), Some(Strip::Window(HEIGHT)));
+        assert_eq!(strip_place(&span, left_one, true, 1.0), Some(Strip::Window(HEIGHT)));
+        // no custom viewport (or none this frame): across the window,
+        // whatever the option
+        assert_eq!(strip_place(&state, None, true, 1.0), Some(Strip::Window(HEIGHT)));
+        assert_eq!(strip_place(&span, None, true, 1.0), Some(Strip::Window(HEIGHT)));
+        assert_eq!(strip_place(&collapsed, None, true, 1.0), Some(Strip::Window(HANDLE)));
+        // the viewer's bars over the whole window: the bar with them
+        assert_eq!(strip_place(&state, right_one, false, 1.0), Some(Strip::Window(HEIGHT)));
+        // a world too low for anything under the strip; popped out
+        assert_eq!(strip_place(&state, Some([0, 0, 800, 30]), true, 1.0), Some(Strip::Window(HEIGHT)));
+        let popped = State { docked: false, ..sample() };
+        assert_eq!(strip_place(&popped, right_one, true, 1.0), None);
+        assert_eq!(strip_place(&popped, None, true, 1.0), None);
+        // the world moves down by the strip, keeping its width
+        assert_eq!(world_under([1920, 0, 1920, 1080], [1920, 0, 1920, 30]), [1920, 30, 1920, 1050]);
+        assert_eq!(world_under([0, 100, 1920, 980], [0, 100, 1920, 45]), [0, 145, 1920, 935]);
+        assert_eq!(world_under([0, 0, 800, 20], [0, 0, 800, 30]), [0, 19, 800, 1], "never empty");
+        assert_eq!(
+            window_pixels(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1280.0, 720.0)), 1.5),
+            (1920, 1080)
+        );
+    }
+
+    /// A viewer window over two monitors (2 x 1280 points), the world on
+    /// one of them, Inventory in the other one's margin: over the world
+    /// only, the strip is the world's width at its top, the world and its
+    /// bars move down under it and the margin keeps the window's whole
+    /// height; spanning, as before checkpoint 8's follow-up.
+    #[test]
+    fn over_the_world_the_margins_keep_their_height_and_the_world_moves_down() {
+        use crate::folderstorm::viewport::{self, Overrides, ViewportSettings};
+        let p = crate::theme::Theme::default().skin_palette();
+        let window = egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(2560.0, 720.0));
+        for (left, right) in [(1280, 0), (0, 1280)] {
+            let settings = ViewportSettings {
+                enabled: true,
+                left,
+                right,
+                ..Default::default()
+            };
+            let whole = viewport::world_rect((2560, 720), &settings, Overrides::default()).expect("a world");
+            for span_window in [false, true] {
+                let state = State { span_window, ..sample() };
+                let strip = strip_place(&state, Some(whole), settings.bars_in_viewport, 1.0).expect("a strip");
+                // what `App::world_viewport` gives the renderer
+                let world = match strip {
+                    Strip::World(strip) => world_under(whole, strip),
+                    Strip::Window(_) => whole,
+                };
+                let ctx = egui::Context::default();
+                let (mut content, mut bars, mut screen, mut room) = (egui::Rect::NOTHING, None, egui::Rect::NOTHING, egui::Rect::NOTHING);
+                for _ in 0..2 {
+                    let raw = egui::RawInput {
+                        screen_rect: Some(window),
+                        safe_area_insets: Some(inset(Some(strip))),
+                        events: vec![egui::Event::PointerMoved(egui::pos2(left as f32 + 20.0, 15.0))],
+                        ..Default::default()
+                    };
+                    let mut output = ctx.run_ui(raw, |ui| {
+                        let ctx = ui.ctx();
+                        content = ctx.content_rect();
+                        // the two lines of app.rs where the bars get their room
+                        bars = bars_room(ctx, viewport::bars_rect(&settings, Some(world), 1.0));
+                        viewport::set_bars_area(ctx, bars);
+                        screen = viewport::bars_screen(ctx);
+                        room = viewport::floater_room(ctx, egui::Rect::from_min_size(egui::pos2(8.0, 48.0), Vec2::splat(300.0)));
+                        show_strip(ctx, &p, &state, strip);
+                    });
+                    output.textures_delta.clear();
+                }
+                let drawn = ctx
+                    .memory(|m| m.area_rect(egui::Id::unique("folderstorm-character-bar")))
+                    .expect("the bar is drawn");
+                let world_x = left as f32;
+                if span_window {
+                    assert_eq!(strip, Strip::Window(30.0));
+                    assert_eq!(world, whole, "the world under the strip, as before");
+                    assert_eq!(content.top(), 30.0, "the whole interface under the strip");
+                    assert_eq!((drawn.left(), drawn.width()), (0.0, 2560.0));
+                } else {
+                    assert_eq!(strip, Strip::World([left, 0, 1280, 30]));
+                    assert_eq!(world, [left, 30, 1280, 690], "the world moves down by the strip");
+                    assert_eq!(content, window, "a margin window keeps the window's whole height");
+                    assert_eq!(room.height(), 720.0, "and may be as high as the window");
+                    assert_eq!((drawn.left(), drawn.top(), drawn.width()), (world_x, 0.0, 1280.0));
+                    assert!(drawn.height() <= 30.5, "{drawn:?}");
+                }
+                // the viewer's bars: inside the world, under the strip, and
+                // `bars_screen` agrees with where they were laid out
+                let bars = bars.expect("confined to the world");
+                assert_eq!(
+                    (bars.left(), bars.top(), bars.width(), bars.bottom()),
+                    (world_x, 30.0, 1280.0, 720.0)
+                );
+                assert_eq!(screen, bars);
+                // the pointer on the bar is over the interface
+                assert!(ctx.is_pointer_over_egui());
+            }
+        }
+    }
+
+    /// The picture of a viewer's window over two monitors, the bar over
+    /// the world on the right one: `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>`
+    /// keeps it as `<folder>/viewer-bar-over-world.png`.
+    #[test]
+    fn the_bar_over_the_world_is_drawn_in_the_world_s_strip_only() {
+        let theme = crate::theme::Theme::default();
+        let p = theme.skin_palette();
+        let ctx = egui::Context::default();
+        theme.apply(&ctx, 1.0);
+        let _icons = crate::ui::icons::Icons::load(&ctx, None);
+        let (width, height) = (1600u32, 400u32);
+        let window = egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32));
+        let state = sample();
+        let strip = strip_place(&state, Some([800, 0, 800, 400]), true, 1.0).expect("a strip");
+        let mut pixels = vec![0u32; (width * height) as usize];
+        let mut painter = crate::crash::software::Painter::default();
+        for _ in 0..3 {
+            let raw = egui::RawInput {
+                screen_rect: Some(window),
+                safe_area_insets: Some(inset(Some(strip))),
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(raw, |ui| {
+                // the world (a plain colour here), under the strip
+                let world = egui::Rect::from_min_max(egui::pos2(800.0, 30.0), egui::pos2(1600.0, 400.0));
+                ui.painter().rect_filled(world, 0.0, Color32::from_rgb(40, 90, 140));
+                show_strip(ui.ctx(), &p, &state, strip);
+            });
+            let primitives = ctx.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
+            pixels.fill(0);
+            painter.paint(
+                &mut pixels,
+                [width as usize, height as usize],
+                &primitives,
+                &output.textures_delta,
+                output.pixels_per_point,
+                p.panel,
+            );
+            output.textures_delta.clear();
+        }
+        let at = |x: u32, y: u32| pixels[(y * width + x) as usize];
+        // the margin's top is the plain background, the world's top is the bar
+        let background = at(10, 390);
+        assert!(
+            (0..800).all(|x| (0..30).all(|y| at(x, y) == background)),
+            "nothing of the bar in the margin"
+        );
+        let bar = (800..1600)
+            .flat_map(|x| (0..30).map(move |y| (x, y)))
+            .filter(|&(x, y)| at(x, y) != background)
+            .count();
+        assert!(bar > 800 * 30 / 2, "the bar fills the world's strip: {bar}");
+        assert_eq!(at(1200, 200) & 0x00ff_ffff, 0x0028_5a8c, "the world under it");
+        if let Some(dir) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR") {
+            let rgba: Vec<_> = pixels
+                .iter()
+                .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+                .collect();
+            let path = std::path::Path::new(&dir).join("viewer-bar-over-world.png");
+            image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+        }
     }
 
     /// The pointer over the strip is over the interface, wherever in it
@@ -831,12 +1110,14 @@ mod tests {
             for _ in 0..2 {
                 let raw = egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1280.0, 720.0))),
-                    safe_area_insets: Some(inset(Some(state))),
+                    safe_area_insets: Some(inset(strip_place(state, None, true, 1.0))),
                     events: vec![egui::Event::PointerMoved(at)],
                     ..Default::default()
                 };
                 let mut output = ctx.run_ui(raw, |ui| {
-                    show_strip(ui.ctx(), &p, state);
+                    if let Some(strip) = strip_place(state, None, true, 1.0) {
+                        show_strip(ui.ctx(), &p, state, strip);
+                    }
                 });
                 output.textures_delta.clear();
             }
@@ -904,11 +1185,12 @@ mod tests {
         // its one reader: the bar's drawing, in its strip
         let glue = include_str!("../app/folderstorm_characters/bar.rs");
         assert_eq!(glue.matches("state.bar").count(), 1, "one place reads it");
-        assert!(glue.contains("drawn::show_strip(ctx, p, state)") && glue.contains("drawn::inset(self.folderstorm_bar_state())"));
+        assert!(glue.contains("drawn::show_strip(ctx, p, state, strip)") && glue.contains("drawn::inset(strip)"));
+        assert!(glue.contains("drawn::strip_place(state, world, bars_in_viewport"));
         assert_eq!(
             glue.matches("folderstorm_bar_state()").count(),
             2,
-            "its use: the inset, the drawing"
+            "its use: the strip's place (its height and where), the drawing"
         );
         // and no other part of the frame's side reaches it under another name
         for other in [

@@ -128,6 +128,11 @@ fn the_bar_shows_each_character_with_its_alias_colour_and_where_it_is() {
     assert_eq!((state.inbox, state.chat_unread, state.chat_open), (3, 7, false));
     assert!(!state.mute_background && state.voice_follows);
     assert_eq!(state.quick, d.bar().quick);
+    // over the world viewport, until the settings say span the window
+    assert!(!state.span_window);
+    assert!(d.edit_bar(|bar| bar.span_window = true));
+    assert!(d.bar_state(3, 7).span_window);
+    assert!(d.edit_bar(|bar| bar.span_window = false));
     let seen: Vec<_> = state
         .characters
         .iter()
