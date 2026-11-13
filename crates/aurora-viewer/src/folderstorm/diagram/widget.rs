@@ -27,6 +27,9 @@ struct Drag {
     cancelled: bool,
 }
 
+/// A bar is drawn at least this thick, in diagram points.
+const MIN_BAR: f32 = 2.0;
+
 /// Room between the diagram's border and what it draws, in points.
 pub(super) const PAD: f32 = 10.0;
 
@@ -250,15 +253,28 @@ fn paint(
         _ => (p.teal.gamma_multiply(0.28), p.teal),
     };
     painter.rect_filled(world_d, none, fill);
-    // the bars: along the top and bottom of the area they follow
-    let bars = if s.bars_in_viewport { world_d } else { window_d };
-    let strip = 3.0_f32.min(bars.height() / 6.0);
-    for y in [bars.top(), bars.bottom() - strip] {
-        painter.rect_filled(
-            Rect::from_min_size(egui::pos2(bars.left(), y), vec2(bars.width(), strip)),
-            none,
-            p.violet.gamma_multiply(0.7),
-        );
+    // the bars, where the settings lay them out: inside the world, over
+    // the window, or around the world (each side in the margin when it has
+    // room); as thick as the viewer last measured them, to scale
+    let thick = crate::folderstorm::viewport::bars::last_thickness(ui.ctx())
+        .filter(|bars| bars.top + bars.bottom + bars.left + bars.right > 0.0)
+        .unwrap_or(super::NOMINAL_BARS)
+        .scaled(ui.ctx().pixels_per_point());
+    let world_px = match world {
+        World::Custom(r) => r,
+        _ => window,
+    };
+    let place = crate::folderstorm::viewport::bars::BarsPlace::of(s);
+    for (side, strip) in super::bars_strips(window, world_px, place, thick) {
+        // never thinner than can be seen: thickened towards the inside
+        let d = mapping.rect_to_diagram(strip);
+        let d = match side {
+            Edge::Top => Rect::from_min_max(d.min, egui::pos2(d.right(), d.bottom().max(d.top() + MIN_BAR))),
+            Edge::Bottom => Rect::from_min_max(egui::pos2(d.left(), d.top().min(d.bottom() - MIN_BAR)), d.max),
+            Edge::Left => Rect::from_min_max(d.min, egui::pos2(d.right().max(d.left() + MIN_BAR), d.bottom())),
+            Edge::Right => Rect::from_min_max(egui::pos2(d.left().min(d.right() - MIN_BAR), d.top()), d.max),
+        };
+        painter.rect_filled(d, none, p.violet.gamma_multiply(0.7));
     }
     if matches!(world, World::Custom(_)) {
         painter.rect_stroke(world_d, none, Stroke::new(1.5, edge_ink), StrokeKind::Inside);

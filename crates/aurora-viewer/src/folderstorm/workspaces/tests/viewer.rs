@@ -667,3 +667,239 @@ fn a_window_first_shown_after_the_baseline_is_watched_from_then_on() {
     next.settle();
     assert!(next.modified(), "moved since it was first shown");
 }
+
+#[test]
+fn the_card_s_buttons_apply_or_put_it_away() {
+    use aurora_i18n::tr;
+    let mut v = two_monitors(false);
+    v.plug();
+    assert!(v.shows(&tr!("fs-layouts-monitors-offer", name = "Wide")));
+    assert!(v.shows(tr!("fs-layouts-monitors-later")));
+    v.click(tr!("fs-layouts-apply"));
+    v.settle();
+    assert_eq!(v.store.active_layout.as_deref(), Some("Wide"));
+    assert_eq!(v.seen().inner, (3840, 1040));
+    assert!(!v.shows(tr!("fs-layouts-monitors-later")), "the card is gone");
+    // unplugged: offered again, and "Not now" this time
+    v.monitors = vec![LEFT];
+    v.frames(200);
+    assert!(v.shows(&tr!("fs-layouts-monitors-offer", name = "Single")));
+    v.click(tr!("fs-layouts-monitors-later"));
+    v.frames(3);
+    assert_eq!(v.notice(), None);
+    assert_eq!(v.store.active_layout.as_deref(), Some("Wide"));
+    // applied without asking: the card says so, and goes back
+    v.store.on_monitor_change = MonitorPolicy::Apply;
+    v.plug();
+    v.monitors = vec![LEFT];
+    v.frames(200);
+    v.settle();
+    assert_eq!(v.store.active_layout.as_deref(), Some("Single"));
+    assert!(v.shows(&tr!("fs-layouts-monitors-applied", name = "Single")));
+    v.click(tr!("fs-layouts-previous-button"));
+    v.settle();
+    assert_eq!(v.store.active_layout.as_deref(), Some("Wide"));
+    assert_eq!(v.notice(), None);
+}
+
+#[test]
+fn the_card_says_when_the_window_was_only_unlocked() {
+    use aurora_i18n::tr;
+    let mut v = two_monitors(true);
+    v.plug();
+    v.apply("Wide");
+    v.settle();
+    // down to a monitor no layout was saved on
+    v.monitors = vec![[0, 0, 2560, 1440]];
+    v.frames(200);
+    assert_eq!(v.notice(), Some(Notice::Unlocked));
+    assert!(v.shows(tr!("fs-layouts-monitors-unlocked")));
+    assert!(v.seen().resizable);
+    v.click(tr!("common-ok"));
+    v.frames(3);
+    assert_eq!(v.notice(), None);
+}
+
+#[test]
+fn the_world_menu_lists_the_layouts_and_what_can_be_done() {
+    use aurora_i18n::tr;
+    let mut v = two_monitors(true);
+    v.plug();
+    menu::ask(&v.ctx, Request::Dismiss);
+    v.menu = true;
+    v.frames(3);
+    for label in ["Wide", "Single", tr!("fs-layouts-menu-open"), tr!("fs-layouts-previous")] {
+        assert!(v.shows(label), "“{label}” is in the menu");
+    }
+    assert!(!v.shows(tr!("fs-layouts-unlock")), "nothing holds the window");
+    v.click("Wide");
+    v.settle();
+    assert_eq!(v.store.active_layout.as_deref(), Some("Wide"));
+    assert!(!v.seen().resizable);
+    // held: Unlock is offered, and does it
+    assert!(v.shows(tr!("fs-layouts-unlock")));
+    v.click(tr!("fs-layouts-unlock"));
+    v.frames(3);
+    assert!(v.seen().resizable);
+    assert!(!v.shows(tr!("fs-layouts-unlock")));
+    v.click(tr!("fs-layouts-previous"));
+    v.settle();
+    assert_eq!(v.store.active_layout.as_deref(), Some("Single"));
+    v.click(tr!("fs-layouts-menu-open"));
+    v.frames(2);
+    assert!(v.preferences);
+    // a renamed layout is listed under its new name
+    let (index, _) = v.store.find("Wide").expect("in the list");
+    v.store.rename(index, "Both screens").expect("renamed");
+    v.frames(3);
+    assert!(v.shows("Both screens") && !v.shows("Wide"));
+}
+
+/// The card over the world and World › Layouts open beside it, with the
+/// software painter: `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the
+/// picture as `<folder>/layouts-card-and-menu.png`.
+#[test]
+fn the_card_and_the_menu_are_drawn() {
+    use crate::folderstorm::diagram::{self, Desktop, Monitor};
+    use crate::folderstorm::workspaces::store::Layout;
+    use aurora_i18n::tr;
+    let theme = crate::theme::Theme::default();
+    let p = theme.skin_palette();
+    let ctx = egui::Context::default();
+    theme.apply(&ctx, 1.0);
+    ctx.all_styles_mut(|s| s.animation_time = 0.0);
+    let _icons = crate::ui::icons::Icons::load(&ctx, None);
+    let monitor = |x: i32| crate::folderstorm::workspaces::store::Monitor {
+        x,
+        y: 0,
+        width: 1280,
+        height: 720,
+        scale: 1.0,
+    };
+    let frame = WindowFrame::Normal {
+        x: Some(0),
+        y: Some(0),
+        width: 1280,
+        height: 680,
+        maximized: false,
+        locked: true,
+    };
+    let mut store = Store::default();
+    store
+        .add(Layout::new("2 monitors", None, None, vec![monitor(0), monitor(1280)]))
+        .expect("added");
+    store
+        .add(Layout::new("1 monitor", None, None, vec![monitor(0)]).with_window(Some(frame)))
+        .expect("added");
+    store.window_held = true;
+    let mut world = ViewportSettings::default();
+    let mut window = Pretend::new(0, 0, 1280, 680);
+    let (width, height) = (1280u32, 680u32);
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(width as f32, height as f32));
+    let mut pixels = vec![0u32; (width * height) as usize];
+    let mut painter = crate::crash::software::Painter::default();
+    let mut texts = Vec::new();
+    let frames = 220;
+    for n in 0..frames {
+        // the second monitor is plugged in once the first setup is noted
+        let rects: &[[i32; 4]] = if n < 40 {
+            &[[0, 0, 1280, 720]]
+        } else {
+            &[[0, 0, 1280, 720], [1280, 0, 1280, 720]]
+        };
+        diagram::set_desktop(
+            &ctx,
+            Desktop {
+                window: window.seen.inner,
+                position: window.seen.outer,
+                monitors: rects.iter().map(|rect| Monitor { rect: *rect, scale: 1.0 }).collect(),
+            },
+        );
+        let outcome = apply::frame(
+            &ctx,
+            &mut Live {
+                store: &mut store,
+                world: &mut world,
+            },
+            Some(window.seen),
+        );
+        window.send(&outcome.commands);
+        window.frame();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(screen),
+                time: Some(f64::from(n) / 60.0),
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx();
+                crate::ui::layout::set_work_area(ctx, screen);
+                crate::folderstorm::workspaces::notice::show(ctx, &p);
+                egui::Area::new(egui::Id::unique("test-world-menu"))
+                    .fixed_pos(pos2(40.0, 140.0))
+                    .show(ctx, |ui| {
+                        crate::ui::widgets::overlay(ui, &p, egui::Margin::same(6), |ui| {
+                            ui.set_width(260.0);
+                            menu::body(ui, &p)
+                        });
+                    });
+            },
+        );
+        texts.clear();
+        fn collect(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
+                egui::Shape::Text(t) => out.push(t.galley.text().to_owned()),
+                _ => {}
+            }
+        }
+        for clipped in &output.shapes {
+            collect(&clipped.shape, &mut texts);
+        }
+        // (the painter is given every frame's textures, and draws the last)
+        let last = n + 1 == frames;
+        let shapes = if last { std::mem::take(&mut output.shapes) } else { Vec::new() };
+        let primitives = ctx.tessellate(shapes, output.pixels_per_point);
+        painter.paint(
+            &mut pixels,
+            [width as usize, height as usize],
+            &primitives,
+            &output.textures_delta,
+            output.pixels_per_point,
+            p.navy,
+        );
+        output.textures_delta.clear();
+    }
+    assert!(!window.seen.resizable, "held by “1 monitor” since the start");
+    if let Some(dir) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR") {
+        let rgba: Vec<_> = pixels
+            .iter()
+            .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+            .collect();
+        let path = std::path::Path::new(&dir).join("layouts-card-and-menu.png");
+        image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+    }
+    for icon in [
+        menu::ICON_LAYOUTS,
+        menu::ICON_LAYOUT,
+        menu::ICON_OPEN,
+        menu::ICON_PREVIOUS,
+        menu::ICON_UNLOCK,
+        "device-desktop-filled",
+        "check",
+        "x",
+    ] {
+        assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
+    }
+    for expected in [
+        tr!("fs-layouts-monitors-offer", name = "2 monitors"),
+        tr!("fs-layouts-apply").to_owned(),
+        tr!("fs-layouts-monitors-later").to_owned(),
+        "1 monitor".to_owned(),
+        tr!("fs-layouts-menu-open").to_owned(),
+        tr!("fs-layouts-previous").to_owned(),
+        tr!("fs-layouts-unlock").to_owned(),
+    ] {
+        assert!(texts.iter().any(|t| *t == expected), "“{expected}” is drawn");
+    }
+}

@@ -37,6 +37,12 @@ struct Viewer {
     monitors: Vec<[i32; 4]>,
     /// `apply::frame` asked for Preferences.
     preferences: bool,
+    /// World › Layouts is drawn open, at the top left.
+    menu: bool,
+    /// What the pointer does in the next frame.
+    events: Vec<egui::Event>,
+    /// The texts of the last frame and where they were.
+    texts: Vec<(String, Rect)>,
 }
 
 impl Viewer {
@@ -54,6 +60,9 @@ impl Viewer {
             window: None,
             monitors: Vec::new(),
             preferences: false,
+            menu: false,
+            events: Vec::new(),
+            texts: Vec::new(),
         }
     }
 
@@ -115,10 +124,12 @@ impl Viewer {
         self.time += 1.0 / 60.0;
         let screen = Rect::from_min_size(Pos2::ZERO, self.size);
         let open = self.open.clone();
+        let menu = self.menu;
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
                 time: Some(self.time),
+                events: std::mem::take(&mut self.events),
                 ..Default::default()
             },
             |ui| {
@@ -126,6 +137,14 @@ impl Viewer {
                 let p = crate::theme::Theme::default().palette();
                 crate::ui::layout::set_work_area(ctx, screen);
                 crate::ui::layout::set_move_area(ctx, screen);
+                // as the interface's pass does: the card, and the menu when open
+                super::notice::show(ctx, &p);
+                if menu {
+                    egui::Area::new(egui::Id::unique("test-world-menu"))
+                        .order(egui::Order::Foreground)
+                        .fixed_pos(pos2(4.0, 300.0))
+                        .show(ctx, |ui| super::menu::body(ui, &p));
+                }
                 for (id, at, size) in [
                     (INVENTORY, pos2(900.0, 56.0), vec2(360.0, 420.0)),
                     (PEOPLE, pos2(20.0, 60.0), vec2(300.0, 400.0)),
@@ -155,6 +174,47 @@ impl Viewer {
             },
         );
         output.textures_delta.clear();
+        fn collect(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
+                egui::Shape::Text(t) => out.push((t.galley.text().to_owned(), t.galley.rect.translate(t.pos.to_vec2()))),
+                _ => {}
+            }
+        }
+        self.texts.clear();
+        for clipped in &output.shapes {
+            collect(&clipped.shape, &mut self.texts);
+        }
+    }
+
+    fn shows(&self, text: &str) -> bool {
+        self.texts.iter().any(|(shown, _)| shown == text)
+    }
+
+    /// Clicks the text `label` of the card or of the menu.
+    fn click(&mut self, label: &str) {
+        let at = self
+            .texts
+            .iter()
+            .find(|(shown, _)| shown == label)
+            .unwrap_or_else(|| panic!("“{label}” is shown"))
+            .1
+            .center();
+        let button = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        for events in [
+            vec![egui::Event::PointerMoved(at)],
+            vec![button(true)],
+            vec![button(false)],
+            Vec::new(),
+        ] {
+            self.events = events;
+            self.frame();
+        }
     }
 
     fn frames(&mut self, count: usize) {

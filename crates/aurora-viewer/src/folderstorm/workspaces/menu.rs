@@ -106,7 +106,7 @@ pub fn show(ui: &mut egui::Ui, p: &Palette) {
     menu::submenu(ui, p, ICON_LAYOUTS, tr!("fs-layouts-menu"), true, |ui| body(ui, p));
 }
 
-fn body(ui: &mut egui::Ui, p: &Palette) {
+pub(super) fn body(ui: &mut egui::Ui, p: &Palette) {
     let view = view(ui.ctx());
     let mut request = None;
     for (name, active) in &view.layouts {
