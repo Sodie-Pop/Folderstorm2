@@ -171,9 +171,11 @@ impl Default for Book {
 
 impl Book {
     /// A list from `launch` of the slot's viewer; kept when it is of the
-    /// login the character is in (`login`: the chat's, `Chat::login`).
+    /// login the character is in (`login`: the chat's, `Chat::login`), or
+    /// when the chat does not know that login yet (the list came first:
+    /// [`Book::sync`] drops it if the login told is another one).
     pub fn set(&mut self, slot: usize, launch: u32, login: Option<Login>, contacts: Contacts) {
-        if slot >= MAX_SLOTS || login != Some((launch, contacts.generation)) {
+        if slot >= MAX_SLOTS || login.is_some_and(|login| login != (launch, contacts.generation)) {
             return;
         }
         let mut contacts = contacts.cleaned();
@@ -185,10 +187,11 @@ impl Book {
         });
     }
 
-    /// The character's login now: a list of another one is dropped.
+    /// The character's login now: a list of another one is dropped. (No
+    /// login known keeps it: the viewer ending empties it, [`Book::ended`].)
     pub fn sync(&mut self, slot: usize, login: Option<Login>) {
         if let Some(list) = self.lists.get_mut(slot)
-            && list.as_ref().is_some_and(|l| Some(l.login) != login)
+            && list.as_ref().is_some_and(|l| login.is_some_and(|login| login != l.login))
         {
             *list = None;
         }
@@ -476,6 +479,16 @@ mod tests {
         book.set(0, 1, Some((1, 2)), list(2));
         book.forget(0);
         assert!(!book.known(0));
+        // a list that comes before the chat knows the login is kept, and
+        // dropped if the login told is another one
+        book.set(0, 3, None, list(1));
+        assert!(book.known(0));
+        book.sync(0, None);
+        assert!(book.known(0));
+        book.sync(0, Some((3, 1)));
+        assert!(book.known(0), "its own login");
+        book.sync(0, Some((3, 2)));
+        assert!(!book.known(0), "another login");
     }
 
     #[test]
