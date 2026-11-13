@@ -17,14 +17,23 @@
 //! not where it was asked is asked for its position again, with its new
 //! size ([`Target`]).
 //!
+//! A layout with a *Viewer window* part first puts the viewer window in
+//! place ([`viewer`], step by step: the system answers when it likes); the
+//! layout's windows wait for it, and are fitted to the interface it gives.
+//!
 //! What a session remembers beside the settings ([`Session`], in egui's
 //! temporary data): the arrangement before the last apply (*Previous*),
-//! the windows still to place, and the baseline the windows are compared
-//! with for the "modified" mark.
+//! the windows still to place, the baseline the windows are compared
+//! with for the "modified" mark, the viewer window, and the card shown
+//! when the monitors change.
 
 use super::capture::{self, Room};
 use super::fit::{Fitted, fit};
-use super::store::{Layout, Placement, Placements, Store, StoreError};
+use super::menu::{self, Request};
+use super::monitors;
+use super::store::{Layout, Monitor, MonitorPolicy, Placement, Placements, Store, StoreError, WindowFrame};
+use super::viewer;
+use super::window::{Command, Hold, Seen};
 use super::windows::{self, Kind, Window};
 use crate::folderstorm::viewport::ViewportSettings;
 use std::collections::{BTreeMap, BTreeSet};
@@ -43,6 +52,9 @@ const ARRIVED: f32 = 1.0;
 const RETRIES: u8 = 2;
 /// Frames a window is given to take a request before it is looked at.
 const TAKEN_AFTER: u64 = 2;
+/// Frames the interface is given to take the viewer window's new size
+/// before the layout's windows are placed in it.
+const RESIZED_AFTER: u64 = 2;
 
 /// Aurora's entry for a floater's placement request (`ui/widgets.rs`,
 /// `PLACE_POS`): there until the floater is next shown.
@@ -67,6 +79,11 @@ impl<'a> Live<'a> {
 /// The parts of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Parts {
+    /// Viewer window. Left out without a word where there is no viewer
+    /// window to read (a capture, a forced size).
+    pub window: bool,
+    /// *Lock the window size*, with the viewer window.
+    pub lock: bool,
     /// World viewport and bars.
     pub world: bool,
     /// Window positions.
@@ -76,6 +93,8 @@ pub struct Parts {
 impl Default for Parts {
     fn default() -> Self {
         Parts {
+            window: true,
+            lock: false,
             world: true,
             windows: true,
         }
@@ -85,6 +104,9 @@ impl Default for Parts {
 /// An arrangement kept in memory: what *Previous arrangement* brings back.
 #[derive(Clone, Debug, PartialEq)]
 struct Arrangement {
+    /// The viewer window, the monitors it counts in and whether it was
+    /// held: kept only when the apply this undoes moves it.
+    window: Option<(WindowFrame, Vec<Monitor>, bool)>,
     world: ViewportSettings,
     windows: Option<Placements>,
     active: Option<String>,
@@ -102,6 +124,37 @@ pub struct Report {
     pub fitted: usize,
     /// Windows of the layout this version does not know: left alone.
     pub unknown: usize,
+    /// Monitors of the layout that are not there.
+    pub missing: usize,
+    /// The viewer window could not go where the layout has it: it stays
+    /// where it is.
+    pub left: bool,
+    /// The layout's lock was not given: a monitor is missing.
+    pub unlocked: bool,
+    /// The layout has a viewer window and there is none to drive here.
+    pub no_window: bool,
+}
+
+/// The card shown over the world when the monitors changed (section 8.5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Notice {
+    /// "Use the layout `name`?" `unlocked`: the window was also unlocked.
+    Offer { name: String, unlocked: bool },
+    /// The layout `name` was applied without asking.
+    Applied { name: String },
+    /// The viewer window was unlocked, and no layout fits the new setup.
+    Unlocked,
+}
+
+/// What a frame asks of the app.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Outcome {
+    /// The store changed: the settings are to be saved.
+    pub save: bool,
+    /// What to ask of the viewer window, in order.
+    pub commands: Vec<Command>,
+    /// *Layouts…* was chosen: Preferences on the Layouts tab.
+    pub preferences: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -136,6 +189,10 @@ struct Session {
     /// The frame of the last look at the windows.
     checked: u64,
     report: Option<Report>,
+    viewer: viewer::State,
+    notice: Option<Notice>,
+    /// What the menu's view was made from ([`menu::stamp`]).
+    menu: u64,
 }
 
 fn session_id() -> egui::Id {
@@ -232,8 +289,37 @@ fn waiting(ctx: &egui::Context, window: &Window) -> bool {
     }
 }
 
-fn arrangement(ctx: &egui::Context, live: &Live) -> Arrangement {
+/// The viewer window as the app last saw it.
+fn seen(ctx: &egui::Context) -> Option<Seen> {
+    session(ctx, |s| s.viewer.seen().copied())
+}
+
+/// Whether there is a viewer window to save in a layout.
+pub fn has_viewer_window(ctx: &egui::Context) -> bool {
+    seen(ctx).is_some_and(|seen| !seen.minimized)
+}
+
+/// The viewer window of now as a layout would save it, without a lock.
+pub fn viewer_window(ctx: &egui::Context) -> Option<WindowFrame> {
+    window_now(ctx).map(|(frame, _)| frame)
+}
+
+/// The *Viewer window* part of now, with the monitors its places count in.
+fn window_now(ctx: &egui::Context) -> Option<(WindowFrame, Vec<Monitor>)> {
+    let monitors = capture::monitors(ctx);
+    Some((capture::viewer_window(&seen(ctx)?, &monitors)?, monitors))
+}
+
+/// The arrangement of now. `window`: with the viewer window, for an apply
+/// that moves it.
+fn arrangement(ctx: &egui::Context, live: &Live, window: bool) -> Arrangement {
+    let held = live.store.window_held;
+    let locked = held && live.store.active().and_then(|layout| layout.window.as_ref()).is_some_and(WindowFrame::locked);
     Arrangement {
+        window: window
+            .then(|| window_now(ctx))
+            .flatten()
+            .map(|(frame, monitors)| (frame.with_lock(locked), monitors, held)),
         world: live.world.clone(),
         windows: capture::windows(ctx),
         active: live.store.active_layout.clone(),
@@ -241,14 +327,40 @@ fn arrangement(ctx: &egui::Context, live: &Live) -> Arrangement {
     }
 }
 
-/// The two steps of an apply: the world now, the windows queued for the
-/// next frame.
-fn start(ctx: &egui::Context, live: &mut Live, world: Option<&ViewportSettings>, windows: Option<&Placements>) -> Report {
+/// The steps of an apply: the viewer window's begun when the layout has
+/// one (`window`: its frame and the monitors it was saved on), the world
+/// now, the windows queued for the frame after the viewer window is in
+/// place. Whether the window is then held is in the second value.
+fn start(
+    ctx: &egui::Context,
+    live: &mut Live,
+    window: Option<(&WindowFrame, &[Monitor])>,
+    world: Option<&ViewportSettings>,
+    windows: Option<&Placements>,
+) -> (Report, bool) {
+    let mut report = Report::default();
+    // the viewer window first: what it asks is worked out from the window
+    // and the monitors of now
+    let asked = window.and_then(|(frame, saved)| match seen(ctx) {
+        Some(seen) => Some(monitors::resolve(frame, saved, &capture::monitors(ctx), &seen)),
+        None => {
+            report.no_window = true;
+            None
+        }
+    });
+    if let Some(asked) = &asked {
+        report.missing = asked.missing;
+        report.left = asked.left;
+        report.unlocked = asked.unlocked;
+    }
+    let plan = asked.and_then(|asked| asked.plan);
+    let held = plan.is_some_and(|plan| plan.hold != Hold::FREE);
     if let Some(world) = world {
         *live.world = world.clone();
     }
-    let room = capture::room(ctx);
-    let mut report = Report::default();
+    // (how many windows do not fit is counted again when they are placed:
+    // the viewer window may have another size by then)
+    let room = capture::room(ctx).filter(|_| plan.is_none());
     for (id, place) in windows.iter().flat_map(|w| &w.windows) {
         if windows::find(id).is_none() {
             report.unknown += 1;
@@ -264,15 +376,17 @@ fn start(ctx: &egui::Context, live: &mut Live, world: Option<&ViewportSettings>,
     }
     let now = ctx.cumulative_frame_nr();
     session(ctx, |s| {
-        // a new apply replaces one still waiting for its frame
+        // a new apply replaces one still under way
+        s.viewer.begin(plan, report.missing == 0);
         s.queued = windows.map(|w| Queued {
             windows: w.clone(),
             frame: now,
         });
         s.settle = Some(now + SETTLE);
         s.baseline = None;
+        s.notice = None;
     });
-    report
+    (report, held)
 }
 
 /// Applies the layout at `index` of the list. The arrangement it replaces
@@ -280,10 +394,12 @@ fn start(ctx: &egui::Context, live: &mut Live, world: Option<&ViewportSettings>,
 pub fn apply(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<Report, StoreError> {
     let layout: Layout = live.store.layout(index).ok_or(StoreError::Missing)?.clone();
     layout.check().map_err(|_| StoreError::Invalid)?;
-    let before = arrangement(ctx, live);
-    let mut report = start(ctx, live, layout.world.as_ref(), layout.windows.as_ref());
+    let before = arrangement(ctx, live, layout.window.is_some());
+    let window = layout.window.as_ref().map(|frame| (frame, layout.monitors.as_slice()));
+    let (mut report, held) = start(ctx, live, window, layout.world.as_ref(), layout.windows.as_ref());
     report.name = Some(layout.name.clone());
     live.store.set_active(Some(layout.name));
+    live.store.window_held = held;
     session(ctx, |s| {
         s.previous = Some(before);
         s.report = Some(report.clone());
@@ -298,13 +414,23 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
     let Some(kept) = session(ctx, |s| s.previous.take()) else {
         return false;
     };
-    let before = arrangement(ctx, live);
-    let report = start(ctx, live, Some(&kept.world), kept.windows.as_ref());
+    let before = arrangement(ctx, live, kept.window.is_some());
+    let window = kept.window.as_ref().map(|(frame, monitors, _)| (frame, monitors.as_slice()));
+    let (report, held) = start(ctx, live, window, Some(&kept.world), kept.windows.as_ref());
     // the marks of then, if that layout is still in the list
     let active = kept.active.filter(|name| live.store.find(name).is_some());
     let modified = kept.modified && active.is_some();
+    // held as it was then, by the layout of then
+    let held = held
+        && kept.window.as_ref().is_some_and(|(_, _, held)| *held)
+        && active
+            .as_deref()
+            .and_then(|name| live.store.find(name))
+            .and_then(|(_, layout)| layout.window.as_ref())
+            .is_some_and(WindowFrame::holds);
     live.store.set_active(active);
     live.store.modified = modified;
+    live.store.window_held = held;
     session(ctx, |s| {
         s.previous = Some(before);
         s.report = Some(report);
@@ -330,13 +456,18 @@ fn rebaseline(ctx: &egui::Context) {
         s.baseline = None;
         s.settle = Some(now + SETTLE);
         s.report = None;
+        s.viewer.rebaseline(now);
     });
 }
 
 /// *Save as new*: the arrangement of now, its chosen `parts`, under
 /// `name`; it becomes the active layout.
 pub fn save_new(ctx: &egui::Context, live: &mut Live, name: &str, parts: Parts) -> Result<usize, StoreError> {
-    if !parts.world && !parts.windows {
+    let (window, monitors) = match parts.window.then(|| window_now(ctx)).flatten() {
+        Some((frame, monitors)) => (Some(frame.with_lock(parts.lock)), monitors),
+        None => (None, capture::monitors(ctx)),
+    };
+    if window.is_none() && !parts.world && !parts.windows {
         return Err(StoreError::Invalid);
     }
     let world = parts.world.then(|| capture::world(live.world));
@@ -344,7 +475,12 @@ pub fn save_new(ctx: &egui::Context, live: &mut Live, name: &str, parts: Parts) 
         true => Some(capture::windows(ctx).ok_or(StoreError::Invalid)?),
         false => None,
     };
-    let index = live.store.add(Layout::new(name, world, windows, capture::monitors(ctx)))?;
+    // the window is where the layout has it: a lock asked holds at once
+    let held = window.as_ref().is_some_and(WindowFrame::holds);
+    let index = live
+        .store
+        .add(Layout::new(name, world, windows, monitors).with_window(window))?;
+    live.store.window_held = held;
     rebaseline(ctx);
     Ok(index)
 }
@@ -353,7 +489,22 @@ pub fn save_new(ctx: &egui::Context, live: &mut Live, name: &str, parts: Parts) 
 /// parts it has, and becomes the active layout.
 pub fn update(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<(), StoreError> {
     let world = capture::world(live.world);
-    live.store.update(index, world, capture::windows(ctx), capture::monitors(ctx))?;
+    let old = live.store.layout(index).ok_or(StoreError::Missing)?;
+    // its lock box is the layout's own; the lock in force stays as it is
+    // for the layout in use, and is the box for another one
+    let locked = old.window.as_ref().is_some_and(WindowFrame::locked);
+    let was_held = if live.store.is_active(index) { live.store.window_held } else { true };
+    let (window, monitors) = match old.window.as_ref().and_then(|_| window_now(ctx)) {
+        Some((frame, monitors)) => (Some(frame.with_lock(locked)), monitors),
+        None => (None, capture::monitors(ctx)),
+    };
+    live.store.update(index, world, capture::windows(ctx), window, monitors)?;
+    live.store.window_held = was_held
+        && live
+            .store
+            .layout(index)
+            .and_then(|layout| layout.window.as_ref())
+            .is_some_and(WindowFrame::holds);
     rebaseline(ctx);
     Ok(())
 }
@@ -366,7 +517,7 @@ pub fn reset_world(ctx: &egui::Context, live: &mut Live) -> bool {
     if *live.world == fresh {
         return false;
     }
-    let before = arrangement(ctx, live);
+    let before = arrangement(ctx, live, false);
     *live.world = fresh;
     session(ctx, |s| {
         s.previous = Some(before);
@@ -402,17 +553,124 @@ fn moved(layout: &Placements, baseline: &Placements, now: &Placements, skip: &BT
         .any(|id| matches!((baseline.windows.get(id), now.windows.get(id)), (Some(a), Some(b)) if differs(a, b)))
 }
 
-/// Each frame, before the interface's pass: places the windows of an
-/// apply asked in an earlier frame, asks again at the start for the
-/// windows still waiting from the last session, and twice a second looks
-/// at the windows for the "modified" mark. True when the store changed and
-/// the settings are to be saved.
-pub fn frame(ctx: &egui::Context, live: &mut Live) -> bool {
-    let Some(room) = capture::room(ctx) else {
-        return false;
-    };
+/// *Unlock the viewer window*: its border and its resizing come back from
+/// the next frame; it keeps its place and size. False when nothing held it.
+pub fn unlock(store: &mut Store) -> bool {
+    std::mem::take(&mut store.window_held)
+}
+
+/// The tab's editor: another *Viewer window* for the layout at `index`.
+/// On the layout in use, the lock box alone takes effect at once (a normal
+/// window's, and a borderless one's while it is held); anything else marks
+/// it modified until it is applied.
+pub fn set_window(store: &mut Store, index: usize, frame: WindowFrame) -> Result<(), StoreError> {
+    let old = store.layout(index).and_then(|layout| layout.window.clone());
+    let lock_only = old.is_some_and(|old| old.with_lock(frame.locked()) == frame);
+    let (active, modified, held) = (store.is_active(index), store.modified, store.window_held);
+    let normal = matches!(frame, WindowFrame::Normal { .. });
+    let locked = frame.locked();
+    store.set_window(index, frame)?;
+    if active && lock_only && (normal || held) {
+        store.modified = modified;
+        store.window_held = if normal { locked } else { held };
+    }
+    Ok(())
+}
+
+/// The card to show over the world, if any.
+pub fn notice(ctx: &egui::Context) -> Option<Notice> {
+    session(ctx, |s| s.notice.clone())
+}
+
+/// What the monitors' change asks for, by the user's choice: nothing, a
+/// card, or (the second value) a layout to apply at once.
+fn on_setup(store: &Store, setup: &[Monitor], unlocked: bool) -> (Option<Notice>, Option<usize>) {
+    if store.on_monitor_change == MonitorPolicy::Nothing {
+        return (None, None);
+    }
+    // the layout in use was saved on this setup: nothing to offer
+    let fits = store
+        .active()
+        .is_some_and(|layout| !layout.monitors.is_empty() && monitors::same_setup(&layout.monitors, setup));
+    let offer = monitors::matching(store, setup).filter(|_| !fits);
+    let name = offer.and_then(|index| store.layout(index)).map(|layout| layout.name.clone());
+    match (name, store.on_monitor_change) {
+        (Some(name), MonitorPolicy::Apply) => (Some(Notice::Applied { name }), offer),
+        (Some(name), _) => (Some(Notice::Offer { name, unlocked }), None),
+        (None, _) if unlocked => (Some(Notice::Unlocked), None),
+        (None, _) => (None, None),
+    }
+}
+
+/// Runs what the menu and the card asked since the last frame.
+fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
+    for request in menu::take(ctx) {
+        match request {
+            Request::Apply(name) => {
+                if let Some((index, _)) = live.store.find(&name)
+                    && apply(ctx, live, index).is_ok()
+                {
+                    outcome.save = true;
+                }
+            }
+            Request::Previous => outcome.save |= previous(ctx, live),
+            Request::Unlock => outcome.save |= unlock(live.store),
+            Request::Preferences => outcome.preferences = true,
+            Request::Dismiss => {}
+        }
+        // any answer takes the card away
+        session(ctx, |s| s.notice = None);
+    }
+}
+
+/// Each frame, before the interface's pass: `seen` is the viewer window
+/// now (None: there is none to drive). Runs what the menu and the card
+/// asked, carries on the viewer window's steps and keeps its lock, places
+/// the windows of an apply once the viewer window is in place, asks again
+/// at the start for the windows still waiting from the last session, looks
+/// at the monitors, and twice a second looks at the windows for the
+/// "modified" mark.
+pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcome {
+    let mut outcome = Outcome::default();
+    run_requests(ctx, live, &mut outcome);
     let now = ctx.cumulative_frame_nr();
     let mut s = session(ctx, std::mem::take);
+    let found = s.viewer.frame(ctx, live.store, seen, &mut outcome.commands);
+    outcome.save |= found.save;
+    let mut apply_now = None;
+    if let Some(setup) = &found.setup {
+        (s.notice, apply_now) = on_setup(live.store, setup, found.unlocked);
+    }
+    if found.placed
+        && let Some(queued) = &mut s.queued
+    {
+        // the interface takes the window's new size in the frames after
+        queued.frame = now + RESIZED_AFTER;
+        s.settle = Some(now + RESIZED_AFTER + SETTLE);
+    }
+    if let Some(room) = capture::room(ctx) {
+        outcome.save |= windows_frame(ctx, live, &mut s, &room);
+    }
+    let stamp = menu::stamp(live.store, s.previous.is_some());
+    if stamp != std::mem::replace(&mut s.menu, stamp) {
+        menu::publish(ctx, live.store, s.previous.is_some());
+    }
+    session(ctx, |slot| *slot = s);
+    // (with the session back in its place: an apply reads and writes it)
+    if let Some(index) = apply_now
+        && apply(ctx, live, index).is_ok()
+    {
+        outcome.save = true;
+        let name = live.store.layout(index).map(|layout| layout.name.clone());
+        session(ctx, |s| s.notice = name.map(|name| Notice::Applied { name }));
+    }
+    outcome
+}
+
+/// The windows' part of a frame, in the interface `room`. True when the
+/// store changed.
+fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &Room) -> bool {
+    let now = ctx.cumulative_frame_nr();
     let mut save = false;
     if !s.started {
         s.started = true;
@@ -420,18 +678,27 @@ pub fn frame(ctx: &egui::Context, live: &mut Live) -> bool {
         if let Some(windows) = live.store.active().and_then(|layout| layout.windows.as_ref()) {
             for id in &live.store.pending {
                 if let (Some(window), Some(place)) = (windows::find(id), windows.windows.get(id)) {
-                    request(ctx, &mut s, window, &room, &fit(place, &windows.frame, &room.frame));
+                    request(ctx, s, window, room, &fit(place, &windows.frame, &room.frame));
                 }
             }
         }
         s.settle = Some(now + SETTLE);
     }
-    if let Some(queued) = s.queued.take_if(|queued| queued.frame < now) {
+    // (the windows wait for the viewer window: they are fitted to the
+    // interface it gives)
+    let viewer_busy = s.viewer.busy();
+    if let Some(queued) = s.queued.take_if(|queued| queued.frame < now && !viewer_busy) {
         s.targets.clear();
+        let mut fitted = 0;
         for (id, place) in &queued.windows.windows {
             if let Some(window) = windows::find(id) {
-                request(ctx, &mut s, window, &room, &fit(place, &queued.windows.frame, &room.frame));
+                let place = fit(place, &queued.windows.frame, &room.frame);
+                fitted += usize::from(place.changed);
+                request(ctx, s, window, room, &place);
             }
+        }
+        if let Some(report) = &mut s.report {
+            report.fitted = fitted;
         }
         s.settle = Some(now + SETTLE);
         s.baseline = None;
@@ -443,7 +710,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live) -> bool {
         s.settle = Some(now + SETTLE);
     }
     let busy = s.queued.is_some() || ctx.input(|i| i.pointer.any_down());
-    if !busy && follow_up(ctx, &mut s) {
+    if !busy && follow_up(ctx, s) {
         s.baseline = None;
         s.settle = Some(now + SETTLE);
     }
@@ -473,13 +740,19 @@ pub fn frame(ctx: &egui::Context, live: &mut Live) -> bool {
     } else if !busy && now >= s.checked.saturating_add(CHECK_EVERY) {
         s.checked = now;
         let layout = live.store.active().and_then(|layout| layout.windows.clone());
-        if !live.store.modified
-            && let (Some(layout), Some(baseline)) = (&layout, &s.baseline)
-            && let Some(current) = capture::windows(ctx)
-            && moved(layout, baseline, &current, &live.store.pending)
-        {
-            live.store.modified = true;
-            save = true;
+        let current = capture::windows(ctx);
+        if let (Some(layout), Some(baseline), Some(current)) = (&layout, &mut s.baseline, &current) {
+            // a window of the layout shown for the first time since the
+            // baseline: where Aurora opened it is where it is watched from
+            for (id, place) in &current.windows {
+                if layout.windows.contains_key(id) && !baseline.windows.contains_key(id) {
+                    baseline.windows.insert(id.clone(), *place);
+                }
+            }
+            if !live.store.modified && moved(layout, baseline, current, &live.store.pending) {
+                live.store.modified = true;
+                save = true;
+            }
         }
         // a window that waited was opened and took its place: Aurora's
         // doing, so the baseline is taken again
@@ -491,6 +764,5 @@ pub fn frame(ctx: &egui::Context, live: &mut Live) -> bool {
             s.settle = Some(now + SETTLE);
         }
     }
-    session(ctx, |slot| *slot = s);
     save
 }

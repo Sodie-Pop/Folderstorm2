@@ -369,3 +369,50 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut ViewportSettings, desktop: &D
     }
     changed
 }
+
+/// The height of [`monitors`]' picture, in points.
+const PREVIEW_H: f32 = 96.0;
+
+/// A small picture of monitors (each x, y, width, height in desktop
+/// pixels), numbered, with a window's frame over them: the monitors a
+/// saved layout counts in, and where it puts the viewer window. The
+/// `chosen` ones are lit. With `pick`, a click on a monitor returns its
+/// place in the list.
+pub fn monitors(ui: &mut egui::Ui, p: &Palette, monitors: &[[i32; 4]], window: Option<[i32; 4]>, chosen: &[usize], pick: bool) -> Option<usize> {
+    let rect_of = |[x, y, w, h]: [i32; 4]| Rect::from_min_size(egui::pos2(x as f32, y as f32), vec2(w.max(0) as f32, h.max(0) as f32));
+    let rects: Vec<Rect> = monitors.iter().map(|m| rect_of(*m)).collect();
+    let bounds = rects
+        .iter()
+        .copied()
+        .chain(window.map(rect_of))
+        .filter(|r| r.is_positive())
+        .reduce(|all, r| all.union(r))?;
+    let width = (PREVIEW_H * bounds.width() / bounds.height().max(1.0)).clamp(120.0, ui.available_width().max(120.0));
+    let sense = if pick { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, PREVIEW_H), sense);
+    let mapping = Mapping::fit(bounds, rect, 6.0);
+    let none = egui::CornerRadius::ZERO;
+    ui.painter().rect_filled(rect, ui.visuals().window_corner_radius, p.field);
+    let painter = ui.painter().with_clip_rect(rect.shrink(1.0));
+    let bold = egui::FontId::new(12.0, crate::ui::fonts::semibold(ui.ctx()));
+    let hovered = resp.hover_pos().and_then(|at| rects.iter().position(|r| r.contains(mapping.to_window(at))));
+    for (n, r) in rects.iter().enumerate() {
+        let d = mapping.rect_to_diagram(*r);
+        let lit = chosen.contains(&n);
+        let fill = if lit { p.violet.gamma_multiply(0.55) } else { p.raised };
+        painter.rect_filled(d, none, fill);
+        let edge = if pick && hovered == Some(n) { p.violet_light } else { p.muted_dim };
+        painter.rect_stroke(d, none, Stroke::new(1.0, edge), StrokeKind::Inside);
+        if d.width() >= 16.0 && d.height() >= 16.0 {
+            let ink = if lit { p.ink } else { p.muted };
+            painter.text(d.left_top() + vec2(5.0, 3.0), egui::Align2::LEFT_TOP, (n + 1).to_string(), bold.clone(), ink);
+        }
+    }
+    if let Some(window) = window.map(rect_of).filter(|r| r.is_positive()) {
+        painter.rect_stroke(mapping.rect_to_diagram(window), none, Stroke::new(1.5, p.teal), StrokeKind::Inside);
+    }
+    if pick && hovered.is_some() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    resp.clicked().then_some(hovered).flatten()
+}

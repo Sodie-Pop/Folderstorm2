@@ -81,12 +81,121 @@ fn one() -> f32 {
     1.0
 }
 
+/// The *Viewer window* part of a layout, in desktop pixels
+/// (folderstorm/plans/workspaces.md, checkpoint 4).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum WindowFrame {
+    /// A window with its border. `x`, `y`: its outer corner as the system
+    /// gives it (absent where it does not: Wayland); `width`, `height`: its
+    /// inside. Maximized, they are the size and place it goes back to.
+    Normal {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        x: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        y: Option<i32>,
+        width: u32,
+        height: u32,
+        #[serde(default)]
+        maximized: bool,
+        /// *Lock the window size*: the window cannot be resized by hand.
+        #[serde(default)]
+        locked: bool,
+    },
+    /// Aurora's full screen, on the monitor at this place of the layout's
+    /// `monitors` (or where the window is, when the layout has none).
+    Fullscreen {
+        #[serde(default)]
+        monitor: u8,
+    },
+    /// No border, exactly over the monitors at these places of the
+    /// layout's `monitors`. `locked`: not resizable either.
+    Borderless {
+        monitors: Vec<u8>,
+        #[serde(default)]
+        locked: bool,
+    },
+}
+
+impl WindowFrame {
+    /// Whether the layout asks for the window to be locked.
+    pub fn locked(&self) -> bool {
+        match self {
+            WindowFrame::Normal { locked, .. } | WindowFrame::Borderless { locked, .. } => *locked,
+            WindowFrame::Fullscreen { .. } => false,
+        }
+    }
+
+    /// The same frame with its lock box as `on` (full screen has none).
+    pub fn with_lock(mut self, on: bool) -> Self {
+        if let WindowFrame::Normal { locked, .. } | WindowFrame::Borderless { locked, .. } = &mut self {
+            *locked = on;
+        }
+        self
+    }
+
+    /// Whether the frame holds the window while it is in force: locked, or
+    /// without a border.
+    pub fn holds(&self) -> bool {
+        self.locked() || matches!(self, WindowFrame::Borderless { .. })
+    }
+
+    fn ok(&self, monitors: usize) -> bool {
+        let far = MAX_DISTANCE as i64;
+        match self {
+            WindowFrame::Normal { x, y, width, height, .. } => {
+                x.zip(*y).is_none_or(|(x, y)| i64::from(x).abs() <= far && i64::from(y).abs() <= far)
+                    && (1..=far).contains(&i64::from(*width))
+                    && (1..=far).contains(&i64::from(*height))
+            }
+            // (a layout saved where the system lists no monitor: the
+            // monitor the window is on)
+            WindowFrame::Fullscreen { monitor } => usize::from(*monitor) < monitors.max(1),
+            WindowFrame::Borderless { monitors: chosen, .. } => {
+                !chosen.is_empty()
+                    && chosen.iter().all(|n| usize::from(*n) < monitors)
+                    && chosen.iter().collect::<BTreeSet<_>>().len() == chosen.len()
+            }
+        }
+    }
+}
+
+/// What to do once the monitor setup has changed (section 8.5).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MonitorPolicy {
+    /// Offer the layout saved on the new setup.
+    #[default]
+    Ask,
+    /// Apply it without asking.
+    Apply,
+    Nothing,
+}
+
+impl MonitorPolicy {
+    /// A word this version does not know reads as the default.
+    fn read(word: &str) -> Self {
+        match word {
+            "apply" => Self::Apply,
+            "nothing" => Self::Nothing,
+            _ => Self::Ask,
+        }
+    }
+
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// A named layout: where things go. Each part is optional; an absent part
 /// is left alone when the layout is applied.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Layout {
     pub schema: u32,
     pub name: String,
+    /// The viewer window: where it is, how large, whether it is locked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<WindowFrame>,
     /// The world viewport and where the bars go.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world: Option<ViewportSettings>,
@@ -273,11 +382,18 @@ impl Layout {
         Layout {
             schema: SCHEMA,
             name: tidy(name).to_owned(),
+            window: None,
             world,
             windows,
             monitors,
             other: BTreeMap::new(),
         }
+    }
+
+    /// The same layout with a *Viewer window* part.
+    pub fn with_window(mut self, window: Option<WindowFrame>) -> Self {
+        self.window = window;
+        self
     }
 
     /// Whether every value is within the limits. A layout that fails is
@@ -291,7 +407,8 @@ impl Layout {
             && self.world.as_ref().is_none_or(world_ok)
             && self.windows.as_ref().is_none_or(Placements::ok)
             && self.monitors.len() <= MAX_MONITORS
-            && self.monitors.iter().all(Monitor::ok);
+            && self.monitors.iter().all(Monitor::ok)
+            && self.window.as_ref().is_none_or(|window| window.ok(self.monitors.len()));
         if ok { Ok(()) } else { Err(Unusable::Invalid) }
     }
 }
@@ -321,6 +438,13 @@ pub struct Store {
     /// Windows a layout placed while they were closed and that have not
     /// been shown since: their place is asked again at the next start.
     pub pending: BTreeSet<String>,
+    /// The active layout's lock or borderless mode is in force
+    /// (`super::viewer`): what a restart puts back.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub window_held: bool,
+    /// What to do when the monitors change.
+    #[serde(skip_serializing_if = "MonitorPolicy::is_default")]
+    pub on_monitor_change: MonitorPolicy,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -331,6 +455,8 @@ struct Raw {
     active_layout: Option<String>,
     modified: bool,
     pending: BTreeSet<String>,
+    window_held: bool,
+    on_monitor_change: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -371,12 +497,16 @@ impl From<Raw> for Store {
                 .filter(|id| super::windows::find(id).is_some())
                 .take(MAX_WINDOWS)
                 .collect(),
+            window_held: raw.window_held,
+            on_monitor_change: raw.on_monitor_change.as_str().map(MonitorPolicy::read).unwrap_or_default(),
         };
         if store.active().is_none() {
             store.active_layout = None;
             store.modified = false;
             store.pending.clear();
         }
+        // nothing holds the window without an active layout that asks for it
+        store.window_held &= store.active().and_then(|layout| layout.window.as_ref()).is_some_and(WindowFrame::holds);
         store
     }
 }
@@ -439,30 +569,53 @@ impl Store {
         Ok(self.layouts.len() - 1)
     }
 
-    /// Puts `world` and `windows` in the layout at `index` for the parts it
-    /// has (a part it does not have stays absent), with the monitors of now,
-    /// and makes it the active one. Its name, its place in the list and
-    /// what this version does not know of it are kept.
+    /// Puts `world`, `windows` and `window` in the layout at `index` for
+    /// the parts it has (a part it does not have stays absent), with the
+    /// monitors of now, and makes it the active one. Its name, its place in
+    /// the list and what this version does not know of it are kept.
     pub fn update(
         &mut self,
         index: usize,
         world: ViewportSettings,
         windows: Option<Placements>,
+        window: Option<WindowFrame>,
         monitors: Vec<Monitor>,
     ) -> Result<(), StoreError> {
         let old = self.layout(index).ok_or(StoreError::Missing)?;
+        // a viewer window that cannot be read now keeps the saved one,
+        // with the monitors it counts in
+        let unread = old.window.is_some() && window.is_none();
         let new = Layout {
             schema: old.schema,
             name: old.name.clone(),
+            window: old.window.as_ref().map(|saved| window.unwrap_or_else(|| saved.clone())),
             world: old.world.as_ref().map(|_| world),
             // a windows part that cannot be read now keeps the saved one
             windows: old.windows.as_ref().map(|saved| windows.unwrap_or_else(|| saved.clone())),
-            monitors,
+            monitors: if unread { old.monitors.clone() } else { monitors },
             other: old.other.clone(),
         };
         new.check().map_err(|_| StoreError::Invalid)?;
         self.set_active(Some(new.name.clone()));
         self.layouts[index] = Record::Layout(new);
+        Ok(())
+    }
+
+    /// Puts another *Viewer window* in the layout at `index` (the tab's
+    /// editor). The layout in use is then modified: its window is not the
+    /// viewer's until it is applied.
+    pub fn set_window(&mut self, index: usize, window: WindowFrame) -> Result<(), StoreError> {
+        let active = self.is_active(index);
+        let Some(Record::Layout(layout)) = self.layouts.get_mut(index) else {
+            return Err(StoreError::Missing);
+        };
+        if !window.ok(layout.monitors.len()) {
+            return Err(StoreError::Invalid);
+        }
+        if layout.window.as_ref() != Some(&window) {
+            layout.window = Some(window);
+            self.modified |= active;
+        }
         Ok(())
     }
 
@@ -508,11 +661,13 @@ impl Store {
     }
 
     /// Marks `name` as the layout in use, as just applied: not modified,
-    /// no window waiting from the one before.
+    /// no window waiting from the one before, the viewer window not held
+    /// (the caller says when it is).
     pub fn set_active(&mut self, name: Option<String>) {
         self.active_layout = name;
         self.modified = false;
         self.pending.clear();
+        self.window_held = false;
     }
 }
 
@@ -864,7 +1019,7 @@ mod tests {
             windows: BTreeMap::from([("people".to_owned(), place(1.0, 2.0, 300.0, 400.0))]),
         };
         store.modified = true;
-        store.update(0, world.clone(), Some(windows.clone()), Vec::new()).expect("updated");
+        store.update(0, world.clone(), Some(windows.clone()), None, Vec::new()).expect("updated");
         let updated = store.layout(0).expect("still there");
         assert_eq!(updated.name, "Wide");
         assert_eq!(updated.world.as_ref(), Some(&world));
@@ -873,15 +1028,15 @@ mod tests {
         assert_eq!(updated.other["window"]["locked"], true);
         assert_eq!((store.active_layout.as_deref(), store.modified), (Some("Wide"), false));
         // a layout without a windows part does not gain one
-        store.update(1, world.clone(), Some(windows), Vec::new()).expect("updated");
+        store.update(1, world.clone(), Some(windows), None, Vec::new()).expect("updated");
         let viewport = store.layout(1).expect("still there");
         assert_eq!((viewport.world.as_ref(), viewport.windows.as_ref()), (Some(&world), None));
         // windows that cannot be read now leave the saved ones
         let saved = store.layout(0).and_then(|l| l.windows.clone());
-        store.update(0, world, None, Vec::new()).expect("updated");
+        store.update(0, world, None, None, Vec::new()).expect("updated");
         assert_eq!(store.layout(0).and_then(|l| l.windows.clone()), saved);
         assert_eq!(
-            store.update(7, ViewportSettings::default(), None, Vec::new()),
+            store.update(7, ViewportSettings::default(), None, None, Vec::new()),
             Err(StoreError::Missing)
         );
     }
@@ -927,7 +1082,7 @@ mod tests {
         assert_eq!(store.name_error("later", None), Some(NameError::Taken));
         assert_eq!(store.rename(0, "Other"), Err(StoreError::Missing));
         assert_eq!(
-            store.update(0, ViewportSettings::default(), None, Vec::new()),
+            store.update(0, ViewportSettings::default(), None, None, Vec::new()),
             Err(StoreError::Missing)
         );
         assert!(store.remove(0));

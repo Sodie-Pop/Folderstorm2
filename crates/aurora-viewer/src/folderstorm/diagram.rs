@@ -435,12 +435,31 @@ pub enum DemoMonitors {
     },
 }
 
+/// `AURORA_DEMO_LAYOUTS=unplug` took the last pretend monitor away.
+static DEMO_UNPLUGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Takes the last pretend monitor away, as if it were unplugged (a demo
+/// run with several monitors in `AURORA_DEMO_MONITORS`).
+pub fn demo_unplug() {
+    DEMO_UNPLUGGED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 impl DemoMonitors {
     /// The desktop these pretend monitors give a window of `size`.
     pub fn desktop(&self, size: (u32, u32)) -> Desktop {
+        self.desktop_with(size, DEMO_UNPLUGGED.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// The same, with the last of several monitors taken away when
+    /// `unplugged`.
+    fn desktop_with(&self, size: (u32, u32), unplugged: bool) -> Desktop {
         match self {
             DemoMonitors::NoPosition => Desktop::window_only(size),
             DemoMonitors::Layout { monitors, window_at } => {
+                let monitors = match monitors.len() {
+                    count if unplugged && count > 1 => &monitors[..count - 1],
+                    _ => &monitors[..],
+                };
                 let corner = monitors
                     .iter()
                     .map(|m| (m.rect[0], m.rect[1]))
@@ -449,7 +468,7 @@ impl DemoMonitors {
                 Desktop {
                     window: size,
                     position: Some(window_at.unwrap_or(corner)),
-                    monitors: monitors.clone(),
+                    monitors: monitors.to_vec(),
                 }
             }
         }
@@ -563,6 +582,11 @@ fn desktop_id() -> egui::Id {
 /// The app's latest look at the window and the monitors, for the diagram.
 pub fn set_desktop(ctx: &egui::Context, desktop: Desktop) {
     ctx.data_mut(|d| d.insert_temp(desktop_id(), desktop));
+}
+
+/// Whether the app has looked at the window and the monitors yet.
+pub fn desktop_known(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<Desktop>(desktop_id())).is_some()
 }
 
 /// The window and the monitors, once the app has looked; else the window

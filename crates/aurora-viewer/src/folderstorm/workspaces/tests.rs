@@ -10,6 +10,8 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod viewer;
+
 const INVENTORY: &str = "inventory";
 const PEOPLE: &str = "people";
 const MAP: &str = "worldmap";
@@ -28,6 +30,13 @@ struct Viewer {
     time: f64,
     /// Whether `apply::frame` asked for the settings to be saved.
     saved: bool,
+    /// A pretend viewer window: it runs what the layouts ask, and the
+    /// interface has its size. None: no window to drive.
+    window: Option<super::window::Pretend>,
+    /// The monitors the app publishes with it, each (x, y, width, height).
+    monitors: Vec<[i32; 4]>,
+    /// `apply::frame` asked for Preferences.
+    preferences: bool,
 }
 
 impl Viewer {
@@ -42,6 +51,9 @@ impl Viewer {
             open: BTreeSet::from([INVENTORY, PEOPLE, MAP, MINIMAP, PREFERENCES]),
             time: 0.0,
             saved: false,
+            window: None,
+            monitors: Vec::new(),
+            preferences: false,
         }
     }
 
@@ -52,6 +64,15 @@ impl Viewer {
         next.store = serde_json::from_str(&serde_json::to_string(&self.store).expect("saved")).expect("read");
         next.world = self.world.clone();
         next.open = self.open.clone();
+        // the window where it was, as Aurora reopens it: with its border,
+        // free to be resized
+        next.window = self.window.as_ref().map(|window| {
+            let (x, y) = window.seen.outer.unwrap_or_default();
+            let mut fresh = super::window::Pretend::new(x, y, window.seen.inner.0, window.seen.inner.1);
+            fresh.seen.outer = window.seen.outer;
+            fresh
+        });
+        next.monitors = self.monitors.clone();
         next
     }
 
@@ -66,7 +87,31 @@ impl Viewer {
     /// the windows that are open.
     fn frame(&mut self) {
         let ctx = self.ctx.clone();
-        self.saved |= apply::frame(&ctx, &mut self.live());
+        // as the app does before the layouts' call: the desktop published,
+        // the window described
+        if let Some(window) = &self.window {
+            self.size = vec2(window.seen.inner.0 as f32, window.seen.inner.1 as f32);
+            crate::folderstorm::diagram::set_desktop(
+                &ctx,
+                crate::folderstorm::diagram::Desktop {
+                    window: window.seen.inner,
+                    position: window.seen.outer,
+                    monitors: self
+                        .monitors
+                        .iter()
+                        .map(|rect| crate::folderstorm::diagram::Monitor { rect: *rect, scale: 1.0 })
+                        .collect(),
+                },
+            );
+        }
+        let seen = self.window.as_ref().map(|window| window.seen);
+        let outcome = apply::frame(&ctx, &mut self.live(), seen);
+        self.saved |= outcome.save;
+        self.preferences |= outcome.preferences;
+        if let Some(window) = &mut self.window {
+            window.send(&outcome.commands);
+            window.frame();
+        }
         self.time += 1.0 / 60.0;
         let screen = Rect::from_min_size(Pos2::ZERO, self.size);
         let open = self.open.clone();
@@ -567,6 +612,7 @@ fn a_part_a_layout_does_not_have_is_left_alone() {
         Parts {
             world: true,
             windows: false,
+            ..Default::default()
         },
     )
     .expect("saved");
@@ -575,6 +621,7 @@ fn a_part_a_layout_does_not_have_is_left_alone() {
         Parts {
             world: false,
             windows: true,
+            ..Default::default()
         },
     )
     .expect("saved");
@@ -583,7 +630,8 @@ fn a_part_a_layout_does_not_have_is_left_alone() {
             "Nothing",
             Parts {
                 world: false,
-                windows: false
+                windows: false,
+                ..Default::default()
             }
         ),
         Err(StoreError::Invalid)
@@ -681,7 +729,8 @@ fn an_interface_too_small_to_hold_windows_is_not_captured() {
             "World",
             Parts {
                 world: true,
-                windows: false
+                windows: false,
+                ..Default::default()
             }
         )
         .is_ok()

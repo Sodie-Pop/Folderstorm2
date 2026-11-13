@@ -9935,7 +9935,7 @@ impl App {
         gfx.renderer.set_world_rect(self.world_viewport(gfx.renderer.size()));
         folderstorm_viewport::publish_monitors(&self.egui_ctx, &gfx.window, self.frame_count);
         crate::folderstorm::chat_upload::frame(&self.settings.folderstorm_chat_upload, &self.palette); // Folderstorm
-        self.folderstorm_workspaces_frame(); // Folderstorm: layouts (app/folderstorm_workspaces.rs)
+        self.folderstorm_workspaces_frame(&gfx.window); // Folderstorm: layouts (app/folderstorm_workspaces.rs)
         let (w, h) = gfx.renderer.size();
         // a photo drawn at its own size this frame: its proportions, the
         // part of it this frame draws, the height its details are chosen for
@@ -16377,6 +16377,7 @@ impl App {
         }
         self.busy_pause_notice(&ctx, &p);
         self.folderstorm_characters_notice(&ctx, &p); // Folderstorm: 3D paused behind
+        self.folderstorm_workspaces_notice(&ctx, &p); // Folderstorm: layouts, the monitors changed
         self.video_memory_notice(&ctx, &p);
         self.media_pack_card(&ctx, &p);
         match self.screen {
