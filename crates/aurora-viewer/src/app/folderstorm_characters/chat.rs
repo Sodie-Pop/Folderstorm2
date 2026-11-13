@@ -135,45 +135,27 @@ impl App {
         if !self.folderstorm_logged_in_as(generation) {
             return OpenOutcome::Refused(OpenRefusal::Stale);
         }
-        let Some(target) = open.target().map(uuid::Uuid::from_u128) else {
-            return OpenOutcome::Refused(OpenRefusal::Unknown);
+        // (the checks of this viewer's own People and Contacts; RLVa's
+        // notice shows here, as for a click in this window)
+        let target = match chat_export::may_open(&mut self.world, open) {
+            Ok(target) => target,
+            Err(why) => return OpenOutcome::Refused(why),
         };
-        let group = self.world.groups.is_member(&target);
         match open {
-            Open::Im(_) => {
-                if target == self.world.agent_id || group || self.world.is_group_session(&target) {
-                    return OpenOutcome::Refused(OpenRefusal::Unknown);
-                }
-                // (RLVa's notice shows here, as for a click in this window)
-                if !self.world.rlva_start_ims(&[target]) {
-                    return OpenOutcome::Refused(OpenRefusal::Restricted);
-                }
-                self.open_conversation_to_type(target);
-                if !self.world.social.has_session(&target) {
-                    return OpenOutcome::Refused(OpenRefusal::Restricted);
-                }
-            }
+            Open::Im(_) => self.open_conversation_to_type(target),
             Open::Group(_) => {
-                if !group {
-                    return OpenOutcome::Refused(OpenRefusal::NotAGroup);
-                }
-                if !self.world.rlva_start_ims(&[target]) {
-                    return OpenOutcome::Refused(OpenRefusal::Restricted);
-                }
                 // as Contacts › Groups' "Group chat"
                 self.world.ui_sounds.push(crate::ui_sound::UiSound::StartIm);
                 self.world.start_group_chat(target);
                 self.open_conversation_to_type(target);
-                if !self.world.social.has_session(&target) {
-                    return OpenOutcome::Refused(OpenRefusal::Restricted);
-                }
             }
             Open::Profile(_) => {
-                if group || !self.world.rlva_can_name(target) {
-                    return OpenOutcome::Refused(if group { OpenRefusal::Unknown } else { OpenRefusal::Restricted });
-                }
                 self.on_ctx_action(crate::ui::context::CtxAction::Profile(target));
+                return OpenOutcome::Opened;
             }
+        }
+        if !self.world.social.has_session(&target) {
+            return OpenOutcome::Refused(OpenRefusal::Restricted);
         }
         OpenOutcome::Opened
     }

@@ -205,7 +205,7 @@ fn asked(app: &mut Window_) -> Vec<(usize, u64, Open)> {
 fn new_im_lists_the_character_s_groups_and_friends_and_opens_what_its_viewer_opened() {
     let mut app = app_with_contacts();
     let size = (1100, 720);
-    app.chat.test_show(0, Some(Sheet::Everyone));
+    app.chat.show_sheet(0, Some(Sheet::Everyone));
     let drawn = frame(&mut app, Which::Main, size, Vec::new());
     keep("contacts-new-im-1100", &drawn, size);
     for text in [
@@ -246,7 +246,7 @@ fn new_im_lists_the_character_s_groups_and_friends_and_opens_what_its_viewer_ope
     assert_eq!(app.chat.viewing(&app.host.chat), Viewing::Thread(0, MIA));
     keep("contacts-opened-1100", &drawn, size);
     // a search narrows the list; a group's chat opens the same way
-    app.chat.test_show(0, Some(Sheet::Everyone));
+    app.chat.show_sheet(0, Some(Sheet::Everyone));
     let drawn = frame(&mut app, Which::Main, size, Vec::new());
     let at = drawn.point_of("Aurora Builders", 2);
     click(&mut app, Which::Main, size, at);
@@ -261,7 +261,7 @@ fn new_im_lists_the_character_s_groups_and_friends_and_opens_what_its_viewer_ope
 fn friends_are_online_first_and_a_refusal_is_said_where_it_was_asked() {
     let mut app = app_with_contacts();
     let size = (1100, 720);
-    app.chat.test_show(0, Some(Sheet::Friends));
+    app.chat.show_sheet(0, Some(Sheet::Friends));
     let drawn = frame(&mut app, Which::Main, size, Vec::new());
     for text in ["Jane Doe's friends", "Online (2)", "Offline (2)", "bob Resident", "Zoe Resident"] {
         assert!(drawn.shows(text), "{text}");
@@ -305,7 +305,7 @@ fn friends_are_online_first_and_a_refusal_is_said_where_it_was_asked() {
     assert!(app.host.chat.thread(0, BOB).is_none());
     keep("contacts-refused-1100", &drawn, size);
     // a character not in the world: its sheet says so, and asks nothing
-    app.chat.test_show(1, Some(Sheet::Friends));
+    app.chat.show_sheet(1, Some(Sheet::Friends));
     app.host.chat.ended(1, 1);
     let drawn = frame(&mut app, Which::Main, size, Vec::new());
     assert!(drawn.shows("Sam Resident is not in the world."));
@@ -375,7 +375,7 @@ fn a_web_link_opens_after_the_viewer_s_judge_and_a_grid_link_switches() {
         "Jane Doe",
         "see https://example.org/page or secondlife://Ahern/128/128/30 and https://secondlife.com/destinations",
     );
-    app.chat.test_show(0, None);
+    app.chat.show_sheet(0, None);
     let drawn = frame(&mut app, Which::Main, size, Vec::new());
     keep("chat-links-1100", &drawn, size);
     // an unknown site: asked first, nothing opened

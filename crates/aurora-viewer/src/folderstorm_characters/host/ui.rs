@@ -1003,6 +1003,11 @@ impl ApplicationHandler for Window_ {
                 if let Some(section) = self.host.demo_settings.take() {
                     self.open_settings(section, None);
                 }
+                // (checkpoint 11, demo only) New IM or Friends, open
+                if let Some(which) = self.host.demo_contacts.take() {
+                    self.chat.show_sheet(0, Some(which));
+                    self.chat_page = true;
+                }
             }
             Err(error) => {
                 self.error = Some(error.to_string());

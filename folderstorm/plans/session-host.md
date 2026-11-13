@@ -392,6 +392,11 @@ available.
   dialogs. These appear as "Attention" items with "Switch to answer"; the
   viewer's own dialog handles them. Nothing is auto-accepted.
 - **No combined archive.** Transcripts stay in each character's viewer.
+- **Starting a conversation** (checkpoint 11): the host asks the
+  character's viewer to open it (`ToViewer::Open`), the viewer opens it as
+  its own People and Contacts would, with their checks, and the
+  conversation then comes to the host as any other. Friends and groups
+  come from the viewer, bounded, for that login only.
 
 ## 10. Sound and voice
 
@@ -476,7 +481,8 @@ available.
   had it: see its "As built". Its follow-ups added the inbox's host-only
   Dismiss, a confirmation for Quit all and new default hotkeys.
   Checkpoint 8 put the quick actions in a bar at the top of every
-  managed viewer, with up to twelve positions of the user's choice.)
+  managed viewer, with up to twelve positions of the user's choice.
+  Checkpoint 11 built the friends list and New IM in the host.)
 - **Creators' permissions:** none of this shows, copies or exports assets or
   asset ids. Monitors show what that character's viewer shows and are never
   saved. Profile copy moves the user's own settings files only.
@@ -816,6 +822,8 @@ May be two small PRs: 1a profiles, 1b behind policy.
   - Not done: starting a conversation from the host, typing notices,
     shout / whisper, a line's links as links (plain text), names coloured
     per character, the chat as its own window (checkpoint 6).
+    (Checkpoint 11 built the first four, typing notices as "… is
+    typing" only.)
 
 ### Checkpoint 4: comfort
 
@@ -2064,6 +2072,7 @@ May be two small PRs: 1a profiles, 1b behind policy.
   - **New IM and Friends are not built**: the shared chat cannot start a
     conversation (the link has no message for it, and the host knows no
     friends list). They stay in FEATURES' "left for the human to pick".
+    (Built in checkpoint 11.)
 - **Cycling monitor**: one more window that shows each background
   character in turn (in the world, behind the active one; slot order),
   each for the interval chosen (5 s at first; 2 s to 10 min). Its header
@@ -2567,6 +2576,198 @@ May be two small PRs: 1a profiles, 1b behind policy.
        panel's off screen (or unplugging a screen); diagnostics; the
        licence;
     6. a `session-host.json` of checkpoint 9: everything as it was.
+
+### Checkpoint 11: conversations from the host
+
+- **The human's notes (2026-11-12)**: in each monitor's chat, "New IM"
+  and "Friends" beside the chips, as in the shared chat; checkpoint 9 left
+  them out because the link could not start a conversation. With them,
+  the chat polish left in checkpoints 3 and 9's "Not done": links as
+  links, shout and whisper for the nearby chat, typing notices if they
+  come cheaply.
+- **Start a conversation from the host**: a new message, host to
+  viewer, asks a managed viewer to open an instant message with a
+  resident (by id, from that character's friends list), the chat of one
+  of its groups, or a friend's profile. The viewer opens it as if the
+  user had, in its own Conversations window, with its own checks
+  (RLVa's `@startim`, `@startimto`, its groups); the host only asks, and
+  a refusal comes back as a notice. Nothing is sent to anyone until the
+  user types a line. The conversation then comes to the host as any
+  other.
+- **Friends in the host**, per character: online and offline, searched
+  by name, with New IM and Profile (in that character's viewer); told by
+  the viewer as a bounded, cleaned list, again when it changes; nothing
+  of it saved by the host.
+- **Chat polish**: a line's web links clickable (the system's browser,
+  http(s) only, after the viewer's own link judge), `secondlife://`
+  links never followed by the host; whisper / say / shout for the nearby
+  chat, through the viewer; "… is typing" from the viewer.
+- Protocol 6; no settings change; locales; `docs/TESTING.md`; FEATURES
+  5.1.
+
+- **As built (branch `claude/session-checkpoint-11`, on top of
+  checkpoint 10):** the rules are pure and tested in
+  `crates/folderstorm-session` (`ipc`: protocol 6 and its messages, the
+  contacts list's bounds and cleaning, the volume's rule; `contacts`: the
+  friends and groups per character, their order and search, the requests
+  to open, their answers and notices; `links`: where a line's links are
+  and which may go to a browser; `chat`: a conversation opened from the
+  host, who types, the volume per character and per line). In the
+  viewer: `folderstorm_characters/chat_export.rs` (a conversation told as
+  soon as it is open, who types, the friends and groups, `may_open`:
+  the checks before anything opens), `app/folderstorm_characters/chat.rs`
+  (the `impl App` glue: opening as People and Contacts open, the line's
+  volume), `folderstorm_characters/host/contacts_ui.rs` (the two buttons
+  and the sheet, for both chats), `host/chat_ui.rs` (links, the link's
+  question, the volume button, "… is typing"),
+  `host/ui/monitor_windows.rs` (the monitor's chat part), `host.rs` (the
+  book of contacts and its messages).
+  - **IPC, protocol 6** (a host and a viewer of different protocols
+    refuse each other). Host to viewer: `Open{id, generation, open}`
+    with `Open::Im(conversation)`, `Open::Group(conversation)` or
+    `Open::Profile(conversation)` (the session of the resident's or the
+    group's id); `SendChat` gains `volume` (`Whisper`, `Normal`,
+    `Shout`; normal for anything but the nearby chat, on both sides).
+    Viewer to host: `Opened{id, Opened | Refused(reason)}` (reasons: not
+    in the world, another login, restricted, not one of its groups,
+    nobody, repeated); `Contacts{generation, friends, groups,
+    more_friends, more_groups}` (each a session id, a name of at most 64
+    characters, online for a friend), whole, the latest replaces the
+    others; `ChatBatch` gains `typing`. The contacts list is bounded by
+    count (300 friends, 150 groups) and by weight (44 KiB of friends,
+    14 KiB of groups as JSON, measured), so the fullest list of the
+    longest names is proven under the 64 KiB frame; friends online come
+    first, so a cut drops offline friends first, and what does not fit
+    is counted ("N more are only in <name>'s own lists"). The host
+    cleans it again (names, nobody twice, no nil or nearby id).
+  - **Never as another character, never without the user.** A request
+    travels only on the pipe of the viewer of the character it was made
+    for, with that viewer's login generation; an id not above the last
+    is refused as repeated. The viewer checks before it opens
+    (`chat_export::may_open`, tested with a world): a resident who is not
+    the character itself or a group, one of its groups for a group's
+    chat, RLVa's `@startim` and `@startimto` through
+    `World::rlva_start_ims` (which shows its own "blocked" notice in that
+    viewer, as for a click there; a conversation already open stays
+    allowed, as in RLVa), `@shownames` for a profile. Then it opens the
+    way its People and Contacts do: `App::open_conversation_to_type`
+    for an IM (the session made, the Conversations window on it, its
+    field ready to type in), `World::start_group_chat` then the same for
+    a group (as Contacts' "Group chat": the group's chat session is
+    joined, as when it is opened in the viewer; nobody is written to),
+    the profile's own action (`CtxAction::Profile`) for a profile.
+    Nothing is said: the conversation waits for the user's first line.
+  - **Shown once the viewer opened it.** The host shows a conversation
+    when the viewer answers `Opened` (`Chat::opened`): made if the host
+    had none, brought back if it was closed here, emptied of what an
+    earlier login told of it, chosen in the window that asked (the
+    shared chat's tab of that character, or the monitor's chat part),
+    with its box ready. A conversation is also told by the viewer as
+    soon as it is open, before its first line (until now one with no
+    line waited for it), so one opened in the viewer itself shows in the
+    host too.
+  - **A refusal or no answer is a notice** in the window that asked
+    (amber, above the lines, with a cross), until dismissed or the next
+    request there: "<name> did not open <who>: <why>". No answer after 15
+    s, or the viewer ended, is "the character's viewer did not answer";
+    a pipe that did not take it, "is not reading". At most four requests
+    per character wait at once.
+  - **The sheet** (`contacts_ui.rs`): "New IM" (`message-circle-plus`)
+    and "Friends" (`users`) at the end of a character's chips, in the
+    shared chat and each monitor's chat part; each opens its sheet in
+    the lines' place (a list, as "+N"'s), a second click closes it, and
+    choosing a chip or "+N" gives the place back. Friends: "Online (n)"
+    then "Offline (n)", a dot per state, each row with IM and Profile.
+    New IM: the groups, then the friends, a click on a row opens it. A
+    search narrows both (every word, whatever its case). In a monitor
+    the sheet takes what the least picture leaves, as the "+N" list,
+    and the box's room too. Profile brings the character forward (the
+    profile is in its own window).
+  - **Links** (`links`, `chat_ui.rs`): what the viewers tell has its app
+    links, places and names already shown by their labels (the viewer's
+    `resolved_text`), so a line's links are mostly web addresses:
+    `http://`, `https://` or a word starting with `www.`, without the
+    sentence's punctuation, underlined in the line; a click asks the
+    viewer's own judge (`link_trust::classify`): a trusted site opens at
+    once in the system's browser, another after "Open this address in
+    your browser?" (the reason in red for one that looks dangerous:
+    local network, an IP address, a hidden destination…). Only an
+    `http(s)` address with a host and no space or control character
+    ever reaches the browser. The viewer's "do not warn" choice is not
+    read: the host always asks. A `secondlife://`, `hop://` or
+    `x-grid-location-info://` link left in a line is drawn as a link but
+    never followed by the host: a click brings that character forward,
+    whose own window shows the line (the viewer itself does not follow
+    an unparsed one either).
+  - **Volume** (`chat`, `chat_ui.rs`): in the nearby chat a button
+    beside Send goes round say, shout, whisper (the viewer's icons, lit
+    when not "say"), per character in the host, not saved; Ctrl+Enter
+    shouts and Shift+Enter whispers one line, whatever is chosen, as the
+    chat bar does. The viewer says it through `App::send_local_chat`
+    with that chat type, so RLVa's `@chatshout`, `@chatwhisper` and
+    `@chatnormal` apply there.
+  - **Typing notices**: received only. The viewer's `is_typing` of a
+    resident's conversation travels with the batch (re-told when it
+    changes, at most every 250 ms); the shared chat shows "<name> is
+    typing…" above its box, a monitor a pencil before its box. Our own
+    typing in the host is not sent to the resident (the viewer's typing
+    notices follow its own field: a message of its own and the viewer's
+    `me_typing` driven from the host; left for later).
+  - **Upstream hooks (new): none.** Fork files, the locales and
+    `docs/TESTING.md`.
+  - **Not done:** our own typing notices from the host (above); a search
+    of all residents by name from the host (the viewer's resident
+    picker asks the grid; the host searches the character's friends and
+    groups); "New IM…" in the bar's and the cards' menus (the bar is
+    drawn by the viewer from the host's state; the two buttons are in
+    every chat instead); conferences started from the host (several
+    residents); following a grid link from the host.
+  - **Demo:** `AURORA_DEMO_SESSION_HOST_CONTACTS=friends|new-im` (with
+    `AURORA_DEMO_SESSION_HOST`; `docs/TESTING.md`): the shared chat opens
+    on the first character with that sheet; the demo viewers tell their
+    own friends and groups.
+  - **Checked here:** the rules' tests (the messages' bounds and
+    cleaning with the worst names, the order and search, a request and
+    its answers from another launch, a refusal, no answer, a pipe that
+    did not take it, the volume's rule, links found and refused,
+    `Chat::opened` for another login, a full list); the viewer's export
+    of a conversation open with no line, who types, the friends and
+    groups (online first, told again on a change, RLVa's hidden names),
+    and `may_open` (RLVa `@startim` and `@shownames`, groups, nobody).
+    The host's windows drawn by the processor's painter without a
+    window, the pictures looked at: New IM and Friends in the shared
+    chat at 1100 and 480 wide and in a monitor at 480 and 320 wide; a
+    click on a row asks that viewer once, its answer shows the
+    conversation in the window that asked (not elsewhere), a refusal is
+    a notice there; a web link of an unknown site asks first and opens
+    once, a trusted one opens at once, a grid link switches; Ctrl+Enter
+    shouts a nearby line; "… is typing". **Not run here:** a real viewer
+    opening a conversation (no graphics card: the demo's viewers link
+    and end), and nothing of Win32.
+  - **To verify on Windows (and on the grid):**
+    1. New IM and Friends in the shared chat and in a monitor: the
+       lists are the character's (online first), the search, the
+       buttons' look; a character not logged in says so;
+    2. New IM with a friend: the IM opens in that character's viewer
+       (Conversations window) and shows in the host, chosen; nothing is
+       sent until a line is typed; the line is said by that character;
+    3. a group's chat from New IM: it opens (the group's session
+       joined) and the next line is said there;
+    4. Profile: the character comes forward with the friend's profile;
+    5. with RLVa `@startim=n` (or `@startimto:<id>=n`) on that
+       character: the viewer shows its "blocked" notice, the host its
+       notice, nothing opens; an IM already open still opens;
+    6. a friend going online or offline moves in the list within a
+       second or two; a hundred friends or more: the list scrolls, and
+       past 300 "N more…" says so;
+    7. shout and whisper from the host: the line is heard at that
+       volume (and turned by RLVa's `@chatshout=n` etc. as in the
+       viewer); Ctrl+Enter, Shift+Enter;
+    8. a resident typing in an IM: "… is typing" in the host;
+    9. a web link in a line: a known site opens in the browser, another
+       asks first, a `secondlife://` link brings the character forward;
+    10. a host of checkpoint 10 against a viewer of checkpoint 11 (or
+        the other way round) refuse each other (protocol 6).
 
 ## 16. Verified in code vs inferred
 

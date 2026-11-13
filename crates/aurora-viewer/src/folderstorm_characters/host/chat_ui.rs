@@ -124,9 +124,9 @@ impl ChatPanel {
         }
     }
 
-    /// Tests: the character's tab, with that sheet open (or none).
-    #[cfg(test)]
-    pub(super) fn test_show(&mut self, slot: usize, sheet: Option<::folderstorm_session::contacts::Which>) {
+    /// The character's tab, with that sheet open (or none): the demo's
+    /// `AURORA_DEMO_SESSION_HOST_CONTACTS`, and the tests.
+    pub(super) fn show_sheet(&mut self, slot: usize, sheet: Option<::folderstorm_session::contacts::Which>) {
         self.tab = Tab::Character(slot);
         self.sheets[slot] = sheet.map(|which| contacts_ui::Sheet {
             which,
@@ -597,11 +597,10 @@ pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Op
                 }
             }
             None if place.is_some() => {
-                if row
+                let row = row
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .on_hover_text(tr!("folderstorm-chat-pick-help"))
-                    .clicked()
-                {
+                    .on_hover_text(tr!("folderstorm-chat-pick-help"));
+                if row.clicked() {
                     clicked = Clicked::Place;
                 }
             }
@@ -909,6 +908,7 @@ pub(super) mod tests {
             desk: Desk::new(Config::demo(2)),
             chat: Chat::default(),
             book: Default::default(),
+            demo_contacts: None,
             alert: false,
             comfort: Default::default(),
             viewers: Default::default(),

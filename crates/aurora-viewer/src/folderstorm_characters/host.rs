@@ -104,6 +104,21 @@ pub const DEMO_MONITORS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_MONITORS";
 /// `hotkeys`, `advanced`, `updates`).
 pub const DEMO_SETTINGS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_SETTINGS";
 
+/// `AURORA_DEMO_SESSION_HOST_CONTACTS=friends|new-im`, demo only, with
+/// [`DEMO_VARIABLE`] (checkpoint 11): the shared chat opens on the first
+/// character with its "Friends" or "New IM" sheet. The demo's viewers
+/// tell their own friends and groups (the demo's buddy list and groups).
+pub const DEMO_CONTACTS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_CONTACTS";
+
+fn demo_contacts(value: &str) -> Option<::folderstorm_session::contacts::Which> {
+    use ::folderstorm_session::contacts::Which;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "friends" | "friend" => Some(Which::Friends),
+        "new-im" | "newim" | "im" | "new" => Some(Which::Everyone),
+        _ => None,
+    }
+}
+
 /// What [`DEMO_MONITORS_VARIABLE`] asks for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct DemoMonitors {
@@ -293,6 +308,9 @@ struct Host {
     /// Checkpoint 10, demo only: the settings' window opens on that
     /// section ([`DEMO_SETTINGS_VARIABLE`]).
     demo_settings: Option<::folderstorm_session::settings::Section>,
+    /// Checkpoint 11, demo only: the shared chat opens with this sheet
+    /// ([`DEMO_CONTACTS_VARIABLE`]).
+    demo_contacts: Option<::folderstorm_session::contacts::Which>,
 }
 
 /// The most clicks of the viewers' bars kept between two looks of the
@@ -323,6 +341,7 @@ impl Host {
             bar_asked: Vec::new(),
             auto_read: Default::default(),
             demo_settings: None,
+            demo_contacts: None,
         };
         if host.demo {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
@@ -341,6 +360,7 @@ impl Host {
             host.demo_settings = std::env::var(DEMO_SETTINGS_VARIABLE)
                 .ok()
                 .and_then(|value| ::folderstorm_session::settings::Section::parse(&value));
+            host.demo_contacts = std::env::var(DEMO_CONTACTS_VARIABLE).ok().and_then(|value| demo_contacts(&value));
         }
         host
     }
@@ -813,6 +833,17 @@ mod tests {
         host.desk.exited(1, 1, true, now);
         host.sync_bars();
         assert!(host.bar_sent[1].is_none() && host.bar_sent[0].is_some());
+    }
+
+    #[test]
+    fn the_demo_s_contacts_are_friends_or_new_im() {
+        use ::folderstorm_session::contacts::Which;
+        assert_eq!(demo_contacts(" Friends "), Some(Which::Friends));
+        assert_eq!(demo_contacts("new-im"), Some(Which::Everyone));
+        assert_eq!(demo_contacts("im"), Some(Which::Everyone));
+        for other in ["", "groups", "1"] {
+            assert_eq!(demo_contacts(other), None, "{other}");
+        }
     }
 
     #[test]

@@ -5892,7 +5892,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `updates`), the host's settings window opens on that section |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7665,6 +7665,40 @@ failure. Grid validation and any paid upload are performed by the human.
     are in `session-host.json` (`chat_shown`, `reading`, `attention`,
     `settings_window`; per character `attention` and `alerts`). A file of
     checkpoint 9 reads with nothing lost.
+  - **conversations from the host** (checkpoint 11).
+    `AURORA_DEMO_SESSION_HOST_CONTACTS=friends|new-im` (with
+    `AURORA_DEMO_SESSION_HOST`) opens the shared chat on the first
+    character with its "Friends" or "New IM" sheet; the demo viewers tell
+    their own friends and groups (the demo's buddy list and its three
+    groups):
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=2 AURORA_DEMO_SESSION_HOST_CONTACTS=new-im cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - the two buttons at the end of a character's chips, in the shared
+      chat and in each monitor's chat part ("New IM", "Friends"): each
+      opens its sheet in the lines' place, a second click closes it;
+    - **Friends**: online first, then offline, searched by name; a row's
+      message button opens an instant message in that character's viewer
+      (its Conversations window, ready to type in there too) and the
+      conversation shows in the host, chosen, with nothing sent; the
+      person button opens the profile in that viewer and brings the
+      character forward;
+    - **New IM**: the character's groups, then its friends; a click on a
+      row opens that conversation (a group's chat is joined as when it is
+      opened in the viewer);
+    - a refusal (in a demo viewer, RLVa `@startim=n` from an attachment;
+      or a viewer closed while asked) is a line in amber above the lines
+      of the window that asked, with a cross;
+    - the nearby chat's volume button beside Send (say, shout, whisper;
+      Ctrl+Enter shouts and Shift+Enter whispers one line): the demo
+      viewer's own nearby chat shows the line at that volume;
+    - who types (on the grid: the demo has no resident who types): while
+      the resident of an IM types, "<name> is typing…" above the shared
+      chat's box, a pencil before a monitor's box;
+    - a line's web address underlined: a well-known site opens in the
+      system's browser at once, another after "Open this address in your
+      browser?" (with the reason in red for one that looks dangerous);
+      a `secondlife://` link is never followed by the host: a click
+      brings the character forward.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames, and each panel's own window to

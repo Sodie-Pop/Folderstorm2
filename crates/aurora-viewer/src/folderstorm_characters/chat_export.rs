@@ -32,7 +32,8 @@ use crate::world::{ChatKind, ChatLine, Origin, World};
 use ::folderstorm_session::contacts::{sort_friends, sort_groups};
 use ::folderstorm_session::export::{Clock, Cursor, Sends};
 use ::folderstorm_session::ipc::{
-    self, AttentionItem, AttentionKind, AttentionList, ChatBatch, Contact, Contacts, Conversation, LineKind, SessionKind, ToHost,
+    self, AttentionItem, AttentionKind, AttentionList, ChatBatch, Contact, Contacts, Conversation, LineKind, Open, OpenRefusal,
+    SessionKind, ToHost,
 };
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -200,6 +201,24 @@ pub fn contacts(world: &World) -> Contacts {
         list.push_group(group);
     }
     list
+}
+
+/// Checkpoint 11: what the host asked to open, checked as this viewer's
+/// own People, Contacts and profiles check it, before anything opens: a
+/// resident who is not the character or a group, one of its groups, and
+/// RLVa's `@startim` and `@startimto` (whose notice shows in this viewer,
+/// as for a click here) or `@shownames` for a profile. The id to open.
+pub fn may_open(world: &mut World, open: Open) -> Result<Uuid, OpenRefusal> {
+    let target = open.target().map(Uuid::from_u128).ok_or(OpenRefusal::Unknown)?;
+    let group = world.groups.is_member(&target);
+    match open {
+        Open::Im(_) if target == world.agent_id || group || world.is_group_session(&target) => Err(OpenRefusal::Unknown),
+        Open::Group(_) if !group => Err(OpenRefusal::NotAGroup),
+        Open::Im(_) | Open::Group(_) if !world.rlva_start_ims(&[target]) => Err(OpenRefusal::Restricted),
+        Open::Profile(_) if group => Err(OpenRefusal::Unknown),
+        Open::Profile(_) if !world.rlva_can_name(target) => Err(OpenRefusal::Restricted),
+        Open::Im(_) | Open::Group(_) | Open::Profile(_) => Ok(target),
+    }
 }
 
 /// What waits for the user's answer in this viewer, as its notification
@@ -871,5 +890,44 @@ mod tests {
             "{:?}",
             lists[0].friends
         );
+    }
+
+    #[test]
+    fn what_the_host_asks_to_open_is_checked_as_this_viewer_checks_it() {
+        let mut w = world();
+        let jane = Conversation::session(JANE.as_u128());
+        let group = Uuid::from_u128(0x9000);
+        w.groups.groups.push(aurora_net::GroupMembership {
+            id: group,
+            name: "Plaza Market".into(),
+            insignia: Uuid::nil(),
+            powers: 0,
+            accept_notices: true,
+            list_in_profile: true,
+            contribution: 0,
+        });
+        let builders = Conversation::session(group.as_u128());
+        assert_eq!(may_open(&mut w, Open::Im(jane)), Ok(JANE));
+        assert_eq!(may_open(&mut w, Open::Profile(jane)), Ok(JANE));
+        assert_eq!(may_open(&mut w, Open::Group(builders)), Ok(group));
+        // nobody, the character itself, a group asked as a resident, a
+        // group it is not in
+        assert_eq!(may_open(&mut w, Open::Im(Conversation::Nearby)), Err(OpenRefusal::Unknown));
+        assert_eq!(
+            may_open(&mut w, Open::Im(Conversation::session(ME.as_u128()))),
+            Err(OpenRefusal::Unknown)
+        );
+        assert_eq!(may_open(&mut w, Open::Im(builders)), Err(OpenRefusal::Unknown));
+        assert_eq!(may_open(&mut w, Open::Profile(builders)), Err(OpenRefusal::Unknown));
+        assert_eq!(may_open(&mut w, Open::Group(jane)), Err(OpenRefusal::NotAGroup));
+        // RLVa: @startim forbids a new conversation, never one already open
+        restrict(&mut w, "@startim=n");
+        assert_eq!(may_open(&mut w, Open::Im(jane)), Err(OpenRefusal::Restricted));
+        assert_eq!(may_open(&mut w, Open::Group(builders)), Err(OpenRefusal::Restricted));
+        w.social.session_mut(JANE);
+        assert_eq!(may_open(&mut w, Open::Im(jane)), Ok(JANE), "already open here");
+        // @shownames: no profile of a resident it hides
+        restrict(&mut w, "@shownames=n");
+        assert_eq!(may_open(&mut w, Open::Profile(jane)), Err(OpenRefusal::Restricted));
     }
 }
