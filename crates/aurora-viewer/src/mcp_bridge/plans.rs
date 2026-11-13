@@ -339,7 +339,7 @@ pub fn plan(args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
     let reply = json!({"plan_id": plan_id, "rows": reply_rows, "counts": counts(&now)});
     Ok(Planned {
         work: Work::Inventory(change),
-        summary: summary.into(),
+        summary,
         reply,
         created: None,
     })
@@ -364,18 +364,17 @@ pub fn dialog_lines(args: &Value) -> Vec<String> {
                     before = text(row, "before"),
                     after = text(row, "after")
                 )
-                .into()
             } else {
-                aurora_i18n::tr!("fs-mcp-ask-plan-row-move", name = text(row, "before")).into()
+                aurora_i18n::tr!("fs-mcp-ask-plan-row-move", name = text(row, "before"))
             }
         })
         .collect();
     if eligible.len() > DIALOG_ROWS {
-        lines.push(aurora_i18n::tr!("fs-mcp-ask-plan-more", count = eligible.len() - DIALOG_ROWS).into());
+        lines.push(aurora_i18n::tr!("fs-mcp-ask-plan-more", count = eligible.len() - DIALOG_ROWS));
     }
     let skipped = rows.len() - eligible.len();
     if skipped > 0 {
-        lines.push(aurora_i18n::tr!("fs-mcp-ask-plan-skipped", count = skipped).into());
+        lines.push(aurora_i18n::tr!("fs-mcp-ask-plan-skipped", count = skipped));
     }
     lines
 }

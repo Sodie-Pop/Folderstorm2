@@ -157,6 +157,8 @@ pub struct ReceiptLine {
     pub summary: String,
     pub state: folderstorm_mcp_bridge::receipts::State,
     pub client: Option<String>,
+    /// When the call arrived on the frame thread.
+    pub asked: std::time::SystemTime,
 }
 
 pub fn status() -> Status {
@@ -173,6 +175,7 @@ pub fn status() -> Status {
                     summary: r.summary.clone(),
                     state: r.state,
                     client: r.client.clone(),
+                    asked: r.asked,
                 })
                 .collect()
         }),

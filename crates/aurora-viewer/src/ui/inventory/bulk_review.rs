@@ -21,7 +21,7 @@ use crate::ui::widgets::{Floater, flat_button, primary_button_sized, radio_value
 
 // Folderstorm: the planner lives in `folderstorm/bulk_plan.rs`, shared
 // with the local assistant's batch plans (mcp-receipts.md, section 6)
-pub(super) use crate::folderstorm::bulk_plan::{Kind, MAX, Row, apply_pattern, mutation, plan_move, plan_rename};
+pub(super) use crate::folderstorm::bulk_plan::{Kind, MAX, Row, mutation, plan_move, plan_rename};
 
 /// The request a preview was made for: Execute needs the same.
 #[derive(Clone, Debug, PartialEq)]
@@ -285,6 +285,7 @@ pub fn demo(st: &mut InventoryUi, inv: &Inventory) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::folderstorm::bulk_plan::apply_pattern;
     use crate::world::inventory::Folder;
     use aurora_net::inventory::{InvFolder, operations::Operation};
 

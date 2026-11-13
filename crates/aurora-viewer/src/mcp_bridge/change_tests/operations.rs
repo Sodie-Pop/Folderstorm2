@@ -167,9 +167,56 @@ fn live_operations_and_waiting_questions_are_bounded() {
     desk.take(again, &ctx(&inv), now);
     assert_eq!(answered(&answer).expect("its receipt")["duplicate"], true);
     assert!(answers.iter().all(|a| a.try_recv().is_err()), "the 8 still wait");
-    assert!(
-        crate::mcp_bridge::desk::ASKS_MAX >= receipts::LIVE_MAX,
-        "the dialog's queue holds every live change"
+}
+
+#[test]
+fn a_change_whose_time_ran_out_is_cancelled_just_before_the_send() {
+    let inv = demo_inventory();
+    let now = Instant::now();
+    let mut desk = desk_with(allow_all());
+    let (c, answer) = call("inventory_rename", json!({"id": TEXTURE.to_string(), "name": "Late"}), false);
+    desk.take(c, &ctx(&inv), now);
+    let run = desk.tick(&IDLE, now).into_iter().next().expect("runs");
+    let operation = run.operation_id.clone().expect("named");
+    // the listener's whole wait went by (a stalled frame thread)
+    desk.ledger()
+        .with(|s| s.update(&operation, |r| r.asked -= Duration::from_secs(10 * 60)));
+    assert!(desk.recheck(run, 0, None, &ctx(&inv), now).is_none(), "never sent");
+    let e = answered(&answer).expect_err("cancelled");
+    assert_eq!(e.code, ErrorCode::Cancelled);
+    assert!(e.message.contains("time ran out"), "{e}");
+    assert_eq!(state(&mut desk, &inv, &operation), "cancelled");
+}
+
+#[test]
+fn an_early_call_cancelled_in_the_dialog_answers_only_once() {
+    let inv = demo_inventory();
+    let now = Instant::now();
+    let mut desk = desk_with(Preset::AskBeforeChanges.permissions());
+    let plan = move_plan(&mut desk, &inv);
+    let (mut c, answer) = call(EXECUTE_PLAN, json!({"plan_id": plan, "wait": false}), true);
+    c.early = true;
+    desk.take(c, &ctx(&inv), now);
+    let early = answered(&answer).expect("at once");
+    let operation = early["operation_id"].as_str().expect("named").to_owned();
+    let cancel = take(&mut desk, &inv, CANCEL, json!({"operation_id": operation}));
+    assert_eq!(answered(&cancel).expect("cancelled")["cancelled"], true);
+    assert!(desk.question(now).is_none(), "the dialog closed");
+    assert!(answer.try_recv().is_err(), "its end only reaches the receipt");
+    let receipt = answered(&take(
+        &mut desk,
+        &inv,
+        "assistant_operation_status",
+        json!({"operation_id": operation}),
+    ))
+    .expect("found");
+    assert_eq!(receipt["receipt"]["state"], "cancelled");
+    assert_eq!(receipt["receipt"]["row_counts"]["not_sent"], 1);
+    // the plan was consumed: executing it again answers the same operation
+    let again = answered(&take(&mut desk, &inv, EXECUTE_PLAN, json!({"plan_id": plan}))).expect("its receipt");
+    assert_eq!(
+        (again["operation_id"].as_str(), again["duplicate"].as_bool()),
+        (Some(operation.as_str()), Some(true))
     );
 }
 

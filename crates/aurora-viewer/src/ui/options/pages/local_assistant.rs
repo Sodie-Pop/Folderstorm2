@@ -192,22 +192,52 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             .row(tr!("fs-mcp-activity"), tr!("fs-mcp-activity-hint"), &Nothing, |ui, _| {
                 ui.vertical(|ui| {
                     ui.set_width(ui.available_width());
-                    if status.activity.is_empty() {
+                    // Folderstorm: a change still under way has no activity
+                    // line until its call answers, nor has a change the
+                    // viewer itself asked for (the demo): shown first, the
+                    // live ones with Stop (mcp-receipts.md, sections 4, 5).
+                    // A receipt older than the oldest line kept had its line
+                    // once, and stays out.
+                    let oldest = status.activity.first().map(|a| a.at);
+                    let unlisted: Vec<&mcp_bridge::ReceiptLine> = status
+                        .receipts
+                        .iter()
+                        .filter(|r| {
+                            !status
+                                .activity
+                                .iter()
+                                .any(|a| a.operation_id.as_deref() == Some(r.operation_id.as_str()))
+                        })
+                        .collect();
+                    let finished = unlisted
+                        .iter()
+                        .rev()
+                        .filter(|r| !r.state.live() && oldest.is_none_or(|at| r.asked >= at))
+                        .take(SHOWN_ACTIVITY);
+                    let under_way: Vec<&mcp_bridge::ReceiptLine> =
+                        unlisted.iter().rev().filter(|r| r.state.live()).chain(finished).copied().collect();
+                    if status.activity.is_empty() && under_way.is_empty() {
                         ui.label(egui::RichText::new(tr!("fs-mcp-activity-none")).size(12.0).color(p.muted));
                     }
                     let now = std::time::SystemTime::now();
+                    let ago = |at: std::time::SystemTime| {
+                        let seconds = now.duration_since(at).map_or(0, |d| d.as_secs());
+                        if seconds < 60 {
+                            tr!("fs-mcp-ago-seconds", count = seconds)
+                        } else {
+                            tr!("fs-mcp-ago-minutes", count = seconds / 60)
+                        }
+                    };
+                    for receipt in under_way {
+                        receipt_line(ui, &p, receipt, ago(receipt.asked));
+                    }
                     for entry in status.activity.iter().rev().take(SHOWN_ACTIVITY) {
                         let outcome = match entry.outcome {
                             Outcome::Done => tr!("fs-mcp-outcome-done"),
                             Outcome::Refused => tr!("fs-mcp-outcome-refused"),
                             Outcome::Failed(_) => tr!("fs-mcp-outcome-failed"),
                         };
-                        let seconds = now.duration_since(entry.at).map_or(0, |d| d.as_secs());
-                        let ago = if seconds < 60 {
-                            tr!("fs-mcp-ago-seconds", count = seconds)
-                        } else {
-                            tr!("fs-mcp-ago-minutes", count = seconds / 60)
-                        };
+                        let ago = ago(entry.at);
                         // Folderstorm: a change's line shows its receipt
                         let receipt = entry
                             .operation_id

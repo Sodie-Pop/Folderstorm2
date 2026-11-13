@@ -233,6 +233,8 @@ pub const LOGIN_CHANGED: &str =
 pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
 /// Folderstorm: questions waiting for the dialog at most (operations).
 pub const ASKS_MAX: usize = 16;
+// the dialog's queue holds every live change of a login
+const _: () = assert!(ASKS_MAX >= receipts::LIVE_MAX);
 /// Folderstorm: the assistant cancelled it.
 pub const CANCELLED: &str = "cancelled by the assistant before it was sent: nothing was sent";
 /// Folderstorm: the user stopped it in Preferences.
