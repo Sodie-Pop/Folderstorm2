@@ -5234,7 +5234,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. |
+| `AURORA_DEMO_MCP=1\|ask\|camera` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5277,6 +5277,25 @@ configuration and `--discovery <demo settings folder>`) can then move,
 rename, Trash and restore entries of the demo inventory and wear the demo
 outfits; each change asks first. Capture the dialog in English, French and
 Japanese.
+
+`AURORA_DEMO_MCP=camera` (Folderstorm2, phase 3: `src/mcp_bridge/camera.rs`,
+`studio.rs`, `picture.rs`): the same session settings, and once the world
+shows, the demo asks, as "Demo assistant", to frame the avatar ("Move the
+camera to frame your avatar: full body"), then to take a picture of what the
+camera shows, also saved in the photo folder. Allow the first: the camera
+glides to the whole avatar from the front, a little above. Allow the second:
+once the camera has stopped, an `assistant-<date>-<time>.jpg` of 512 × 512
+appears in the Photo window's folder, without the interface or the HUDs, and
+the log reads `local assistant demo: camera_snapshot answered {…"saved_to"…}`
+(never the picture's bytes). Refuse either: nothing moves, nothing is saved.
+With `AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the "Camera
+and pictures" row, and Recent activity lists one entry per line across the
+page. A real client can then call `camera_preset` (portrait, full body,
+front, back, left, right), `camera_shot`, `camera_reset`, `camera_snapshot`
+(the picture comes back as an image) and `inventory_snapshot_thumbnail` on a
+demo outfit (the Outfit Gallery shows the new picture). A picture with
+`interface: true` asks even with Camera on Allow. Capture the dialogs in
+English, French and Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and
