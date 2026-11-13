@@ -178,20 +178,26 @@ impl State {
             self.started = true;
             found.placed = true;
         }
-        // the hold of the last session, or of the window before this one
-        if !self.started && crate::folderstorm::diagram::desktop_known(ctx) {
+        // the hold of the last session, or of the window before this one,
+        // once the app has looked at the monitors
+        if !self.started {
+            if !crate::folderstorm::diagram::desktop_known(ctx) {
+                return found;
+            }
             self.started = true;
             self.settle = Some(now + SETTLE);
+            let monitors_now = capture::monitors(ctx);
+            self.complete = store
+                .active()
+                .is_none_or(|layout| monitors::missing(&layout.monitors, &monitors_now) == 0);
             if let Some((frame, saved)) = store
                 .window_held
                 .then(|| store.active())
                 .flatten()
                 .and_then(|layout| Some((layout.window.clone()?, layout.monitors.clone())))
             {
-                let asked = monitors::resolve(&frame, &saved, &capture::monitors(ctx), &seen);
-                let plan = asked.plan.filter(|plan| asked.missing == 0 && plan.hold != Hold::FREE);
-                self.complete = plan.is_some();
-                match plan {
+                let asked = monitors::resolve(&frame, &saved, &monitors_now, &seen);
+                match asked.plan.filter(|plan| asked.missing == 0 && plan.hold != Hold::FREE) {
                     // not where the layout has it (Aurora reopens a
                     // stretched window smaller, and any window with its
                     // border): put back, then held

@@ -224,6 +224,33 @@ fn a_restart_locks_again_when_the_monitors_are_all_there() {
 }
 
 #[test]
+fn the_lock_box_ticked_after_a_restart_locks_too() {
+    // "Wide" in use and not locked when the viewer closed
+    let mut v = two_monitors(false);
+    v.plug();
+    menu::ask(&v.ctx, Request::Apply("Wide".into()));
+    v.settle();
+    v.settle();
+    let mut next = v.restarted();
+    next.settle();
+    assert!(next.seen().resizable && next.pretend().log.is_empty());
+    let (index, layout) = next.store.find("Wide").expect("in the list");
+    let frame = layout.window.clone().expect("the part");
+    apply::set_window(&mut next.store, index, frame.with_lock(true)).expect("edited");
+    next.frames(3);
+    assert!(!next.seen().resizable, "its monitors are all there");
+    // with one of them gone at the start, the box does not lock
+    let mut next = v.restarted();
+    next.monitors = vec![LEFT];
+    next.settle();
+    let (index, layout) = next.store.find("Wide").expect("in the list");
+    let frame = layout.window.clone().expect("the part");
+    apply::set_window(&mut next.store, index, frame.with_lock(true)).expect("edited");
+    next.frames(3);
+    assert!(next.seen().resizable, "never locked while a monitor is missing");
+}
+
+#[test]
 fn a_window_made_anew_is_locked_again() {
     let mut v = two_monitors(true);
     v.plug();

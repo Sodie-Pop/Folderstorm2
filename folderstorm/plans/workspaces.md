@@ -530,7 +530,7 @@ All in the demo's own settings; nothing reaches the user's.
 | `AURORA_DEMO_MONITORS="WxH[+X+Y][@scale],…[,window+X+Y]"` or `wayland` (syntax in `docs/TESTING.md`) | Pretend monitors (unequal, negative coordinates, a missing one) for the diagram and monitor matching, without the hardware | 2 |
 | `AURORA_DEMO_OPTIONS=layout/0:cogs` | Opens the World viewport group with the diagram (existing mechanism) | 2 |
 | `AURORA_DEMO_LAYOUTS=1` | Seeds "Wide" (world on the right half, Inventory and map on the left) and "Single" (viewport off, windows on one screen); opens the Layouts tab. Try with `AURORA_WINDOW_SIZE=3840,1080` | 3 |
-| `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide" | 4 |
+| `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide"; `=unplug` takes the last pretend monitor away after 10 s (the card offers "Single") | 4 |
 | `AURORA_DEMO_SWITCHER=1` | Opens the switcher on the seeded entries | 5 |
 | `AURORA_DEMO_WORKSPACES=1` | Seeds "Sorting" and "Exploring" on the demo inventory; `=folders` adds folder windows | 6 |
 
@@ -1079,9 +1079,10 @@ is `app/folderstorm_workspaces.rs` (`folderstorm_viewer_window`,
 `workspaces::window` (11, against a pretend window that answers at once,
 late, or never), `workspaces::capture` (4), `diagram` (+2, one drawn).
 Frame tests with the pretend window and pretend monitors,
-`workspaces::tests::viewer` (27): save and apply, the windows placed only
+`workspaces::tests::viewer` (28): save and apply, the windows placed only
 once the window has its size, lock and unlock, a restart (in place, shrunk
-by Aurora, a monitor gone), a window made anew, full screen, a lost monitor
+by Aurora, a monitor gone, the lock box ticked after it), a window made
+anew, full screen, a lost monitor
 with each of the three choices, the card's buttons, World › Layouts,
 Previous, the modified mark, Update, borderless, full screen on a monitor,
 no window to drive, the editor, a window first shown after the baseline.
@@ -1105,6 +1106,12 @@ checkpoint's report.
   new layout with the parts wanted.
 - A locked normal window can still be moved by its title bar (section
   8.4); the layout then shows as modified.
+- A lock box ticked on the layout in use while one of its monitors is
+  missing does not lock until the monitor is back; *Unlock the viewer
+  window* is offered meanwhile.
+- *Save as a new layout* takes its lock from its own box, not from the
+  lock in force: saved unticked while the window is locked, the new layout
+  (now the one in use) unlocks it.
 - Under the session host, bringing a character forward puts its window on
   the host's stage, whatever a layout asked: the layout then shows as
   modified.
