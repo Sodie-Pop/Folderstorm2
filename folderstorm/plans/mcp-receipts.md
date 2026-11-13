@@ -2,8 +2,9 @@
 
 Step 3 of the MCP parity order: the foundation that the later tool groups
 need (navigation, uploads, content editing, object dialogs, task scripts,
-history and undo, session routing). **Design only**: nothing here is built
-yet. It extends [mcp.md](mcp.md) (phases 1 and 2) and assumes the two open
+history and undo, session routing). Checkpoint 1 is PR #28 and
+checkpoint 2 is built on top of it (see "As built" below); the rest is
+design only. It extends [mcp.md](mcp.md) (phases 1 and 2) and assumes the two open
 catalogue PRs, #21 (camera, `claude/mcp-camera`) and #25 (inventory gaps,
 `claude/mcp-inventory-gaps`), land first: both touch `protocol.rs`,
 `desk.rs` and `mcp_bridge.rs`.
@@ -392,6 +393,27 @@ One viewer process per character (session-host.md), so:
 This is the session routing group, after FEATURES 5.1; nothing of it is in
 the checkpoints below.
 
+**What checkpoint 2 prepares for it** (nothing more is built): one
+`viewer_session` names one login of one process, so it is the address of a
+character.
+
+- `--viewer-pid` already picks one process, so one character, today; it
+  stays the way to give an assistant one fixed character.
+- `connect::find` already returns each viewer's health, `viewer_session`
+  included: `viewer_list` is `discovery::find` over the shared folder, one
+  health per file (the existing probe), giving each live process's
+  `viewer_session` (and the character, once a decision says where it may be
+  shown; see "As built").
+- The sidecar's single pin becomes one link per `viewer_session`
+  (`connect::Viewer` holds one `Link` and one pin today): the call's
+  `viewer_session` argument chooses the link and is sent as
+  `CallRequest::session`, so each process checks its own login exactly as
+  now. The no-resend rule is per link: a process found again on another
+  login answers `session_changed`; a vanished one answers `session_changed`
+  with no session; neither ever falls back to another process.
+- Nothing changes on the bridge side: each process's bridge already refuses
+  a session that is not its own.
+
 ## Wire changes
 
 | Where | Change | Older other side |
@@ -439,6 +461,116 @@ gets one line for a new demo value, `AURORA_DEMO_MCP=plan` (the demo makes a
 
 Each changes the viewer, so the human validates it; each runs the checks of
 AGENT_RULES § 4 and updates [mcp.md](mcp.md) and FEATURES.md.
+
+## As built
+
+### Checkpoint 2: login binding and capability versions
+
+Branch `claude/mcp-login-binding`, on top of checkpoint 1 (PR #28, branch
+`claude/mcp-recheck-permissions`), which is not on `main` yet; #21, #25 and
+#27 are not on its base either.
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/binding.rs` (new) | `Capabilities`, this build's map (`CAPABILITIES`), `assumed()` for a viewer without one, `supports`, `missing`; `new_viewer_session`; the per-bridge `Binding` (generation → `viewer_session`); the `session_changed` and `unsupported` errors |
+| `folderstorm-mcp-bridge/src/protocol.rs` | the new wire fields; `ErrorCode::SessionChanged` (409) and `Unsupported` (501) with `fallback` / `for_sidecar`; `ToolSpec::group` and `ToolSpec::bound` |
+| `folderstorm-mcp-bridge/src/server.rs` | `Bridge::set_login` / `viewer_session`; health's `capabilities` and `viewer_session`; a fast `session_changed` refusal; every error mapped for the call's sidecar; an unknown tool answers `unsupported` to a sidecar that declares capabilities |
+| `folderstorm-mcp-bridge/src/client.rs` | `Client::call_in` (with a session); every call declares this build's capabilities; an error with an unknown code keeps its message |
+| `folderstorm-mcp/src/connect.rs` | pinning, no resend, the rediscovery rule, the capability check (`unsupported` before sending) |
+| `folderstorm-mcp/src/diagnose.rs` | `sidecar_capabilities`, `viewer_capabilities`, `missing_capabilities`, `login_bound` |
+| `aurora-viewer/src/mcp_bridge.rs` | tells the bridge the login generation each frame and in `replan`, gives the desk its `viewer_session` |
+| `aurora-viewer/src/mcp_bridge/desk.rs` | a bound call pinned to another login is refused when taken; a login change refuses the waiting calls with `session_changed` (checkpoint 1 said `permission_denied`) |
+| `aurora-viewer/src/mcp_bridge/tools.rs` | `viewer_status` gives `viewer_session` and `capabilities` |
+
+**Capabilities on this base**: `inventory: 1` (phases 1 and 2, every tool
+today) and `login_binding: 1`. When they merge, #21 adds `camera: 1`, #25
+`inventory_gaps: 1` and #27 `world: 1`: each sets its tools' `group` and
+adds its row to `binding::CAPABILITIES` (the catalogue test fails until
+every tool's group is in the map). Later: `receipts`, `plans`,
+`operations`.
+
+**Wire, as built** (`API_VERSION` stays 1; every new field is optional and
+skipped when empty):
+
+| Where | Field or code | Older other side |
+|---|---|---|
+| `Health` | `capabilities` (map), `viewer_session` (absent logged out) | an older sidecar ignores them; this sidecar reads a viewer without them as `{inventory: 1}`, unbound |
+| `CallRequest` | `session`, `features` (the sidecar's map) | an older viewer ignores both |
+| `ToolError` | `viewer_session` (with `session_changed`) | dropped when the code is mapped |
+| `ErrorCode` | `session_changed` → `not_ready`, `unsupported` → `unknown_tool` for a sidecar that does not declare `login_binding` | an older sidecar gets today's codes |
+| `viewer_status` | `viewer_session` (null logged out), `capabilities` | additive |
+
+**Differences from the design above**:
+
+- The epoch is the bridge instance: a `viewer_session` is drawn from the OS
+  random source for each (bridge start, login generation), in the bridge
+  crate rather than `login.rs`, because the listener needs it for health and
+  for its fast refusal. `login.rs` keeps the generation. Logged in means
+  `World::login` set, or the demo.
+- `viewer_status` is not bound: it answers on whatever login is current,
+  since it is how the assistant looks again after `session_changed`.
+  Every tool with a class is bound.
+- With nothing pinned (logged out at the first call), the sidecar asks
+  health before each call until it sees a login, then pins it; the very
+  first call works as before.
+- After `session_changed` the sidecar pins the login named in the error;
+  when the viewer is logged out it keeps the old pin, so that every bound
+  call is refused until the next login, which is reported once more. A
+  viewer found again after a lost connection gets the call only on the
+  pinned login; otherwise `session_changed` (nothing sent). A viewer older
+  than login binding is called unbound, as before (it cannot tell logins
+  apart); one found again in place of a binding viewer is reported once.
+- `session_changed` and `unsupported` are both tied to `login_binding` for
+  the fallback: they came with it, as `features` did.
+- **Not built: `grid` and `character` in `viewer_status`.** `viewer_status`
+  needs no class (it works with Read on Never), while decision 1 gives names
+  to the assistant only when Read is Allow; and the view has no clean source
+  for the grid of the login in force (the settings' choice is the next
+  login's). Left for `viewer_list` (section 8) or a Read-gated field: the
+  human decides.
+
+**Tests**: bridge crate: `viewer_session` form and freshness (new
+generation, new bridge, logged out), capabilities both ways, `Health` and
+`CallRequest` read by older and newer sides, the error-code fallback, health
+fields over the socket, the fast refusal and the frame thread's `session`,
+an older sidecar's mapped codes, `unsupported` for an unknown tool. Sidecar
+(`tests/binding.rs`, real sockets): pinning and `session_changed` never
+followed by a second send, a logout keeping the pin, no pin while logged
+out, a viewer restart reported instead of retried, an older viewer (no
+capabilities) called unbound, a viewer lacking a group refused with
+`unsupported` before sending, a newer viewer used, every tool listed.
+Viewer: the desk's refusal at take, `viewer_status`'s fields, checkpoint 1's
+login-change tests with the new code, and end to end (sidecar → socket →
+bridge → desk) a relog while the dialog is open: `session_changed`, nothing
+sent, never resent, the next call runs.
+
+### The studio follows the desk's rules (integration of #21 with #28 and #32)
+
+Branch `claude/mcp-integrated` (every MCP PR merged, then `main`). #21's
+`Studio` held camera calls after the desk had let them run: camera moves
+waiting for the camera to stop, pictures waiting for it or for their photo
+and encoding, the thumbnail waiting for the gallery's snapshot. Access off
+dropped them, but neither a login change nor a class set to Never reached
+them. Now:
+
+| Where | What |
+|---|---|
+| `mcp_bridge/desk.rs` | `Desk::login` (the generation in force) and `Desk::review(tool, login)`: under another generation → the desk's own `session_changed` refusal; a class on Never → `PERMISSIONS_CHANGED`; else Run or Ask. `Desk::recheck` now uses it too |
+| `mcp_bridge/studio.rs` | every wait keeps the generation it was queued under; `Studio::review(&desk)` applies `Desk::review` to each (section 1's table: what has not acted refuses or goes back to the dialog, what has acted — the camera moved, the photo taken — answers nothing more, a thumbnail sent waits for the server); `Studio::close` refuses as `Desk::close` does; `Studio::thumbnail_send` stops the gallery's snapshot of a refused thumbnail |
+| `mcp_bridge.rs` | the studio reviewed each frame after the desk's levels and login; `photo_step` and `thumbnail_send` read the login in force and review just before acting; the calls that ask again go to `Desk::take` |
+| `app/local_assistant.rs`, `app/inventory_thumbnail.rs` (one hook) | the check just before the gallery's snapshot is sent; a stopped snapshot ends as a failed one, with Appearance's note `fs-mcp-thumbnail-stopped` |
+
+Tests (`mcp_bridge/camera_tests/recheck.rs`): a queued picture refused
+after a relog (nothing captured) and when its photo is being drawn (its
+pixels never become an image); a queued picture refused after Camera →
+Never; Camera → Ask sends a picture not asked yet back to the dialog while
+one already asked keeps its place; a move waiting for the camera to stop
+refused after a logout and after Never, but not after Ask; a thumbnail
+waiting for its picture refused after a relog and after Never (the
+snapshot stopped), one sent left to the server; a thumbnail not sent going
+back to the dialog; access off; and end to end over a real socket (sidecar
+→ bridge → desk → studio) a relog between the frame and the photo:
+`session_changed`, nothing captured, never resent, the next call runs.
 
 ## Tests
 

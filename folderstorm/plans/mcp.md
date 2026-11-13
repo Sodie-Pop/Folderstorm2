@@ -7,6 +7,8 @@ Port of Folderstorm (C++)'s local assistant bridge (`doc/fs-mcp.md`,
 Phase 1 is **read-only**: nothing an assistant asks can change the
 inventory, the avatar, the camera or the world. Phase 2 adds inventory and
 outfit changes, each behind its permission class (see "Phase 2" below).
+Phase 3 part 1 adds the camera, pictures and thumbnails (see "Phase 3,
+part 1" below).
 
 ## Architecture
 
@@ -88,6 +90,7 @@ Classes, each with a level **Allow / Ask / Never**:
 | `move` | 2 | move, copy, link |
 | `wear` | 2 | wear, take off, detach |
 | `trash` | 2 | move to Trash, restore |
+| `camera` | 3 | camera moves and pictures |
 
 `viewer_status` is the health check: it needs a valid token but no class,
 so *Check connection* works even with Read set to Never. It returns only
@@ -95,7 +98,7 @@ login and inventory readiness.
 
 Presets (derived from the levels, never stored):
 
-| Preset | read | edit, move, wear, trash |
+| Preset | read | edit, move, wear, trash, camera |
 |---|---|---|
 | Read only | Allow | Never |
 | Ask before changes | Allow | Ask |
@@ -118,7 +121,7 @@ Phase 1 (read):
 
 | Tool | Class | Returns |
 |---|---|---|
-| `viewer_status` | health | product, version, session state (logged out / logged in / demo), inventory usable, folders fetched / total, items known |
+| `viewer_status` | health | product, version, session state (logged out / logged in / demo), inventory usable, folders fetched / total, items known; `viewer_session` and `capabilities` (see "Login binding") |
 | `inventory_search` | read | items and folders whose name contains `query` (case-insensitive), filters `folder_id` / `path` (subtree), `type`, `include_library`, `include_trash`; `limit` ≤ 200, `truncated` flag |
 | `inventory_list_folder` | read | a folder by `folder_id` or `path` (root when neither): its subfolders and items (≤ 500), whether it is fetched |
 | `inventory_item` | read | one item: name, description, type, folder and path, creator, creation date, permissions, worn, link target; `asset_id` only per the rule above |
@@ -130,8 +133,8 @@ or from the Library (`Library/…`). Names are not unique: an ambiguous path
 returns an error listing the candidate ids.
 
 Phase 2 (changes): see "Phase 2" below. Phase 3: camera presets and
-snapshots (4.4), then FEATURES.md 4.6 one group at a time (navigation,
-chat, teleport, uploads, world observation…).
+snapshots (4.4, "Phase 3, part 1" below), then FEATURES.md 4.6 one group
+at a time (navigation, chat, teleport, uploads, world observation…).
 
 ## Phase 2: changes
 
@@ -198,6 +201,127 @@ socket timeout follows the same table.
 Preferences shows every class under Custom now, with Allow / Ask / Never
 (Read: Allow / Never).
 
+### Permissions in force while a call waits
+
+The listener thread's Allow / Ask / Never is a fast refusal only: the frame
+thread (`mcp_bridge/desk.rs`) decides again with the levels in force when
+it takes a call, on every frame while the call waits, when Allow is
+clicked and in `App::local_assistant_run` just before the send
+(`mcp_bridge::replan` → `Desk::recheck`). For every class the call needs:
+
+- any class on Never: refused at once (`permission_denied`), its dialog
+  closes, a later click does nothing;
+- Ask → Allow while the call is asked or queued as asked: it still asks
+  (an Allow setting never answers an open question);
+- Allow → Ask for a call not asked yet: it goes back to asking;
+- access turned off: every waiting call, queued in the channel or not, is
+  refused (`permission_denied`, "access was turned off") instead of being
+  dropped; a change already sent answers `timeout` (it may still land);
+- another login (logout, login, another character): every waiting call
+  is refused (`session_changed`, "the viewer's login changed"; `not_ready`
+  for an older sidecar). The login generation (`mcp_bridge/login.rs`)
+  moves each time the frame sees `World::login` change.
+
+Anything already sent is never undone, but nothing more is sent. An
+approval covers that one call and never changes the saved levels.
+
+The camera calls that wait in `mcp_bridge/studio.rs` after the desk let
+them run follow the same rules (`Studio::review` with `Desk::review`), each
+bound to the login generation it was queued under. They are decided again
+on every frame, just before a picture's photo starts
+(`mcp_bridge::photo_step`, which reads the login itself) and just before the
+gallery's snapshot is sent as a thumbnail (`mcp_bridge::thumbnail_send`):
+
+| Waiting in the studio | Another login | A class on Never | Allow → Ask, not asked yet | Access off |
+|---|---|---|---|---|
+| a picture waiting for the camera to stop | `session_changed`, nothing captured | refused, nothing captured | back to the dialog | refused |
+| a picture drawn or being encoded | `session_changed`, no image given | refused, no image given | goes on | refused, no image given |
+| a camera move waiting for the camera to stop (already made) | `session_changed`, no position given | refused, no position given | goes on | refused, no position given |
+| a thumbnail waiting for its picture | `session_changed`, the gallery's snapshot stopped before it is sent | refused, snapshot stopped | back to the dialog, snapshot stopped | refused, snapshot stopped |
+| a thumbnail sent | waits for the server | waits | goes on | `timeout` (it may still be set) |
+
+A camera move itself is checked by `replan` just before the camera moves,
+as any change; a picture saved with `save: true` and refused while it is
+being encoded may already be in the photo folder (the refusal says so).
+
+### Login binding and capability versions
+
+Checkpoint 2 of [mcp-receipts.md](mcp-receipts.md) (its "As built" has the
+details):
+
+- each login of a running bridge has a `viewer_session` (`vs-` and 32 hex
+  digits, random, new at each login and each bridge start), given by
+  `/v1/health` and `viewer_status`, absent while logged out;
+- the sidecar pins the first one it sees and sends it with every call; a
+  call of a tool with a class pinned to another login is refused
+  (`session_changed`, with the login now) and **never sent again** by the
+  sidecar: the assistant calls `viewer_status` and looks again.
+  `viewer_status` answers on any login;
+- after a refused connection or token, the viewer found again gets the
+  call only when it is on the pinned login (a restart never is);
+- both sides advertise `capabilities` (`{group: version}`; this build:
+  `inventory: 1`, `login_binding: 1`): the viewer in health and
+  `viewer_status`, the sidecar in each call. `tools/list` lists every tool
+  the sidecar knows; a tool whose group the viewer lacks answers
+  `unsupported` ("update Folderstorm2") without being sent. A sidecar that
+  declares no capabilities gets only the error codes it knows.
+
+## Phase 3, part 1: camera and pictures
+
+FEATURES.md 4.4, after Folderstorm (C++)'s `doc/help.md` ("Asking for
+something": `camera_snapshot`, `inventory_snapshot_upload`, the presets
+`portrait`, `full_body`, `front`, `back`, `left`, `right`) and
+`doc/plans/assistant-permission-presets.md` (Camera is in "Ask before
+changes"). The camera moves through the camera's own calls (`set_view`, the
+`pstcampos` path; `handle_reset_view`, Escape); pictures through Aurora's
+photo jobs (`Renderer::snapshot_request`, as Snapshot to disk), and the
+thumbnail through the Outfit Gallery's Take snapshot (#2716: the photo,
+square, 256 × 256, JPEG2000, `UploadInventoryThumbnail`). No new network
+message.
+
+| Tool | Class | Arguments | Returns | Refused when |
+|---|---|---|---|---|
+| `camera_preset` | camera | `preset`: `portrait`, `full_body`, `front`, `back`, `left`, `right` | `camera`, `target` (region metres), `fov_degrees`, once the camera stopped (3 s at most) | not in the world; the avatar not drawn yet; an RLVa camera restriction (`not_allowed`) |
+| `camera_shot` | camera | `position` and `target` (region metres), or `camera_offset` with optional `focus_offset` (metres in the avatar's frame: x forward, y left, z up); optional `fov_degrees` (5–120) | as above | as above; a camera farther from the avatar than the draw distance (64 m at least), as `pstcampos` refuses it |
+| `camera_reset` | camera | none | `done` | not in the world; RLVa |
+| `camera_snapshot` | camera | `source` `window` (default) or `world` (the world viewport); `width` and/or `height` (64–2048), else `max_edge` (64–2048, default 1024); `crop` `{x, y, width, height}` (fractions of the source); `interface`, `huds` (default false); `format` `jpeg` (default) or `png`; `save` (default false) | the picture as MCP image content (base64), with `width`, `height`, `format`, `bytes`, and `saved_to` when saved | not in the world; `interface` with `source: world`; arguments out of range |
+| `inventory_snapshot_thumbnail` | edit + camera | `id` (outfit, folder or item) or `path` (folder) | `id`, `done` once the server confirmed it | `actions::mutable` says no (Library, Current Outfit, Received Items); the Marketplace Listings folder; another snapshot or inventory change under way (`busy`) |
+
+- **Sizes.** Both `width` and `height`: that size, the source (after
+  `crop`) centre-cropped to its proportions, as Folderstorm (C++) does. One
+  of them: the other follows the cropped source's proportions. Neither: the
+  cropped source at its size in the window, the long edge brought down to
+  `max_edge`. The photo is drawn at the size that gives the cropped part
+  these pixels (4096 on its long edge at most), then cut and scaled on a
+  worker.
+- **Bytes.** The encoded picture is 3 000 000 bytes at most (4 MB in
+  base64, under the bridge's 8 MiB answer): a JPEG steps its quality down
+  (90, 80, 70, 60), then both formats shrink by a quarter until they fit.
+  The answer gives the size actually sent.
+- **What the picture shows.** What the viewer would put in a photo: no
+  interface and no HUDs unless asked for (Aurora's photo options
+  "interface" and "HUDs"), never the photo window's looks. RLVa's vision
+  restrictions are drawn in it as in any photo. `interface: true` shows the
+  viewer's windows, chat included: such a call **always asks**, even with
+  Camera on Allow (`protocol::always_asks`); Never still refuses it.
+- **Saved copies** (`save: true`) go to the Photo window's folder,
+  `assistant-<date>-<time>.jpg|png`; `saved_to` gives the path.
+- **Compound class.** `inventory_snapshot_thumbnail` needs Edit and Camera
+  (`ToolSpec::also`): either on Never refuses, either on Ask asks once.
+- **The field of view** of `camera_shot` is the view's (Preferences'
+  "Viewing angle", which a camera preset's lens sets too): the user's own
+  comes back with `camera_reset` or the next `camera_preset`.
+- **RLVa.** Any camera restriction (`@setcam`, `@setcam_unlock` /
+  `@camunlock`, eye or focus offsets, distance and field-of-view limits,
+  `@setcam_mouselook`) refuses the three camera moves with `not_allowed`.
+  Pictures stay allowed: they show what the restricted view shows.
+- **Waits.** A camera move answers once the camera stopped (3 s at most); a
+  picture waits for the camera to stop and for any photo being drawn, then
+  45 s at most; a thumbnail 45 s plus the server's confirmation (30 s).
+- **Not in this part**: uploading a picture as a texture (an L$ price,
+  asked with the amount), animated shots, and a camera on an object or a
+  fixed place by name.
+
 ## MCP sidecar: no SDK
 
 The official Rust SDK, `rmcp` 3.9 (Apache-2.0, maintained by the MCP
@@ -213,18 +337,112 @@ Discovery: `FOLDERSTORM2_MCP_DISCOVERY` (a directory) overrides the default
 settings directory; `--viewer-pid` picks one viewer when several run;
 otherwise the newest file whose viewer answers is used.
 `folderstorm-mcp --diagnose [--viewer-pid N] [--discovery DIR]` prints one
-JSON line (stage reached, port, readiness; never the token) and exits 0 on
-success, 1 on failure, 2 on bad arguments.
+JSON line (stage reached, port, readiness, both sides' capabilities and
+what the viewer lacks, whether a login is bound; never the token) and exits
+0 on success, 1 on failure, 2 on bad arguments.
+
+## Phase 3, part 2: inventory gaps
+
+Step 2 of the MCP parity order: the inventory and outfit tools of
+Folderstorm (C++)'s `tools/fs-mcp` (`inventory_extra.go`, `appearance.go`,
+`server.go`) that phases 1 and 2 left out, with the C++ names. Their
+catalogue is its own file (`protocol/inventory.rs`, listed with
+`protocol::all()`), so that the other phase 3 groups do not touch it. No
+new permission class: reads are Read, changes are Edit (as
+`inventory_create_folder` is). Every change goes through the inventory
+window's own command and rules; no new network message.
+
+| Tool | Class | Arguments | Returns | Refused when |
+|---|---|---|---|---|
+| `inventory_get_many` | read | `ids` (1–50) | `entries` (each item as `inventory_item` gives it, each folder as listed, with its counts), `missing` | — (an asset id only for full permissions, as `inventory_item`) |
+| `inventory_system_folder` | read | `type`: a system folder name (`textures`, `landmarks`, `trash`, `current_outfit`…; usual spellings accepted) | the folder entry | a name that is no system folder; My Inventory has none (the Library's are never given) |
+| `inventory_types` | read | none | `kinds`, `system_folders`, `wearables`, `create_item_types`, `search_link_filters` | — |
+| `inventory_protected_folders` | read | none | each folder the changes leave alone, with why: `system`, `locked` (inventory window), `pinned` (#RLV, #Firestorm, #Aurora), `marketplace`, `listing`; the Library's id | — |
+| `inventory_changes` | read | `since` (optional) | `generation`, `changes` (`id`, `kind`, `change` added / changed / removed, `name`, `folder_id`), `more`, `reset` | `since` ahead of the viewer |
+| `inventory_landmark` | read | `item_id` (a link is followed) | `region_name` (when the map knows it), `region_id`, `region_position`, `global_position` (10 s at most) | not a landmark; RLVa `@showloc` (`not_allowed`); the asset unreadable (`failed`) or late (`timeout`) |
+| `appearance_outfit_items` | read | `outfit_id` or `path` | the outfit folder's entries, links followed: `type`, `wearable`, `worn`, `target_id`, `attachment_point`, `broken` | — |
+| `inventory_search` (more filters) | read | phase 1's, plus `description`, `creator_id`, `worn`, `copyable`, `modifiable`, `favorite`, `created_after`, `created_before` (Unix seconds), `filter_links` (`include` / `exclude` / `only`), `linked_id` | as before; entries now carry `favorite` | a filter of the wrong type |
+| `inventory_create_item` | edit | `type`: `notecard`, `script`, `gesture`, `material`, `sky`, `water`, `day_cycle`, `landmark`; `name` (optional); `folder_id` or `path` (default: the folder of its type, else My Inventory) | `item_id` once the item arrived, `name`, `folder_id` | where the New menu is not offered (`actions::destination`: Library, Current Outfit, Received Items, Trash, My Outfits; Lost And Found); the Marketplace; a landmark outside a region or under RLVa `@showloc` |
+| `inventory_set_favorite` | edit | `ids` (1–50), `favorite` | `ids`, `favorite` | as the menu's Favorites entries (`favorites_ready`): the Trash, the Library, My Inventory itself; the Marketplace |
+| `inventory_batch_rename` | edit | `items`: 1–50 `{id, name}` | `renamed`, `unchanged` | any entry `actions::renameable` refuses: nothing is renamed |
+| `inventory_set_thumbnail` | edit | `id`; `texture_id` (an inventory texture, a link to one, or an asset id the window accepts) or `clear: true` | `id`, `done` (or `cleared`) | the entry: `actions::mutable` says no, a link, an item without Modify (stricter than the window), the Marketplace; the texture: `thumbnail::usable` says no (Copy and Transfer, or the Library; not in the Trash) |
+
+- **`inventory_changes`.** The viewer keeps no list of changed entries:
+  the journal (`mcp_bridge/journal.rs`) keeps a fingerprint of each entry
+  of My Inventory (place, name, description, types, flags, rights,
+  favorite, picture) and compares it when the inventory's generation
+  moved, once a second at most, only while an assistant polls (the first
+  call starts it; 10 minutes without a call, or another login, stop it).
+  The answer folds each entry's changes into one (added then removed is
+  not reported), 200 entries at most (`more`, then poll from the
+  `generation` given). A cursor older than the journal answers `reset`.
+  It never carries an asset or picture id; the Library is left out.
+- **`inventory_landmark`** reads the landmark cache (`world::landmarks`:
+  the asset, then the region's handle), which the app asks for what is
+  missing; the call waits 10 s at most. Any landmark of the inventory or
+  the Library, as its About window shows it.
+- **`inventory_create_item`** sends what the New menu sends
+  (`InvAction::Create`, creation permissions from Preferences); a landmark
+  is named as the star's quick entries name it
+  (`landmark_create::default_title`). The call answers when the new item
+  arrives (`NetEvent::InventoryCreated` with that folder, type and name),
+  or `timeout` after 30 s. Unlike a click on New, the inventory window
+  neither selects nor renames it, and no editor opens. Clothing and body parts are not created: a new
+  wearable uploads its asset.
+- **`inventory_set_thumbnail`** runs the Image window's "Choose image"
+  path (`inventory_image_action` with `Input::Texture`): the texture is
+  fetched and checked (square, 64 pixels at least), used as it is when
+  256 pixels or less, else scaled down to 256 and sent to the free
+  thumbnail service, as the window does (no L$). The job has no window: two hooks in
+  `app/inventory_thumbnail.rs` keep it going without one and tell the desk
+  its errors. "Remove image" is the window's patch. Never an asset id in
+  the answer.
+- **The Ask dialog** names what changes: "Create the script “Door” in
+  “Objects”", "Create a landmark of where you stand in “Landmarks”", "Add
+  “Boots” to Favorites", "Rename 3 entries, “a” to “b” first", "Set the
+  picture of “Evening” to “Sunset”".
+- **Upstream hooks** (each marked `// Folderstorm:`):
+  `app/inventory_thumbnail.rs` (`mcp_bridge::image_job` in
+  `poll_inventory_images`, `mcp_bridge::image_finished` in
+  `finish_inventory_image`); `app.rs` (`mcp_bridge::created_by_assistant`
+  where a new item is filed: no rename box for the assistant's);
+  `aurora-i18n/locales/{en,fr,ja}.ftl` (the Ask
+  strings after `fs-mcp-ask-many`, the Edit row's hint). The rest is in
+  Folderstorm files: `protocol/inventory.rs`, `mcp_bridge/{inventory_reads,
+  inventory_edits,journal,landmark,gap_tests}.rs`, and small additions to
+  `tools.rs`, `changes.rs`, `desk.rs`, `mcp_bridge.rs`,
+  `app/local_assistant.rs` and the sidecar's `tools/list`.
+- **Tests** (`mcp_bridge/gap_tests.rs`, `protocol/inventory.rs`, the
+  sidecar): each tool on the demo inventory, the search filters, the
+  journal (changes, folding, paging, idle stop, reset), landmarks (wait,
+  timeout, unreadable, RLVa), the refusals of each change, the creators'
+  permissions matrix (owner, group-owned, someone else's, Library, no
+  copy, no transfer, no modify, full) for batch rename, pictures and
+  favorites, the desk's waits for a created item and a picture, the
+  bridge's classes (Read only refuses, Ask before changes asks), and
+  `tools/list`.
+- **Left out** (see the parity checklist): `inventory_replace_links`
+  (needs FEATURES 2.12), `inventory_preview_batch_rename`,
+  `inventory_preview_batch_move` and `inventory_execute_plan` (need the
+  receipts design, step 3, although the native review 2.4 exists),
+  `inventory_history` and `inventory_preview_undo` (FEATURES 2.5), the
+  copy policies and the `nocopy` class (Folderstorm2 keeps refusing to copy
+  no-copy items), new clothing and body parts (an asset upload),
+  `inventory_snapshot_upload` as a texture (L$) and from the camera (phase
+  3, part 1), the `creator_name` search filter (needs the name cache), and
+  `inventory_next_owner_set` (the building group, last in the order).
 
 ## Crates and files
 
 | Where | What |
 |---|---|
-| `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
+| `crates/folderstorm-mcp-bridge/` | no viewer dependency: `policy` (classes, levels, presets, saved settings), `token`, `discovery`, `protocol` (tool catalogue, wire types, error codes), `binding` (`viewer_session`, capabilities), `http` (bounded HTTP/1.1 heads), `server` (listener), `client` (used by the sidecar and the tests) |
 | `crates/folderstorm-mcp/` | binary `folderstorm-mcp`: `jsonrpc` (MCP), `diagnose`, `main` |
-| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake), `ask` (the dialog) |
-| `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id |
+| `crates/aurora-viewer/src/mcp_bridge.rs` + `mcp_bridge/` | viewer adapter: lifecycle, session copy, per-frame poll, `tools` (answers from `Inventory`), `setup` (client configurations, connection check); phase 2: `changes` (plans each change with the window's rules), `desk` (calls waiting for the user, the app, the server or the bake, decided again with the permissions in force), `login` (the login generation), `ask` (the dialog) |
+| `crates/aurora-viewer/src/app/local_assistant.rs` | phase 2: runs the planned changes through `App::apply_appearance_action` and the inventory window's submit, and tells the desk the request id; phase 3: moves the camera, starts the assistant's photo jobs and the gallery's thumbnail snapshot |
+| `crates/aurora-viewer/src/mcp_bridge/{camera,picture,studio}.rs` | phase 3: the camera tools' arguments, presets and RLVa check; the picture's size, crop and encoding; the calls waiting for the camera, the photo or the thumbnail |
 | `crates/aurora-viewer/src/ui/options/pages/local_assistant.rs` | the Preferences group |
+| `crates/folderstorm-mcp-bridge/src/protocol/inventory.rs`, `crates/aurora-viewer/src/mcp_bridge/{inventory_reads,inventory_edits,journal,landmark}.rs` | phase 3, part 2: the inventory gaps' catalogue, reads, changes, `inventory_changes`' journal and the landmark waits |
 
 New dependencies: `getrandom` 0.4 (OS random source, MIT/Apache-2.0,
 already in Cargo.lock) and `subtle` 2.6 (constant-time comparison,
@@ -251,6 +469,14 @@ workspace uses them; `tempfile` for tests (already in the lock).
   of `on_app_event` (inventory and outfit answers), one
   `mcp_bridge::ask::show(&ctx, &p)` beside the other confirmation dialogs
   of `draw_ui`. The `fs-mcp-*` block of the catalogues grows.
+- Phase 3, `app.rs`: one `self.local_assistant_photo(&gfx.renderer)` beside
+  `poll_outfit_photo`; `app/snapshot.rs`: the `Purpose::Assistant` photo
+  (its size and options in `photo_job`, its pixels to `mcp_bridge`);
+  `app/inventory_thumbnail.rs`: one `mcp_bridge::thumbnail_done` where the
+  gallery's snapshot ends, and one `local_assistant_thumbnail_stopped`
+  just before the gallery's snapshot is sent (the assistant's thumbnail
+  decided again); `aurora-i18n/locales/{en,fr,ja}.ftl`:
+  `fs-mcp-thumbnail-stopped` (Appearance's note for a stopped snapshot).
 
 ## Tests
 
@@ -270,6 +496,8 @@ workspace uses them; `tempfile` for tests (already in the lock).
   TOML escaping of spaces, quotes, backslashes and Unicode), and an
   end-to-end test: sidecar logic → real socket → bridge → the adapter
   answering from the demo inventory.
+- login binding and capabilities: see the "As built" tests of
+  [mcp-receipts.md](mcp-receipts.md), checkpoint 2.
 - demo: `AURORA_DEMO_OPTIONS=privacy:local-assistant` opens the group;
   `AURORA_DEMO_MCP=1` also starts the bridge (session only) so its status
   and port show. Listed in `docs/TESTING.md`.
@@ -288,9 +516,63 @@ workspace uses them; `tempfile` for tests (already in the lock).
   allowed and Trash refused in the dialog, from the sidecar to the demo
   inventory.
 
+- phase 3: arguments of each camera tool, presets → camera and target,
+  the size and crop math, the byte cap, the Camera class and its migration
+  from saved settings, the compound class of the thumbnail and the
+  interface's forced Ask in the bridge, RLVa refusals, the waits for the
+  camera and the photo, `tools/list` and the image content in the sidecar.
+
 Not testable here: the look of the page and of the dialog (no display in
 the sandbox), real MCP clients on Windows, and the grid's answers (the
 bake wait against a real region).
+
+## Phase 3, part 3: world observation
+
+Step 4 of the MCP parity order (first half): the six `world_*` reads of
+Folderstorm (C++) (`tools/fs-mcp/internal/mcptools/world.go`,
+`doc/plans/mcp-world-observation.md`), with the C++ names. Their catalogue
+is its own file (`protocol/world.rs`, listed with `protocol::all()`); the
+viewer answers them in `mcp_bridge/world.rs`, from what it has already
+loaded and shows, on the frame thread. They are **Read** (Allow / Never,
+never ask): they change nothing, send nothing to the server, and keep
+nothing between calls (no history of other avatars in the bridge). The
+Read row of Preferences now says that it covers the surroundings too.
+
+Folderstorm (C++) put these behind a separate opt-in `world_read` class.
+Here they share Read, as the approved order asked; a separate class could
+follow once the camera PR's `Class::Camera` has merged (both edit
+`policy.rs`).
+
+| Tool | Arguments | Returns | RLVa |
+|---|---|---|---|
+| `world_location` | none | region (name, maturity, size), parcel name, position in the region, global position, facing (heading, compass point), flying, sitting | `@showloc`: region and parcel replaced by the navigation bar's hidden labels, no coordinates (`location_hidden_by_rlv`) |
+| `world_parcel` | none | About Land's summary: local id, name, description, owner (resident or group), area, prims used / max, for sale and price, flags (fly, build, group build, scripts, group scripts, damage, push restricted, landmarks, terraform, voice, local sounds, see avatars, avatar sounds) | `@showloc`: `not_allowed`, unless the user owns the parcel or manages it through a group (`World::rlva_can_view_parcel`'s rule), and then its name still goes through the RLVa text filter (hidden); `@shownames`: an anonymous owner, no id |
+| `world_nearby_avatars` | `radius` (1–256 m, 64), `limit` (1–100, 25) | the avatars `radar::sightings` gives (loaded ones, then coarse locations), nearest first: name, id, distance (none when the altitude is unknown), same region, loaded, sitting, friend, offset east / north / up | `@shownearby`: `not_allowed` (People › Nearby is empty); `@shownames`, and `@shownametags` for a hidden tag (stricter than the People list): the anonymous name, no id, no friend flag; `@showminimap`: no offsets (`positions_hidden_by_rlv`) |
+| `world_nearby_objects` | `radius`, `limit` | loaded root objects (no avatars, attachments or HUDs; the parcel isolation applies), nearest first: id, distance, offset, prim count, tree; name, description and owner only when the viewer already holds them (Area Search, a hover tip, the selection), else `name_known: false` | names and descriptions through the viewer's RLVa text filter; `@shownames`: an anonymous owner, no id |
+| `world_audio_sources` | `radius`, `limit` | the Sound Explorer's history, newest first: kind (`avatar`, `collision`, `llTriggerSound`, `llLoopSound`, `llPlaySound`), owner name, playing, started / stopped seconds ago, distance | `@shownames`: an anonymous owner (`sound_owner_name`) |
+| `world_media_sources` | `radius`, `limit` | the parcel's music and media: configured or not, media type, description, size, looping; loaded objects nearby with media on a face (not worn ones): id, distance, faces | descriptions through the RLVa text filter |
+
+- Every list gives `radius`, `limit`, `count`, `total` (rows in the radius)
+  and `truncated`; nothing past the limit is computed into the answer.
+- Creators' permissions: no asset id at all (sound assets included, even
+  where the Sound Explorer would show one), no object contents, no hover
+  text, no media or music URL.
+- Not ready (`not_ready`): logged out, during a teleport, before the
+  region is known; `world_parcel` before the parcel's properties came;
+  `world_audio_sources` without the scene's history.
+- Unknown is not absence: what the viewer has not loaded is not listed,
+  and an empty list proves nothing. Playback state of media is not
+  reported (the media manager is not read).
+- Upstream hooks: `app/area_search.rs` gives its loaded properties to the
+  bridge (`Feed::props`, read only). `app/local_assistant.rs` (ours) adds
+  the property caches and the sound history to `mcp_bridge::View`;
+  `mcp_bridge::frame` answers the `world_*` calls before the desk.
+- Tests (`mcp_bridge/world_tests.rs`, on the demo plaza): each tool, the
+  argument bounds, not ready, the 100-row cap and the order, each
+  restriction (`@showloc` for the place and the parcel, the owner's
+  exception, `@shownearby`, `@shownames` with an exception,
+  `@shownametags`, `@showminimap`), no asset id or URL in any answer; the
+  catalogue (`protocol/world.rs`) and the sidecar's `tools/list`.
 
 ## Next: receipts, plans, login binding and operations
 

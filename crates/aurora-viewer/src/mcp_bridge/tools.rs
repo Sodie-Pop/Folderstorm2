@@ -49,6 +49,11 @@ pub struct Ctx<'a> {
     /// The worn objects' points, temporary attachments left out
     /// (`World::outfit_attachment_points`), for the outfit rules.
     pub outfit_points: HashMap<Uuid, u8>,
+    /// What the camera tools read (phase 3).
+    pub stage: super::camera::Stage,
+    /// The login's `viewer_session` (None while logged out), which
+    /// `viewer_status` gives.
+    pub viewer_session: Option<String>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {
@@ -70,16 +75,20 @@ pub fn answer(tool: &str, args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
         "inventory_item" => item(args, cx),
         "outfits_list" => Ok(outfits(cx)),
         "worn_items" => Ok(worn(cx)),
-        _ => Err(err(ErrorCode::UnknownTool, "unknown tool")),
+        // Folderstorm: phase 3, part 2 (inventory gaps)
+        _ => super::inventory_reads::answer(tool, args, cx).unwrap_or_else(|| Err(err(ErrorCode::UnknownTool, "unknown tool"))),
     }
 }
 
 fn known_argument(tool: &str, key: &str) -> bool {
     let known: &[&str] = match tool {
-        "inventory_search" => &["query", "folder_id", "path", "type", "include_library", "include_trash", "limit"],
+        "inventory_search" => {
+            return ["query", "folder_id", "path", "type", "include_library", "include_trash", "limit"].contains(&key)
+                || folderstorm_mcp_bridge::protocol::inventory::SEARCH_FILTERS.contains(&key);
+        }
         "inventory_list_folder" => &["folder_id", "path"],
         "inventory_item" => &["item_id"],
-        _ => &[],
+        _ => return super::inventory_reads::known_argument(tool, key).unwrap_or(false),
     };
     known.contains(&key)
 }
@@ -110,6 +119,10 @@ fn status(cx: &Ctx) -> Value {
             Session::LoggedIn => "logged_in",
             Session::Demo => "demo",
         },
+        // the login the calls are bound to, and what this viewer implements
+        // (folderstorm/plans/mcp-receipts.md, sections 2 and 3)
+        "viewer_session": cx.viewer_session,
+        "capabilities": folderstorm_mcp_bridge::binding::capabilities(),
         "inventory": {
             "usable": usable && !cx.inventory_locked,
             "locked_by_rlv": cx.inventory_locked,
@@ -147,7 +160,7 @@ pub(super) fn kind(item: &InvItem) -> &'static str {
 
 /// The name of a system folder type (LLFolderType), None for an ordinary
 /// folder.
-fn system_name(kind: i32) -> Option<&'static str> {
+pub(super) fn system_name(kind: i32) -> Option<&'static str> {
     Some(match kind {
         0 => "textures",
         1 => "sounds",
@@ -179,7 +192,7 @@ fn system_name(kind: i32) -> Option<&'static str> {
 }
 
 /// The wearable type in an item's flags (LLWearableType).
-fn wearable_name(flags: u32) -> &'static str {
+pub(super) fn wearable_name(flags: u32) -> &'static str {
     match flags & 0xff {
         0 => "shape",
         1 => "skin",
@@ -319,7 +332,7 @@ pub(super) fn library(inv: &Inventory, folder: Uuid) -> bool {
     inv.folders.get(&folder).is_some_and(|f| f.library)
 }
 
-fn item_entry(cx: &Ctx, item: &InvItem) -> Value {
+pub(super) fn item_entry(cx: &Ctx, item: &InvItem) -> Value {
     let mut entry = json!({
         "id": item.id,
         "name": item.name,
@@ -331,10 +344,11 @@ fn item_entry(cx: &Ctx, item: &InvItem) -> Value {
     if matches!(item.asset_type, 5 | 13) {
         entry["wearable"] = json!(wearable_name(item.flags));
     }
+    entry["favorite"] = json!(actions::is_favorite(cx.inv, item.id)); // Folderstorm: phase 3
     entry
 }
 
-fn folder_entry(cx: &Ctx, folder: Uuid) -> Value {
+pub(super) fn folder_entry(cx: &Ctx, folder: Uuid) -> Value {
     let Some(f) = cx.inv.folders.get(&folder) else {
         return json!({"id": folder, "type": "folder"});
     };
@@ -349,6 +363,7 @@ fn folder_entry(cx: &Ctx, folder: Uuid) -> Value {
     if let Some(system) = system_name(f.info.type_default) {
         entry["system"] = json!(system);
     }
+    entry["favorite"] = json!(f.info.favorite); // Folderstorm: phase 3
     entry
 }
 
@@ -372,6 +387,7 @@ fn search(args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
             .ok_or_else(|| err(ErrorCode::InvalidArguments, format!("`limit` must be 1 to {SEARCH_MAX}")))? as usize,
     };
     let scope = scope(args, inv)?;
+    let filters = super::inventory_reads::Filters::parse(args)?; // Folderstorm: phase 3
     let with_library = bool_arg(args, "include_library")? || scope.is_some_and(|s| library(inv, s));
     let with_trash = bool_arg(args, "include_trash")? || scope.is_some_and(|s| inv.in_folder_type(s, FT_TRASH));
     let place_ok = |id: Uuid, parent: Uuid| {
@@ -383,14 +399,15 @@ fn search(args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
     let mut found: Vec<(String, Uuid, bool)> = Vec::new();
     if wanted.is_none_or(|w| w == "folder") {
         for (id, f) in &inv.folders {
-            if *id != inv.root && *id != inv.lib_root && name_ok(&f.info.name) && place_ok(*id, *id) {
+            if *id != inv.root && *id != inv.lib_root && name_ok(&f.info.name) && place_ok(*id, *id) && filters.folder_ok(cx, *id) {
                 found.push((f.info.name.to_lowercase(), *id, true));
             }
         }
     }
     if wanted.is_none_or(|w| w != "folder") {
         for item in inv.items.values() {
-            if wanted.is_none_or(|w| w == kind(item)) && name_ok(&item.name) && place_ok(item.id, item.parent) {
+            if wanted.is_none_or(|w| w == kind(item)) && name_ok(&item.name) && place_ok(item.id, item.parent) && filters.item_ok(cx, item)
+            {
                 found.push((item.name.to_lowercase(), item.id, false));
             }
         }
@@ -447,7 +464,7 @@ fn rights(mask: u32) -> Value {
     })
 }
 
-fn item(args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
+pub(super) fn item(args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
     let inv = cx.inv;
     let id = uuid_arg(args, "item_id")?.ok_or_else(|| err(ErrorCode::InvalidArguments, "`item_id` is required"))?;
     if inv.folders.contains_key(&id) {

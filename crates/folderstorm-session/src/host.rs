@@ -1499,6 +1499,21 @@ impl Desk {
             .is_some_and(|since| now.saturating_duration_since(since) >= START_NOTE_AFTER)
     }
 
+    /// How long the viewer has been on its way, from its launch until it
+    /// shows its first frame (its first report past [`Screen::Starting`]):
+    /// shown beside "Starting…", so that a slow start never looks stuck.
+    /// None when it is not starting.
+    pub fn starting_for(&self, slot: usize, now: Instant) -> Option<Duration> {
+        let s = self.slot(slot)?;
+        let on_its_way = match s.phase {
+            Phase::Starting => true,
+            Phase::Running => !s.closing && s.status.as_ref().is_none_or(|st| st.screen == Screen::Starting),
+            _ => false,
+        };
+        let since = s.starting_since.filter(|_| on_its_way)?;
+        Some(now.saturating_duration_since(since))
+    }
+
     /// How a viewer answers. Never a reason to end it.
     pub fn health(&self, slot: usize, now: Instant) -> Health {
         let Some(s) = self.slot(slot).filter(|s| s.phase == Phase::Running) else {
@@ -2163,6 +2178,32 @@ mod tests {
         // it reports at last: no note any more
         d.connected(0, 1, now + START_NOTE_AFTER);
         assert!(!d.starting_too_long(0, now + START_NOTE_AFTER * 2));
+    }
+
+    #[test]
+    fn a_starting_viewer_shows_how_long_until_its_first_frame() {
+        let (mut d, now) = desk(1);
+        assert_eq!(d.starting_for(0, now), None, "not started");
+        d.launch(0, true);
+        d.tick(now);
+        let later = now + Duration::from_secs(12);
+        assert_eq!(d.starting_for(0, later), Some(Duration::from_secs(12)));
+        // linked, its window not drawn yet: still on its way
+        d.connected(0, 1, later);
+        assert_eq!(d.starting_for(0, later), Some(Duration::from_secs(12)));
+        let starting = Status {
+            screen: Screen::Starting,
+            ..Status::default()
+        };
+        d.status(0, 1, starting.clone(), later);
+        assert!(d.starting_for(0, later).is_some());
+        // its first frame: the login screen
+        let login = Status {
+            screen: Screen::Login,
+            ..starting
+        };
+        d.status(0, 1, login, later);
+        assert_eq!(d.starting_for(0, later), None);
     }
 
     #[test]

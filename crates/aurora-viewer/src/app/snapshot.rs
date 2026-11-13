@@ -57,6 +57,8 @@ pub(super) enum Purpose {
     Portrait {
         preview: bool,
     },
+    /// Folderstorm: the local assistant's picture, at its own size and options
+    Assistant(crate::mcp_bridge::picture::Render),
 }
 
 impl Purpose {
@@ -808,6 +810,7 @@ impl App {
                 self.prepare_inventory_photo(request, job.size.0, job.size.1, job.pixels);
             }
             Purpose::Portrait { preview } => self.outfit_portrait_drawn(preview, job.size, job.pixels, job.cutout),
+            Purpose::Assistant(_) => self.local_assistant_photo_drawn(job.size, job.pixels), // Folderstorm
         }
     }
 
@@ -1106,8 +1109,16 @@ impl App {
     /// Start a photo of the destination's size.
     pub(super) fn photo_job(&mut self, purpose: Purpose, renderer: &Renderer) {
         let window = renderer.size();
-        let outfit = purpose.outfit();
-        let full = if purpose == (Purpose::Portrait { preview: false }) {
+        // Folderstorm: the local assistant's picture is drawn as an outfit's
+        // (no looks, no supersampling), at its size and with its options
+        let assistant = match purpose {
+            Purpose::Assistant(render) => Some(render),
+            _ => None,
+        };
+        let outfit = purpose.outfit() || assistant.is_some();
+        let full = if let Some(render) = assistant {
+            render.size
+        } else if purpose == (Purpose::Portrait { preview: false }) {
             // (the HD picture is chosen once the photo is shown)
             (snapshot::portrait::SHOT_SIDE, snapshot::portrait::SHOT_SIDE)
         } else if outfit {
@@ -1164,6 +1175,7 @@ impl App {
         // an outfit's picture shows the outfit: never the interface, the
         // HUDs or the photo's looks, whatever the Photo window has chosen
         let interface = !outfit && s.interface && snapshot::same_proportions(full, window);
+        let interface = interface || assistant.is_some_and(|a| a.interface && snapshot::same_proportions(full, window)); // Folderstorm
         // (with the ambient occlusion on: GTAO may be forced over its method)
         let context = ContextPass::plan(size, tiles.len(), self.settings.ssao > 0);
         // (the outfit's photo mode keeps the viewfinder's looks: the
@@ -1179,7 +1191,7 @@ impl App {
             waiting: None,
             pixels: Vec::new(),
             interface,
-            huds: !outfit && s.huds,
+            huds: (!outfit && s.huds) || assistant.is_some_and(|a| a.huds), // Folderstorm
             started: Instant::now(),
             supersample,
             cutout: self.world.photo_isolation.empty_background(),
@@ -3077,7 +3089,9 @@ LUT_3D_SIZE {n}
                 vf.light = v.light;
                 vf.hinted = v.menu || v.help || v.drawer || vf.looks || v.light;
                 if v.poser && self.ik_editor.toggle_poser() {
-                    crate::ui::widgets::open_floater(&self.egui_ctx, "poser", &mut self.ik_editor.open);
+                    // the window in its mode (the compact one by default)
+                    let window = self.ik_editor.poser_window(&self.settings.poser);
+                    crate::ui::widgets::open_floater(&self.egui_ctx, window, &mut self.ik_editor.open);
                 }
                 self.snapshots.quality_ask = v.quality_warning;
             }

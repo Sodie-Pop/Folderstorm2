@@ -1,5 +1,5 @@
-//! Folderstorm: Preferences › Privacy › Local assistant (FEATURES.md 4.1
-//! and 4.5; Folderstorm (C++)'s panel_preferences_local_assistant.xml and
+//! Folderstorm: Preferences › Privacy › Local assistant (FEATURES.md 4.1,
+//! 4.4 and 4.5; Folderstorm (C++)'s panel_preferences_local_assistant.xml and
 //! doc/plans/assistant-*.md). Access, "this session only", the permission
 //! presets, the bridge's state and recent activity, and the Setup rows.
 //! The token is never shown nor copied.
@@ -148,6 +148,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-trash-hint"),
                     field!(local_assistant.permissions.trash),
                 ),
+                (
+                    Class::Camera,
+                    tr!("fs-mcp-camera"),
+                    tr!("fs-mcp-camera-hint"),
+                    field!(local_assistant.permissions.camera),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];
@@ -180,9 +186,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             ui.label(egui::RichText::new(text).size(12.5).color(color));
             false
         });
-        cx.wide()
+        // the label above, one entry per line across the whole row (in the
+        // control column each entry wrapped over several lines)
+        cx.below()
             .row(tr!("fs-mcp-activity"), tr!("fs-mcp-activity-hint"), &Nothing, |ui, _| {
                 ui.vertical(|ui| {
+                    ui.set_width(ui.available_width());
                     if status.activity.is_empty() {
                         ui.label(egui::RichText::new(tr!("fs-mcp-activity-none")).size(12.0).color(p.muted));
                     }
@@ -205,7 +214,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                             outcome = outcome.to_owned(),
                             ago = ago
                         );
-                        ui.label(egui::RichText::new(line).size(12.0).color(p.ink));
+                        ui.add(egui::Label::new(egui::RichText::new(line).size(12.0).color(p.ink)).truncate());
                     }
                 });
                 false
