@@ -277,3 +277,88 @@ End to end over real sockets:
 
 Not testable here: the Ask window's look, real MCP clients on Windows, two
 real characters on the grid.
+
+## As built (branch `claude/mcp-session-routing`)
+
+Built as planned; the differences and decisions taken while building:
+
+- **Discovery.** `mcp_bridge::discovery_dir()` is the main profile's
+  settings folder for every profile, as planned, so the configuration that
+  Preferences copies (with that folder) reaches every character. It carries
+  no `--profile`: copied from any character's Preferences, the assistant
+  chooses (`viewer_select`), or the user adds `--profile <name>` by hand.
+- **The profile is in health only**, not in the discovery file: the file
+  keeps schema 1, and the sidecar reads each live viewer's health anyway
+  (to skip stale files). The bridge learns it with
+  `Bridge::set_identity` once per frame (`profile`, `managed`, the
+  avatar's name), and health filters the name by Read and by a login.
+- **`viewer_status`** gives `profile` (`main` for the main one), `managed`
+  and `character` (only while Read is Allow), as health does.
+- **The choice** is the profile, kept as the viewer names it; `--viewer-pid`
+  keeps today's meaning (that process only). `viewer_list` answers even
+  when no viewer runs (an empty list), and gives `missing_capabilities` for
+  an older viewer.
+- **The host's controller** reuses the bridge's listener bounds and checks
+  (`server::accept_loop`, `check_head`, now shared through a small
+  `Served` trait) and the bridge's wire (`CallRequest`; `ToolError` with
+  the current `host_session` in its `viewer_session` field on
+  `session_changed`). Its own `ControllerHealth`. It logs each call's tool
+  and outcome, never its arguments.
+- **`folderstorm-session` depends on `folderstorm-mcp-bridge`** for the
+  controller's classes and levels (`HostClass`, `HostLevels`, `Level`), so
+  that the settings file and the listener share one definition. No new
+  external crate.
+- **Restart** is new on the desk (`Desk::restart`): Close, and the same
+  slot is started again (not activated) when its process ends; never while
+  "Quit all" runs (also when the restarting viewer is the last one to
+  end). A character that ended restarts at once; one never started is
+  refused (`host_open_login` does that).
+- **Stop managing** is new on the desk (`Desk::release`): the slot becomes
+  unmanaged as one the host could not manage (`Effect::LetGo`), no longer
+  active; its viewer goes back to its own sound and voice settings, as when
+  the host closes. Only the controller offers it (the human dropped the
+  button from the host's settings).
+- **The Ask window** is a window of the host's own (`Which::Ask`), always
+  on top, centred on the host's window (its place also while it hides
+  behind a docked bar), brought forward for each new question; closing it,
+  Escape, Refuse or 60 s refuse. If it cannot open, the question is
+  refused rather than left unseen.
+- **The demo's own request** asks to put `demo-2` in Economy (always
+  possible, unlike bringing forward a demo viewer still starting).
+- **A background character's question** is the first item of its viewer's
+  Attention list (`AttentionKind::Assistant`, its number far from the
+  notifications'), titled with the program's name, worded as the viewer's
+  dialog; listed whatever the kinds chosen, not for a character left out of
+  Attention. Protocol 6.
+
+**Tests.** Bridge crate: discovery kinds never read each other; health's
+identity and the name gated by Read and a login; the controller's catalogue,
+levels, health, calls, Never at the listener, a stale `host_session`, an
+unknown tool, a wrong token, a host that does not answer. Sidecar
+(`tests/routing.rs`, real sockets, real bridges): one viewer chosen and
+kept; several refused (`target_required`) until `viewer_select`, then only
+that one called; a chosen character that relogs, quits (another one still
+running: `unavailable`, never called) and starts again; choice by exact
+login and by process, a stale login refused; `--profile` and
+`--viewer-pid` limiting the list and the choice; the host's controller
+found, pinned, restarted (`session_changed` once, never resent), never
+confused with a viewer. `folderstorm-session` (`controller_tests.rs`):
+defaults and older files, arguments, off / Never / no access / unknown
+profile / a stale launch, each action's eligibility at each state, the
+actions as the desk's own (restart, release, a restart during "Quit all"),
+the list and its metadata gate, the questions decided again (Ask → Allow
+still asks, Never, access removed, another launch, no longer possible,
+60 s, controller off), the Attention rule. Viewer: `viewer_status`'s new
+fields; the assistant's question in the Attention list; the settings
+section drawn with every class and character and its clicks; the Ask
+window's text and its answers (allowed, refused, closed); end to end over
+the real socket (a client → the host's listener → the `Host` ticked by
+hand): the list, Allow, a character without access, Never at the
+listener, a refusal for a character not in the world, Ask allowed and
+refused in the window, the controller turned off while a question waits.
+
+**Not built:** an optional `viewer_session` argument on each tool (several
+characters from one sidecar at once: one sidecar per character, or
+`viewer_select`, instead); controller receipts and request ids (C++'s
+`controller_operation_status`): an action answers once the desk has taken
+it; monitor arrangement and cycling controls beyond open / close.

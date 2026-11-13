@@ -74,11 +74,16 @@
 //!   several windows show of the chat;
 //! - [`host`]: the monitors' settings, the swap on a switch, what the
 //!   cycling monitor asks.
+//!
+//! Session routing and the MCP controller (folderstorm/plans/mcp-routing.md):
+//! - [`controller`]: what the host's MCP controller may list and do, its
+//!   settings, its questions decided again while they wait.
 
 pub mod bar;
 pub mod behind;
 pub mod chat;
 pub mod chips;
+pub mod controller;
 pub mod copy;
 pub mod export;
 pub mod gpu;

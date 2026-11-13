@@ -41,6 +41,11 @@
 //! ([`bar::Request::Cycling`]). The monitors' own windows are the host's:
 //! nothing else changed on the link.
 //!
+//! Since protocol 6 (session routing, folderstorm/plans/mcp-routing.md) a
+//! viewer's Attention list may carry its local assistant's open question
+//! ([`AttentionKind::Assistant`]), so that the host's inbox shows a
+//! question waiting in a background character's window.
+//!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
 //! and bounded before anything shows it ([`Status::cleaned`]).
@@ -66,7 +71,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 5;
+pub const PROTOCOL: u32 = 6;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -414,6 +419,9 @@ pub enum AttentionKind {
     Call,
     #[default]
     Other,
+    /// Protocol 6 (session routing): the viewer's local assistant asks the
+    /// user (its Ask dialog waits in that viewer's window).
+    Assistant,
 }
 
 /// One question waiting in a viewer. The host only shows it: the answer

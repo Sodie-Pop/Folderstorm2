@@ -2534,7 +2534,9 @@ May be two small PRs: 1a profiles, 1b behind policy.
     the alias and colour editor under a card (its palette button opens
     the Characters section).
   - **Not done:** a WAV of one's own and an alert volume (above); the
-    MCP controller's page (later).
+    MCP controller's page (later: built with the MCP session routing,
+    section "MCP controller" of the window, see
+    [mcp-routing.md](mcp-routing.md)).
   - **Demo:** `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>`
     (`docs/TESTING.md`); `AURORA_SESSION_HOST_CAPTURE` also writes the
     settings window (`<file>-settings.png`).
