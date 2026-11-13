@@ -36,6 +36,11 @@
 //! hears the clicks on it ([`ToHost::Bar`]), and may ask a background
 //! character's window off the taskbar ([`Assignment::off_taskbar`]).
 //!
+//! Since protocol 5 (checkpoint 9) the bar's state says whether the
+//! cycling monitor is open, and a click may open or close it
+//! ([`bar::Request::Cycling`]). The monitors' own windows are the host's:
+//! nothing else changed on the link.
+//!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
 //! and bounded before anything shows it ([`Status::cleaned`]).
@@ -61,7 +66,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 4;
+pub const PROTOCOL: u32 = 5;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -823,8 +828,14 @@ mod tests {
         );
         // a bar's state without the word on spanning the window: over the
         // world viewport, as the default is
-        let without = r#"{"docked":true,"collapsed":false,"characters":[],"inbox":0,"chat_open":false,"chat_unread":0,"mute_background":false,"voice_follows":false,"quick":[],"quick_labels":"icon-only","toolbar_labels":"icon-only"}"#;
-        let read = serde_json::from_str::<bar::State>(without).expect("reads");
+        let mut without = serde_json::to_value(bar::State {
+            docked: true,
+            span_window: true,
+            ..bar::State::default()
+        })
+        .expect("json");
+        without.as_object_mut().expect("an object").remove("span_window");
+        let read = serde_json::from_value::<bar::State>(without).expect("reads");
         assert!(read.docked && !read.span_window);
         // an assignment of before protocol 4 has no word on the taskbar
         let old = r#"{"seq":3,"role":"Background","behind":"Off","standby":"Warm","sound_muted":true,"voice_allowed":false}"#;

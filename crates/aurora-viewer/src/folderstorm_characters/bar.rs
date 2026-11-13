@@ -461,9 +461,17 @@ fn login_menu(ui: &mut egui::Ui, p: &Palette, state: &State, asked: &mut Vec<Req
 
 fn monitors_menu(ui: &mut egui::Ui, p: &Palette, state: &State, asked: &mut Vec<Request>) {
     for character in &state.characters {
-        // greyed when it is not in the world, or is the one in front
+        // greyed when it is not in the world, or is the one in front;
+        // a monitor that is open can always be closed
         let label = numbered(character, LIST_NAME);
-        if menu::check(ui, p, "device-desktop-filled", &label, character.monitor, character.watchable()) {
+        if menu::check(
+            ui,
+            p,
+            "device-desktop-filled",
+            &label,
+            character.monitor,
+            character.monitor_clickable(),
+        ) {
             asked.push(Request::Monitor(character.slot, !character.monitor));
         }
     }
@@ -474,16 +482,11 @@ fn monitors_menu(ui: &mut egui::Ui, p: &Palette, state: &State, asked: &mut Vec<
     if menu::item_if(ui, p, "device-desktop-filled", tr!("folderstorm-bar-monitors-open-all"), closed) {
         asked.push(Request::OpenMonitors);
     }
-    // (its place: the cycling monitor comes with the monitors' own windows)
-    menu::item_tip(
-        ui,
-        p,
-        "refresh",
-        tr!("folderstorm-bar-monitors-cycling"),
-        false,
-        tr!("folderstorm-bar-monitors-cycling-help"),
-    );
-    let open = state.characters.iter().any(|c| c.monitor);
+    // (checkpoint 9) one window that shows each of them in turn
+    if menu::check(ui, p, "repeat", tr!("folderstorm-bar-monitors-cycling"), state.cycling, true) {
+        asked.push(Request::Cycling(!state.cycling));
+    }
+    let open = state.cycling || state.characters.iter().any(|c| c.monitor);
     if menu::item_if(ui, p, "x", tr!("folderstorm-bar-monitors-close-all"), open) {
         asked.push(Request::CloseMonitors);
     }

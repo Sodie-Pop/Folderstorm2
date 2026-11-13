@@ -5892,7 +5892,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view); with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions; add `AURORA_DEMO_VIEWPORT=1` (inherited by the demo viewers) to see the docked bar over the world viewport only (the option "Span the whole window" on the bar's page puts it across the window) |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions; add `AURORA_DEMO_VIEWPORT=1` (inherited by the demo viewers) to see the docked bar over the world viewport only (the option "Span the whole window" on the bar's page puts it across the window) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7318,37 +7318,40 @@ failure. Grid validation and any paid upload are performed by the human.
     on the grid by the human.) "Heard in the background" on a row keeps
     that character's sounds while another one is active (its log says
     `Background, …, sound on, voice off`).
-  - **monitors** (checkpoint 5): in the demo every character's
-    **Monitor** is open. Under the row of each background character a
-    picture of its own demo scene appears and changes about once a second,
-    with "<name> · just now · live" under it; the active character's
-    says "This is the active character: see its own window". The picture
-    has the proportions of that viewer's window (resize a viewer: bars
-    appear left and right, or above and below, never a stretched picture)
-    and is the right way up. It does not flicker, and clicking or typing
-    on it does nothing. What to try:
-    - **Switch** to a watched character: its window comes forward and its
-      monitor says it is in front; the one left gets its picture within a
-      second or two. Each watched viewer's log says `session monitor: on,
+  - **monitors** (checkpoint 5; each in a window of its own since
+    checkpoint 9, below): tick **Monitor** on a background character's
+    row, or start the demo with
+    `AURORA_DEMO_SESSION_HOST_MONITORS=windows`. A window opens with a
+    picture of that character's own demo scene, which changes about once
+    a second; hover its name or the picture for "just now · live". The
+    picture has the proportions of that viewer's window (resize a viewer:
+    bars appear left and right, or above and below, never a stretched
+    picture) and is the right way up. It does not flicker, and clicking
+    or typing on it does nothing. What to try:
+    - **Switch** to a watched character: its window comes forward, and
+      its monitor's window now shows the character that was in front,
+      within a second or two. Each watched viewer's log says `session monitor: on,
       pictures within (480, 270) every 1000 ms`, still `3D paused: …
       (policy Off)`, and never `3D resumed` while it is only watched.
-    - untick **Monitor** on a row: the picture goes at once, and that
-      viewer's log says `session monitor: off, the 3D stays off (n
+    - untick **Monitor** on a row, or close the monitor's window: the
+      picture goes at once, and that viewer's log says `session monitor: off, the 3D stays off (n
       pictures sent, x ms a picture)`: the cost of a picture as that
       viewer measured it.
     - the sizes (320 × 180, 480 × 270, 640 × 360) and rates (0.5, 1, 2,
-      5 / s) under a monitor. With `AURORA_DEMO_SESSION_HOST=5`, set the
-      four monitors to 640 × 360 and 5 / s: each says "1.3 pictures a
-      second: the monitors share one budget".
-    - minimise the host, cover it whole with another window (where the
-      system tells: Windows only says so for a minimised window), or
-      scroll a monitor out of sight: within a second that viewer's log
-      says `session monitor: off`; bring the host back: `on` again, and
-      the last picture is still there with its age until the next one.
+      5 / s) in a monitor's options (and on its character's card). With
+      `AURORA_DEMO_SESSION_HOST=5`, set the four monitors to 640 × 360
+      and 5 / s: each says "1.3 pictures a second: the monitors share one
+      budget" (the hover, and its options).
+    - minimise a monitor's window, or cover it whole with another window
+      (where the system tells: Windows only says so for a minimised
+      window): within a second that viewer's log says `session monitor:
+      off`; bring it back: `on` again, and the last picture is still
+      there with its age until the next one. The host's own window
+      minimised or hidden changes nothing for the monitors.
     - tick "Minimise in the background" on a row whose monitor is open:
       that window is no longer minimised when another becomes active. A
       window minimised by hand shows "Its window is minimised: no
-      picture…" in its monitor.
+      picture…" in its monitor's window.
     - with `AURORA_DEMO_BUSY_PAUSE=<frame>` (the viewers inherit it): the
       watched viewers' monitors say "fewer pictures: the graphics card is
       busy" and change about every 10 seconds; with
@@ -7361,37 +7364,31 @@ failure. Grid validation and any paid upload are performed by the human.
     one in memory while its monitor is open.
   - **pop-out panels** (checkpoint 6). At the top of the host's window,
     "In a window of its own:" with **Chat**, **Characters** and
-    **Monitors**. `AURORA_DEMO_SESSION_HOST_PANELS=chat,monitors` (the
-    names `chat`, `controls` or `characters`, `monitors`, or `all`; with
+    **Inbox**. `AURORA_DEMO_SESSION_HOST_PANELS=chat,inbox` (the names
+    `chat`, `controls` or `characters`, `inbox`, or `all`; with
     `AURORA_DEMO_SESSION_HOST`) starts the demo's host with those panels
     out:
-    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_PANELS=chat,monitors cargo run -p aurora-viewer -- --title "Test host"`.
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_PANELS=chat cargo run -p aurora-viewer -- --title "Test host"`.
+    (Until checkpoint 9 the monitors were a third panel, one window for
+    all of them; each monitor now has its own window, below.)
     What to look at:
     - tick **Chat**: the chat leaves the host's window for a window of its
       own (`… Chat — …` in its title), which comes in front as a window
       you asked for; the host's window keeps the characters. The same for
-      **Characters** and **Monitors** (the cards then keep each monitor's
-      size and rate and say "Its picture is in the Monitors window"). The
-      host's log says `session host: chat in its own window`.
+      **Characters**. The host's log says `session host: chat in its own
+      window`.
     - type and send in the chat's window, switch characters from the
-      characters' window or with **Switch** under a picture in the
-      monitors' window: everything works as in the host's window, and the
-      host's window goes on working (untick a box there, add a
+      characters' window: everything works as in the host's window, and
+      the host's window goes on working (untick a box there, add a
       character).
     - **Dock back** in a panel's window, its close button, or unticking
-      its box: the panel is back in the host's window (`docked back`). A
-      monitor's latest picture moves with it, without waiting for the
-      next one. Closing a panel's window never closes the host or a
-      character, and never asks "Quit all".
+      its box: the panel is back in the host's window (`docked back`).
+      Closing a panel's window never closes the host or a character, and
+      never asks "Quit all".
     - with every panel out, the host's window lists them with **Dock
       back**. Close the host's window while characters run: its question
       (Quit all, Close only this window, Cancel) is asked in the host's
       own window.
-    - minimise the monitors' window, or cover it whole: within a second
-      the watched viewers' logs say `session monitor: off`, although the
-      host's own window is in view; bring it back: `on`. With the
-      monitors docked, minimising the chat's window changes nothing for
-      them.
     - lines arriving in the chat's window are read only while that
       window has the keyboard; with "Sound for a message…" on, a message
       for a background character flashes the chat's window in the
@@ -7453,7 +7450,7 @@ failure. Grid validation and any paid upload are performed by the human.
       ring for no colour. The alias replaces the
       name on the card (the real name stays beside it, in grey), on the
       quick-action button, on the chat's tab and in "All"
-      (`[Main › Nearby chat]`, in the colour), under a monitor's picture,
+      (`[Main › Nearby chat]`, in the colour), in a monitor's header,
       in the inbox and in the condensed lines; the colour is a dot or a
       line beside it. Above the chat's box, "Send as Main (demo-1) — …"
       always says the real name too. Hover a tab or a quick-action button
@@ -7470,11 +7467,9 @@ failure. Grid validation and any paid upload are performed by the human.
       signs and the name. "Cards" turns back. Tick **Chat** under "In a
       window of its own": the host's window is the lines alone and can
       be made small (down to 340 × 200 points) beside the characters'
-      windows. With a monitor open and the monitors docked, the watched
-      viewer's log says `session monitor: off` in this layout (its
-      picture is in the cards); with the monitors in their own window it
-      goes on. Outside the demo the choice is `condensed` in
-      `session-host.json`.
+      windows. A monitor's picture is in its own window (checkpoint 9),
+      so it goes on in this layout as in the other. Outside the demo the
+      choice is `condensed` in `session-host.json`.
   - **the docked bar and the compact controls** (checkpoint 8).
     `AURORA_DEMO_SESSION_HOST_BAR=docked|popped` (with
     `AURORA_DEMO_SESSION_HOST`; without it the bar is docked too, the
@@ -7493,8 +7488,8 @@ failure. Grid validation and any paid upload are performed by the human.
       shared chat in its own window, shown or hidden; its unread count),
       **Monitors** (each character, greyed when it is not in the world or
       is the active one, ticked when its monitor is open; "Open all
-      inactive monitors", a greyed "Cycling monitor", "Close all
-      monitors", "Monitor settings…"), **Settings** ("Bar and quick
+      inactive monitors", "Cycling monitor", "Close all monitors",
+      "Monitor settings…": checkpoint 9, below), **Settings** ("Bar and quick
       actions…", "Hotkeys…", the two toggles, "Show the host's window",
       "Quit…"); in the middle the quick actions (a button per character
       with its number, alias and colour, "Attention" with its count,
@@ -7540,12 +7535,93 @@ failure. Grid validation and any paid upload are performed by the human.
       is off the taskbar and out of Alt-Tab` or `on … in`). An Economy
       (minimised) character only loses its button. Untick "One taskbar
       button", pop the bar out, or close the host: every window is back.
+  - **monitors in their own windows, and the cycling monitor**
+    (checkpoint 9). `AURORA_DEMO_SESSION_HOST_MONITORS=windows|cycling`
+    (one of them, both with a comma, or `all`; with
+    `AURORA_DEMO_SESSION_HOST`): `windows` opens a monitor's window for
+    every demo character but the first (the first of them with its chat
+    part), `cycling` opens the cycling monitor with its chat part:
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=4 AURORA_DEMO_SESSION_HOST_MONITORS=all AURORA_DEMO_SESSION_HOST_POLISH=colours cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - **a monitor's window** is compact: a thin header with the
+      character's colour and its alias or name (hover it for the real
+      name, the picture's age and how its viewer does), then four icon
+      buttons, each with its tooltip, and the picture under it. No text
+      says the picture is read-only; clicking or typing on it does
+      nothing. Its title is "<name> — Monitor". Resize it: the picture
+      keeps its proportions.
+    - **Switch** (the two arrows): that character comes to the front, and
+      the *same window* now shows the character that was in front, with
+      its place, size, pin and chat part. Switch with the bar, a hotkey
+      or a click in a viewer instead: a monitor whose character comes to
+      the front does the same. With a monitor open for every background
+      character ("Open all inactive monitors"), every switch leaves every
+      background character watched. The host's log says `the monitor of
+      character 2 now shows character 1`.
+    - **Pin**: a tilted plain pin when the window is as any other, an
+      upright pin on the accent colour when it stays above the others;
+      the hover says which.
+    - **Options** (the cog): a sheet in the window, in the picture's
+      place: the three sizes, the four rates, the note that all monitors
+      share one budget (and the rate this one is granted when that is
+      less), "Show chat", "Use this size and rate as monitor defaults",
+      "Back". Choose a size: the window takes the size that shows it.
+      While the sheet covers the picture, that viewer's log says
+      `session monitor: off`.
+    - **Chat** (the bubble) shows the chat part under the picture: that
+      character's conversations as chips, the lines of the one chosen,
+      and a box. Type a line and press Enter: the demo viewer whose name
+      the header shows says it (its nearby chat shows it; the shared chat
+      shows it under that character too), once. The same draft shows in
+      the shared chat for that character and conversation. Lines are
+      read (the unread counts fall) only while that window has the
+      keyboard.
+    - **chips** (the same in the shared chat's character tabs): the
+      nearby chat first; a cross on every other chip closes that
+      conversation *in the host only* (it comes back with its next
+      message; nothing closes in the viewer); right-click a chip for
+      Pin / Unpin and Close. Make the window narrow: the names shrink
+      together, never under six characters and "…", and the whole name
+      is in the hover. (The demo has few conversations; the tests draw
+      thirteen: past two rows a "+N" chip, with "· n" when some of the
+      hidden ones have something unread, opens their list in the lines'
+      place.)
+    - **the cycling monitor** (`cycling`, or "Cycling monitor" in the
+      bar's Monitors menu): one window that shows each demo character
+      behind the active one in turn, 5 seconds each; its header says who.
+      Besides the four buttons it has **previous**, **pause** and
+      **next**. Only the character shown is asked for pictures (the
+      viewers' logs: `session monitor: on` for one, `off` for the one
+      before). Its options add "Show each character for" (3, 5, 10, 30,
+      60 s) and "Pause cycling while typing".
+    - **pause while typing**: click in the cycling monitor's box and
+      type: the pause button lights up and the turn does not pass, for as
+      long as the box has the keyboard or holds your unsent text; press
+      Enter: the character shown says the line, and the next turn comes a
+      whole interval later. Untick "Pause cycling while typing" and type
+      again: when the turn passes, the box shows the next character's own
+      (empty) draft, your text stays with the character it was typed for
+      (cycle back, or look at the shared chat), and Enter sends nothing
+      as the wrong character.
+    - **the bar's Monitors menu**: tick and untick each character, "Open
+      all inactive monitors", "Cycling monitor", "Close all monitors"
+      (the cycling one too), "Monitor settings…" (the host's "Monitors"
+      page: what a new monitor opens with, the budget's note, and the
+      cycling monitor's choices; also a button under the cards).
+    - close a monitor's window: that monitor closes (its box on the card
+      is unticked), nothing else does. Outside the demo, each monitor's
+      window is in `session-host.json` (`monitor_window` per character:
+      `place`, `pinned`, `chat`; `monitors`: `defaults`, `cycling`): close
+      the host and start it again, the windows open where they were,
+      without taking the keyboard, and one whose screen is gone comes
+      back on a connected one.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
-  window's picture at each of its frames (its monitors included), and
-  each panel's own window to `<file>-chat.png`, `<file>-controls.png`,
-  `<file>-monitors.png` or `<file>-inbox.png`, the compact window to
-  `<file>-bar.png`.
+  window's picture at each of its frames, and each panel's own window to
+  `<file>-chat.png`, `<file>-controls.png` or `<file>-inbox.png`, the
+  compact window to `<file>-bar.png`, each monitor's window to
+  `<file>-monitor-<n>.png` (its picture included: demo viewers have no
+  grid) and the cycling monitor's to `<file>-cycling.png`.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

@@ -4830,7 +4830,7 @@ folderstorm-new-profile-done = Profil « { $name } » créé et ajouté à la li
 folderstorm-new-profile-done-full = Profil « { $name } » créé. La liste contient déjà { $max } personnages : retirez-en un pour l'ajouter.
 folderstorm-new-profile-done-unreadable = Les réglages de départ n'ont pas pu être lus : il démarre donc avec les réglages par défaut.
 folderstorm-monitor = Moniteur
-folderstorm-monitor-help = Tant que ce personnage est en arrière-plan, affiche une petite image de ce que montre son propre viewer, quelques fois par seconde au plus. Sa 3D n'est dessinée que pour ces images, et seulement tant que le moniteur est visible ici. Rien n'est enregistré ni sauvegardé, et rien de ce que vous faites ici n'atteint sa fenêtre : utilisez « Basculer ».
+folderstorm-monitor-help = Tant que ce personnage est en arrière-plan, affiche une petite image de ce que montre son propre viewer, dans une fenêtre à lui, quelques fois par seconde au plus. Sa 3D n'est dessinée que pour ces images, et seulement tant que cette fenêtre est visible. Rien n'est enregistré ni sauvegardé, et rien de ce que vous faites sur l'image n'atteint sa fenêtre : utilisez « Basculer ».
 folderstorm-monitor-rate = { $rate } / s
 folderstorm-monitor-age-now = à l'instant
 folderstorm-monitor-age = il y a { $seconds } s
@@ -4848,14 +4848,51 @@ folderstorm-monitor-no-viewer = Son viewer n'est pas lancé.
 folderstorm-monitor-hidden = en pause
 folderstorm-monitor-too-many = Au plus { $max } moniteurs fonctionnent en même temps.
 folderstorm-monitor-not-answering = son viewer ne répond pas
-folderstorm-monitor-in-window = Son image est dans la fenêtre Moniteurs.
-folderstorm-panel-monitors = Moniteurs
+folderstorm-monitor-in-window = Son image est dans sa propre fenêtre.
+folderstorm-monitor-switch-help = Basculer vers ce personnage. Cette fenêtre montre ensuite le personnage qui était actif.
+folderstorm-monitor-chat-show = Afficher le chat de ce personnage
+folderstorm-monitor-chat-hide = Masquer le chat
+folderstorm-monitor-options = Options
+folderstorm-monitor-show-chat = Afficher le chat
+folderstorm-monitor-budget-note = Tous les moniteurs partagent un même budget : avec plus de moniteurs, des images plus grandes ou des cadences plus élevées, chacun reçoit moins d'images par seconde.
+folderstorm-monitor-use-as-defaults = Utiliser cette taille et cette cadence par défaut pour les moniteurs
+folderstorm-monitor-use-as-defaults-help = Un moniteur ouvert par la suite commence avec cette taille et cette cadence.
+folderstorm-monitor-are-defaults = Cette taille et cette cadence sont celles par défaut des moniteurs.
+folderstorm-monitors-page-heading = Moniteurs
+folderstorm-monitors-page-intro = Ce avec quoi s'ouvre un nouveau moniteur, et le moniteur tournant. La taille, la cadence et le chat de chaque moniteur se règlent dans les options de sa fenêtre.
+folderstorm-monitors-page-defaults = Un nouveau moniteur s'ouvre avec
+folderstorm-cycling-intro = Une seule fenêtre qui montre tour à tour chaque personnage derrière le personnage actif.
+folderstorm-cycling-open = Ouvrir le moniteur tournant
+folderstorm-cycling-interval = Montrer chaque personnage pendant
+folderstorm-cycling-seconds = { $seconds } s
+folderstorm-cycling-spec = Ses images
+folderstorm-cycling-pause-typing = Suspendre la rotation pendant la saisie
+folderstorm-cycling-pause-typing-help = Tant que vous écrivez dans le chat du moniteur tournant, il reste sur le même personnage jusqu'à ce que votre ligne soit envoyée ou effacée. Dans tous les cas, une ligne n'est dite que par le personnage pour lequel elle a été écrite.
+folderstorm-cycling-nobody = Aucun personnage n'est dans le monde derrière le personnage actif.
+folderstorm-cycling-nobody-short = Personne à montrer
+folderstorm-cycling-previous = Personnage précédent
+folderstorm-cycling-next = Personnage suivant
+folderstorm-cycling-pause = Rester sur ce personnage
+folderstorm-cycling-resume = En pause sur ce personnage. Cliquez pour reprendre la rotation.
+folderstorm-cycling-typing = En pause pendant que vous écrivez ici : le personnage ne change pas sous votre texte.
+folderstorm-chips-close = Fermer
+folderstorm-chips-close-help = Fermer cette conversation ici. Elle reste ouverte dans la fenêtre du personnage, et revient ici à son prochain message.
+folderstorm-chips-pin = Épingler
+folderstorm-chips-unpin = Détacher
+folderstorm-chips-more-heading = Autres conversations
+folderstorm-chips-more-help = { $count ->
+        [one] 1 autre conversation
+       *[other] { $count } autres conversations
+    }
+folderstorm-chips-more-unread-help = { $count ->
+        [one] 1 autre conversation, avec du non lu
+       *[other] { $count } autres conversations, dont { $unread } avec du non lu
+    }
 folderstorm-panel-own-window = Dans sa propre fenêtre :
 folderstorm-panel-own-window-help = Affiche cette partie dans une fenêtre séparée que vous placez où vous voulez, sur un autre écran par exemple. Fermer cette fenêtre, ou « Rattacher », la ramène ici. Les fenêtres des personnages ne changent pas.
 folderstorm-panel-out = Dans sa propre fenêtre : { $panel }
 folderstorm-panel-dock = Rattacher
 folderstorm-panel-dock-help = Revient dans la fenêtre de l'hôte. Fermer cette fenêtre fait la même chose.
-folderstorm-panel-monitors-empty = Aucun moniteur n'est ouvert. Cochez « Moniteur » sur un personnage pour voir son image ici.
 folderstorm-inbox = Boîte de réception
 folderstorm-inbox-intro = on répond dans la fenêtre de chaque personnage
 folderstorm-inbox-help = Ce qui attend une réponse dans les fenêtres des personnages : offres, demandes de téléportation et d'amitié, dialogues et demandes de permissions des scripts, appels. Rien n'est accepté ni refusé d'ici : « Basculer pour répondre » amène ce personnage au premier plan. Une question quitte la liste une fois qu'on y a répondu là-bas, ou qu'elle y a expiré. « Écarter » la retire seulement de cette liste : elle attend toujours dans la fenêtre du personnage.
@@ -4902,7 +4939,6 @@ folderstorm-condensed-waiting = { $count ->
         [one] 1 question attend une réponse dans sa fenêtre
        *[other] { $count } questions attendent une réponse dans sa fenêtre
     }
-folderstorm-condensed-monitor = Son moniteur est ouvert. Son image est dans les cartes, ou dans la fenêtre Moniteurs ; ici il est en pause.
 folderstorm-condensed-more-in-cards = « Cartes » contient ce qu'on peut y faire.
 folderstorm-bar-title = Commandes des personnages
 folderstorm-bar-inactive = Inactif
@@ -4923,7 +4959,6 @@ folderstorm-bar-monitors = Moniteurs
 folderstorm-bar-monitors-help = Petites vues en direct des personnages derrière le personnage actif.
 folderstorm-bar-monitors-open-all = Ouvrir tous les moniteurs inactifs
 folderstorm-bar-monitors-cycling = Moniteur tournant
-folderstorm-bar-monitors-cycling-help = Pas encore fait : il viendra avec les fenêtres propres aux moniteurs.
 folderstorm-bar-monitors-close-all = Fermer tous les moniteurs
 folderstorm-bar-monitors-settings = Réglages des moniteurs…
 folderstorm-bar-settings = Réglages

@@ -25,6 +25,12 @@
 //! shows it in a compact window of its own (`ui/bar.rs`). While a bar is
 //! on screen the host's own window hides.
 //!
+//! Checkpoint 9: each monitor has a window of its own, with a chat part
+//! that speaks as its character, and a cycling monitor shows each
+//! background character in turn (`ui/monitor_windows.rs`); a character's
+//! conversations are chips, in those windows and in the shared chat
+//! ([`chips`]).
+//!
 //! Every window is drawn on the processor, like the crash window
 //! (`crash/software.rs`): the host opens no graphics device, so it takes
 //! nothing from the characters' card and no driver trouble reaches it.
@@ -34,6 +40,7 @@
 //! viewer: their command pipes close and they go on by themselves.
 
 mod chat_ui;
+mod chips;
 mod comfort;
 mod faces;
 mod hotkeys;
@@ -73,6 +80,29 @@ pub const DEMO_POLISH_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_POLISH";
 /// the demo's viewers or in the host's compact window. Either way the
 /// demo's quick actions also have the two toggles.
 pub const DEMO_BAR_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_BAR";
+
+/// `AURORA_DEMO_SESSION_HOST_MONITORS=windows|cycling` (or both, or
+/// `all`), demo only, with [`DEMO_VARIABLE`] (checkpoint 9): `windows`
+/// opens a monitor's window for every demo character but the first, the
+/// first of them with its chat part; `cycling` opens the cycling monitor,
+/// with its chat part.
+pub const DEMO_MONITORS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_MONITORS";
+
+/// What [`DEMO_MONITORS_VARIABLE`] asks for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct DemoMonitors {
+    windows: bool,
+    cycling: bool,
+}
+
+fn demo_monitors(list: &str) -> DemoMonitors {
+    let names: Vec<String> = list.split(',').map(|name| name.trim().to_ascii_lowercase()).collect();
+    let has = |wanted: &[&str]| names.iter().any(|name| name == "all" || wanted.contains(&name.as_str()));
+    DemoMonitors {
+        windows: has(&["windows", "window"]),
+        cycling: has(&["cycling", "cycle"]),
+    }
+}
 
 /// What [`DEMO_BAR_VARIABLE`] asks for.
 fn demo_bar(value: &str) -> Option<Placement> {
@@ -271,9 +301,8 @@ impl Host {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
             for slot in slots {
                 host.desk.launch(slot, slot == 0);
-                // the demo shows the monitors without a click
-                host.desk.set_monitor(slot, Some(Default::default()));
             }
+            host.demo_monitors(demo_monitors(&std::env::var(DEMO_MONITORS_VARIABLE).unwrap_or_default()));
             let out = std::env::var(DEMO_PANELS_VARIABLE).unwrap_or_default();
             for panel in ::folderstorm_session::panels::parse_list(&out) {
                 host.desk.set_panel_out(panel, true);
@@ -284,6 +313,25 @@ impl Host {
             }
         }
         host
+    }
+
+    /// Checkpoint 9, demo only: the monitors [`DEMO_MONITORS_VARIABLE`]
+    /// asks for.
+    fn demo_monitors(&mut self, monitors: DemoMonitors) {
+        if monitors.windows {
+            // every character behind the first, which the demo puts in front
+            let behind: Vec<usize> = self.desk.slots().map(|(slot, _)| slot).skip(1).collect();
+            for (index, slot) in behind.into_iter().enumerate() {
+                self.desk.open_monitor(slot);
+                self.desk.edit_monitor_window(slot, |window| window.chat = index == 0);
+            }
+        }
+        if monitors.cycling {
+            self.desk.edit_monitors(|config| {
+                config.cycling.open = true;
+                config.cycling.window.chat = true;
+            });
+        }
     }
 
     /// Checkpoint 8, demo only: the bar where [`DEMO_BAR_VARIABLE`] asks,
@@ -601,6 +649,43 @@ mod tests {
         distinct.sort_unstable();
         distinct.dedup();
         assert_eq!(distinct.len(), numbers.len());
+    }
+
+    #[test]
+    fn the_demo_s_monitors_are_windows_the_cycling_one_or_both() {
+        assert_eq!(demo_monitors(""), DemoMonitors::default());
+        assert_eq!(demo_monitors("monitors,1"), DemoMonitors::default());
+        assert_eq!(
+            demo_monitors(" Windows "),
+            DemoMonitors {
+                windows: true,
+                cycling: false
+            }
+        );
+        assert_eq!(
+            demo_monitors("cycling"),
+            DemoMonitors {
+                windows: false,
+                cycling: true
+            }
+        );
+        let both = DemoMonitors {
+            windows: true,
+            cycling: true,
+        };
+        assert_eq!(demo_monitors("cycling,windows"), both);
+        assert_eq!(demo_monitors("all"), both);
+        // nothing asked: no monitor is open
+        let mut host = chat_ui::tests::host();
+        host.demo_monitors(DemoMonitors::default());
+        assert!(host.desk.slots().all(|(_, s)| s.monitor.is_none()) && !host.desk.monitors().cycling.open);
+        // windows: every character but the first, the first of them with
+        // its chat part
+        host.demo_monitors(both);
+        assert!(host.desk.slot(0).is_some_and(|s| s.monitor.is_none()));
+        assert!(host.desk.slot(1).is_some_and(|s| s.monitor.is_some() && s.monitor_window.chat));
+        let cycling = host.desk.monitors().cycling;
+        assert!(cycling.open && cycling.window.chat);
     }
 
     #[test]

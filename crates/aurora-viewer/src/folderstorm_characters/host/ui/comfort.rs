@@ -29,6 +29,8 @@ pub(super) enum Page {
     NewProfile,
     /// Checkpoint 8: the bar and its quick actions (`ui/bar.rs`).
     Bar,
+    /// Checkpoint 9: the monitors' settings (`ui/monitor_windows.rs`).
+    Monitors,
 }
 
 /// What the window keeps for checkpoint 4.
@@ -129,6 +131,7 @@ impl Window_ {
             Page::Hotkeys => self.hotkeys_page(ui, &p, &mut asked),
             Page::NewProfile => self.new_profile_page(ui, &p, &mut asked),
             Page::Bar => self.bar_page(ui, &p, acts),
+            Page::Monitors => self.monitors_page(ui, &p, acts),
         }
         acts.extend(asked.into_iter().map(super::Act::Comfort));
         true
@@ -202,6 +205,14 @@ impl Window_ {
                 .clicked()
             {
                 acts.push(super::Act::Comfort(Act::Page(Page::Bar)));
+            }
+            // (checkpoint 9: the monitors' page)
+            let monitors = tr!("folderstorm-bar-monitors-settings");
+            if widgets::action_button(ui, p, "device-desktop-filled", monitors, ActionKind::Flat, BUTTON)
+                .on_hover_text(tr!("folderstorm-monitors-page-intro"))
+                .clicked()
+            {
+                acts.push(super::Act::Comfort(Act::Page(Page::Monitors)));
             }
         });
         if let Some(note) = &self.comfort.note {

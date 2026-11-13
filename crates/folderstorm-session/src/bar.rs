@@ -296,10 +296,17 @@ pub struct Character {
 }
 
 impl Character {
-    /// Its monitor can be opened or closed from the bar: it is in the
-    /// world and not the one in front.
+    /// Its monitor can be opened from the bar: it is in the world and
+    /// not the one in front.
     pub fn watchable(&self) -> bool {
         self.presence == Presence::Inactive
+    }
+
+    /// Its entry of the monitors' menu can be clicked: to open a monitor
+    /// that can be, or to close one that is open, whatever its character
+    /// does.
+    pub fn monitor_clickable(&self) -> bool {
+        self.monitor || self.watchable()
     }
 }
 
@@ -318,6 +325,8 @@ pub struct State {
     /// The shared chat has its window; its unread lines.
     pub chat_open: bool,
     pub chat_unread: u32,
+    /// Checkpoint 9: the cycling monitor is open.
+    pub cycling: bool,
     pub mute_background: bool,
     pub voice_follows: bool,
     pub quick: Vec<QuickAction>,
@@ -427,7 +436,8 @@ pub enum Page {
     /// The bar's and the quick actions' settings.
     Bar,
     Hotkeys,
-    /// The characters, where each one's monitor is set.
+    /// The monitors' settings (checkpoint 9: their defaults and the
+    /// cycling monitor's).
     Monitors,
     /// The window as it is.
     Host,
@@ -448,9 +458,11 @@ pub enum Request {
     /// A character's monitor, opened or closed.
     Monitor(u8, bool),
     /// A monitor for every character that is in the world behind the
-    /// active one; no monitor at all.
+    /// active one; no monitor at all (the cycling one neither).
     OpenMonitors,
     CloseMonitors,
+    /// Checkpoint 9: the cycling monitor, opened or closed.
+    Cycling(bool),
     /// The host's own window, on that page.
     Show(Page),
     /// The inbox, in its own window.
@@ -484,6 +496,7 @@ impl Request {
                 | Request::Chat(true)
                 | Request::Monitor(_, true)
                 | Request::OpenMonitors
+                | Request::Cycling(true)
                 | Request::Show(_)
                 | Request::Inbox
                 | Request::Dock(false)

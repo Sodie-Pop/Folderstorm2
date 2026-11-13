@@ -207,11 +207,11 @@ fn the_bar_opens_the_panels_in_their_own_windows() {
     assert!(!d.panels().out(Panel::Chat));
     d.bar_request(Request::Inbox, now);
     assert!(d.panels().out(Panel::Inbox));
-    // a monitor opens with the monitors' window; closing one leaves it
+    // a monitor opens and closes; no panel has anything to do with it
     d.bar_request(Request::Monitor(1, true), now);
-    assert!(d.slot(1).is_some_and(|s| s.monitor.is_some()) && d.panels().out(Panel::Monitors));
+    assert!(d.slot(1).is_some_and(|s| s.monitor.is_some()));
     d.bar_request(Request::Monitor(1, false), now);
-    assert!(d.slot(1).is_some_and(|s| s.monitor.is_none()) && d.panels().out(Panel::Monitors));
+    assert!(d.slot(1).is_some_and(|s| s.monitor.is_none()));
     // all the characters behind the active one, never the one in front
     d.bar_request(Request::OpenMonitors, now);
     let open: Vec<usize> = d.slots().filter(|(_, s)| s.monitor.is_some()).map(|(i, _)| i).collect();
@@ -225,8 +225,25 @@ fn the_bar_opens_the_panels_in_their_own_windows() {
     d.bar_request(Request::Monitor(1, true), now);
     d.bar_request(Request::OpenMonitors, now);
     assert_eq!(d.slot(1).and_then(|s| s.monitor), Some(small));
+    // the cycling monitor, and the bar says it is open
+    assert!(!d.bar_state(0, 0).cycling);
+    d.bar_request(Request::Cycling(true), now);
+    assert!(d.monitors().cycling.open && d.bar_state(0, 0).cycling);
+    d.bar_request(Request::Cycling(false), now);
+    assert!(!d.monitors().cycling.open);
+    d.bar_request(Request::Cycling(true), now);
+    // "Close all monitors": every character's, and the cycling one
     d.bar_request(Request::CloseMonitors, now);
-    assert!(d.slots().all(|(_, s)| s.monitor.is_none()) && !d.panels().out(Panel::Monitors));
+    assert!(d.slots().all(|(_, s)| s.monitor.is_none()) && !d.monitors().cycling.open);
+    // a monitor opened from the bar has the defaults the user chose
+    d.edit_monitors(|monitors| monitors.defaults = small);
+    d.bar_request(Request::Monitor(2, true), now);
+    assert_eq!(d.slot(2).and_then(|s| s.monitor), Some(small));
+    // an open monitor's entry can be clicked whatever its character does
+    let state = d.bar_state(0, 0);
+    assert!(state.character(2).is_some_and(|c| c.monitor && c.monitor_clickable()));
+    assert!(state.character(0).is_some_and(|c| !c.watchable() && !c.monitor_clickable()));
+    assert!(Request::Cycling(true).shows_a_window() && !Request::Cycling(false).shows_a_window());
     // a page of the host's window is the host's matter: the desk does nothing
     d.take_effects();
     d.bar_request(Request::Show(Page::Bar), now);

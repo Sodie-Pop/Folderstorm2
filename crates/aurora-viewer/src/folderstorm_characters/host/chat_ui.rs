@@ -7,8 +7,14 @@
 //! (`crash/software.rs`), no graphics device. The rules (whose draft this
 //! is, what may be sent, what is uncertain) are the `folderstorm-session`
 //! crate's `chat::Chat`; this file only shows it.
+//!
+//! Checkpoint 9: a character's conversations are chips (`chips.rs`, the
+//! same in each monitor's chat), with a cross that closes one in the host
+//! only and, past two rows, "+N" and its list. The lines' rows and the box
+//! are shared with the monitors' windows (`ui/monitor_windows.rs`).
 
 use super::Host;
+use super::chips;
 use super::faces::{self, Face};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
@@ -44,6 +50,8 @@ pub(super) struct ChatPanel {
     /// "All" leaves what waits for an answer to it. Elsewhere (or
     /// nowhere), "All" lists it itself, as before.
     pub inbox_beside: bool,
+    /// Checkpoint 9: the "+N" list of each character's tab is open.
+    more: [bool; MAX_SLOTS],
 }
 
 /// What the panel asks of the window.
@@ -61,7 +69,7 @@ pub(super) fn count_text(n: u32) -> String {
 }
 
 /// The name of a conversation's tab.
-fn title(thread: &Thread) -> String {
+pub(super) fn title(thread: &Thread) -> String {
     match thread.kind {
         SessionKind::Nearby => tr!("common-nearby-chat").to_owned(),
         _ if thread.title.is_empty() => tr!("folderstorm-chat-untitled").to_owned(),
@@ -101,9 +109,10 @@ impl ChatPanel {
             Tab::All => Viewing::All,
             Tab::Character(slot) => {
                 let shown = self.shown[slot];
-                match chat.thread(slot, shown) {
-                    Some(_) => Viewing::Thread(slot, shown),
-                    None => Viewing::Nothing,
+                match chat.open_thread(slot, shown) {
+                    // (the "+N" list is in the lines' place)
+                    Some(_) if !self.more[slot] => Viewing::Thread(slot, shown),
+                    _ => Viewing::Nothing,
                 }
             }
         }
@@ -150,11 +159,12 @@ impl ChatPanel {
             }
         });
         ui.add_space(4.0);
+        let mut hidden = Vec::new();
         let target = match self.tab {
             Tab::All => self.target,
             Tab::Character(slot) => {
-                self.conversations(ui, p, &host.chat, slot);
-                host.chat.thread(slot, self.shown[slot]).map(|t| (slot, t.conversation))
+                hidden = self.conversations(ui, p, &mut host.chat, slot, &mut asked);
+                host.chat.open_thread(slot, self.shown[slot]).map(|t| (slot, t.conversation))
             }
         };
         self.attention(ui, p, &host.chat, &host.inbox, &name, &mut asked);
@@ -172,7 +182,12 @@ impl ChatPanel {
                     .stick_to_bottom(true)
                     .show(ui, |ui| match self.tab {
                         Tab::All => self.feed(ui, p, &host.chat, &name, &tint, &mut asked),
-                        Tab::Character(slot) => match host.chat.thread(slot, self.shown[slot]) {
+                        Tab::Character(slot) if self.more[slot] => {
+                            // "+N": the conversations that have no chip
+                            let clicks = chips::list(ui, p, &host.chat, slot, &hidden);
+                            asked.acted |= clicks.apply(&mut host.chat, slot, &mut self.shown[slot], &mut self.more[slot]);
+                        }
+                        Tab::Character(slot) => match host.chat.open_thread(slot, self.shown[slot]) {
                             Some(thread) => {
                                 if thread.trimmed {
                                     ui.label(RichText::new(tr!("folderstorm-chat-trimmed")).italics().color(p.muted));
@@ -197,7 +212,13 @@ impl ChatPanel {
             Some((slot, conversation)) => {
                 // who will say it: the real name too, behind an alias
                 let said_as = face(slot).map(Face::full).unwrap_or_default();
-                compose(ui, p, &mut host.chat, slot, conversation, &name(slot), &said_as, now, &mut asked);
+                let who = Speaker {
+                    slot,
+                    conversation,
+                    name: &name(slot),
+                    said_as: Some(&said_as),
+                };
+                asked.acted |= compose(ui, p, &mut host.chat, who, now).acted;
             }
             None => {
                 let hint = match self.tab {
@@ -210,31 +231,20 @@ impl ChatPanel {
         asked
     }
 
-    /// The conversations of a character, the nearby chat first.
-    fn conversations(&mut self, ui: &mut egui::Ui, p: &Palette, chat: &Chat, slot: usize) {
-        let threads = chat.threads(slot);
-        if chat.thread(slot, self.shown[slot]).is_none()
-            && let Some(first) = threads.first()
+    /// The conversations of a character as chips (`chips.rs`): the
+    /// nearby chat first, two rows at most. Returns those behind "+N".
+    fn conversations(&mut self, ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, slot: usize, asked: &mut Asked) -> Vec<Conversation> {
+        if chat.open_thread(slot, self.shown[slot]).is_none()
+            && let Some(first) = chat.open_threads(slot).next()
         {
             self.shown[slot] = first.conversation;
         }
-        ui.horizontal_wrapped(|ui| {
-            for thread in threads {
-                let mut label = title(thread);
-                if thread.unread > 0 {
-                    label = format!("{label} ({})", count_text(thread.unread));
-                }
-                let icon = match thread.kind {
-                    SessionKind::Nearby => "message-circle",
-                    SessionKind::Resident => "user",
-                    SessionKind::Group | SessionKind::Conference => "users",
-                };
-                if widgets::filter_pill(ui, p, icon, &label, self.shown[slot] == thread.conversation).clicked() {
-                    self.shown[slot] = thread.conversation;
-                }
-            }
-        });
+        let drawn = chips::row(ui, p, chat, slot, Some(self.shown[slot]), self.more[slot]);
+        asked.acted |= drawn.asked.apply(chat, slot, &mut self.shown[slot], &mut self.more[slot]);
+        // (nothing behind "+N" any more: its list has nothing to show)
+        self.more[slot] &= !drawn.hidden.is_empty();
         ui.add_space(4.0);
+        drawn.hidden
     }
 
     /// What waits for an answer in the characters' own windows. Nothing is
@@ -325,7 +335,7 @@ impl ChatPanel {
 
 /// What a click on a line's row asks for.
 #[derive(PartialEq, Eq)]
-enum Clicked {
+pub(super) enum Clicked {
     Nothing,
     /// Its character and conversation label ("All" tab).
     Place,
@@ -337,7 +347,7 @@ enum Clicked {
 /// and conversation label of the "All" tab, whether the box writes there
 /// and the character's colour; a click on the row then chooses that
 /// conversation.
-fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str, bool, Option<egui::Color32>)>) -> Clicked {
+pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str, bool, Option<egui::Color32>)>) -> Clicked {
     let body = egui::TextStyle::Body.resolve(ui.style());
     let small = egui::FontId::new(body.size * 0.85, body.family.clone());
     let part = |font: &egui::FontId, color: egui::Color32, italics: bool| egui::TextFormat {
@@ -426,33 +436,56 @@ fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str,
     clicked
 }
 
+/// Who a box speaks for, and where.
+#[derive(Clone, Copy)]
+pub(super) struct Speaker<'a> {
+    pub slot: usize,
+    pub conversation: Conversation,
+    /// The character as the host shows it (its alias when it has one).
+    pub name: &'a str,
+    /// The shared chat: "Send as … — …" above the field, with the real
+    /// name behind an alias. None in a monitor's window, whose header
+    /// names the character: the box is one row, its button an icon, and
+    /// the field does not take the keyboard back after a line.
+    pub said_as: Option<&'a str>,
+}
+
+/// What became of the box in this frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct Composed {
+    /// A line was sent, or a draft taken up or discarded.
+    pub acted: bool,
+    /// The field has the keyboard.
+    pub focused: bool,
+    /// The user typed in it.
+    pub typed: bool,
+}
+
 /// The box: who will say what is typed, and where, above the field. The
 /// draft shown is that character's in that conversation and no other's.
-#[allow(clippy::too_many_arguments)]
-fn compose(
-    ui: &mut egui::Ui,
-    p: &Palette,
-    chat: &mut Chat,
-    slot: usize,
-    conversation: Conversation,
-    name: &str,
-    said_as: &str,
-    now: Instant,
-    asked: &mut Asked,
-) {
-    let place = chat.thread(slot, conversation).map(title).unwrap_or_default();
-    ui.label(
-        RichText::new(tr!("folderstorm-chat-send-as", name = said_as.to_owned(), place = place))
-            .strong()
-            .color(p.violet_light),
-    );
+pub(super) fn compose(ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, who: Speaker<'_>, now: Instant) -> Composed {
+    let Speaker {
+        slot,
+        conversation,
+        name,
+        said_as,
+    } = who;
+    let mut done = Composed::default();
+    if let Some(said_as) = said_as {
+        let place = chat.thread(slot, conversation).map(title).unwrap_or_default();
+        ui.label(
+            RichText::new(tr!("folderstorm-chat-send-as", name = said_as.to_owned(), place = place))
+                .strong()
+                .color(p.violet_light),
+        );
+    }
     if chat.draft_held(slot, conversation) {
         ui.label(RichText::new(tr!("folderstorm-chat-held", name = name.to_owned())).color(p.amber));
         ui.add(egui::Label::new(RichText::new(chat.draft(slot, conversation)).color(p.ink)).truncate());
         ui.horizontal_wrapped(|ui| {
             let take = tr!("folderstorm-chat-held-take", name = name.to_owned());
             if widgets::action_button_if(ui, p, "check", &take, ActionKind::Flat, BUTTON, chat.logged_in(slot)).clicked() {
-                asked.acted |= chat.adopt_draft(slot, conversation);
+                done.acted |= chat.adopt_draft(slot, conversation);
             }
             if widgets::action_button(
                 ui,
@@ -465,17 +498,18 @@ fn compose(
             .clicked()
             {
                 chat.discard_draft(slot, conversation);
-                asked.acted = true;
+                done.acted = true;
             }
         });
-        return;
+        return done;
     }
     let state = chat.can_send(slot, conversation);
     let editable = chat.logged_in(slot);
     let mut text = chat.draft(slot, conversation).to_owned();
     let mut send = false;
     ui.horizontal(|ui| {
-        let width = (ui.available_width() - 110.0).max(120.0);
+        let button_room = if said_as.is_some() { 110.0 } else { 40.0 };
+        let width = (ui.available_width() - button_room).max(80.0);
         let field = widgets::text_field(ui, editable, &mut text, |b, _| {
             egui::TextEdit::singleline(b)
                 .id_salt(("folderstorm-chat-draft", slot, conversation))
@@ -485,18 +519,29 @@ fn compose(
         });
         if field.changed() {
             chat.set_draft(slot, conversation, &text);
+            done.typed = true;
         }
+        done.focused = field.has_focus();
         let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let can = chat.can_send(slot, conversation).is_ok();
-        let button = widgets::action_button_if(ui, p, "send", tr!("common-send"), ActionKind::Primary, BUTTON, can);
+        let button = match said_as {
+            Some(_) => widgets::action_button_if(ui, p, "send-filled", tr!("common-send"), ActionKind::Primary, BUTTON, can),
+            None => widgets::action_button_if(ui, p, "send-filled", "", ActionKind::Primary, Vec2::new(30.0, BUTTON.y), can)
+                .on_hover_text(tr!("common-send")),
+        };
         if (button.clicked() || entered) && can {
             send = true;
-            // the next line is typed without another click
-            field.request_focus();
+            if said_as.is_some() {
+                // the next line is typed without another click
+                field.request_focus();
+                done.focused = true;
+            } else {
+                done.focused = false;
+            }
         }
     });
     if send && chat.submit(slot, conversation, now).is_ok() {
-        asked.acted = true;
+        done.acted = true;
     }
     let note = match state {
         Err(Blocked::NotInWorld) => Some(tr!("folderstorm-chat-blocked-not-in-world", name = name.to_owned())),
@@ -505,10 +550,17 @@ fn compose(
         Err(Blocked::Held | Blocked::Empty) | Ok(()) => None,
     };
     if let Some(note) = note {
-        ui.label(RichText::new(note).color(p.muted));
+        if said_as.is_some() {
+            ui.label(RichText::new(note).color(p.muted));
+        } else {
+            // (one row in a monitor's window: whole in the hover)
+            ui.add(egui::Label::new(RichText::new(&note).color(p.muted)).truncate())
+                .on_hover_text(note);
+        }
     } else if chat.sending(slot, conversation) > 0 {
         ui.label(RichText::new(tr!("folderstorm-chat-sending", name = name.to_owned())).color(p.muted));
     }
+    done
 }
 
 #[cfg(test)]
