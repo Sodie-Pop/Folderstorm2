@@ -564,8 +564,7 @@ impl Window_ {
         let mut asked = Vec::new();
         ui.columns(columns, |cells| {
             for (column, ui) in cells.iter_mut().enumerate() {
-                for position in column * rows..((column + 1) * rows).min(config.quick.len()) {
-                    let held = config.quick[position];
+                for (position, &held) in config.quick.iter().enumerate().skip(column * rows).take(rows) {
                     ui.push_id(("folderstorm-bar-quick", position), |ui| {
                         ui.horizontal(|ui| {
                             let number = RichText::new(tr!("folderstorm-bar-page-position", number = position + 1)).color(p.muted);
