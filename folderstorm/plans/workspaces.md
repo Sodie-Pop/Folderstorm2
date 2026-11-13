@@ -738,6 +738,89 @@ line, one call after `publish_monitors`, the existing `bars_rect` call),
 `bare_window` (the placement request), the three catalogues,
 `docs/TESTING.md`.
 
+#### Checkpoint 3 as built (branch `claude/workspaces-cp3`, 2026-11-13)
+
+Built as detailed above. What the build added or changed on the way:
+
+- **Windows are asked twice when they change size and place at once.**
+  Aurora keeps a window inside the interface with the size it had *before*
+  a placement request (`Floater::show` constrains with egui's last size,
+  and a window never shown is first measured at its default size). A window
+  made smaller and moved towards an edge stopped short of its place. So
+  `apply.rs` remembers where each window was asked to go; one that took its
+  request and is not there is asked for its position again (`move_floater`,
+  at most twice). No upstream change.
+- **Nothing is placed before egui's first frame**: until then egui's screen
+  is a made-up 10 000-point square, and a place fitted to it lands far away
+  (`capture::room`).
+- **The modified mark** is as designed: the world part compared exactly,
+  the windows compared with a baseline taken 12 frames after an apply, a
+  start, an Update or a change of the interface's size, and again when a
+  waiting window is opened. Looked at every 30 frames, never while a
+  pointer button is down.
+- **Rename** gives the field the keyboard with the name selected. **Update**
+  and **Delete** ask in the page (no modal dialog). A double click on a
+  line applies it.
+- **The store keeps `modified`** (the mark survives a restart) beside
+  `layouts`, `active_layout` and `pending`.
+- **The allowlist** (`windows.rs`): Inventory, the additional Inventory
+  window, Conversations, People, Contacts, Places, Search, mini-map, world
+  map, Performance, Controls and the Legacy camera and movement windows,
+  Gestures, Appearance, AO, region tracker, area search, quick preferences,
+  Destinations, money tracker. Ten of them are string ids; a test reads
+  each back from the file that makes its window.
+
+**Settings format.** As in "2. Store" above, plus `"modified": false`.
+`folderstorm_viewport` gains `"bars_around": false`. Nothing to migrate: a
+file without `folderstorm_workspaces` has no layouts, and a file without
+`bars_around` reads its `bars_in_viewport` as before (tests:
+`settings_without_the_field_have_an_empty_store`,
+`settings_from_before_the_choice_read_as_they_did`).
+
+**Upstream hooks** (line numbers at `c417ba4`):
+
+| File | Line | Hook |
+|---|---|---|
+| `crates/aurora-viewer/src/app.rs` | 67 | `mod folderstorm_workspaces;` |
+| `crates/aurora-viewer/src/app.rs` | 9938 | `self.folderstorm_workspaces_frame();` after `publish_monitors` and the chat upload's call |
+| `crates/aurora-viewer/src/app.rs` | 16924–16925 | the existing `bars_rect` call (6 lines) is now `self.folderstorm_bars_rect(…)` |
+| `crates/aurora-viewer/src/settings.rs` | 521–522, 2044, 3313 | the field, its default, kept by `reset_keeping_account` |
+| `crates/aurora-viewer/src/ui/widgets.rs` | 1073–1076 | `bare_window` takes a layout's placement request |
+| `crates/aurora-viewer/src/ui/options/pages.rs` | 17, 89 | `mod` line, the tab's label |
+| `crates/aurora-viewer/src/ui/options/pages/layout.rs` | 188 | the tab's match arm |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | | 3 new `folderstorm-viewport-bars-*` keys, 2 reworded, 49 `fs-layouts-*` keys in a section of their own |
+| `docs/TESTING.md` | | one paragraph, one table row |
+
+No hook in `ui/bars/side.rs` (the bars' area is still one rectangle) and
+none in `ui/layout.rs`.
+
+**Tests.** Pure: `viewport::bars` (7), `workspaces::store` (13),
+`workspaces::fit` (8), `workspaces::windows` (3). Frame tests with Aurora's
+own `Floater` and `bare_window` in an `egui::Context`:
+`workspaces::tests` (16: capture and the allowlist, apply and back, the
+mini-map, a closed window and a restart, minimized windows, our reads of
+Aurora's entries, Previous, the modified mark, a resized viewer window, a
+smaller interface, absent parts, a replaced apply, unknown windows, Reset
+bars and world, a tiny interface). The real Preferences window on the tab
+(10, in `ui/options/pages/folderstorm_workspaces.rs`), one of which draws
+it with the software painter (`FOLDERSTORM_TEST_CAPTURE_DIR`).
+
+**Not checked here** (no graphics device in the sandbox): the bars drawn
+around the world in the viewer itself, with the islands and with the Legacy
+bars; the demo scenario; anything on Windows. The human's list is in the
+checkpoint's report.
+
+**Known limits.**
+
+- The diagram of the world viewport still draws the bars' area as the
+  world for *Around the world* (it does not know how thick the bars are).
+- A window opened for the first time after an apply is not watched for the
+  modified mark until the next baseline.
+- Windows glued to each other (snapped side by side) are placed one by one;
+  their link is Aurora's and is left as it is.
+- With the session host's bar docked over the world, the top bars stay
+  inside the world under it even with *Around the world*.
+
 ### Checkpoint 4: the viewer window in a layout, and locking
 
 - Window frame modes (Normal, Full screen, Borderless over monitors), lock
