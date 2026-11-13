@@ -11,12 +11,20 @@
 //! - [`store`]: what `settings.json` keeps, its limits, the list.
 //! - [`windows`]: the allowlist.
 //! - [`fit`]: a saved place in an interface of another size or scale.
+//! - [`capture`]: the arrangement of now.
+//! - [`apply`]: applying, *Previous arrangement*, the "modified" mark.
 //!
 //! A layout never holds what a window contains: no message, conversation,
 //! Inventory folder or item, filter or selection has a field to go in.
 
+pub mod apply;
+pub mod capture;
 pub mod fit;
 pub mod store;
 pub mod windows;
 
+#[cfg(test)]
+mod tests;
+
+pub use apply::take_bare;
 pub use store::Store;
