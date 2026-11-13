@@ -575,9 +575,13 @@ back to the dialog; access off; and end to end over a real socket (sidecar
 ### Checkpoints 3 to 5: receipts, plans, operations
 
 Branch `claude/mcp-receipts` on `main` (checkpoints 1, 2 and the studio fix
-merged), one commit per checkpoint; PR #45 (session routing) is not on its
+merged): one commit for checkpoint 3, one for 4, and for 5 the work saved
+before a restart and its completion. PR #45 (session routing) is not on its
 base: nothing here touches the sidecar's routing or the host controller
-beyond one line in `connect.rs` and one in `jsonrpc.rs`'s tool list.
+beyond one line in `connect.rs` and the instructions and tool list of
+`jsonrpc.rs`. Merging both will still meet text conflicts where each adds
+to the same list: `binding::CAPABILITIES`, `ErrorCode`, the end of
+`server/tests.rs`, `mcp_bridge.rs` and FEATURES 4.6; keep both sides.
 
 **Checkpoint 3, receipts.**
 
@@ -623,7 +627,7 @@ Choices and differences:
 
 | Where | What |
 |---|---|
-| viewer `folderstorm/bulk_plan.rs` (new) | `Kind`, `Row`, `apply_pattern`, `plan_rename`, `plan_rename_to` (explicit names, new), `plan_move`, `mutation`; `ui/inventory/bulk_review.rs` re-exports them (its tests unchanged) |
+| viewer `folderstorm/bulk_plan.rs` (new) | `Kind`, `Row`, `apply_pattern`, `plan_rename`, `plan_rename_to` (explicit names, new), `plan_move`, `mutation`; `ui/inventory/bulk_review.rs` re-exports what it uses (its tests unchanged) |
 | viewer `mcp_bridge/plans.rs` (new) | `Plans` (5 min, 8 per login, used once), the previews' parsing and rows with the bridge's rules, the frozen execute, `plan` (planned again, must equal), the dialog's lines |
 | `desk.rs`, `changes.rs`, `ask.rs` | previews answered by the desk; an executed plan answers its operation; the execute takes its plan (receipt rows, targets, `plan_id`), carries it frozen in its arguments and decides by `Pending::plan_class`; `Question::detail` under the sentence |
 | bridge `protocol/assistant.rs`, `server.rs` | the three tools; `ErrorCode::Stale` (`not_allowed` for a sidecar without `plans`); `any_decision` (the listener refuses an execute only when Edit and Move are both Never); `plans: 1` |
@@ -649,7 +653,7 @@ Choices and differences:
 |---|---|
 | bridge `protocol.rs`, `protocol/assistant.rs`, `server.rs`, `receipts.rs` | `ErrorCode::Cancelled` (`permission_denied` for a sidecar without `operations`); `assistant_operation_cancel`; `answers_early` (`inventory_execute_plan` with `wait: false`); `Pending::early`, set by the listener only for a sidecar declaring `operations`, and `Pending::answer_early`; `LIVE_MAX` (8) and `Store::live`; `operations: 1` |
 | viewer `desk.rs` | the early answer once the call is asking or queued; `Desk::cancel` (dialog closes, queued call removed, sent: not recalled); 8 live operations per login, 16 questions waiting; the deadline (the listener's whole wait) checked in `recheck`, just before the send |
-| `mcp_bridge.rs`, `ui/options/pages/local_assistant.rs` | `mcp_bridge::cancel`; a Stop button on a live line of Recent activity |
+| `mcp_bridge.rs`, `ui/options/pages/local_assistant.rs` | `mcp_bridge::cancel`; Recent activity lists first the changes that have no activity line yet (in the dialog, waiting for their turn, or asked by the viewer itself, as the demo's), a live one with a Stop button |
 
 Choices and differences:
 
@@ -667,6 +671,20 @@ Choices and differences:
 - Lanes are the busy checks that already exist (the inventory window's
   pending change, Appearance's, the gallery's snapshot); no queue behind
   them, as planned.
+- **The early answer** is `{operation_id, state, early: true, next}`; the
+  call's end then only updates its receipt (nothing more reaches the
+  listener). The listener records the early answer as the call's activity
+  line, which Preferences shows with the receipt's state.
+- **Bounds**: 8 live operations per login answer `busy` to a new change (a
+  retry of one of them still answers its receipt). Since every question in
+  the dialog is a live operation, the 16 questions waiting is a backstop
+  (checked at compile time to be above 8).
+- **Stop in Preferences**: an activity line exists only once a call
+  answered, so a change in the dialog had no line to carry Stop. Recent
+  activity therefore lists the receipts without a line first: the live ones
+  (with Stop) and, newest first, up to five finished ones the viewer asked
+  for itself; a receipt older than the oldest line kept had its line once
+  and stays out.
 
 **Tests.** Bridge crate: the store (`receipts/tests.rs`: id forms, text
 cut, duplicates, conflicts, eviction order, live never evicted, busy,
@@ -690,7 +708,9 @@ login change; the preview's rows equal the native review's, the refusals,
 execute's class, one dialog with five rows and "N more", stale before the
 dialog and before the send, expiry, once, 8 plans, login change, the
 server's three answers in the rows; early answers and polling, cancel while
-asking, queued and sent, Stop, the bounds; end to end over a real socket: a
+asking, queued and sent, Stop, the bounds, a change whose time ran out
+cancelled just before the send, an early call cancelled in the dialog
+answering only once (its rows `not_sent`, its plan consumed); end to end over a real socket: a
 retry with the same id, a previewed plan executed after the dialog, a plan
 with `wait: false` polled to `done`.
 
