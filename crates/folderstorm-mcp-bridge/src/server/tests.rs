@@ -446,3 +446,58 @@ fn a_picture_with_the_interface_asks_even_on_allow() {
     );
     assert!(calls.try_recv().is_err());
 }
+
+/// Folderstorm: receipts (mcp-receipts.md, section 4): a change gets its
+/// `operation_id` when it arrives, its listener's timeout names it, and the
+/// activity line keeps it; a read gets none.
+#[test]
+fn a_change_gets_its_operation_id_when_it_arrives() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Edit, Level::Allow);
+    bridge.set_permissions(permissions);
+    let viewer = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        while let Ok(call) = calls.recv() {
+            seen.push(call.operation_id.clone());
+            let answer = json!({"operation_id": call.operation_id});
+            call.answer(Ok(answer));
+        }
+        seen
+    });
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let renamed = client.call("inventory_rename", json!({"id": "x", "name": "y"})).expect("answered");
+    let operation = renamed["operation_id"].as_str().expect("an operation").to_owned();
+    assert!(receipts::is_operation_id(&operation), "{operation}");
+    client.call("worn_items", json!({})).expect("answered");
+    let activity = bridge.activity();
+    assert_eq!(activity[0].operation_id.as_deref(), Some(operation.as_str()));
+    assert_eq!(activity[1].operation_id, None);
+    bridge.stop();
+    let seen = viewer.join().expect("viewer");
+    assert_eq!(seen, vec![Some(operation), None], "a read has no operation");
+    // the listener's own timeout names the operation
+    let e = timed_out(Some("op-0123456789abcdef0123456789abcdef".into()));
+    assert_eq!(e.code, ErrorCode::Timeout);
+    assert!(e.to_string().contains("assistant_operation_status"), "{e}");
+    assert!(e.to_string().ends_with("(operation_id op-0123456789abcdef0123456789abcdef)"), "{e}");
+    assert_eq!(timed_out(None).operation_id, None);
+    // an older sidecar ignores the field; a newer one reads it
+    let wire = serde_json::to_value(&e).expect("json");
+    assert_eq!(wire["operation_id"], "op-0123456789abcdef0123456789abcdef");
+    let back: ToolError = serde_json::from_value(wire).expect("read back");
+    assert_eq!(back, e);
+}
+
+#[test]
+fn a_conflict_reaches_only_a_sidecar_that_declares_receipts() {
+    let conflict = ToolError::new(ErrorCode::Conflict, "used");
+    assert_eq!(conflict.clone().for_sidecar(None).code, ErrorCode::InvalidArguments);
+    let mut login_only = crate::binding::assumed();
+    login_only.insert(crate::binding::LOGIN_BINDING.into(), 1);
+    assert_eq!(conflict.clone().for_sidecar(Some(&login_only)).code, ErrorCode::InvalidArguments);
+    assert_eq!(
+        conflict.for_sidecar(Some(&crate::binding::capabilities())).code,
+        ErrorCode::Conflict
+    );
+}

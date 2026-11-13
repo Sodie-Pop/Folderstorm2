@@ -324,3 +324,31 @@ fn a_newer_viewer_with_more_groups_and_versions_is_used() {
     assert_eq!(v.pinned(), Some("vs-0123456789abcdef0123456789abcdef"));
     assert_eq!(newer.calls()[0]["session"], "vs-0123456789abcdef0123456789abcdef");
 }
+
+/// Folderstorm: receipts (mcp-receipts.md, section 3): a viewer that
+/// advertises no `receipts` would refuse a `client_request_id` as an unknown
+/// argument, and dropping it would make a retry unsafe: the sidecar answers
+/// `unsupported` and sends nothing. Without one the call goes as before.
+#[test]
+fn a_client_request_id_is_refused_before_sending_to_a_viewer_without_receipts() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let older = OtherViewer::start(
+        dir.path(),
+        204,
+        json!({"api": 1, "product": "P", "version": "x", "read_allowed": true,
+               "capabilities": {"inventory": 1, "login_binding": 1},
+               "viewer_session": "vs-0123456789abcdef0123456789abcdef"}),
+    );
+    let mut v = viewer(dir.path());
+    let e = v
+        .call("inventory_rename", json!({"id": "x", "name": "y", "client_request_id": "r1"}))
+        .expect_err("unsupported");
+    assert_eq!(e.code, ErrorCode::Unsupported);
+    assert!(e.message.contains("client_request_id"), "{e}");
+    assert!(older.calls().is_empty(), "nothing was sent");
+    v.call("inventory_rename", json!({"id": "x", "name": "y"})).expect("sent as before");
+    assert_eq!(older.calls().len(), 1);
+    // the receipts' tools need a viewer that has them
+    let e = v.call("assistant_operation_status", json!({})).expect_err("unsupported");
+    assert_eq!(e.code, ErrorCode::Unsupported);
+}

@@ -217,6 +217,7 @@ impl Viewer {
             if !binding::supports(&link.capabilities, spec) {
                 return Err(binding::unsupported(spec));
             }
+            binding::check_arguments(&link.capabilities, spec, &arguments)?; // Folderstorm: receipts
             let session = if link.binding { self.pinned.as_deref() } else { None };
             match link.client.call_in(tool, arguments.clone(), session) {
                 Ok(result) => return Ok(result),

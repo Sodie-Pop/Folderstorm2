@@ -10,6 +10,7 @@
 //! - [`protocol`]: the tool catalogue and the wire types;
 //! - [`binding`]: the login binding (`viewer_session`) and the capability
 //!   versions both sides advertise;
+//! - [`receipts`]: the record of each change an assistant asked for;
 //! - [`server`]: the 127.0.0.1 listener;
 //! - [`client`]: the sidecar's side of the wire.
 
@@ -19,6 +20,7 @@ pub mod discovery;
 mod http;
 pub mod policy;
 pub mod protocol;
+pub mod receipts;
 pub mod server;
 pub mod token;
 

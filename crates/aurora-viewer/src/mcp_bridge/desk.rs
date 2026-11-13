@@ -18,13 +18,21 @@
 //! now is refused with `session_changed` when the desk takes it; once taken,
 //! a call belongs to the login generation it was taken under, and a login
 //! change refuses it with `session_changed` too.
+//!
+//! Receipts (folderstorm/plans/mcp-receipts.md, section 4): every change the
+//! desk takes gets a receipt in its [`Ledger`], whatever its end; the call's
+//! answer ends it ([`Pending::answer`]) and carries its `operation_id` and
+//! `state`. A `client_request_id` seen before answers the first receipt and
+//! runs nothing. A change the server does not confirm in time answers
+//! `unconfirmed` and keeps listening for its answer ([`LateWait`]).
 
 use super::changes::{self, Planned, Work};
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
+use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
-use folderstorm_mcp_bridge::{Decision, ErrorCode, Permissions, ToolError, binding};
+use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -62,6 +70,17 @@ struct BakeWait {
     deadline: Instant,
 }
 
+/// Folderstorm: a change that answered `unconfirmed`, still listening for
+/// the server's answer to update its receipt (receipts).
+struct LateWait {
+    tracked: Tracked,
+    outfit: bool,
+    request: Option<Uuid>,
+    expect: Option<(Uuid, i32, Option<String>)>,
+    image: bool,
+    deadline: Instant,
+}
+
 /// What the server said of a change.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
@@ -70,6 +89,9 @@ pub enum Outcome {
     Copying,
     /// Done; the folders it created, temporary id → the server's.
     Done(HashMap<Uuid, Uuid>),
+    /// Folderstorm: a grid without AIS accepted the moves for later
+    /// (`Reply::moves_queued`): sent, not confirmed.
+    Queued,
     /// The new item arrived (phase 3).
     Created(Uuid),
     Failed(String),
@@ -146,10 +168,44 @@ pub struct Desk {
     /// That login's `viewer_session` (None while logged out), which a
     /// bound call must be pinned to, when pinned at all.
     session: Option<String>,
+    /// Folderstorm: the receipts of this login (kept when access is turned
+    /// off, cleared at a login change).
+    receipts: Ledger,
+    /// Folderstorm: changes that answered `unconfirmed`, listening on.
+    late: Vec<LateWait>,
 }
 
 fn refused(message: &str) -> ToolError {
     ToolError::new(ErrorCode::PermissionDenied, message)
+}
+
+/// Folderstorm: refuse `call`, its receipt saying why first (the user, or
+/// the 60 seconds).
+fn refuse_as(call: Pending, decision: receipts::Decision, message: &str) {
+    call.receipt(|r| r.decide(decision));
+    call.answer(Err(refused(message)));
+}
+
+/// Folderstorm: the inventory ids a change names (never asset ids: only
+/// what the inventory holds), for its receipt.
+fn targets(args: &Value, inv: &crate::world::inventory::Inventory) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut add = |value: &Value| {
+        if let Some(id) = value.as_str().and_then(|s| Uuid::parse_str(s.trim()).ok())
+            && (inv.items.contains_key(&id) || inv.folders.contains_key(&id))
+            && !out.contains(&id.to_string())
+        {
+            out.push(id.to_string());
+        }
+    };
+    for key in ["id", "item_id", "outfit_id", "folder_id"] {
+        add(&args[key]);
+    }
+    for key in ["ids", "item_ids"] {
+        args[key].as_array().into_iter().flatten().for_each(&mut add);
+    }
+    args["items"].as_array().into_iter().flatten().for_each(|item| add(&item["id"]));
+    out
 }
 
 /// A class the call needs was set to Never while it waited.
@@ -210,6 +266,18 @@ impl Desk {
             let refusal = binding::session_changed(self.session.as_deref());
             return call.answer(Err(refusal));
         }
+        // Folderstorm: a change gets its receipt (once: a call that comes
+        // back from the dialog's checks has it already)
+        if spec.changes() && call.tracked().is_none() {
+            match self.admit_receipt(call, now) {
+                Some(admitted) => call = admitted,
+                None => return,
+            }
+        }
+        if call.tool == "assistant_operation_status" {
+            let result = self.status(&call.arguments);
+            return call.answer(result);
+        }
         // the levels may have changed while the call was queued
         match decision(&self.permissions, &call.tool) {
             Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
@@ -248,12 +316,127 @@ impl Desk {
                 reply,
                 ..
             }) => call.answer(Ok(reply)),
-            Ok(planned) if call.ask => self.ask(call, planned.summary, now),
-            Ok(planned) => self.ready.push(Ready {
-                call,
-                summary: planned.summary,
-            }),
+            Ok(planned) => {
+                call.receipt(|r| {
+                    r.set_summary(&planned.summary);
+                    if r.targets.is_empty() {
+                        r.set_targets(targets(&call.arguments, cx.inv));
+                    }
+                });
+                if call.ask {
+                    self.ask(call, planned.summary, now);
+                } else {
+                    self.queue(call, planned.summary);
+                }
+            }
         }
+    }
+
+    /// Folderstorm: an allowed change waits for its turn.
+    fn queue(&mut self, call: Pending, summary: String) {
+        call.receipt(|r| {
+            if r.decision.is_none() {
+                r.decide(receipts::Decision::Allowed);
+            }
+            r.state = State::Queued;
+        });
+        self.ready.push(Ready { call, summary });
+    }
+
+    /// Folderstorm: the receipt of a change just taken, its
+    /// `client_request_id` taken out of its arguments. None: the call was
+    /// answered (the same request seen before, a conflict, too many live).
+    fn admit_receipt(&mut self, mut call: Pending, now: Instant) -> Option<Pending> {
+        let client_request_id = match receipts::take_client_request_id(&mut call.arguments) {
+            Ok(id) => id,
+            Err(e) => {
+                call.answer(Err(e));
+                return None;
+            }
+        };
+        if call.operation_id.is_none() {
+            // a call made in the process (the demo, the tests)
+            call.operation_id = receipts::new_operation_id().ok();
+        }
+        let Some(operation_id) = call.operation_id.clone() else {
+            return Some(call);
+        };
+        let admission = self.receipts.with(|store| {
+            store.admit(
+                receipts::Request {
+                    operation_id,
+                    client_request_id,
+                    tool: &call.tool,
+                    client: call.client.clone(),
+                    viewer_session: self.session.clone(),
+                    arguments: &call.arguments,
+                },
+                now,
+            )
+        });
+        let answer = match admission {
+            Admission::New => {
+                call.track(&self.receipts);
+                return Some(call);
+            }
+            Admission::Duplicate(receipt) => Ok(json!({
+                "operation_id": receipt.operation_id,
+                "state": receipt.state,
+                "duplicate": true,
+                "receipt": receipt.to_json(self.names()),
+            })),
+            Admission::Conflict => Err(ToolError::new(
+                ErrorCode::Conflict,
+                "this client_request_id was already used on this login with other arguments (or is too old to tell): nothing was run. Use a new id, or ask assistant_operation_status",
+            )),
+            Admission::Busy => Err(ToolError::new(
+                ErrorCode::Busy,
+                "too many changes are still under way: try again once they end",
+            )),
+        };
+        call.answer(answer);
+        None
+    }
+
+    /// Folderstorm: whether receipts give names to the assistant (Read is
+    /// Allow; decision 1).
+    fn names(&self) -> bool {
+        self.permissions.check(Class::Read).is_ok()
+    }
+
+    /// Folderstorm: `assistant_operation_status`, on this login only.
+    fn status(&self, args: &Value) -> Result<Value, ToolError> {
+        let invalid = |m: &str| ToolError::new(ErrorCode::InvalidArguments, m);
+        let Some(args) = args.as_object() else {
+            return Err(invalid("unknown argument"));
+        };
+        if args.keys().any(|k| k != "operation_id" && k != receipts::CLIENT_REQUEST_ID) {
+            return Err(invalid("unknown argument"));
+        }
+        let names = self.names();
+        let session = self.session.as_deref();
+        let not_found = || ToolError::new(ErrorCode::NotFound, "no such operation on this login");
+        self.receipts.with(|store| {
+            let found = match (args.get("operation_id"), args.get(receipts::CLIENT_REQUEST_ID)) {
+                (Some(_), Some(_)) => return Err(invalid("give `operation_id` or `client_request_id`, not both")),
+                (Some(id), None) => store.find(session, id.as_str().ok_or_else(|| invalid("`operation_id` is a string"))?),
+                (None, Some(id)) => store.find_request(session, id.as_str().ok_or_else(|| invalid("`client_request_id` is a string"))?),
+                (None, None) => {
+                    let list: Vec<Value> = store
+                        .recent(session, receipts::STATUS_RECENT)
+                        .into_iter()
+                        .map(|r| r.to_json(names))
+                        .collect();
+                    return Ok(json!({"receipts": list, "viewer_session": session}));
+                }
+            };
+            found.map(|r| json!({"receipt": r.to_json(names)})).ok_or_else(not_found)
+        })
+    }
+
+    /// Folderstorm: this login's receipts (Preferences).
+    pub fn ledger(&self) -> &Ledger {
+        &self.receipts
     }
 
     /// Folderstorm: a call answered outside the desk (the world reads, which
@@ -319,6 +502,9 @@ impl Desk {
         self.login = generation;
         let refusal = self.login_changed();
         self.refuse_waiting(&refusal);
+        // Folderstorm: the old login's receipts go (Activity lines stay)
+        self.late.clear();
+        self.receipts.with(receipts::Store::clear);
     }
 
     fn refuse_waiting(&mut self, refusal: &ToolError) {
@@ -341,11 +527,37 @@ impl Desk {
     pub fn close(&mut self) {
         let mut old = std::mem::take(self);
         old.refuse_waiting(&refused(ACCESS_OFF));
-        for flight in old.sending.take().into_iter().chain(old.sent) {
-            flight.call.answer(Err(ToolError::new(
-                ErrorCode::Timeout,
-                "the change was sent before local assistant access was turned off; it may still land: look again before retrying",
-            )));
+        let now = Instant::now();
+        for flight in old.sending.take().into_iter().chain(std::mem::take(&mut old.sent)) {
+            old.listen_late(flight, now);
+        }
+        // Folderstorm: the receipts stay with the login, and a change sent
+        // keeps listening for its answer
+        self.receipts = old.receipts;
+        self.late = old.late;
+        self.login = old.login;
+    }
+
+    /// Folderstorm: `flight` answers that it may still land, and listens on
+    /// for the server's answer to update its receipt.
+    fn listen_late(&mut self, flight: InFlight, now: Instant) {
+        let tracked = flight.call.tracked().cloned();
+        flight.call.answer(Err(ToolError::new(
+            ErrorCode::Timeout,
+            "the change was sent but the server did not confirm it in time; it may still land: ask assistant_operation_status or look again before retrying",
+        )));
+        if let Some(tracked) = tracked {
+            if self.late.len() == receipts::LATE_MAX {
+                self.late.remove(0);
+            }
+            self.late.push(LateWait {
+                tracked,
+                outfit: flight.outfit,
+                request: flight.request,
+                expect: flight.expect,
+                image: flight.image,
+                deadline: now + receipts::LATE_WAIT,
+            });
         }
     }
 
@@ -390,7 +602,7 @@ impl Desk {
         // an Allow for a class set to Never meanwhile refuses at once
         if allow && decision(&self.permissions, &self.asks[index].call.tool) == Decision::Refuse {
             if let Some(ask) = self.asks.remove(index) {
-                ask.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+                refuse_as(ask.call, receipts::Decision::RefusedPermissionsChanged, PERMISSIONS_CHANGED);
             }
             return;
         }
@@ -408,28 +620,27 @@ impl Desk {
                 continue;
             }
             match ask.decision {
-                Some(true) => self.ready.push(Ready {
-                    call: ask.call,
-                    summary: ask.summary,
-                }),
-                Some(false) => ask.call.answer(Err(refused("the user refused this change"))),
-                None if now >= ask.deadline => ask.call.answer(Err(refused(&format!(
-                    "the user did not answer within {} seconds: refused",
-                    ASK_TIMEOUT.as_secs()
-                )))),
+                Some(true) => {
+                    ask.call.receipt(|r| r.decide(receipts::Decision::Approved));
+                    self.queue(ask.call, ask.summary);
+                }
+                Some(false) => refuse_as(ask.call, receipts::Decision::RefusedByUser, "the user refused this change"),
+                None if now >= ask.deadline => refuse_as(
+                    ask.call,
+                    receipts::Decision::AskTimedOut,
+                    &format!("the user did not answer within {} seconds: refused", ASK_TIMEOUT.as_secs()),
+                ),
                 None => self.asks.push_back(ask),
             }
         }
         for flight in std::mem::take(&mut self.sent) {
             if now >= flight.deadline {
-                flight.call.answer(Err(ToolError::new(
-                    ErrorCode::Timeout,
-                    "the change was sent but the server did not confirm it in time; it may still land: look again before retrying",
-                )));
+                self.listen_late(flight, now);
             } else {
                 self.sent.push(flight);
             }
         }
+        self.late.retain(|late| now < late.deadline);
         for wait in std::mem::take(&mut self.bakes) {
             if decision(&self.permissions, &wait.call.tool) == Decision::Refuse {
                 wait.call.answer(Err(refused(PERMISSIONS_CHANGED)));
@@ -453,6 +664,7 @@ impl Desk {
 
     fn ask(&mut self, mut call: Pending, summary: String, now: Instant) {
         call.ask = true;
+        call.receipt(|r| r.state = State::Asking);
         self.asked += 1;
         self.asks.push_back(Asking {
             number: self.asked,
@@ -472,6 +684,7 @@ impl Desk {
             Work::Create(c) => Some((c.parent, c.asset_type(), c.name.clone())),
             _ => None,
         };
+        call.receipt(Receipt::mark_sent);
         self.sending = Some(InFlight {
             call,
             outfit,
@@ -528,6 +741,18 @@ impl Desk {
         }
         if let Some(index) = self.sent.iter().position(|f| f.outfit == outfit && f.request == Some(request)) {
             finish(self.sent.swap_remove(index), outcome);
+        } else if let Some(index) = self
+            .late
+            .iter()
+            .position(|l| l.outfit == outfit && l.expect.is_none() && l.request == Some(request))
+        {
+            // Folderstorm: the answer of a change that answered `unconfirmed`
+            let late = self.late.swap_remove(index);
+            late.tracked.settle(match outcome {
+                Outcome::Failed(reason) => Late::Refused(reason),
+                Outcome::Queued => Late::Queued,
+                _ => Late::Confirmed,
+            });
         }
     }
 
@@ -547,6 +772,15 @@ impl Desk {
             finish(self.sent.swap_remove(index), Outcome::Created(item.id));
             return true;
         }
+        let late = |l: &LateWait| {
+            l.expect.as_ref().is_some_and(|(parent, asset_type, name)| {
+                *parent == item.parent && *asset_type == item.asset_type && name.as_ref().is_none_or(|n| *n == item.name)
+            })
+        };
+        if let Some(index) = self.late.iter().position(late) {
+            self.late.swap_remove(index).tracked.settle(Late::Confirmed);
+            return true;
+        }
         false
     }
 
@@ -564,7 +798,18 @@ impl Desk {
             flight
                 .call
                 .answer(Err(ToolError::new(ErrorCode::Failed, format!("the picture was not set: {error}"))));
+        } else if let Some(index) = self.late.iter().position(|l| l.image && l.request == Some(request)) {
+            self.late
+                .swap_remove(index)
+                .tracked
+                .settle(Late::Refused(format!("the picture was not set: {error}")));
         }
+    }
+
+    /// Folderstorm: changes listening for a late answer, for the tests.
+    #[cfg(test)]
+    pub fn late_count(&self) -> usize {
+        self.late.len()
     }
 
     /// Folderstorm: once per frame, the reads that wait or follow the
@@ -606,6 +851,14 @@ fn finish(flight: InFlight, outcome: Outcome) {
             ErrorCode::Failed,
             format!("the server refused the change: {reason}"),
         ))),
+        // Folderstorm: accepted for later, never "done" (receipts)
+        Outcome::Queued => {
+            let mut reply = flight.reply;
+            reply["done"] = json!(false);
+            reply["queued"] = json!(true);
+            reply["next"] = json!("the grid accepted the moves for later: look again in a moment before relying on them");
+            flight.call.answer(Ok(reply));
+        }
         Outcome::Copying => flight
             .call
             .answer(Err(ToolError::new(ErrorCode::Internal, "the change did not end"))),
@@ -638,6 +891,7 @@ pub fn outcome(event: &aurora_net::NetEvent) -> Option<(Uuid, bool, Outcome)> {
             false,
             match result {
                 Ok(reply) if !reply.copies.is_empty() => Outcome::Copying,
+                Ok(reply) if reply.moves_queued => Outcome::Queued, // Folderstorm: receipts
                 Ok(reply) => Outcome::Done(reply.created.clone()),
                 Err(reason) => Outcome::Failed(reason.clone()),
             },

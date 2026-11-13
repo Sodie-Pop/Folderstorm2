@@ -24,6 +24,9 @@ pub mod inventory;
 // Folderstorm: phase 3, part 3 (world observation), its own catalogue
 pub mod world;
 
+// Folderstorm: receipts, plans and operations (mcp-receipts.md)
+pub mod assistant;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -106,6 +109,9 @@ pub enum ErrorCode {
     /// The running viewer does not implement this tool (it is older than
     /// the sidecar): nothing was sent.
     Unsupported,
+    /// Folderstorm: a `client_request_id` already used with other
+    /// arguments, or retired: nothing was run (receipts).
+    Conflict,
 }
 
 impl ErrorCode {
@@ -117,7 +123,7 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady | ErrorCode::SessionChanged => 409,
+            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::Conflict => 409,
             ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
@@ -135,6 +141,8 @@ impl ErrorCode {
             // both came with login binding, as `features` itself did
             ErrorCode::SessionChanged => Some((binding::LOGIN_BINDING, ErrorCode::NotReady)),
             ErrorCode::Unsupported => Some((binding::LOGIN_BINDING, ErrorCode::UnknownTool)),
+            // Folderstorm: receipts (mcp-receipts.md, section 3)
+            ErrorCode::Conflict => Some((binding::RECEIPTS, ErrorCode::InvalidArguments)),
             _ => None,
         }
     }
@@ -158,6 +166,11 @@ pub struct ToolError {
     /// logged out), which the sidecar pins next.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_session: Option<String>,
+    /// Folderstorm: the operation of a change the viewer took (its
+    /// receipt, `assistant_operation_status`), also in the listener's own
+    /// timeout. Kept for every sidecar: an older one ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
 }
 
 impl ToolError {
@@ -166,6 +179,7 @@ impl ToolError {
             code,
             message: message.into(),
             viewer_session: None,
+            operation_id: None,
         }
     }
 
@@ -185,7 +199,11 @@ impl std::fmt::Display for ToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = serde_json::to_value(self.code).ok();
         let code = code.as_ref().and_then(Value::as_str).unwrap_or("error");
-        write!(f, "{code}: {}", self.message)
+        write!(f, "{code}: {}", self.message)?;
+        match &self.operation_id {
+            Some(operation) => write!(f, " (operation_id {operation})"),
+            None => Ok(()),
+        }
     }
 }
 
@@ -226,7 +244,22 @@ impl ToolSpec {
     /// whatever login is current: it is how the assistant looks again after
     /// `session_changed`.
     pub fn bound(&self) -> bool {
-        self.class.is_some()
+        // Folderstorm: the receipts' and operations' tools need no class
+        // but belong to one login (mcp-receipts.md, section 2)
+        self.class.is_some() || assistant::bound_group(self.group)
+    }
+
+    /// Folderstorm: its JSON Schema as the sidecar lists it: a change also
+    /// takes an optional `client_request_id` (receipts), which the viewer
+    /// takes out before the tool reads its arguments.
+    pub fn input_schema(&self) -> Value {
+        let mut schema = (self.schema)();
+        if self.changes()
+            && let Some(properties) = schema["properties"].as_object_mut()
+        {
+            properties.insert(crate::receipts::CLIENT_REQUEST_ID.to_owned(), assistant::client_request_id_schema());
+        }
+        schema
     }
 }
 
@@ -745,7 +778,11 @@ pub fn tool(name: &str) -> Option<&'static ToolSpec> {
 
 /// Every tool: [`TOOLS`], then the groups phase 3 adds.
 pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
-    TOOLS.iter().chain(inventory::INVENTORY_TOOLS).chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
+    TOOLS
+        .iter()
+        .chain(inventory::INVENTORY_TOOLS)
+        .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
+        .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
 }
 
 #[cfg(test)]

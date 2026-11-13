@@ -146,7 +146,7 @@ fn take_image(value: &mut Value) -> Option<(String, String)> {
 fn initialize(params: &Value) -> Value {
     let asked = params["protocolVersion"].as_str().unwrap_or_default();
     let version = PROTOCOL_VERSIONS.iter().find(|v| **v == asked).unwrap_or(&PROTOCOL_VERSIONS[0]);
-    json!({
+    let mut answer = json!({
         "protocolVersion": version,
         "capabilities": {"tools": {"listChanged": false}},
         "serverInfo": {"name": "folderstorm-mcp", "title": format!("{} local assistant", folderstorm_brand::PRODUCT), "version": env!("CARGO_PKG_VERSION")},
@@ -154,8 +154,16 @@ fn initialize(params: &Value) -> Value {
             "Reads and organises the inventory and outfits of the {} viewer running on this computer, moves its camera and takes pictures. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake before a picture. Frame the avatar with camera_preset or camera_shot, then camera_snapshot returns the picture; inventory_snapshot_thumbnail sets it as an outfit's or folder's picture. Calls are bound to the login the viewer was on at the first call: after a logout, another login or a viewer restart a call answers session_changed and is not run; call viewer_status and look again before retrying. A tool that answers unsupported needs a newer viewer.",
             folderstorm_brand::PRODUCT
         )
-    })
+    });
+    // Folderstorm: receipts, plans and operations (mcp-receipts.md)
+    if let Some(text) = answer["instructions"].as_str() {
+        answer["instructions"] = json!(format!("{text} {RECEIPTS_HINT}"));
+    }
+    answer
 }
+
+/// Folderstorm: how an assistant uses receipts, plans and operations.
+const RECEIPTS_HINT: &str = "Every change answers with an operation_id and its state, in errors and timeouts too: after a timeout or a lost answer, call assistant_operation_status instead of retrying. A change may take your own client_request_id: sent again with the same arguments, it returns the first receipt and runs nothing.";
 
 fn tools_list() -> Value {
     let tools: Vec<Value> = protocol::all()
@@ -163,7 +171,7 @@ fn tools_list() -> Value {
             json!({
                 "name": t.name,
                 "description": t.description,
-                "inputSchema": (t.schema)(),
+                "inputSchema": t.input_schema(),
                 "annotations": {
                     "readOnlyHint": !t.changes(),
                     "destructiveHint": false,

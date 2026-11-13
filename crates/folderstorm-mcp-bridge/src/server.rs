@@ -16,6 +16,7 @@ use crate::discovery::{self, Discovery};
 use crate::http::{self, HttpError};
 use crate::policy::{Class, Decision, Permissions};
 use crate::protocol::{self, CallRequest, ErrorCode, Health, ToolError};
+use crate::receipts::{self, Ledger, Receipt, Tracked};
 use crate::token::Token;
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -68,6 +69,13 @@ pub struct Pending {
     /// sidecar, or nothing pinned yet). The frame thread refuses a bound
     /// tool pinned to another login than its own.
     pub session: Option<String>,
+    /// Folderstorm: a change's `operation_id`, made by the listener when it
+    /// arrived (receipts); None for a read, or a call made in the process
+    /// (the frame thread then makes one).
+    pub operation_id: Option<String>,
+    /// Folderstorm: its receipt, once the frame thread took it: its answer
+    /// ends the receipt ([`Pending::answer`]).
+    tracked: Option<Tracked>,
     reply: SyncSender<Result<Value, ToolError>>,
 }
 
@@ -83,15 +91,44 @@ impl Pending {
                 ask,
                 client: client.and_then(clean_client),
                 session: None,
+                operation_id: None,
+                tracked: None,
                 reply,
             },
             answer,
         )
     }
 
-    /// Answer the call; an answer after the timeout is dropped.
+    /// Answer the call; an answer after the timeout is dropped. A call
+    /// with a receipt ends it, and its answer carries its `operation_id`
+    /// and `state`.
     pub fn answer(self, result: Result<Value, ToolError>) {
+        let result = match &self.tracked {
+            Some(tracked) => tracked.decorate(result),
+            None => result,
+        };
         let _ = self.reply.try_send(result);
+    }
+
+    /// Folderstorm: the receipt of this call is kept in `ledger` (its
+    /// `operation_id` must be set).
+    pub fn track(&mut self, ledger: &Ledger) {
+        if let Some(operation_id) = &self.operation_id {
+            self.tracked = Some(Tracked {
+                ledger: ledger.clone(),
+                operation_id: operation_id.clone(),
+            });
+        }
+    }
+
+    /// Folderstorm: its receipt, if it has one.
+    pub fn tracked(&self) -> Option<&Tracked> {
+        self.tracked.as_ref()
+    }
+
+    /// Folderstorm: change its receipt (nothing for a call without one).
+    pub fn receipt<R>(&self, f: impl FnOnce(&mut Receipt) -> R) -> Option<R> {
+        self.tracked.as_ref().and_then(|t| t.update(f))
     }
 }
 
@@ -109,6 +146,8 @@ pub struct Activity {
     pub at: SystemTime,
     pub tool: String,
     pub outcome: Outcome,
+    /// Folderstorm: the change's operation, whose receipt Preferences shows.
+    pub operation_id: Option<String>,
 }
 
 struct Shared {
@@ -433,10 +472,14 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
             ));
         }
     };
+    // Folderstorm: a change gets its operation now, so that even this
+    // thread's own timeout can name it (receipts)
+    let operation_id = spec.changes().then(receipts::new_operation_id).and_then(Result::ok);
     let (pending, answer) = Pending::detached(&call.tool, call.arguments.clone(), ask, None);
     let pending = Pending {
         client,
         session: call.session.clone(),
+        operation_id: operation_id.clone(),
         ..pending
     };
     match shared.queue.try_send(pending) {
@@ -444,12 +487,29 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
         Err(TrySendError::Full(_)) => return Err(ToolError::new(ErrorCode::Busy, "too many calls waiting for the viewer")),
         Err(TrySendError::Disconnected(_)) => return Err(ToolError::new(ErrorCode::Unavailable, "the bridge is stopping")),
     }
-    // the dialog's time, then the tool's own, on top of the usual wait
-    let wait = shared.viewer_timeout + spec.wait + if ask { protocol::ASK_TIMEOUT } else { Duration::ZERO };
+    // the dialog's time, then the tool's own, on top of the usual wait (a
+    // change may ask even when it arrived on Allow: the levels may change)
+    let asks = ask || spec.changes();
+    let wait = shared.viewer_timeout + spec.wait + if asks { protocol::ASK_TIMEOUT } else { Duration::ZERO };
     match answer.recv_timeout(wait) {
         Ok(result) => result,
-        Err(RecvTimeoutError::Timeout) => Err(ToolError::new(ErrorCode::Timeout, "the viewer did not answer in time")),
+        Err(RecvTimeoutError::Timeout) => Err(timed_out(operation_id)),
         Err(RecvTimeoutError::Disconnected) => Err(ToolError::new(ErrorCode::Unavailable, "the call was dropped")),
+    }
+}
+
+/// The viewer did not answer in time: a change names its operation, which
+/// may still run.
+fn timed_out(operation_id: Option<String>) -> ToolError {
+    match operation_id {
+        Some(operation_id) => ToolError {
+            operation_id: Some(operation_id),
+            ..ToolError::new(
+                ErrorCode::Timeout,
+                "the viewer did not answer in time; the change may still run: ask assistant_operation_status before retrying",
+            )
+        },
+        None => ToolError::new(ErrorCode::Timeout, "the viewer did not answer in time"),
     }
 }
 
@@ -459,6 +519,11 @@ fn record(shared: &Shared, tool: &str, result: &Result<Value, ToolError>) {
         Err(e) if e.code == ErrorCode::PermissionDenied => Outcome::Refused,
         Err(e) => Outcome::Failed(e.code),
     };
+    let operation_id = match result {
+        Ok(value) => value["operation_id"].as_str().map(str::to_owned),
+        Err(e) => e.operation_id.clone(),
+    }
+    .filter(|id| receipts::is_operation_id(id));
     // an unknown name is the client's text: keep it short and printable
     let tool: String = tool.chars().filter(|c| c.is_ascii_graphic()).take(48).collect();
     let mut activity = shared.activity.lock().unwrap_or_else(PoisonError::into_inner);
@@ -469,6 +534,7 @@ fn record(shared: &Shared, tool: &str, result: &Result<Value, ToolError>) {
         at: SystemTime::now(),
         tool,
         outcome,
+        operation_id,
     });
 }
 

@@ -23,6 +23,10 @@
 //! `viewer_session` that the sidecar pins: a call pinned to another login is
 //! refused with `session_changed` (folderstorm/plans/mcp-receipts.md,
 //! section 2).
+//!
+//! Every change the desk takes gets a receipt (section 4): the desk keeps
+//! them for the login, Preferences shows them in Recent activity, and
+//! `assistant_operation_status` reads them back.
 
 pub mod ask;
 pub mod camera;
@@ -51,6 +55,7 @@ mod world_tests;
 
 use crate::world::World;
 pub use desk::Desk;
+use folderstorm_mcp_bridge::receipts::Receipt;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
 use folderstorm_mcp_bridge::{Bridge, ErrorCode, LocalAssistant, Preset, ToolError};
 use std::collections::{HashMap, HashSet};
@@ -138,6 +143,18 @@ pub struct Status {
     pub port: Option<u16>,
     pub failure: Option<String>,
     pub activity: Vec<Activity>,
+    /// Folderstorm: this login's receipts, oldest first.
+    pub receipts: Vec<ReceiptLine>,
+}
+
+/// Folderstorm: a receipt as Recent activity shows it.
+#[derive(Debug, Clone)]
+pub struct ReceiptLine {
+    pub operation_id: String,
+    pub tool: String,
+    pub summary: String,
+    pub state: folderstorm_mcp_bridge::receipts::State,
+    pub client: Option<String>,
 }
 
 pub fn status() -> Status {
@@ -145,6 +162,18 @@ pub fn status() -> Status {
         port: rt.running.as_ref().map(|r| r.bridge.port()),
         failure: rt.failure.clone(),
         activity: rt.running.as_ref().map(|r| r.bridge.activity()).unwrap_or_default(),
+        receipts: rt.desk.ledger().with(|store| {
+            store
+                .all()
+                .map(|r| ReceiptLine {
+                    operation_id: r.operation_id.clone(),
+                    tool: r.tool.clone(),
+                    summary: r.summary.clone(),
+                    state: r.state,
+                    client: r.client.clone(),
+                })
+                .collect()
+        }),
     })
 }
 
@@ -472,11 +501,13 @@ fn log_demo_answer(tool: &str, result: &Result<serde_json::Value, ToolError>) {
 /// A camera move was made: its call answers once the camera stops. Bound,
 /// as the calls below, to the login it was decided under (`replan`).
 pub fn wait_move(call: Pending, reply: serde_json::Value) {
+    call.receipt(Receipt::mark_sent); // Folderstorm: receipts
     with(|rt| rt.studio.wait_move(call, reply, rt.desk.login(), Instant::now()));
 }
 
 /// A picture to take once the camera stops.
 pub fn queue_photo(call: Pending, request: picture::Request) {
+    call.receipt(Receipt::mark_sent);
     with(|rt| rt.studio.queue_photo(call, request, rt.desk.login(), Instant::now()));
 }
 
@@ -504,6 +535,7 @@ pub fn photo_drawn(size: (u32, u32), pixels: Vec<u8>, folder: std::path::PathBuf
 
 /// A thumbnail of the assistant started through the gallery's snapshot.
 pub fn thumbnail_started(call: Pending, reply: serde_json::Value) {
+    call.receipt(Receipt::mark_sent);
     with(|rt| rt.studio.thumbnail_started(call, reply, rt.desk.login(), Instant::now()));
 }
 

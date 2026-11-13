@@ -943,6 +943,20 @@ fs-mcp-activity-entry = { $tool } : { $outcome }, { $ago }
 fs-mcp-outcome-done = fait
 fs-mcp-outcome-refused = refusé
 fs-mcp-outcome-failed = échec
+fs-mcp-activity-receipt = { $summary } · { $state }, { $ago }
+fs-mcp-activity-program = Demandé par « { $client } » (le nom que le programme se donne).
+fs-mcp-activity-program-unnamed = Demandé par un programme qui ne s'est pas nommé.
+fs-mcp-state-waiting = en attente
+fs-mcp-state-asking = attend votre réponse
+fs-mcp-state-queued = autorisé, attend son tour
+fs-mcp-state-running = en cours
+fs-mcp-state-done = fait
+fs-mcp-state-failed = refusé par le serveur
+fs-mcp-state-refused = refusé
+fs-mcp-state-cancelled = annulé
+fs-mcp-state-stopped = arrêté en cours de route
+fs-mcp-state-stale = non envoyé : l'inventaire a changé
+fs-mcp-state-unconfirmed = pas encore confirmé
 fs-mcp-ago-seconds = { $count ->
     [one] il y a { $count } seconde
    *[other] il y a { $count } secondes

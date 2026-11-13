@@ -208,6 +208,15 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                         } else {
                             tr!("fs-mcp-ago-minutes", count = seconds / 60)
                         };
+                        // Folderstorm: a change's line shows its receipt
+                        let receipt = entry
+                            .operation_id
+                            .as_ref()
+                            .and_then(|id| status.receipts.iter().find(|r| &r.operation_id == id));
+                        if let Some(receipt) = receipt {
+                            receipt_line(ui, &p, receipt, ago);
+                            continue;
+                        }
                         let line = tr!(
                             "fs-mcp-activity-entry",
                             tool = entry.tool.clone(),
@@ -311,4 +320,37 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             setup::forget_check();
         }
     });
+}
+
+/// Folderstorm: a change's Recent activity line from its receipt: what the
+/// dialog said and where it stands; the program's name in its tooltip
+/// (folderstorm/plans/mcp-receipts.md, section 4).
+fn receipt_line(ui: &mut egui::Ui, p: &crate::theme::Palette, receipt: &mcp_bridge::ReceiptLine, ago: String) {
+    use aurora_i18n::tr;
+    use folderstorm_mcp_bridge::receipts::State;
+    let state = match receipt.state {
+        State::Waiting => tr!("fs-mcp-state-waiting"),
+        State::Asking => tr!("fs-mcp-state-asking"),
+        State::Queued => tr!("fs-mcp-state-queued"),
+        State::Running => tr!("fs-mcp-state-running"),
+        State::Done => tr!("fs-mcp-state-done"),
+        State::Failed => tr!("fs-mcp-state-failed"),
+        State::Refused => tr!("fs-mcp-state-refused"),
+        State::Cancelled => tr!("fs-mcp-state-cancelled"),
+        State::Stopped => tr!("fs-mcp-state-stopped"),
+        State::Stale => tr!("fs-mcp-state-stale"),
+        State::Unconfirmed => tr!("fs-mcp-state-unconfirmed"),
+    };
+    let summary = if receipt.summary.is_empty() {
+        receipt.tool.clone()
+    } else {
+        receipt.summary.clone()
+    };
+    let line = tr!("fs-mcp-activity-receipt", summary = summary, state = state.to_owned(), ago = ago);
+    let who = match &receipt.client {
+        Some(client) => tr!("fs-mcp-activity-program", client = client.clone()),
+        None => tr!("fs-mcp-activity-program-unnamed").to_owned(),
+    };
+    ui.add(egui::Label::new(egui::RichText::new(line).size(12.0).color(p.ink)).truncate())
+        .on_hover_text(who);
 }

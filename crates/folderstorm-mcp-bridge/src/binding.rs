@@ -33,10 +33,20 @@ pub const CAMERA: &str = "camera";
 pub const INVENTORY_GAPS: &str = "inventory_gaps";
 /// Phase 3, part 3: the world observations (#27).
 pub const WORLD: &str = "world";
+/// Receipts (mcp-receipts.md, section 4): `operation_id`,
+/// `client_request_id`, `assistant_operation_status`, the `conflict` code.
+pub const RECEIPTS: &str = "receipts";
 
-/// What this build implements. Later groups add theirs: `receipts`,
-/// `plans`, `operations`…
-pub const CAPABILITIES: &[(&str, u32)] = &[(INVENTORY, 1), (CAMERA, 1), (INVENTORY_GAPS, 1), (WORLD, 1), (LOGIN_BINDING, 1)];
+/// What this build implements. Later groups add theirs: `plans`,
+/// `operations`…
+pub const CAPABILITIES: &[(&str, u32)] = &[
+    (INVENTORY, 1),
+    (CAMERA, 1),
+    (INVENTORY_GAPS, 1),
+    (WORLD, 1),
+    (LOGIN_BINDING, 1),
+    (RECEIPTS, 1), // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
+];
 
 /// [`CAPABILITIES`] as a map.
 pub fn capabilities() -> Capabilities {
@@ -108,6 +118,24 @@ pub fn unsupported(spec: &ToolSpec) -> ToolError {
             spec.name, spec.group
         ),
     )
+}
+
+/// Folderstorm: whether a viewer implementing `viewer` can take these
+/// arguments of a tool it has: a `client_request_id` needs `receipts` (an
+/// older viewer would refuse it as an unknown argument, and dropping it
+/// would make a retry unsafe without a word).
+pub fn check_arguments(viewer: &Capabilities, spec: &ToolSpec, arguments: &serde_json::Value) -> Result<(), ToolError> {
+    if arguments.get(crate::receipts::CLIENT_REQUEST_ID).is_some() && !viewer.contains_key(RECEIPTS) {
+        let product = folderstorm_brand::PRODUCT;
+        return Err(ToolError::new(
+            ErrorCode::Unsupported,
+            format!(
+                "the running {product} is older than this assistant connector: `{}` cannot take a `client_request_id` (tool group `{RECEIPTS}`). Update {product}, or call it without one; nothing was sent",
+                spec.name
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// The `viewer_session` of each login generation, for one bridge.
@@ -186,7 +214,7 @@ mod tests {
         );
         assert!(!protocol::all().all(|t| supports(&assumed(), t)), "not the later groups");
         assert!(missing(&mine).is_empty());
-        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING]);
+        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS]);
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();
         newer.insert("inventory".to_owned(), 2);
