@@ -113,6 +113,7 @@ pub(super) enum Edit {
     ToolbarLabels(LabelMode),
     OneTaskbarButton(bool),
     HideHost(bool),
+    SpanWindow(bool),
 }
 
 /// A label mode's name.
@@ -455,6 +456,7 @@ impl Window_ {
             Edit::ToolbarLabels(mode) => bar.toolbar_labels = mode,
             Edit::OneTaskbarButton(on) => bar.one_taskbar_button = on,
             Edit::HideHost(on) => bar.hide_host = on,
+            Edit::SpanWindow(on) => bar.span_window = on,
         });
     }
 
@@ -474,6 +476,15 @@ impl Window_ {
             ];
             if widgets::segmented(ui, p, &mut place, &places) {
                 acts.push(Act::Bar(Request::Dock(place == 0)));
+            }
+            ui.add_space(4.0);
+            // (docked, in a viewer with a custom world viewport)
+            let mut span = config.span_window;
+            if widgets::checkbox(ui, p, &mut span, tr!("folderstorm-bar-page-span-window"))
+                .on_hover_text(tr!("folderstorm-bar-page-span-window-help"))
+                .changed()
+            {
+                acts.push(Act::BarEdit(Edit::SpanWindow(span)));
             }
             ui.add_space(8.0);
             // how the buttons are labelled
@@ -828,9 +839,11 @@ mod tests {
     fn draw_docked(app: &Window_, state: &bar::State, width: u32, height: u32) -> (Vec<String>, Vec<u32>, f32, Vec<Request>) {
         let view = app.look.view();
         let p = app.palette;
+        // (no custom world viewport here: across the window)
+        let strip = drawn::strip_place(state, None, true, 1.0);
         let raw = || egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width as f32, height as f32))),
-            safe_area_insets: Some(drawn::inset(Some(state))),
+            safe_area_insets: Some(drawn::inset(strip)),
             ..Default::default()
         };
         let mut top = 0.0;
@@ -838,7 +851,7 @@ mod tests {
         let mut pass = |context: &egui::Context| {
             context.run_ui(raw(), |ui| {
                 let ctx = ui.ctx().clone();
-                asked = drawn::show_strip(&ctx, &p, state);
+                asked = strip.map_or_else(Vec::new, |strip| drawn::show_strip(&ctx, &p, state, strip));
                 top = ctx.content_rect().top();
                 // the viewer's bars, as `App::draw_ui` lays them out: in
                 // the root `Ui`, or in the room `bars_room` gives them
@@ -1006,6 +1019,7 @@ mod tests {
         let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 760);
         assert!(shows(&drawn, tr!("folderstorm-settings-toolbar")), "{drawn:?}");
         assert!(shows(&drawn, tr!("folderstorm-bar-page-quick")) && shows(&drawn, tr!("folderstorm-bar-labels-icons")));
+        assert!(shows(&drawn, tr!("folderstorm-bar-page-span-window")), "{drawn:?}");
         assert!(shows(&drawn, "(Main)"), "a character's position says who it is: {drawn:?}");
         assert!(shows(&drawn, tr!("folderstorm-host-stage")), "the stage moved here: {drawn:?}");
         assert!(!shows(&drawn, "use of widget"), "two widgets share an id: {drawn:?}");
@@ -1019,6 +1033,7 @@ mod tests {
                 Act::BarEdit(Edit::QuickLabels(LabelMode::IconOnly)),
                 Act::BarEdit(Edit::OneTaskbarButton(false)),
                 Act::BarEdit(Edit::HideHost(false)),
+                Act::BarEdit(Edit::SpanWindow(true)),
                 Act::Bar(Request::VoiceFollows(false)),
             ],
             now,
@@ -1031,6 +1046,10 @@ mod tests {
             (LabelMode::IconAndText, LabelMode::IconOnly)
         );
         assert!(!config.one_taskbar_button && !config.hide_host && !app.host.desk.voice_follows());
+        assert!(
+            config.span_window && app.host.desk.bar_state(0, 0).span_window,
+            "sent to the viewers"
+        );
         // the hotkeys' and the monitors' entries open their sections
         app.bar_apply(Request::Show(bar::Page::Hotkeys), now);
         assert_eq!(app.host.desk.settings_window().section, Section::Hotkeys);

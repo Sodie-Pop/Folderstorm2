@@ -1913,6 +1913,57 @@ May be two small PRs: 1a profiles, 1b behind policy.
        background"; "Voice follows active" off with real voice: the
        character left keeps talking and is heard, the new active one
        has no voice; on again, one voice only at every moment.
+  - **Follow-up: the bar over the custom world viewport.** With a
+    custom world viewport (FEATURES 1.1: the window over several
+    monitors, the world in one rectangle, windows in the margins) the
+    strip spanned the whole window and took 30 points from the margins'
+    windows too. Now, by default, it stays over the world viewport: at
+    the world's top, as wide as the world. The bar's settings gain
+    "Span the whole window" (`session-host.json`, `bar.span_window`,
+    off by default; a checkbox on the bar's page, since checkpoint 10
+    in the settings window's Toolbar section), sent in the bar's state
+    (`State::span_window`, read as off when absent: host and viewers
+    are one binary, so no new protocol number).
+    - *Where the strip goes* is a pure rule
+      (`folderstorm_characters::bar::strip_place`): over the world when
+      the viewer has a custom viewport this frame (the viewport
+      module's own `world_rect`, not a copy), its own bars stay inside
+      it ("Keep the bars inside the viewport": the bar goes with the
+      viewer's bars, so the two never overlap) and the option is off;
+      across the window otherwise, exactly as before: no viewport (or
+      none this frame: login, loading), the option on, or the bars
+      over the whole window. (In mouselook and the full-frame photo
+      view there is no bar at all, as before.)
+    - *Over the world*, nothing is taken from the interface's room (the
+      safe-area inset is zero), so the margins' windows keep the
+      window's whole height; the world's own rectangle moves down by
+      the strip (`App::world_viewport`, the fork's function the renderer,
+      the HUDs, the mouselook centre and the camera's proportions
+      already read), so the 3D view and the HUDs start under the bar,
+      and the viewer's bars, laid out in the world's rectangle, follow
+      without a change; `bars_room` returns them as they are (no inset),
+      and `bars_screen` and the floaters' room read the same area.
+    - **Upstream hooks: unchanged**, the same two lines; the rest is in
+      `app/folderstorm_viewport.rs` and `app/folderstorm_characters/
+      bar.rs`.
+    - *Tested:* the rule (a left and a right margin, a top margin, the
+      scale, collapsed, the option, no viewport, bars over the window,
+      a world too low, popped out); a pass over two monitors with the
+      world on either: the strip drawn at the world's top and width,
+      the interface's room the whole window, the floaters' room as high
+      as the window, the world and the viewer's bars under the strip and
+      `bars_screen` agreeing, the pointer on the bar over the interface;
+      with the option, all as before; the picture painted by the
+      processor (nothing of the bar over the margin, the bar in the
+      world's strip, the world under it); the setting on the page and
+      in the state.
+    - *To verify on Windows:* a window over two monitors, the world on
+      one (`AURORA_DEMO_VIEWPORT=1` with the bar's demo, or the
+      viewport's "Fit to a monitor"): the bar over the world only, the
+      3D view, the HUDs and the viewer's bars under it, a window in the
+      margin as high as the window; "Span the whole window" on: the bar
+      across the whole window, everything under it as before; the
+      viewport off: as before; the world on the left monitor too.
   - **Follow-ups, if the Windows test asks for them:** Alt-Tab through
     a short hide and show around the style change (against R2 as
     written: only with the human's word, and only for a window whose 3D
