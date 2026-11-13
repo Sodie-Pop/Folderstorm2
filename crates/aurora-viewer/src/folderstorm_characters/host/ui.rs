@@ -246,7 +246,6 @@ enum Act {
 }
 
 impl Window_ {
-    /// What the window being drawn (`self.drawing`) shows.
     /// Checkpoint 11: each conversation a viewer opened at the host's
     /// request is shown in the window that asked for it.
     fn show_opened(&mut self) {
@@ -259,6 +258,7 @@ impl Window_ {
         }
     }
 
+    /// What the window being drawn (`self.drawing`) shows.
     fn content(&mut self, ui: &mut egui::Ui) -> Vec<Act> {
         let p = self.palette;
         let now = Instant::now();

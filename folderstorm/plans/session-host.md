@@ -2623,7 +2623,12 @@ May be two small PRs: 1a profiles, 1b behind policy.
   `host/ui/monitor_windows.rs` (the monitor's chat part), `host.rs` (the
   book of contacts and its messages).
   - **IPC, protocol 6** (a host and a viewer of different protocols
-    refuse each other). Host to viewer: `Open{id, generation, open}`
+    refuse each other). **Number clash:** the MCP session routing branch
+    (`claude/mcp-session-routing`, PR #45, not merged) also moves the
+    link from 5 to 6, for the assistant's kind of Attention item. Two
+    different protocols must not share a number: whichever of the two
+    is merged second bumps `ipc::PROTOCOL` to 7 and says in the module's
+    header what 7 adds. Host to viewer: `Open{id, generation, open}`
     with `Open::Im(conversation)`, `Open::Group(conversation)` or
     `Open::Profile(conversation)` (the session of the resident's or the
     group's id); `SendChat` gains `volume` (`Whisper`, `Normal`,
