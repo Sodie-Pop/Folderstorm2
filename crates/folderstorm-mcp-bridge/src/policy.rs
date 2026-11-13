@@ -22,10 +22,21 @@ pub enum Class {
     Trash,
     /// Move the camera, take a picture (phase 3).
     Camera,
+    /// Folderstorm: save a notecard's text, save and compile a script of
+    /// the agent's own inventory (folderstorm/plans/mcp-content.md).
+    Content,
 }
 
 impl Class {
-    pub const ALL: [Class; 6] = [Class::Read, Class::Edit, Class::Move, Class::Wear, Class::Trash, Class::Camera];
+    pub const ALL: [Class; 7] = [
+        Class::Read,
+        Class::Edit,
+        Class::Move,
+        Class::Wear,
+        Class::Trash,
+        Class::Camera,
+        Class::Content,
+    ];
 
     /// Whether the class can ask the user before each call (every class
     /// that changes something; reading does not ask).
@@ -44,9 +55,9 @@ pub enum Level {
 }
 
 /// One level per class. Unknown or missing levels read as the safe default
-/// of the field (Read: Allow, the others: Never); a Camera level missing
-/// from settings saved before phase 3 follows "Ask before changes" when the
-/// other changes all ask ([`Saved`]).
+/// of the field (Read: Allow, the others: Never); a Camera (or Content)
+/// level missing from settings saved before it existed follows "Ask before
+/// changes" when the other changes all ask ([`Saved`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "Saved")]
 pub struct Permissions {
@@ -57,9 +68,11 @@ pub struct Permissions {
     pub wear: Level,
     pub trash: Level,
     pub camera: Level,
+    /// Folderstorm: content editing (mcp-content.md).
+    pub content: Level,
 }
 
-/// [`Permissions`] as saved: Camera came with phase 3.
+/// [`Permissions`] as saved: Camera came with phase 3, Content later.
 #[derive(Deserialize)]
 #[serde(default)]
 struct Saved {
@@ -70,6 +83,7 @@ struct Saved {
     wear: Level,
     trash: Level,
     camera: Option<Level>,
+    content: Option<Level>,
 }
 
 impl Default for Saved {
@@ -82,6 +96,7 @@ impl Default for Saved {
             wear: p.wear,
             trash: p.trash,
             camera: None,
+            content: None,
         }
     }
 }
@@ -92,6 +107,9 @@ impl From<Saved> for Permissions {
         // preset: asking first is what it promised for every change
         let asked = [s.edit, s.move_, s.wear, s.trash].iter().all(|l| *l == Level::Ask);
         let camera = s.camera.unwrap_or(if asked { Level::Ask } else { Level::Never });
+        // Folderstorm: the same rule for content editing, the camera included
+        let asked = asked && camera == Level::Ask;
+        let content = s.content.unwrap_or(if asked { Level::Ask } else { Level::Never });
         Permissions {
             read: s.read,
             edit: s.edit,
@@ -99,6 +117,7 @@ impl From<Saved> for Permissions {
             wear: s.wear,
             trash: s.trash,
             camera,
+            content,
         }
     }
 }
@@ -119,6 +138,7 @@ impl Permissions {
             Class::Wear => self.wear,
             Class::Trash => self.trash,
             Class::Camera => self.camera,
+            Class::Content => self.content,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -141,6 +161,7 @@ impl Permissions {
             Class::Wear => self.wear = level,
             Class::Trash => self.trash = level,
             Class::Camera => self.camera = level,
+            Class::Content => self.content = level,
         }
     }
 
@@ -220,6 +241,7 @@ impl Preset {
             wear: changes,
             trash: changes,
             camera: changes,
+            content: changes,
         }
     }
 }
@@ -243,7 +265,7 @@ mod tests {
         assert!(!d.enabled);
         assert_eq!(d.permissions.preset(), Preset::ReadOnly);
         assert_eq!(d.permissions.check(Class::Read), Ok(()));
-        for class in [Class::Edit, Class::Move, Class::Wear, Class::Trash, Class::Camera] {
+        for class in [Class::Edit, Class::Move, Class::Wear, Class::Trash, Class::Camera, Class::Content] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
     }
@@ -276,6 +298,29 @@ mod tests {
         assert_eq!(kept.level(Class::Camera), Level::Never);
         let json = serde_json::to_string(&kept).expect("serialized");
         assert!(json.contains(r#""camera":"never""#), "{json}");
+    }
+
+    #[test]
+    fn content_asks_in_ask_before_changes_and_settings_saved_before_it_keep_their_preset() {
+        assert_eq!(Preset::AskBeforeChanges.permissions().level(Class::Content), Level::Ask);
+        assert_eq!(Preset::ReadOnly.permissions().level(Class::Content), Level::Never);
+        assert!(Class::Content.can_ask());
+        // "Ask before changes" saved before content editing existed
+        let asked: Permissions =
+            serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask"}"#).expect("parsed");
+        assert_eq!(asked.level(Class::Content), Level::Ask);
+        assert_eq!(asked.preset(), Preset::AskBeforeChanges);
+        // saved by phase 2 (no camera either): still that preset
+        let older: Permissions = serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#).expect("parsed");
+        assert_eq!(older.preset(), Preset::AskBeforeChanges);
+        // the camera allowed or refused: content editing is not allowed
+        let custom: Permissions =
+            serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"allow"}"#).expect("parsed");
+        assert_eq!(custom.level(Class::Content), Level::Never);
+        let kept: Permissions = serde_json::from_str(r#"{"content":"allow"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Content), Level::Allow);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""content":"allow""#), "{json}");
     }
 
     #[test]

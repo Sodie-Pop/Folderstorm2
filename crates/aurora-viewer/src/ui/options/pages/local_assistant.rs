@@ -154,6 +154,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-camera-hint"),
                     field!(local_assistant.permissions.camera),
                 ),
+                (
+                    Class::Content,
+                    tr!("fs-mcp-content"),
+                    tr!("fs-mcp-content-hint"),
+                    field!(local_assistant.permissions.content),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

@@ -54,6 +54,9 @@ pub struct Ctx<'a> {
     /// The login's `viewer_session` (None while logged out), which
     /// `viewer_status` gives.
     pub viewer_session: Option<String>,
+    /// Folderstorm: RLVa's restrictions on notecards and scripts, and the
+    /// editors open now (content editing).
+    pub content: super::content::Limits,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

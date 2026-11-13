@@ -930,6 +930,8 @@ fs-mcp-trash = Corbeille
 fs-mcp-trash-hint = Mettre à la corbeille et en restaurer. Rien n'est jamais supprimé définitivement.
 fs-mcp-camera = Caméra et photos
 fs-mcp-camera-hint = Déplacer la caméra autour de votre avatar et photographier ce qu'elle montre, y compris comme image d'une tenue ou d'un dossier (ce qui demande aussi Renommer et créer des dossiers). Une photo avec les fenêtres du viewer demande toujours d'abord.
+fs-mcp-content = Modifier notes et scripts
+fs-mcp-content-hint = Enregistrer le texte de vos notes, enregistrer et compiler vos scripts (Copie et Modification nécessaires, jamais dans la Bibliothèque), à partir d'une version lue juste avant, en gardant les objets intégrés. Lire leur texte fait partie de Lecture. Les scripts dans les objets ne sont jamais touchés, et rien n'est exécuté.
 fs-mcp-changes-note = Demander ouvre une fenêtre dans le viewer avant chaque changement ; sans réponse sous 60 secondes, le changement est refusé. La suppression définitive et Vider la corbeille ne sont jamais autorisées.
 fs-mcp-status = État
 fs-mcp-status-hint = Si la connexion est ouverte. La clé d'accès n'est jamais affichée.
@@ -1019,6 +1021,30 @@ fs-mcp-ask-plan-skipped = { $count ->
 }
 fs-mcp-ask-picture-set = Donner à « { $name } » l'image « { $texture } »
 fs-mcp-ask-picture-clear = Retirer l'image de « { $name } »
+fs-mcp-ask-save-notecard = Enregistrer la note « { $name } » ({ $added ->
+    [one] { $added } ligne ajoutée
+   *[other] { $added } lignes ajoutées
+}, { $removed ->
+    [one] { $removed } retirée
+   *[other] { $removed } retirées
+})
+fs-mcp-ask-save-script = Enregistrer et compiler le script « { $name } » ({ $added ->
+    [one] { $added } ligne ajoutée
+   *[other] { $added } lignes ajoutées
+}, { $removed ->
+    [one] { $removed } retirée
+   *[other] { $removed } retirées
+})
+fs-mcp-demo-content-folder = Tests de contenu de l'assistant
+fs-mcp-demo-content-notes = Notes de l'assistant
+fs-mcp-demo-content-notes-items = Notes avec objets
+fs-mcp-demo-content-notes-no-modify = Notes (sans modification)
+fs-mcp-demo-content-notes-no-copy = Notes (sans copie)
+fs-mcp-demo-content-script = Script d'accueil
+fs-mcp-demo-content-script-no-modify = Script d'accueil (sans modification)
+fs-mcp-demo-content-script-broken = Script qui ne compilera pas
+fs-mcp-demo-content-notes-text = Rendez-vous sur la place samedi. Apportez les lanternes bleues.
+fs-mcp-demo-content-added-line = Ajouté par l'assistant : les lanternes sont dans le dossier Objets.
 fs-mcp-picture-texture = une texture de votre inventaire
 fs-mcp-new-notecard = la note
 fs-mcp-new-script = le script

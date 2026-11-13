@@ -291,6 +291,7 @@ mod tests {
         assert_eq!(
             names.len(),
             TOOLS.len() + INVENTORY_TOOLS.len() + super::super::world::WORLD_TOOLS.len() + super::super::assistant::ASSISTANT_TOOLS.len() // Folderstorm: receipts, plans, operations
+                + super::super::content::CONTENT_TOOLS.len() // Folderstorm: content editing
         );
         for read in [
             "inventory_get_many",

@@ -35,6 +35,9 @@ mod camera_tests;
 #[cfg(test)]
 mod change_tests;
 pub mod changes;
+pub mod content; // Folderstorm: content editing (mcp-content.md)
+#[cfg(test)]
+mod content_tests;
 pub mod desk;
 #[cfg(test)]
 mod gap_tests; // Folderstorm: phase 3, part 2 (inventory gaps)
@@ -92,6 +95,9 @@ struct Runtime {
     demo_asked: bool,
     /// The demo's requests waiting for their answer, logged when it comes.
     demo_answers: Vec<(&'static str, Receiver<Result<serde_json::Value, ToolError>>)>,
+    /// Folderstorm: `AURORA_DEMO_MCP=content`: the demo's reads, saved
+    /// once they answer.
+    demo_reads: Vec<Receiver<Result<serde_json::Value, ToolError>>>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -201,7 +207,7 @@ pub fn discovery_dir() -> std::path::PathBuf {
 /// every change, and the demo makes requests of its own so that the dialog
 /// shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan" || v == "content")
 }
 
 /// `AURORA_DEMO_MCP=plan`: the demo previews a 3-entry move and executes
@@ -234,6 +240,9 @@ pub struct View<'a> {
     pub object_props: Vec<&'a HashMap<Uuid, aurora_net::build::ObjectProps>>,
     /// The Sound Explorer's history, for `world_audio_sources`.
     pub sounds: Option<&'a crate::scene::sounds::history::History>,
+    /// Folderstorm: the items open in the notecard window or the script
+    /// editor, which content saves leave alone.
+    pub content_open: HashSet<Uuid>,
 }
 
 impl View<'_> {
@@ -257,6 +266,10 @@ impl View<'_> {
             outfit_points: world.outfit_attachment_points(),
             stage: self.stage,
             viewer_session: None,
+            content: content::Limits {
+                open: self.content_open.clone(),
+                ..content::Limits::of(&world.rlva)
+            },
         }
     }
 
@@ -372,7 +385,9 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             let cx = cx.get_or_insert_with(context);
             rt.desk.take(call, cx, now);
         }
-        let demo_ready = !view.world.inventory.root.is_nil() && (!demo_camera() || view.stage.in_world);
+        let demo_ready = !view.world.inventory.root.is_nil()
+            && (!demo_camera() || view.stage.in_world)
+            && (!content::demo::wanted() || view.world.inventory.items.contains_key(&content::demo::NOTES));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -397,6 +412,15 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 log::info!("local assistant demo: plan previewed: {plan:?}");
                 let plan_id = plan.as_ref().and_then(|p| p["plan_id"].as_str()).unwrap_or_default().to_owned();
                 vec![(plans_tool::EXECUTE_PLAN, serde_json::json!({"plan_id": plan_id}))]
+            } else if content::demo::wanted() {
+                // Folderstorm: content editing: the reads now, each saved
+                // once it answers (below)
+                for (tool, arguments) in content::demo::reads() {
+                    let (call, answer) = Pending::detached(tool, arguments, false, Some("Demo assistant"));
+                    rt.desk.take(call, cx.get_or_insert_with(context), now);
+                    rt.demo_reads.push(answer);
+                }
+                Vec::new()
             } else {
                 vec![("inventory_create_folder", serde_json::json!({"name": "Sorted by the assistant"}))]
             };
@@ -404,6 +428,29 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
                 rt.desk.take(call, cx.get_or_insert_with(context), now);
                 rt.demo_answers.push((tool, answer));
+            }
+        }
+        // Folderstorm: a content read answered: the demo saves an edit
+        for read in std::mem::take(&mut rt.demo_reads) {
+            match read.try_recv() {
+                Ok(result) => {
+                    // the text itself is never logged
+                    match &result {
+                        Ok(read) => log::info!(
+                            "local assistant demo: inventory_content_get answered {} bytes, editable {}",
+                            read["bytes"],
+                            read["editable"]
+                        ),
+                        Err(e) => log::info!("local assistant demo: inventory_content_get ended with {e}"),
+                    }
+                    if let Some((tool, arguments)) = result.ok().as_ref().and_then(content::demo::save_after) {
+                        let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_answers.push((tool, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_reads.push(read),
+                Err(TryRecvError::Disconnected) => {}
             }
         }
         rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
@@ -441,6 +488,34 @@ pub fn created_by_assistant(item: Uuid) -> bool {
         }
         None => false,
     })
+}
+
+/// Folderstorm: what the waiting content reads need fetched: the app sends
+/// a notecard's `PreviewInventoryItem` or a script's `LoadScript`.
+pub fn wanted_content() -> Vec<content::Fetch> {
+    with(|rt| rt.desk.wanted_content())
+}
+
+/// Folderstorm: the app's fetch `request` could not be sent.
+pub fn content_fetch_failed(request: Uuid, reason: String) {
+    with(|rt| rt.desk.content().fetch_failed(request, reason));
+}
+
+/// Folderstorm: a notecard's asset as the demo serves it (the demo's
+/// `PreviewInventoryItem` does not pass through [`observe`]).
+pub fn content_demo_notecard(item: Uuid, asset: Uuid, bytes: Vec<u8>) {
+    with(|rt| rt.desk.content().notecard_loaded(item, asset, &Ok(bytes)));
+}
+
+/// Folderstorm: the scripts the assistant saved (item, new asset), for the
+/// app's inventory.
+pub fn content_updates() -> Vec<(Uuid, Uuid)> {
+    with(|rt| rt.desk.content().take_updates())
+}
+
+/// Folderstorm: whether an assistant's save of `item` is under way.
+pub fn content_saving(item: Uuid) -> bool {
+    with(|rt| rt.desk.content_saving(item))
 }
 
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
@@ -506,6 +581,16 @@ pub fn observe(event: &aurora_net::NetEvent) {
             }
         });
         return;
+    }
+    // Folderstorm: a content read's text (mcp-content.md)
+    match event {
+        aurora_net::NetEvent::InventoryPreview { item, asset, result } => {
+            return with(|rt| rt.desk.content().notecard_loaded(*item, *asset, result));
+        }
+        aurora_net::NetEvent::ScriptLoaded { request, target, result } if target.object.is_nil() => {
+            return with(|rt| rt.desk.content().script_loaded(*request, result));
+        }
+        _ => {}
     }
     let Some(outcome) = desk::outcome(event) else { return };
     with(|rt| rt.desk.observe(outcome));

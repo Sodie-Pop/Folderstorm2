@@ -6,8 +6,10 @@ use std::io::{Read, Write};
 
 /// The largest request or response head.
 pub const MAX_HEAD: usize = 8 * 1024;
-/// The largest request body (a tool call's arguments).
-pub const MAX_REQUEST_BODY: usize = 64 * 1024;
+/// The largest request body (a tool call's arguments). Folderstorm: 512 KiB
+/// since content editing, so that a whole notecard or script (64 KiB of
+/// text) fits however JSON escapes it (mcp-content.md).
+pub const MAX_REQUEST_BODY: usize = 512 * 1024;
 /// The largest response body the client reads (results are capped well
 /// below this by the viewer).
 pub const MAX_RESPONSE_BODY: usize = 8 * 1024 * 1024;

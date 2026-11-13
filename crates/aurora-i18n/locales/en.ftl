@@ -927,6 +927,8 @@ fs-mcp-trash = Trash
 fs-mcp-trash-hint = Move to the Trash and restore from it. Nothing is ever deleted for good.
 fs-mcp-camera = Camera and pictures
 fs-mcp-camera-hint = Move the camera around your avatar and take pictures of what it shows, also as an outfit's or folder's picture (which needs Rename and create folders too). A picture with the viewer's windows always asks first.
+fs-mcp-content = Edit notecards and scripts
+fs-mcp-content-hint = Save the text of your notecards and save and compile your scripts (Copy and Modify needed, never in the Library), from a version read just before, keeping embedded items. Reading their text is part of Read. Scripts in objects are never touched, and nothing is run.
 fs-mcp-changes-note = Asking opens a dialog in the viewer before each change; without an answer within 60 seconds, the change is refused. Permanent deletion and Empty Trash are never allowed.
 fs-mcp-status = Status
 fs-mcp-status-hint = Whether the connection is open. The access key is never shown.
@@ -1016,6 +1018,30 @@ fs-mcp-ask-plan-skipped = { $count ->
 }
 fs-mcp-ask-picture-set = Set the picture of “{ $name }” to “{ $texture }”
 fs-mcp-ask-picture-clear = Remove the picture of “{ $name }”
+fs-mcp-ask-save-notecard = Save the notecard “{ $name }” ({ $added ->
+    [one] one line
+   *[other] { $added } lines
+} added, { $removed ->
+    [one] one
+   *[other] { $removed }
+} removed)
+fs-mcp-ask-save-script = Save and compile the script “{ $name }” ({ $added ->
+    [one] one line
+   *[other] { $added } lines
+} added, { $removed ->
+    [one] one
+   *[other] { $removed }
+} removed)
+fs-mcp-demo-content-folder = Assistant content tests
+fs-mcp-demo-content-notes = Assistant notes
+fs-mcp-demo-content-notes-items = Notes with items
+fs-mcp-demo-content-notes-no-modify = Notes (no modify)
+fs-mcp-demo-content-notes-no-copy = Notes (no copy)
+fs-mcp-demo-content-script = Greeter script
+fs-mcp-demo-content-script-no-modify = Greeter script (no modify)
+fs-mcp-demo-content-script-broken = Script that will not compile
+fs-mcp-demo-content-notes-text = Meeting at the plaza on Saturday. Bring the blue lanterns.
+fs-mcp-demo-content-added-line = Added by the assistant: the lanterns are in the Objects folder.
 fs-mcp-picture-texture = a texture of your inventory
 fs-mcp-new-notecard = notecard
 fs-mcp-new-script = script
