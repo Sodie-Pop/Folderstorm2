@@ -700,7 +700,8 @@ impl Modal {
         self
     }
 
-    pub fn show<T>(self, ctx: &egui::Context, body: impl FnOnce(&mut egui::Ui) -> T) -> egui::ModalResponse<T> {
+    pub fn show<T>(mut self, ctx: &egui::Context, body: impl FnOnce(&mut egui::Ui) -> T) -> egui::ModalResponse<T> {
+        self.0.area = crate::folderstorm::viewport::modal_area(ctx, self.0.area); // Folderstorm: centred in the world viewport
         // Theme supplies skin colors and radii; per-modal frames remain local.
         let mut frame = egui::Frame::popup(&ctx.global_style())
             .inner_margin(18)

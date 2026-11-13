@@ -185,6 +185,13 @@ margin, half the window wide: wider than the world, it keeps its size (it is
 no longer shrunk to the world's width). Make the viewer window narrower and
 wider again: Inventory keeps its size unless it is wider than the whole window,
 and comes back to its place.
+Dialogs centre in the world, not on the window: with
+`AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_MCP=ask AURORA_WINDOW_SIZE=3840,1080` the
+local assistant's Ask dialog opens in the middle of the right two thirds, as
+every modal dialog does (the Quit dialog, for one), and the friendship and
+region message prompts and the region restart alert. The notification toasts,
+the chat lines, the media bar and the banners under the top bar follow the
+bars: inside the world, or over the whole window with `bars-window`.
 
 **Chat image upload (Folderstorm2).** `AURORA_DEMO_CHAT_UPLOAD=1` turns the
 uploads on for the run with an uploader inside the viewer: nothing leaves the
@@ -5521,7 +5528,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MAP=1`, `mini` or words among `search:<text>`, `drawer:<tab>`, `landmarks`, `friend`, `legacy`, `switch`, `show-on-map`, `show-link`, `coordinates`, `beacon[-click|-offscreen]` | Maps, search, drawer, landmarks, followed friend, side panel layout, layout switched with the map open, Show on map, coordinate entry and clickable 3D beacon |
 | `AURORA_DEMO_NOTIF=1`, `AURORA_DEMO_STATUSMENU=1` or `invisible`, `AURORA_DEMO_MICMENU=1`, `AURORA_DEMO_NAVEDIT=1` | Notification list, status menu, microphone panel, location field |
 | `AURORA_DEMO_PARCEL_NAME=<text>` | Any parcel name in the place island (odd names, line breaks) |
-| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world) |
+| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world); dialogs centred in the world |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |

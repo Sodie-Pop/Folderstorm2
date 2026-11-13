@@ -82,9 +82,10 @@ pub fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, media: &mut MediaMa
     // LLPanelPrimMediaControls: navigation needs perms_control
     let can_control = m.entry.as_ref().is_none_or(|e| e.perms_control != 0);
     let mut close = false;
+    let bars = crate::folderstorm::viewport::bars_offset(ctx, egui::Align2::CENTER_TOP).x; // Folderstorm: world viewport
     egui::Area::new(controls_id())
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, top + 6.0))
+        .anchor(egui::Align2::CENTER_TOP, Vec2::new(bars, top + 6.0))
         .show(ctx, |ui| {
             super::widgets::overlay(ui, p, egui::Margin::symmetric(8, 5), |ui| {
                 ui.horizontal(|ui| {

@@ -9470,6 +9470,7 @@ impl App {
         // Folderstorm: the world's part of the window (custom world viewport)
         self.viewport_demo(gfx.renderer.size());
         gfx.renderer.set_world_rect(self.world_viewport(gfx.renderer.size()));
+        crate::folderstorm::viewport::set_world_area(&self.egui_ctx, gfx.renderer.world_rect());
         folderstorm_viewport::publish_monitors(&self.egui_ctx, &gfx.window, self.frame_count);
         crate::folderstorm::chat_upload::frame(&self.settings.folderstorm_chat_upload, &self.palette); // Folderstorm
         let (w, h) = gfx.renderer.size();
