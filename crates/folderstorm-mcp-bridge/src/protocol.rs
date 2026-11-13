@@ -55,6 +55,19 @@ pub struct Health {
     /// The login the viewer runs bound calls on now; None while logged out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_session: Option<String>,
+    /// Session routing (`sessions`): the viewer's `--profile`; None for
+    /// the main profile (and for a viewer older than session routing, which
+    /// only ever wrote its discovery file from the main profile).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Session routing: a session host manages this viewer.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub managed: bool,
+    /// Session routing: the name the viewer shows for its own avatar, only
+    /// while it is logged in and Read is Allow (names go to an assistant
+    /// only with Read; mcp-receipts.md, decision 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character: Option<String>,
 }
 
 impl Health {
@@ -106,6 +119,10 @@ pub enum ErrorCode {
     /// The running viewer does not implement this tool (it is older than
     /// the sidecar): nothing was sent.
     Unsupported,
+    /// Session routing: several viewers run and the sidecar was not told
+    /// which one to use (`viewer_select`, `--profile`): nothing was sent.
+    /// Made by the sidecar only; no viewer sends it.
+    TargetRequired,
 }
 
 impl ErrorCode {
@@ -117,7 +134,7 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady | ErrorCode::SessionChanged => 409,
+            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::TargetRequired => 409,
             ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
@@ -135,6 +152,8 @@ impl ErrorCode {
             // both came with login binding, as `features` itself did
             ErrorCode::SessionChanged => Some((binding::LOGIN_BINDING, ErrorCode::NotReady)),
             ErrorCode::Unsupported => Some((binding::LOGIN_BINDING, ErrorCode::UnknownTool)),
+            // (the sidecar's own: never on the wire from a viewer)
+            ErrorCode::TargetRequired => Some((binding::SESSIONS, ErrorCode::NotReady)),
             _ => None,
         }
     }

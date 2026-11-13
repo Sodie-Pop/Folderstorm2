@@ -33,10 +33,21 @@ pub const CAMERA: &str = "camera";
 pub const INVENTORY_GAPS: &str = "inventory_gaps";
 /// Phase 3, part 3: the world observations (#27).
 pub const WORLD: &str = "world";
+/// Session routing (folderstorm/plans/mcp-routing.md): the shared
+/// discovery folder, and `profile`, `managed` and `character` in health and
+/// `viewer_status`.
+pub const SESSIONS: &str = "sessions";
 
 /// What this build implements. Later groups add theirs: `receipts`,
 /// `plans`, `operations`…
-pub const CAPABILITIES: &[(&str, u32)] = &[(INVENTORY, 1), (CAMERA, 1), (INVENTORY_GAPS, 1), (WORLD, 1), (LOGIN_BINDING, 1)];
+pub const CAPABILITIES: &[(&str, u32)] = &[
+    (INVENTORY, 1),
+    (CAMERA, 1),
+    (INVENTORY_GAPS, 1),
+    (WORLD, 1),
+    (LOGIN_BINDING, 1),
+    (SESSIONS, 1),
+];
 
 /// [`CAPABILITIES`] as a map.
 pub fn capabilities() -> Capabilities {
@@ -70,14 +81,25 @@ pub fn missing(other: &Capabilities) -> Vec<&'static str> {
 
 /// A fresh `viewer_session`.
 pub fn new_viewer_session() -> std::io::Result<String> {
+    random_id("vs-")
+}
+
+/// `prefix` and 32 hex digits from the OS random source: a
+/// `viewer_session` (`vs-`), the host controller's `host_session` (`hc-`).
+pub fn random_id(prefix: &str) -> std::io::Result<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|e| std::io::Error::other(format!("no random source: {e}")))?;
-    Ok(format!("vs-{}", bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()))
+    Ok(format!("{prefix}{}", bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()))
 }
 
 /// Whether `value` has the form of a `viewer_session`.
 pub fn is_viewer_session(value: &str) -> bool {
-    value.len() == 35 && value.starts_with("vs-") && value[3..].bytes().all(|b| b.is_ascii_hexdigit())
+    is_random_id(value, "vs-")
+}
+
+/// Whether `value` has the form of a [`random_id`] with that prefix.
+pub fn is_random_id(value: &str, prefix: &str) -> bool {
+    value.len() == prefix.len() + 32 && value.starts_with(prefix) && value[prefix.len()..].bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// A bound call reached another login than the one it was pinned to.
@@ -186,7 +208,7 @@ mod tests {
         );
         assert!(!protocol::all().all(|t| supports(&assumed(), t)), "not the later groups");
         assert!(missing(&mine).is_empty());
-        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING]);
+        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, SESSIONS]);
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();
         newer.insert("inventory".to_owned(), 2);
@@ -254,6 +276,9 @@ mod tests {
             read_allowed: true,
             capabilities: Some(capabilities()),
             viewer_session: None,
+            profile: None,
+            managed: false,
+            character: None,
         };
         let wire = serde_json::to_value(&mine).expect("json");
         assert_eq!(wire["api"], 1);

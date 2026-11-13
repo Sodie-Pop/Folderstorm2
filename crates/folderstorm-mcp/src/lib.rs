@@ -8,4 +8,6 @@
 
 pub mod connect;
 pub mod diagnose;
+pub mod host;
 pub mod jsonrpc;
+pub mod routing;

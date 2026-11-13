@@ -94,8 +94,13 @@ impl Client {
     }
 
     pub fn health(&self) -> Result<Health, ClientError> {
-        let value = self.request("GET", "/v1/health", None, self.timeout)?;
+        let value = self.get("/v1/health")?;
         serde_json::from_value(value).map_err(|e| ClientError::Protocol(e.to_string()))
+    }
+
+    /// A GET request's result (the host controller's health).
+    pub fn get(&self, path: &str) -> Result<Value, ClientError> {
+        self.request("GET", path, None, self.timeout)
     }
 
     /// Call a tool, unbound.
@@ -103,25 +108,33 @@ impl Client {
         self.call_in(tool, arguments, None)
     }
 
-    /// Call a tool on the login `session` names (None: unbound). Every call
-    /// declares this build's capabilities, so that the viewer may answer
-    /// with the newer error codes.
+    /// Call a tool on the login `session` names (None: unbound), a viewer's
+    /// or the host controller's (`host_*`). Every call declares this
+    /// build's capabilities, so that the other side may answer with the
+    /// newer error codes.
     pub fn call_in(&self, tool: &str, arguments: Value, session: Option<&str>) -> Result<Value, ClientError> {
+        let mut features = crate::binding::capabilities();
+        features.extend(crate::controller::capabilities());
         let body = serde_json::to_vec(&CallRequest {
             tool: tool.to_owned(),
             arguments,
             session: session.map(str::to_owned),
-            features: Some(crate::binding::capabilities()),
+            features: Some(features),
         })
         .map_err(|e| ClientError::Protocol(e.to_string()))?;
-        let extra = crate::protocol::tool(tool).map_or(Duration::ZERO, |spec| {
-            spec.wait
-                + if spec.changes() {
-                    crate::protocol::ASK_TIMEOUT
-                } else {
-                    Duration::ZERO
-                }
-        });
+        let extra = match crate::protocol::tool(tool) {
+            Some(spec) => {
+                spec.wait
+                    + if spec.changes() {
+                        crate::protocol::ASK_TIMEOUT
+                    } else {
+                        Duration::ZERO
+                    }
+            }
+            // the host's questions wait as long as a viewer's
+            None if crate::controller::host_tool(tool).is_some_and(|t| t.class.is_some()) => crate::protocol::ASK_TIMEOUT,
+            None => Duration::ZERO,
+        };
         self.request("POST", "/v1/call", Some(&body), self.timeout + extra)
     }
 
