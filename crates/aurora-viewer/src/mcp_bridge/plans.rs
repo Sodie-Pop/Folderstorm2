@@ -70,7 +70,7 @@ pub enum Found {
     /// Not there, expired, or of another login.
     Missing,
     /// Already executed by this operation.
-    Used(String),
+    Used,
     /// Consumed now by the execute: its request, frozen.
     Fresh { tool: String, arguments: Value, rows: Vec<Row> },
 }
@@ -109,8 +109,8 @@ impl Plans {
         let Some(plan) = self.plans.iter_mut().find(|p| p.id == id) else {
             return Found::Missing;
         };
-        if let Some(used) = &plan.used {
-            return Found::Used(used.clone());
+        if plan.used.is_some() {
+            return Found::Used;
         }
         plan.used = Some(operation.to_owned());
         Found::Fresh {
@@ -277,11 +277,6 @@ pub fn preview(
 /// frozen, so that the send plans it again ([`plan`]).
 pub fn frozen(plan_id: &str, tool: &str, arguments: Value, rows: &[Row]) -> Value {
     json!({"plan_id": plan_id, "frozen": {"tool": tool, "arguments": arguments, "rows": rows_json(rows)}})
-}
-
-/// The class of a frozen execute (None: not frozen).
-pub fn frozen_class(args: &Value) -> Option<Class> {
-    args["frozen"]["tool"].as_str().map(class)
 }
 
 /// A stale plan: the inventory or the rules changed since the preview.
