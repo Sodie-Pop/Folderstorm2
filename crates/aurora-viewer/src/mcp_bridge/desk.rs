@@ -27,8 +27,10 @@
 //! `unconfirmed` and keeps listening for its answer ([`LateWait`]).
 
 use super::changes::{self, Planned, Work};
+use super::plans::{self, Plans}; // Folderstorm: batch plans
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
+use folderstorm_mcp_bridge::protocol::assistant::EXECUTE_PLAN;
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
@@ -135,6 +137,9 @@ pub struct Question {
     pub seconds_left: u64,
     /// Other requests waiting behind this one.
     pub waiting: usize,
+    /// Folderstorm: a plan's rows under its sentence (at most 5, "and N
+    /// more", the entries left out); empty for any other change.
+    pub detail: Vec<String>,
 }
 
 /// A change allowed, to run on this frame.
@@ -173,6 +178,8 @@ pub struct Desk {
     receipts: Ledger,
     /// Folderstorm: changes that answered `unconfirmed`, listening on.
     late: Vec<LateWait>,
+    /// Folderstorm: this login's batch plans.
+    plans: Plans,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -242,6 +249,15 @@ pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
     permissions.decide_all(spec.classes())
 }
 
+/// Folderstorm: what the levels say of `call`, a plan's execute by its
+/// plan's class.
+pub fn call_decision(permissions: &Permissions, call: &Pending) -> Decision {
+    match call.plan_class {
+        Some(class) => permissions.decide(class),
+        None => decision(permissions, &call.tool),
+    }
+}
+
 impl Desk {
     /// The login changed under `call`: refused, with the login now.
     fn login_changed(&self) -> ToolError {
@@ -266,6 +282,20 @@ impl Desk {
             let refusal = binding::session_changed(self.session.as_deref());
             return call.answer(Err(refusal));
         }
+        // Folderstorm: a plan already executed answers its operation
+        if call.tool == EXECUTE_PLAN
+            && call.tracked().is_none()
+            && let Some(operation) = call.arguments["plan_id"].as_str().and_then(|id| self.plans.used(id, now))
+        {
+            let receipt = self.receipts.with(|s| s.find(self.session.as_deref(), &operation).cloned());
+            return call.answer(match receipt {
+                Some(receipt) => Ok(self.duplicate(&receipt)),
+                None => Err(ToolError::new(
+                    ErrorCode::NotFound,
+                    "this plan was executed and its receipt is gone",
+                )),
+            });
+        }
         // Folderstorm: a change gets its receipt (once: a call that comes
         // back from the dialog's checks has it already)
         if spec.changes() && call.tracked().is_none() {
@@ -278,8 +308,15 @@ impl Desk {
             let result = self.status(&call.arguments);
             return call.answer(result);
         }
+        // Folderstorm: a plan's execute takes its plan (once)
+        if call.tool == EXECUTE_PLAN && call.plan_class.is_none() {
+            match self.take_plan(call, now) {
+                Some(taken) => call = taken,
+                None => return,
+            }
+        }
         // the levels may have changed while the call was queued
-        match decision(&self.permissions, &call.tool) {
+        match call_decision(&self.permissions, &call) {
             Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
             Decision::Ask => call.ask = true,
             Decision::Run => {}
@@ -303,6 +340,12 @@ impl Desk {
         if call.tool == "inventory_landmark" {
             self.landmarks.extend(landmark::start(call, cx, now));
             return;
+        }
+        // Folderstorm: batch plans
+        if plans::previews(&call.tool) {
+            let execution = self.permissions.decide(plans::class(&call.tool));
+            let result = plans::preview(&mut self.plans, &call.tool, &call.arguments, cx, execution, now);
+            return call.answer(result);
         }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
@@ -379,12 +422,7 @@ impl Desk {
                 call.track(&self.receipts);
                 return Some(call);
             }
-            Admission::Duplicate(receipt) => Ok(json!({
-                "operation_id": receipt.operation_id,
-                "state": receipt.state,
-                "duplicate": true,
-                "receipt": receipt.to_json(self.names()),
-            })),
+            Admission::Duplicate(receipt) => Ok(self.duplicate(&receipt)),
             Admission::Conflict => Err(ToolError::new(
                 ErrorCode::Conflict,
                 "this client_request_id was already used on this login with other arguments (or is too old to tell): nothing was run. Use a new id, or ask assistant_operation_status",
@@ -396,6 +434,59 @@ impl Desk {
         };
         call.answer(answer);
         None
+    }
+
+    /// Folderstorm: the answer of a request seen before: its receipt.
+    fn duplicate(&self, receipt: &Receipt) -> Value {
+        json!({
+            "operation_id": receipt.operation_id,
+            "state": receipt.state,
+            "duplicate": true,
+            "receipt": receipt.to_json(self.names()),
+        })
+    }
+
+    /// Folderstorm: a plan's execute takes its plan: consumed now, its rows
+    /// kept by the receipt, the plan's class decides, and the call carries
+    /// the plan frozen so that the send plans it again. None: answered.
+    fn take_plan(&mut self, mut call: Pending, now: Instant) -> Option<Pending> {
+        let invalid = |m: &str| ToolError::new(ErrorCode::InvalidArguments, m);
+        if call.arguments.as_object().is_none_or(|a| a.keys().any(|k| k != "plan_id")) {
+            call.answer(Err(invalid("unknown argument")));
+            return None;
+        }
+        let Some(id) = call.arguments["plan_id"].as_str().map(str::to_owned) else {
+            call.answer(Err(invalid("`plan_id` is required")));
+            return None;
+        };
+        let operation = call.operation_id.clone().unwrap_or_default();
+        match self.plans.take(&id, &operation, now) {
+            plans::Found::Missing => {
+                call.answer(Err(ToolError::new(
+                    ErrorCode::NotFound,
+                    "no such plan on this login, or it expired (5 minutes): preview again",
+                )));
+                None
+            }
+            plans::Found::Used(_) => {
+                call.answer(Err(ToolError::new(ErrorCode::NotFound, "this plan was already executed")));
+                None
+            }
+            plans::Found::Fresh { tool, arguments, rows } => {
+                let kept = self.receipts.with(|s| s.set_rows(&operation, plans::receipt_rows(&rows)));
+                if !kept && call.tracked().is_some() {
+                    call.answer(Err(ToolError::new(ErrorCode::Busy, "too many plans are still under way")));
+                    return None;
+                }
+                call.receipt(|r| {
+                    r.plan_id = Some(id.clone());
+                    r.set_targets(rows.iter().map(|row| row.id.to_string()));
+                });
+                call.plan_class = Some(plans::class(&tool));
+                call.arguments = plans::frozen(&id, &tool, arguments, &rows);
+                Some(call)
+            }
+        }
     }
 
     /// Folderstorm: whether receipts give names to the assistant (Read is
@@ -474,10 +565,15 @@ impl Desk {
     /// than the one now it is refused with `session_changed`; needing a
     /// class now on Never it is refused; else what the levels say now.
     pub fn review(&self, tool: &str, login: u64) -> Review {
+        self.review_as(login, decision(&self.permissions, tool))
+    }
+
+    /// Folderstorm: [`Desk::review`] with the levels' decision given.
+    fn review_as(&self, login: u64, decided: Decision) -> Review {
         if login != self.login {
             return Review::Refuse(self.login_changed());
         }
-        match decision(&self.permissions, tool) {
+        match decided {
             Decision::Refuse => Review::Refuse(refused(PERMISSIONS_CHANGED)),
             Decision::Ask => Review::Ask,
             Decision::Run => Review::Run,
@@ -502,7 +598,9 @@ impl Desk {
         self.login = generation;
         let refusal = self.login_changed();
         self.refuse_waiting(&refusal);
-        // Folderstorm: the old login's receipts go (Activity lines stay)
+        // Folderstorm: the old login's receipts and plans go (Activity
+        // lines stay)
+        self.plans = Plans::default();
         self.late.clear();
         self.receipts.with(receipts::Store::clear);
     }
@@ -567,7 +665,7 @@ impl Desk {
     pub fn recheck(&mut self, call: Pending, login: u64, session: Option<String>, cx: &Ctx, now: Instant) -> Option<Pending> {
         let taken = self.login;
         self.set_login(login, session);
-        match self.review(&call.tool, taken) {
+        match self.review_as(taken, call_decision(&self.permissions, &call)) {
             Review::Refuse(refusal) => {
                 call.answer(Err(refusal));
                 None
@@ -590,6 +688,7 @@ impl Desk {
             summary: first.summary.clone(),
             seconds_left: first.deadline.saturating_duration_since(now).as_secs_f32().ceil() as u64,
             waiting: open.len() - 1,
+            detail: plans::dialog_lines(&first.call.arguments),
         })
     }
 
@@ -600,7 +699,7 @@ impl Desk {
             return;
         };
         // an Allow for a class set to Never meanwhile refuses at once
-        if allow && decision(&self.permissions, &self.asks[index].call.tool) == Decision::Refuse {
+        if allow && call_decision(&self.permissions, &self.asks[index].call) == Decision::Refuse {
             if let Some(ask) = self.asks.remove(index) {
                 refuse_as(ask.call, receipts::Decision::RefusedPermissionsChanged, PERMISSIONS_CHANGED);
             }
@@ -614,7 +713,7 @@ impl Desk {
     /// changes the app runs now.
     pub fn tick(&mut self, bake: &Bake, now: Instant) -> Vec<Pending> {
         for ask in std::mem::take(&mut self.asks) {
-            if decision(&self.permissions, &ask.call.tool) == Decision::Refuse {
+            if call_decision(&self.permissions, &ask.call) == Decision::Refuse {
                 // the dialog closes with it
                 ask.call.answer(Err(refused(PERMISSIONS_CHANGED)));
                 continue;
@@ -652,7 +751,7 @@ impl Desk {
         }
         let mut runs = Vec::new();
         for ready in std::mem::take(&mut self.ready) {
-            match decision(&self.permissions, &ready.call.tool) {
+            match call_decision(&self.permissions, &ready.call) {
                 Decision::Refuse => ready.call.answer(Err(refused(PERMISSIONS_CHANGED))),
                 // not asked yet, and its class asks now
                 Decision::Ask if !ready.call.ask => self.ask(ready.call, ready.summary, now),
@@ -854,6 +953,12 @@ fn finish(flight: InFlight, outcome: Outcome) {
         // Folderstorm: accepted for later, never "done" (receipts)
         Outcome::Queued => {
             let mut reply = flight.reply;
+            // a plan's rows too
+            for row in reply["rows"].as_array_mut().into_iter().flatten() {
+                if row["outcome"] == "done" {
+                    row["outcome"] = json!("queued");
+                }
+            }
             reply["done"] = json!(false);
             reply["queued"] = json!(true);
             reply["next"] = json!("the grid accepted the moves for later: look again in a moment before relying on them");

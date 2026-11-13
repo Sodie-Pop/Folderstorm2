@@ -607,6 +607,7 @@ fn end(r: &mut Receipt, result: &Result<Value, ToolError>) {
                     )
                 }
                 ErrorCode::SessionChanged => (State::Refused, Some(Decision::RefusedSessionChanged), RowOutcome::NotSent),
+                ErrorCode::Stale => (State::Stale, Some(Decision::Stale), RowOutcome::NotSent),
                 _ if sent => (State::Unconfirmed, None, RowOutcome::Unknown),
                 _ => (State::Refused, Some(Decision::RefusedByViewer), RowOutcome::NotSent),
             };

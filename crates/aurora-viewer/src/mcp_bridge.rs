@@ -44,6 +44,7 @@ pub mod journal;
 pub mod landmark;
 pub mod login;
 pub mod picture;
+pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
 pub mod setup;
 pub mod studio;
 #[cfg(test)]
@@ -55,6 +56,7 @@ mod world_tests;
 
 use crate::world::World;
 pub use desk::Desk;
+use folderstorm_mcp_bridge::protocol::assistant as plans_tool;
 use folderstorm_mcp_bridge::receipts::Receipt;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
 use folderstorm_mcp_bridge::{Bridge, ErrorCode, LocalAssistant, Preset, ToolError};
@@ -192,10 +194,17 @@ pub fn discovery_dir() -> std::path::PathBuf {
     crate::settings::config_dir()
 }
 
-/// `AURORA_DEMO_MCP=ask` (or `camera`): the session asks before every
-/// change, and the demo makes requests of its own so that the dialog shows.
+/// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`): the session asks before
+/// every change, and the demo makes requests of its own so that the dialog
+/// shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan")
+}
+
+/// `AURORA_DEMO_MCP=plan`: the demo previews a 3-entry move and executes
+/// it, so that the dialog lists a plan's rows.
+fn demo_plan() -> bool {
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "plan")
 }
 
 /// `AURORA_DEMO_MCP=camera`: the demo's requests frame the avatar and take
@@ -371,6 +380,20 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                         serde_json::json!({"source": "world", "width": 512, "height": 512, "save": true}),
                     ),
                 ]
+            } else if demo_plan() {
+                // Folderstorm: a plan, previewed now (a read answers at once)
+                let ids: Vec<String> = [8100u128, 8102, 8103].iter().map(|n| Uuid::from_u128(*n).to_string()).collect();
+                let (call, answer) = Pending::detached(
+                    plans_tool::PREVIEW_MOVE,
+                    serde_json::json!({"ids": ids, "folder_id": Uuid::from_u128(8001).to_string()}),
+                    false,
+                    Some("Demo assistant"),
+                );
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                let plan = answer.try_recv().ok().and_then(Result::ok);
+                log::info!("local assistant demo: plan previewed: {plan:?}");
+                let plan_id = plan.as_ref().and_then(|p| p["plan_id"].as_str()).unwrap_or_default().to_owned();
+                vec![(plans_tool::EXECUTE_PLAN, serde_json::json!({"plan_id": plan_id}))]
             } else {
                 vec![("inventory_create_folder", serde_json::json!({"name": "Sorted by the assistant"}))]
             };

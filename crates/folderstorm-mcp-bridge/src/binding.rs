@@ -36,6 +36,9 @@ pub const WORLD: &str = "world";
 /// Receipts (mcp-receipts.md, section 4): `operation_id`,
 /// `client_request_id`, `assistant_operation_status`, the `conflict` code.
 pub const RECEIPTS: &str = "receipts";
+/// Batch plans (mcp-receipts.md, section 6): the previews,
+/// `inventory_execute_plan`, the `stale` code.
+pub const PLANS: &str = "plans";
 
 /// What this build implements. Later groups add theirs: `plans`,
 /// `operations`…
@@ -46,6 +49,7 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (WORLD, 1),
     (LOGIN_BINDING, 1),
     (RECEIPTS, 1), // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
+    (PLANS, 1),    // Folderstorm: batch plans (checkpoint 4)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -214,7 +218,10 @@ mod tests {
         );
         assert!(!protocol::all().all(|t| supports(&assumed(), t)), "not the later groups");
         assert!(missing(&mine).is_empty());
-        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS]);
+        assert_eq!(
+            missing(&assumed()),
+            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS, PLANS]
+        );
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();
         newer.insert("inventory".to_owned(), 2);
@@ -307,6 +314,6 @@ mod tests {
         assert_eq!(wire, json!({"tool": "worn_items", "arguments": {}}));
         // a newer viewer's error with a code this build does not know
         // fails to parse: the client keeps its message (client.rs)
-        assert!(serde_json::from_value::<ToolError>(json!({"code": "stale", "message": "m"})).is_err());
+        assert!(serde_json::from_value::<ToolError>(json!({"code": "some_later_code", "message": "m"})).is_err());
     }
 }

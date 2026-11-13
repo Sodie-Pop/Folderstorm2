@@ -112,6 +112,9 @@ pub enum ErrorCode {
     /// Folderstorm: a `client_request_id` already used with other
     /// arguments, or retired: nothing was run (receipts).
     Conflict,
+    /// Folderstorm: the world changed since the plan or the dialog (a
+    /// plan's rows no longer match): nothing was sent (plans).
+    Stale,
 }
 
 impl ErrorCode {
@@ -123,7 +126,7 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::Conflict => 409,
+            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::Conflict | ErrorCode::Stale => 409,
             ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
@@ -143,6 +146,7 @@ impl ErrorCode {
             ErrorCode::Unsupported => Some((binding::LOGIN_BINDING, ErrorCode::UnknownTool)),
             // Folderstorm: receipts (mcp-receipts.md, section 3)
             ErrorCode::Conflict => Some((binding::RECEIPTS, ErrorCode::InvalidArguments)),
+            ErrorCode::Stale => Some((binding::PLANS, ErrorCode::NotAllowed)),
             _ => None,
         }
     }

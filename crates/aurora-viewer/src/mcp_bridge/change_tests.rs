@@ -820,3 +820,6 @@ mod binding;
 
 /// Receipts and client request ids.
 mod receipts;
+
+/// Batch plans: preview, then execute.
+mod plans;

@@ -1000,6 +1000,21 @@ fs-mcp-ask-create-landmark = Créer un repère de l'endroit où vous êtes dans 
 fs-mcp-ask-favorite-add = Ajouter { $what } aux favoris
 fs-mcp-ask-favorite-remove = Retirer { $what } des favoris
 fs-mcp-ask-batch-rename = Renommer { $count } éléments, d'abord « { $old } » en « { $new } »
+fs-mcp-ask-plan-rename = Renommer { $count ->
+    [one] un élément
+   *[other] { $count } éléments
+} :
+fs-mcp-ask-plan-move = Déplacer { $count ->
+    [one] un élément
+   *[other] { $count } éléments
+} vers « { $folder } » :
+fs-mcp-ask-plan-row-rename = « { $before } » → « { $after } »
+fs-mcp-ask-plan-row-move = « { $name } »
+fs-mcp-ask-plan-more = …et { $count } de plus
+fs-mcp-ask-plan-skipped = { $count ->
+    [one] Un élément est laissé de côté (le plan dit pourquoi).
+   *[other] { $count } éléments sont laissés de côté (le plan dit pourquoi).
+}
 fs-mcp-ask-picture-set = Donner à « { $name } » l'image « { $texture } »
 fs-mcp-ask-picture-clear = Retirer l'image de « { $name } »
 fs-mcp-picture-texture = une texture de votre inventaire

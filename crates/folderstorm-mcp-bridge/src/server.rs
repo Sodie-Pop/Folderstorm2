@@ -76,6 +76,9 @@ pub struct Pending {
     /// Folderstorm: its receipt, once the frame thread took it: its answer
     /// ends the receipt ([`Pending::answer`]).
     tracked: Option<Tracked>,
+    /// Folderstorm: the class `inventory_execute_plan` needs, decided by
+    /// the frame thread from its plan (plans); None for any other call.
+    pub plan_class: Option<Class>,
     reply: SyncSender<Result<Value, ToolError>>,
 }
 
@@ -93,6 +96,7 @@ impl Pending {
                 session: None,
                 operation_id: None,
                 tracked: None,
+                plan_class: None,
                 reply,
             },
             answer,
@@ -461,7 +465,15 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
         }
     }
     let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
-    let ask = match permissions.decide_all(spec.classes()) {
+    // Folderstorm: a plan's execute needs the plan's class, which only the
+    // frame thread knows: refused here only when every class it may need is
+    // on Never
+    let decided = if protocol::assistant::from_plan(spec) {
+        protocol::assistant::any_decision(&permissions, spec)
+    } else {
+        permissions.decide_all(spec.classes())
+    };
+    let ask = match decided {
         // a picture with the interface asks even on Allow
         Decision::Run => spec.class.is_some() && protocol::always_asks(&call.tool, &call.arguments),
         Decision::Ask => true,

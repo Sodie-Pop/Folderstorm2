@@ -501,3 +501,21 @@ fn a_conflict_reaches_only_a_sidecar_that_declares_receipts() {
         ErrorCode::Conflict
     );
 }
+
+/// Folderstorm: plans (mcp-receipts.md, section 6): the listener cannot
+/// know a plan's class; it refuses an execute only when Edit and Move are
+/// both on Never, and the frame thread decides from the plan.
+#[test]
+fn a_plans_execute_is_refused_here_only_when_both_classes_are_never() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let viewer = responder(calls);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let execute = || client.call("inventory_execute_plan", json!({"plan_id": "pl-x"}));
+    assert_eq!(code(execute().expect_err("both Never")), ErrorCode::PermissionDenied);
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Move, Level::Allow);
+    bridge.set_permissions(permissions);
+    assert_eq!(execute().expect("reaches the viewer")["tool"], "inventory_execute_plan");
+    bridge.stop();
+    assert_eq!(viewer.join().expect("responder"), 1);
+}

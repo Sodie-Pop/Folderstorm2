@@ -997,6 +997,21 @@ fs-mcp-ask-create-landmark = Create a landmark of where you stand in “{ $folde
 fs-mcp-ask-favorite-add = Add { $what } to Favorites
 fs-mcp-ask-favorite-remove = Remove { $what } from Favorites
 fs-mcp-ask-batch-rename = Rename { $count } entries, “{ $old }” to “{ $new }” first
+fs-mcp-ask-plan-rename = Rename { $count ->
+    [one] one entry
+   *[other] { $count } entries
+}:
+fs-mcp-ask-plan-move = Move { $count ->
+    [one] one entry
+   *[other] { $count } entries
+} to “{ $folder }”:
+fs-mcp-ask-plan-row-rename = “{ $before }” → “{ $after }”
+fs-mcp-ask-plan-row-move = “{ $name }”
+fs-mcp-ask-plan-more = …and { $count } more
+fs-mcp-ask-plan-skipped = { $count ->
+    [one] One entry is left out (the plan says why).
+   *[other] { $count } entries are left out (the plan says why).
+}
 fs-mcp-ask-picture-set = Set the picture of “{ $name }” to “{ $texture }”
 fs-mcp-ask-picture-clear = Remove the picture of “{ $name }”
 fs-mcp-picture-texture = a texture of your inventory
