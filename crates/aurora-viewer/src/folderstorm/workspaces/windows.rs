@@ -26,11 +26,14 @@ pub struct Window {
     /// The id its window is made with (`egui::Id::unique(id)`).
     pub id: &'static str,
     pub kind: Kind,
+    // (its name: only the tests read it for now)
+    #[cfg_attr(not(test), allow(dead_code))]
     label: fn() -> &'static str,
 }
 
 impl Window {
     /// Its name, as its title bar or its menu entry has it.
+    #[cfg(test)]
     pub fn label(&self) -> &'static str {
         (self.label)()
     }
