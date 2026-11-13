@@ -719,3 +719,34 @@ retried with the same `client_request_id` submitted once.
 Sitting and standing, touching, follow, autopilot to an object or an
 avatar, teleports by region name or landmark, offers and lures (C++ also
 leaves them out), running instead of walking.
+
+### As built
+
+Branch `claude/mcp-navigation`, stacked on `claude/mcp-receipts` (PR #47,
+merged into it up to `737a01e`).
+
+| Where | What |
+|---|---|
+| bridge `policy.rs` | `Class::Navigation` (saved as `navigation`), its migration |
+| bridge `protocol/navigation.rs` (new) | the catalogue, bounds, `always_asks`, `needs_client_request_id` (the schema lists it as required), `answers_early` |
+| bridge `binding.rs`, `protocol.rs`, `protocol/assistant.rs` | `navigation: 1`; the group bound to the login (`navigation_stop`); the teleport in `protocol::always_asks`; early answers |
+| sidecar `jsonrpc.rs` | the instructions' navigation paragraph; `navigation_stop` not read-only |
+| viewer `mcp_bridge/navigation.rs` (new) | the rules (`plan`), `teleport_target`, `manual_input`, `Navigator` (move and teleport under way, `Reason`, `Last`, lanes and the rate limit), `status` |
+| viewer `desk.rs` | the navigator (kept across access off, its stops still run); the lanes after the receipt (so that a retried `client_request_id` answers its receipt, never `busy`); `client_request_id` required for a teleport; `always_asks` also for calls made in the process; `navigation_status` and `navigation_stop`; `Desk::navigate` (the class on Never stops a running move) |
+| viewer `changes.rs`, `tools.rs`, `mcp_bridge.rs` | `Work::Navigate`, `Ctx::nav`, `View::navigation`, `navigation_frame`, the `TeleportFailed` reason, the demo |
+| viewer `app/local_assistant.rs` | the autopilot started as `walk_to` / `travel_to_avatar` start theirs, `toggle_fly`, `request_user_teleport`; the per-frame hook that stops only the assistant's own autopilot |
+
+Differences from the design above:
+
+- `navigation_stop` is `assistant_operation_cancel` restricted to the
+  navigation tools; in return `assistant_operation_cancel` and Preferences'
+  Stop now also stop a move under way (`stopped`) and ask a submitted
+  teleport to cancel (`cancel_requested`).
+- A move already within its stop distance answers at once (`arrived`,
+  `moved: false`), without a dialog.
+- A move's answer is `cancelled` with `stopped: <reason>` for every stop,
+  so its receipt reads `stopped`; a teleport refused by the simulator is
+  `failed` with its reason, one with no end in 60 s `timeout`
+  (`unconfirmed`).
+- Take-off and landing answer at once (the flight flag is the viewer's).
+- Not built: running (the autopilot walks), a separate teleport class.
