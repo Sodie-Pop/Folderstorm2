@@ -857,7 +857,7 @@ impl Window_ {
                                 if thread.earlier_login {
                                     ui.label(RichText::new(tr!("folderstorm-chat-earlier-login")).italics().color(p.muted));
                                 }
-                                for entry in thread.entries() {
+                                for entry in thread.entries().filter(|entry| chat.shows_entry(entry)) {
                                     answer |= chat_ui::entry_row(ui, p, entry, None) == chat_ui::Clicked::Answer;
                                 }
                             }
@@ -1018,53 +1018,34 @@ impl Window_ {
             });
     }
 
-    /// "Monitors", in place of the characters ("Monitor settings…"): what
-    /// a new monitor opens with, the budget's note, and the cycling
-    /// monitor.
-    pub(super) fn monitors_page(&mut self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<HostAct>) {
-        use super::comfort::{Act as Comfort, Page};
-        if widgets::action_button(ui, p, "arrow-left", tr!("common-back"), ActionKind::Flat, BUTTON).clicked() {
-            acts.push(HostAct::Comfort(Comfort::Page(Page::Characters)));
-        }
-        ui.add_space(8.0);
-        ui.label(
-            RichText::new(tr!("folderstorm-monitors-page-heading"))
-                .size(18.0)
-                .strong()
-                .color(p.ink),
-        );
-        ui.add_space(2.0);
-        ui.label(RichText::new(tr!("folderstorm-monitors-page-intro")).color(p.muted));
-        ui.add_space(10.0);
+    /// Checkpoint 10: the monitors' section of the settings window (it was
+    /// checkpoint 9's page): a new monitor's size and rate, the budget's
+    /// note, the cycling monitor.
+    pub(super) fn monitors_settings(&mut self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<HostAct>) {
         let monitors = *self.host.desk.monitors();
-        egui::ScrollArea::vertical()
-            .id_salt("folderstorm-host-monitors-page")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.label(RichText::new(tr!("folderstorm-monitors-page-defaults")).strong().color(p.ink));
-                ui.add_space(4.0);
-                if let Some(spec) = self.spec_choices(ui, p, monitors.defaults, "defaults") {
-                    acts.push(HostAct::Monitors(Act::Defaults(spec)));
-                }
-                ui.add_space(4.0);
-                self.budget_note(ui, p, None);
-                ui.add_space(12.0);
-                ui.label(RichText::new(tr!("folderstorm-bar-monitors-cycling")).strong().color(p.ink));
-                ui.label(RichText::new(tr!("folderstorm-cycling-intro")).color(p.muted));
-                ui.add_space(4.0);
-                let mut open = monitors.cycling.open;
-                if widgets::checkbox(ui, p, &mut open, tr!("folderstorm-cycling-open")).changed() {
-                    acts.push(HostAct::Monitors(Act::Cycling(open)));
-                }
-                ui.add_space(4.0);
-                self.cycling_choices(ui, p, acts);
-                ui.add_space(6.0);
-                ui.label(RichText::new(tr!("folderstorm-cycling-spec")).color(p.ink));
-                ui.add_space(2.0);
-                if let Some(spec) = self.spec_choices(ui, p, monitors.cycling.spec, "cycling") {
-                    acts.push(HostAct::Monitors(Act::Spec(Seat::Cycling, spec)));
-                }
-            });
+        ui.label(RichText::new(tr!("folderstorm-monitors-page-defaults")).strong().color(p.ink));
+        ui.add_space(4.0);
+        if let Some(spec) = self.spec_choices(ui, p, monitors.defaults, "defaults") {
+            acts.push(HostAct::Monitors(Act::Defaults(spec)));
+        }
+        ui.add_space(4.0);
+        self.budget_note(ui, p, None);
+        ui.add_space(12.0);
+        ui.label(RichText::new(tr!("folderstorm-bar-monitors-cycling")).strong().color(p.ink));
+        ui.label(RichText::new(tr!("folderstorm-cycling-intro")).color(p.muted));
+        ui.add_space(4.0);
+        let mut open = monitors.cycling.open;
+        if widgets::checkbox(ui, p, &mut open, tr!("folderstorm-cycling-open")).changed() {
+            acts.push(HostAct::Monitors(Act::Cycling(open)));
+        }
+        ui.add_space(4.0);
+        self.cycling_choices(ui, p, acts);
+        ui.add_space(6.0);
+        ui.label(RichText::new(tr!("folderstorm-cycling-spec")).color(p.ink));
+        ui.add_space(2.0);
+        if let Some(spec) = self.spec_choices(ui, p, monitors.cycling.spec, "cycling") {
+            acts.push(HostAct::Monitors(Act::Spec(Seat::Cycling, spec)));
+        }
     }
 }
 

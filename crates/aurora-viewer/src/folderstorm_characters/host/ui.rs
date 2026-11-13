@@ -23,6 +23,7 @@ mod inbox;
 mod monitor_windows;
 mod monitors;
 mod panels;
+mod settings;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
@@ -134,6 +135,8 @@ struct Window_ {
     bar: bar::Bar,
     /// Checkpoint 9: each monitor's own window, and the cycling monitor.
     monitors: monitor_windows::Monitors,
+    /// Checkpoint 10: the settings' window.
+    settings: settings::Settings,
 }
 
 impl Window_ {
@@ -166,6 +169,7 @@ impl Window_ {
             inbox_titled: 0,
             bar: Default::default(),
             monitors: Default::default(),
+            settings: Default::default(),
         }
     }
 }
@@ -213,9 +217,8 @@ enum Act {
     Monitor(usize, Option<::folderstorm_session::monitor::Spec>),
     /// Checkpoint 6: a panel leaves for its own window, or comes back.
     Panel(Panel, bool),
-    /// Checkpoint 7 (`ui/identity.rs`): a character's alias and colour
-    /// are chosen (None: no more), its colour, its alias.
-    EditIdentity(Option<usize>),
+    /// Checkpoint 7 (`ui/identity.rs`): a character's colour, its alias
+    /// (chosen in the settings' window since checkpoint 10).
     Colour(usize, ::folderstorm_session::identity::Colour),
     Alias(usize, String),
     /// Checkpoint 7 (`ui/condensed.rs`): one line per character, or the
@@ -234,6 +237,9 @@ enum Act {
     /// Checkpoint 9 (`ui/monitor_windows.rs`): a click in a monitor's
     /// window, or on the monitors' page.
     Monitors(monitor_windows::Act),
+    /// Checkpoint 10 (`ui/settings.rs`): a click in the settings' window,
+    /// or a way to it.
+    Settings(settings::Act),
 }
 
 impl Window_ {
@@ -281,6 +287,11 @@ impl Window_ {
                         .frame(egui::Frame::new().fill(p.panel))
                         .show(ui, |ui| self.monitor_window(ui, seat, now, &mut acts));
                 }
+                false
+            }
+            Which::Settings => {
+                // (checkpoint 10) the sections' list, then a page
+                self.settings_window(ui, &mut acts);
                 false
             }
         };
@@ -407,21 +418,8 @@ impl Window_ {
         ui.add_space(2.0);
         ui.label(RichText::new(tr!("folderstorm-host-intro")).color(p.muted));
         ui.add_space(10.0);
-        let mut stage = self.host.desk.stage();
-        if widgets::checkbox(ui, &p, &mut stage, tr!("folderstorm-host-stage"))
-            .on_hover_text(tr!("folderstorm-host-stage-help"))
-            .changed()
-        {
-            acts.push(Act::Stage(stage));
-        }
-        let mut sound = self.host.desk.chat_sound();
-        if widgets::checkbox(ui, &p, &mut sound, tr!("folderstorm-chat-sound"))
-            .on_hover_text(tr!("folderstorm-chat-sound-help"))
-            .changed()
-        {
-            acts.push(Act::ChatSound(sound));
-        }
-        ui.add_space(10.0);
+        // (checkpoint 10: the stage's and the alert's boxes are in the
+        // settings' window)
         self.quick_strip(ui, &p, acts);
         egui::ScrollArea::vertical()
             .id_salt("folderstorm-host-characters")
@@ -443,7 +441,6 @@ impl Window_ {
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 self.character(ui, &p, *slot, state, now, quitting, acts);
-                                self.identity_editor(ui, &p, *slot, state, acts);
                                 self.monitor_panel(ui, &p, *slot, state, acts);
                             });
                     });
@@ -474,6 +471,9 @@ impl Window_ {
             if let Some(error) = &self.add_error {
                 ui.label(RichText::new(error).color(p.danger));
             }
+        }
+        if !quitting {
+            // (checkpoint 10: "Settings…" is there with five characters too)
             self.comfort_buttons(ui, &p, acts);
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
@@ -712,7 +712,6 @@ impl Window_ {
                 // (its window opens or closes before the next wait:
                 // `sync_panes`)
                 Act::Panel(panel, out) => self.host.desk.set_panel_out(panel, out),
-                Act::EditIdentity(slot) => self.identity_edit(slot),
                 Act::Colour(slot, colour) => self.host.desk.set_colour(slot, colour),
                 Act::Alias(slot, text) => self.identity_alias(slot, &text),
                 Act::InboxDismiss(slot, id) => {
@@ -727,6 +726,7 @@ impl Window_ {
                 Act::Bar(request) => self.bar_apply(request, now),
                 Act::BarEdit(edit) => self.bar_edit(edit),
                 Act::Monitors(act) => self.monitors_apply(act, now),
+                Act::Settings(act) => self.settings_apply(act),
                 Act::Condensed(condensed) => {
                     self.host.desk.set_condensed(condensed);
                     // (the cards' pages have no way back from the lines)
@@ -854,6 +854,7 @@ fn capture_path(path: &std::path::Path, which: Which) -> std::path::PathBuf {
         Which::Bar => "bar".to_owned(),
         Which::Monitor(slot) => Seat::Slot(slot).key(),
         Which::Cycling => Seat::Cycling.key(),
+        Which::Settings => "settings".to_owned(),
     };
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
     let mut name = format!("{stem}-{key}");
@@ -979,7 +980,13 @@ impl ApplicationHandler for Window_ {
         match made {
             // the panels that were out when the host closed, after the
             // host's own window and without taking the keyboard from it
-            Ok(()) => self.sync_panes(event_loop),
+            Ok(()) => {
+                self.sync_panes(event_loop);
+                // (checkpoint 10, demo only) the settings, on a section
+                if let Some(section) = self.host.demo_settings.take() {
+                    self.open_settings(section, None);
+                }
+            }
             Err(error) => {
                 self.error = Some(error.to_string());
                 event_loop.exit();
@@ -1013,6 +1020,8 @@ impl ApplicationHandler for Window_ {
             Which::Bar if self.bar_event(&event) => return,
             // a monitor's window closed closes that monitor: the host stays
             Which::Monitor(_) | Which::Cycling if Seat::of(which).is_some_and(|seat| self.monitor_event(seat, &event)) => return,
+            // the settings' window closed: nothing else
+            Which::Settings if self.settings_event(&event) => return,
             _ => {}
         }
         if let WindowEvent::Focused(focused) = event
@@ -1065,13 +1074,24 @@ impl ApplicationHandler for Window_ {
                         self.monitor_failed(seat, &error);
                     }
                 }
+                Which::Settings => {
+                    // nor the settings': they close
+                    log::warn!("session host: the settings' window is not drawn ({error}): closed");
+                    self.settings_event(&WindowEvent::CloseRequested);
+                }
             }
         }
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         self.main.detach();
-        for pane in self.panes.iter_mut().flatten().chain(&mut self.bar.view) {
+        for pane in self
+            .panes
+            .iter_mut()
+            .flatten()
+            .chain(&mut self.bar.view)
+            .chain(&mut self.settings.view)
+        {
             pane.detach();
         }
         for view in self.monitors.views_mut() {
@@ -1124,6 +1144,8 @@ impl ApplicationHandler for Window_ {
         self.sync_panes(event_loop);
         // (checkpoint 9) and so does each monitor that opened or closed
         self.sync_monitors(event_loop);
+        // (checkpoint 10) and the settings' window
+        self.sync_settings(event_loop);
         // (checkpoint 8) and the bar's compact window; the host's own
         // window hides or shows; what a bar asked for comes forward
         self.sync_bar(event_loop);
@@ -1132,6 +1154,7 @@ impl ApplicationHandler for Window_ {
             .chain(self.panes.iter_mut().flatten())
             .chain(&mut self.bar.view)
             .chain(self.monitors.views_mut())
+            .chain(&mut self.settings.view)
         {
             if std::mem::take(&mut view.redraw)
                 && let Some(window) = &view.window

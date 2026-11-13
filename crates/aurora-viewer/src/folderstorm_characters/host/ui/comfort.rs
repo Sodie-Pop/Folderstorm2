@@ -25,12 +25,7 @@ use crate::folderstorm_characters::profile_copy::{CopyError, Preferences};
 pub(super) enum Page {
     #[default]
     Characters,
-    Hotkeys,
     NewProfile,
-    /// Checkpoint 8: the bar and its quick actions (`ui/bar.rs`).
-    Bar,
-    /// Checkpoint 9: the monitors' settings (`ui/monitor_windows.rs`).
-    Monitors,
 }
 
 /// What the window keeps for checkpoint 4.
@@ -128,10 +123,7 @@ impl Window_ {
         let mut asked = Vec::new();
         match self.comfort.page {
             Page::Characters => return false,
-            Page::Hotkeys => self.hotkeys_page(ui, &p, &mut asked),
             Page::NewProfile => self.new_profile_page(ui, &p, &mut asked),
-            Page::Bar => self.bar_page(ui, &p, acts),
-            Page::Monitors => self.monitors_page(ui, &p, acts),
         }
         acts.extend(asked.into_iter().map(super::Act::Comfort));
         true
@@ -191,28 +183,15 @@ impl Window_ {
             {
                 acts.push(super::Act::Comfort(Act::Page(Page::NewProfile)));
             }
-            let hotkeys = tr!("folderstorm-host-hotkeys");
-            if widgets::action_button(ui, p, "keyboard-filled", hotkeys, ActionKind::Flat, BUTTON)
-                .on_hover_text(tr!("folderstorm-host-hotkeys-help"))
+            // (checkpoint 10: the hotkeys, the bar's and the monitors'
+            // pages are sections of the settings window)
+            let settings = tr!("folderstorm-settings-open");
+            if widgets::action_button(ui, p, "settings-filled", settings, ActionKind::Flat, BUTTON)
+                .on_hover_text(tr!("folderstorm-settings-open-help"))
                 .clicked()
             {
-                acts.push(super::Act::Comfort(Act::Page(Page::Hotkeys)));
-            }
-            // (checkpoint 8: the bar's and the quick actions' page)
-            let bar = tr!("folderstorm-bar-settings-bar");
-            if widgets::action_button(ui, p, "settings-filled", bar, ActionKind::Flat, BUTTON)
-                .on_hover_text(tr!("folderstorm-bar-page-intro"))
-                .clicked()
-            {
-                acts.push(super::Act::Comfort(Act::Page(Page::Bar)));
-            }
-            // (checkpoint 9: the monitors' page)
-            let monitors = tr!("folderstorm-bar-monitors-settings");
-            if widgets::action_button(ui, p, "device-desktop-filled", monitors, ActionKind::Flat, BUTTON)
-                .on_hover_text(tr!("folderstorm-monitors-page-intro"))
-                .clicked()
-            {
-                acts.push(super::Act::Comfort(Act::Page(Page::Monitors)));
+                let open = super::settings::Act::Open(::folderstorm_session::settings::Section::Toolbar, None);
+                acts.push(super::Act::Settings(open));
             }
         });
         if let Some(note) = &self.comfort.note {
@@ -263,8 +242,9 @@ impl Window_ {
         ui.add_space(10.0);
     }
 
-    fn hotkeys_page(&mut self, ui: &mut egui::Ui, p: &Palette, asked: &mut Vec<Act>) {
-        self.page_heading(ui, p, tr!("folderstorm-hotkeys-heading"), tr!("folderstorm-hotkeys-intro"), asked);
+    /// Checkpoint 10: the hotkeys' section of the settings window (it was
+    /// checkpoint 4's page).
+    pub(super) fn hotkeys_settings(&mut self, ui: &mut egui::Ui, p: &Palette, asked: &mut Vec<Act>) {
         if !Registrar::available() {
             ui.label(RichText::new(tr!("folderstorm-hotkeys-windows-only")).color(p.amber));
             ui.add_space(6.0);
@@ -276,54 +256,51 @@ impl Window_ {
         }
         ui.add_space(8.0);
         let demo = self.host.demo;
-        egui::ScrollArea::vertical()
-            .id_salt("folderstorm-host-hotkeys")
-            .auto_shrink([false, true])
-            .max_height((ui.available_height() - 80.0).max(120.0))
-            .show(ui, |ui| {
-                for action in Action::all() {
-                    let index = action.index();
-                    let state = self.host.hotkey_state(action);
-                    ui.horizontal(|ui| {
-                        let name = RichText::new(action_name(action)).color(p.ink);
-                        ui.add_sized([150.0, BUTTON.y], egui::Label::new(name).truncate());
-                        let mut text = self.comfort.keys[index].clone().unwrap_or_else(|| config.text(action).to_owned());
-                        let field = widgets::text_field(ui, true, &mut text, |b, _| {
-                            egui::TextEdit::singleline(b)
-                                .char_limit(::folderstorm_session::hotkeys::MAX_TEXT)
-                                .hint_text(tr!("folderstorm-hotkeys-hint"))
-                                .desired_width(170.0)
-                        });
-                        if field.changed() {
-                            self.comfort.keys[index] = Some(text);
-                        }
-                        if field.lost_focus()
-                            && let Some(typed) = self.comfort.keys[index].take()
-                        {
-                            asked.push(Act::Hotkey(action, typed));
-                        }
-                        if demo
-                            && widgets::action_button(
-                                ui,
-                                p,
-                                "player-play-filled",
-                                tr!("folderstorm-hotkeys-try"),
-                                ActionKind::Flat,
-                                BUTTON,
-                            )
-                            .on_hover_text(tr!("folderstorm-hotkeys-try-help"))
-                            .clicked()
-                        {
-                            asked.push(Act::Try(action));
-                        }
+        // (in the settings' page, which scrolls)
+        ui.vertical(|ui| {
+            for action in Action::all() {
+                let index = action.index();
+                let state = self.host.hotkey_state(action);
+                ui.horizontal(|ui| {
+                    let name = RichText::new(action_name(action)).color(p.ink);
+                    ui.add_sized([150.0, BUTTON.y], egui::Label::new(name).truncate());
+                    let mut text = self.comfort.keys[index].clone().unwrap_or_else(|| config.text(action).to_owned());
+                    let field = widgets::text_field(ui, true, &mut text, |b, _| {
+                        egui::TextEdit::singleline(b)
+                            .char_limit(::folderstorm_session::hotkeys::MAX_TEXT)
+                            .hint_text(tr!("folderstorm-hotkeys-hint"))
+                            .desired_width(170.0)
                     });
-                    if let Some((text, problem)) = state_text(&state) {
-                        let colour = if problem { p.danger } else { p.muted };
-                        ui.label(RichText::new(text).color(colour));
+                    if field.changed() {
+                        self.comfort.keys[index] = Some(text);
                     }
-                    ui.add_space(6.0);
+                    if field.lost_focus()
+                        && let Some(typed) = self.comfort.keys[index].take()
+                    {
+                        asked.push(Act::Hotkey(action, typed));
+                    }
+                    if demo
+                        && widgets::action_button(
+                            ui,
+                            p,
+                            "player-play-filled",
+                            tr!("folderstorm-hotkeys-try"),
+                            ActionKind::Flat,
+                            BUTTON,
+                        )
+                        .on_hover_text(tr!("folderstorm-hotkeys-try-help"))
+                        .clicked()
+                    {
+                        asked.push(Act::Try(action));
+                    }
+                });
+                if let Some((text, problem)) = state_text(&state) {
+                    let colour = if problem { p.danger } else { p.muted };
+                    ui.label(RichText::new(text).color(colour));
                 }
-            });
+                ui.add_space(6.0);
+            }
+        });
         ui.add_space(6.0);
         ui.label(RichText::new(tr!("folderstorm-hotkeys-altgr-note")).color(p.muted));
         ui.add_space(6.0);
@@ -476,7 +453,7 @@ impl Window_ {
 #[cfg(test)]
 mod tests {
     use super::super::super::chat_ui::tests::host;
-    use super::super::tests::{draw, window};
+    use super::super::tests::{draw, draw_in, window};
     use super::*;
     use ::folderstorm_session::host::Effect;
 
@@ -491,7 +468,7 @@ mod tests {
         let (drawn, _) = draw(&mut app, 1120, 760);
         // one quick-action button per character, numbered as its hotkey
         assert!(shows(&drawn, "1 · demo-1") && shows(&drawn, "2 · demo-2"), "{drawn:?}");
-        assert!(shows(&drawn, "New character profile…") && shows(&drawn, "Hotkeys…"));
+        assert!(shows(&drawn, "New character profile…") && shows(&drawn, tr!("folderstorm-settings-open")));
         assert!(shows(&drawn, "Heard in the background"));
         // the quick action of a character without a viewer starts one, once
         let now = Instant::now();
@@ -515,19 +492,22 @@ mod tests {
         let mut app = window(host());
         let now = Instant::now();
         app.host.apply_hotkeys();
-        app.comfort_apply(Act::Page(Page::Hotkeys), now);
-        draw(&mut app, 1120, 900);
-        let (drawn, _) = draw(&mut app, 1120, 900);
-        assert!(shows(&drawn, "Global hotkeys"), "{drawn:?}");
+        // (checkpoint 10: a section of the settings window)
+        let open = super::super::settings::Act::Open(::folderstorm_session::settings::Section::Hotkeys, None);
+        app.apply(vec![super::super::Act::Settings(open)], now);
+        app.settings.view = Some(app.look.view());
+        let settings = super::super::panels::Which::Settings;
+        draw_in(&mut app, settings, 1000, 900);
+        let (drawn, _) = draw_in(&mut app, settings, 1000, 900);
+        assert!(shows(&drawn, tr!("folderstorm-settings-hotkeys")), "{drawn:?}");
         assert!(shows(&drawn, "Character 1") && shows(&drawn, "Next character") && shows(&drawn, "Previous character"));
         assert!(shows(&drawn, "Ctrl+Shift+F1") && shows(&drawn, "Ctrl+Shift+F7"));
-        assert!(!shows(&drawn, "Each character runs in its own viewer"), "the page takes the column");
         // (the tests register nothing: as on a system without them)
         assert!(shows(&drawn, "Windows only"));
         // a choice that is no hotkey, and one already used: both are told
         app.comfort_apply(Act::Hotkey(Action::Next, "ctrl+banana".into()), now);
         app.comfort_apply(Act::Hotkey(Action::Previous, "ctrl + shift + f2".into()), now);
-        let (drawn, _) = draw(&mut app, 1120, 900);
+        let (drawn, _) = draw_in(&mut app, settings, 1000, 900);
         assert!(shows(&drawn, "banana"), "{drawn:?}");
         assert!(shows(&drawn, "Same keys as") && shows(&drawn, "which keeps them"));
         assert_eq!(app.host.desk.hotkeys().text(Action::Previous), "Ctrl+Shift+F2");

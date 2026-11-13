@@ -49,6 +49,8 @@ pub(in super::super) enum Which {
     /// (`ui/monitor_windows.rs`).
     Monitor(usize),
     Cycling,
+    /// Checkpoint 10: the settings' window (`ui/settings.rs`).
+    Settings,
 }
 
 /// What every window of the host is drawn with.
@@ -197,6 +199,7 @@ impl Window_ {
             Which::Pane(panel) => self.panes[panel.index()].as_ref(),
             Which::Bar => self.bar.view.as_ref(),
             Which::Monitor(_) | Which::Cycling => Seat::of(which).and_then(|seat| self.monitors.view(seat)),
+            Which::Settings => self.settings.view.as_ref(),
         }
     }
 
@@ -206,6 +209,7 @@ impl Window_ {
             Which::Pane(panel) => self.panes[panel.index()].as_mut(),
             Which::Bar => self.bar.view.as_mut(),
             Which::Monitor(_) | Which::Cycling => Seat::of(which).and_then(|seat| self.monitors.view_mut(seat)),
+            Which::Settings => self.settings.view.as_mut(),
         }
     }
 
@@ -228,6 +232,9 @@ impl Window_ {
         if self.bar.view.as_ref().is_some_and(is) {
             return Some(Which::Bar);
         }
+        if self.settings.view.as_ref().is_some_and(is) {
+            return Some(Which::Settings);
+        }
         if let Some((seat, _)) = self.monitors.views().find(|(_, view)| is(view)) {
             return Some(seat.which());
         }
@@ -240,7 +247,13 @@ impl Window_ {
     /// Every window is drawn again.
     pub(super) fn redraw_all(&mut self) {
         self.main.redraw = true;
-        for pane in self.panes.iter_mut().flatten().chain(&mut self.bar.view) {
+        for pane in self
+            .panes
+            .iter_mut()
+            .flatten()
+            .chain(&mut self.bar.view)
+            .chain(&mut self.settings.view)
+        {
             pane.redraw = true;
         }
         for view in self.monitors.views_mut() {

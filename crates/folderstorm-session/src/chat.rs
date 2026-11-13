@@ -49,6 +49,7 @@ use crate::ipc::{
     AttentionItem, AttentionList, ChatBatch, ChatLine, Conversation, LineKind, MAX_SEND, MAX_SLOTS, SendOutcome, SendRefusal, SessionKind,
     ToViewer, clean_text,
 };
+use crate::settings::ChatShown;
 use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, Instant};
 
@@ -280,8 +281,15 @@ pub enum Effect {
     /// with [`Chat::not_written`].
     Send { slot: usize, launch: u32, message: ToViewer },
     /// A message came for a character that is not the active one: the
-    /// host may sound or flash.
-    Alert { slot: usize },
+    /// host may sound or flash, by what the character's alerts say of a
+    /// line of someone else (`said`) or an offer (`card`) in a
+    /// conversation of that kind (checkpoint 10).
+    Alert {
+        slot: usize,
+        kind: SessionKind,
+        said: bool,
+        card: bool,
+    },
 }
 
 /// The shared chat.
@@ -298,6 +306,10 @@ pub struct Chat {
     looks: BTreeMap<u8, (Viewing, bool)>,
     active: Option<usize>,
     effects: Vec<Effect>,
+    /// Checkpoint 10: what the chats show, for every character.
+    shown: ChatShown,
+    /// Checkpoint 10: what a window that has the keyboard shows is read.
+    mark_displayed: bool,
 }
 
 /// The shared chat's own window, for [`Chat::look_from`].
@@ -315,6 +327,8 @@ impl Default for Chat {
             looks: BTreeMap::new(),
             active: None,
             effects: Vec::new(),
+            shown: ChatShown::default(),
+            mark_displayed: true,
         }
     }
 }
@@ -327,6 +341,35 @@ impl Chat {
     /// The desk's active character (a message for another one alerts).
     pub fn set_active(&mut self, active: Option<usize>) {
         self.active = active;
+    }
+
+    /// Checkpoint 10: what the chats show (the host's settings). A kind
+    /// that is not shown is in no chip, not in "All", counts nowhere and
+    /// is never read by being shown.
+    pub fn set_shown(&mut self, shown: ChatShown) {
+        self.shown = shown;
+    }
+
+    pub fn shown(&self) -> ChatShown {
+        self.shown
+    }
+
+    /// Checkpoint 10: what a window that has the keyboard shows is read
+    /// (on, checkpoint 6's rule), or nothing is read by being shown.
+    pub fn set_mark_displayed(&mut self, on: bool) {
+        self.mark_displayed = on;
+    }
+
+    /// Checkpoint 10, "Auto-read the active character": every
+    /// conversation of the character that is shown is read in the host.
+    /// Its viewer is told nothing: what it has unread there is its own.
+    pub fn read_in_host(&mut self, slot: usize) {
+        let shown = self.shown;
+        if let Some(c) = self.characters.get_mut(slot) {
+            for t in c.threads.iter_mut().filter(|t| shown.thread(t.kind)) {
+                t.unread = 0;
+            }
+        }
     }
 
     /// Whether what comes from `launch` of `slot` is taken: its current
@@ -432,6 +475,11 @@ impl Chat {
 
     /// On screen in a window that has the keyboard.
     fn viewed(&self, slot: usize, conversation: Conversation) -> bool {
+        // (checkpoint 10: unless nothing is read by being shown, and never
+        // a kind the chats do not show)
+        if !self.mark_displayed || self.thread(slot, conversation).is_some_and(|t| !self.shown.thread(t.kind)) {
+            return false;
+        }
         self.looks.values().any(|(viewing, focused)| {
             *focused
                 && match *viewing {
@@ -514,7 +562,7 @@ impl Chat {
         if batch.missed > 0 {
             self.push(slot, conversation, Entry::Gap(u64::from(batch.missed)));
         }
-        let (mut unread, mut alert) = (0u32, false);
+        let (mut unread, mut said, mut card) = (0u32, false, false);
         for line in batch.lines {
             let Some(t) = self.thread_mut(slot, conversation) else {
                 break;
@@ -525,7 +573,10 @@ impl Chat {
             t.last_number = Some(line.number);
             let others = matches!(line.kind, LineKind::Said | LineKind::Object | LineKind::Card);
             unread += u32::from(others);
-            alert |= conversation != Conversation::Nearby && matches!(line.kind, LineKind::Said | LineKind::Card);
+            if conversation != Conversation::Nearby {
+                said |= line.kind == LineKind::Said;
+                card |= line.kind == LineKind::Card;
+            }
             self.push(slot, conversation, Entry::Line(line));
         }
         if let Some(t) = self.thread_mut(slot, conversation) {
@@ -535,8 +586,9 @@ impl Chat {
                 t.unread = t.unread.saturating_add(unread);
             }
         }
-        if alert && self.active != Some(slot) && !batch.restart {
-            self.effects.push(Effect::Alert { slot });
+        let kind = self.thread(slot, conversation).map_or(SessionKind::Nearby, |t| t.kind);
+        if (said || card) && self.active != Some(slot) && !batch.restart && self.shown.thread(kind) {
+            self.effects.push(Effect::Alert { slot, kind, said, card });
         }
         if viewed {
             self.read(slot, conversation);
@@ -583,17 +635,28 @@ impl Chat {
         } else {
             self.looks.insert(window, (viewing, focused));
         }
-        if !focused {
+        if !focused || !self.mark_displayed {
             return;
         }
+        let shown = self.shown;
         let seen: Vec<(usize, Conversation)> = match viewing {
             Viewing::Nothing => Vec::new(),
-            Viewing::Thread(slot, conversation) => vec![(slot, conversation)],
+            Viewing::Thread(slot, conversation) => self
+                .thread(slot, conversation)
+                .filter(|t| shown.thread(t.kind))
+                .map(|t| (slot, t.conversation))
+                .into_iter()
+                .collect(),
             Viewing::All => self
                 .characters
                 .iter()
                 .enumerate()
-                .flat_map(|(slot, c)| c.threads.iter().map(move |t| (slot, t.conversation)))
+                .flat_map(|(slot, c)| {
+                    c.threads
+                        .iter()
+                        .filter(move |t| shown.thread(t.kind))
+                        .map(move |t| (slot, t.conversation))
+                })
                 .collect(),
         };
         for (slot, conversation) in seen {
@@ -803,13 +866,16 @@ impl Chat {
 
     /// The character's conversations that are not closed in the host,
     /// the nearby chat first: what its chips show.
+    /// (Checkpoint 10: and of a kind the chats show.)
     pub fn open_threads(&self, slot: usize) -> impl Iterator<Item = &Thread> {
-        self.threads(slot).iter().filter(|t| !t.closed)
+        let shown = self.shown;
+        self.threads(slot).iter().filter(move |t| !t.closed && shown.thread(t.kind))
     }
 
-    /// One of them; None for a conversation that is closed or unknown.
+    /// One of them; None for a conversation that is closed, not shown or
+    /// unknown.
     pub fn open_thread(&self, slot: usize, conversation: Conversation) -> Option<&Thread> {
-        self.thread(slot, conversation).filter(|t| !t.closed)
+        self.thread(slot, conversation).filter(|t| !t.closed && self.shown.thread(t.kind))
     }
 
     /// How many lines typed in that conversation wait for their answer.
@@ -830,14 +896,34 @@ impl Chat {
         self.threads(slot).iter().find(|t| t.conversation == conversation)
     }
 
-    /// The "All" tab: every character's entries as they came.
-    pub fn feed(&self) -> impl DoubleEndedIterator<Item = &FeedItem> + ExactSizeIterator {
-        self.feed.iter()
+    /// The "All" tab: every character's entries as they came (checkpoint
+    /// 10: those the chats show).
+    pub fn feed(&self) -> impl DoubleEndedIterator<Item = &FeedItem> {
+        self.feed.iter().filter(|item| self.feed_shown(item))
     }
 
-    /// The character's unread lines, all conversations together.
+    /// An entry of a conversation that is shown is shown too, but a line of
+    /// the viewer's when its notices are not (checkpoint 10).
+    pub fn shows_entry(&self, entry: &Entry) -> bool {
+        match entry {
+            Entry::Line(line) => self.shown.line(line.kind),
+            Entry::Gap(_) | Entry::Note(_) => true,
+        }
+    }
+
+    /// An entry of "All" is shown: its conversation's kind is, and a line
+    /// of the viewer's is when its notices are.
+    fn feed_shown(&self, item: &FeedItem) -> bool {
+        let kind = self.thread(item.slot, item.conversation).map_or(SessionKind::Nearby, |t| t.kind);
+        self.shown.thread(kind) && self.shows_entry(&item.entry)
+    }
+
+    /// The character's unread lines, all the conversations shown together.
     pub fn unread(&self, slot: usize) -> u32 {
-        self.threads(slot).iter().fold(0, |sum, t| sum.saturating_add(t.unread))
+        self.threads(slot)
+            .iter()
+            .filter(|t| self.shown.thread(t.kind))
+            .fold(0, |sum, t| sum.saturating_add(t.unread))
     }
 
     pub fn total_unread(&self) -> u32 {
@@ -1137,12 +1223,90 @@ mod tests {
         c.batch(1, 1, batch(1, JANE, vec![line(1, LineKind::Own, "Alex", "my own line")]));
         assert_eq!(c.take_effects(), vec![]);
         c.batch(1, 1, batch(1, JANE, vec![said(2, "to a background one"), said(3, "twice")]));
-        assert_eq!(c.take_effects(), vec![Effect::Alert { slot: 1 }]);
+        let alert = Effect::Alert {
+            slot: 1,
+            kind: SessionKind::Resident,
+            said: true,
+            card: false,
+        };
+        assert_eq!(c.take_effects(), vec![alert]);
         // a conversation told again is not news
         let mut again = batch(1, JANE, vec![said(2, "to a background one")]);
         again.restart = true;
         c.batch(1, 1, again);
         assert_eq!(c.take_effects(), vec![]);
+        // an offer in a group says what it is (checkpoint 10)
+        c.batch(1, 1, batch(1, GROUP, vec![line(1, LineKind::Card, "Shop", "an offer")]));
+        let card = Effect::Alert {
+            slot: 1,
+            kind: SessionKind::Group,
+            said: false,
+            card: true,
+        };
+        assert_eq!(c.take_effects(), vec![card]);
+        // a kind the chats do not show alerts nobody
+        c.set_shown(ChatShown {
+            ims: false,
+            ..ChatShown::default()
+        });
+        c.batch(1, 1, batch(1, JANE, vec![said(4, "hidden")]));
+        assert_eq!(c.take_effects(), vec![]);
+    }
+
+    #[test]
+    fn a_kind_the_chats_do_not_show_is_in_no_chip_nor_all_and_never_read_by_being_shown() {
+        let (mut c, _) = chat(1);
+        c.batch(0, 1, batch(1, Conversation::Nearby, vec![said(1, "near")]));
+        c.batch(0, 1, batch(1, JANE, vec![said(1, "an im")]));
+        c.batch(
+            0,
+            1,
+            batch(1, GROUP, vec![said(1, "a group"), line(2, LineKind::System, "", "a notice")]),
+        );
+        assert_eq!(c.open_threads(0).count(), 3);
+        assert_eq!(c.feed().count(), 4);
+        assert_eq!(c.unread(0), 3);
+        c.set_shown(ChatShown {
+            groups: false,
+            notices: false,
+            ..ChatShown::default()
+        });
+        assert_eq!(c.open_threads(0).count(), 2);
+        assert!(c.open_thread(0, GROUP).is_none());
+        assert_eq!(c.feed().count(), 2, "no group line, no notice");
+        assert_eq!(c.unread(0), 2, "the group's unread line counts nowhere");
+        // "All" on screen in a window that has the keyboard reads what it
+        // shows, and not the group
+        c.look(Viewing::All, true);
+        assert_eq!(c.unread(0), 0);
+        assert_eq!(c.thread(0, GROUP).map(|t| t.unread), Some(1));
+        c.look(Viewing::Thread(0, GROUP), true);
+        assert_eq!(c.thread(0, GROUP).map(|t| t.unread), Some(1), "a hidden kind is never read");
+        // the notice of the viewer is hidden in a conversation that shows
+        let notice = Entry::Line(line(9, LineKind::System, "", "x"));
+        assert!(!c.shows_entry(&notice));
+        c.set_shown(ChatShown::default());
+        assert!(c.shows_entry(&notice));
+        assert_eq!(c.unread(0), 1);
+    }
+
+    #[test]
+    fn with_mark_displayed_read_off_nothing_is_read_by_being_shown_and_auto_read_is_the_host_s() {
+        let (mut c, _) = chat(1);
+        c.batch(0, 1, batch(1, JANE, vec![said(1, "one"), said(2, "two")]));
+        assert_eq!(c.unread(0), 2);
+        c.set_mark_displayed(false);
+        c.look(Viewing::Thread(0, JANE), true);
+        assert_eq!(c.unread(0), 2);
+        assert!(sends(&mut c).is_empty(), "nothing told to the viewer");
+        // auto-read: read in the host, the viewer is told nothing
+        c.read_in_host(0);
+        assert_eq!(c.unread(0), 0);
+        assert!(sends(&mut c).is_empty());
+        c.set_mark_displayed(true);
+        c.batch(0, 1, batch(1, JANE, vec![said(3, "three")]));
+        c.look(Viewing::Thread(0, JANE), true);
+        assert_eq!(c.unread(0), 0);
     }
 
     #[test]
@@ -1414,7 +1578,7 @@ mod tests {
         let open = |c: &Chat| c.open_threads(0).map(|t| t.conversation).collect::<Vec<_>>();
         assert_eq!(open(&c), [Conversation::Nearby, JANE, GROUP]);
         assert!(c.set_draft(0, JANE, "half a line"));
-        let feed = c.feed().len();
+        let feed = c.feed().count();
         // closed: no chip, nothing unread, nothing typed, and not a word
         // to its viewer
         assert!(c.close(0, JANE));
@@ -1425,7 +1589,7 @@ mod tests {
         assert_eq!(c.unread(0), 2, "the nearby chat's and the group's");
         assert_eq!(c.draft(0, JANE), "");
         assert!(c.take_effects().is_empty());
-        assert_eq!(c.feed().len(), feed, "its lines stay in All");
+        assert_eq!(c.feed().count(), feed, "its lines stay in All");
         // the nearby chat is never closed, nor a conversation there is not
         assert!(!c.close(0, Conversation::Nearby));
         assert!(!c.close(0, Conversation::Session(9, 9)));

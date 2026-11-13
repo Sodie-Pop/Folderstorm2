@@ -906,13 +906,17 @@ fn the_monitors_page_has_the_defaults_and_the_cycling_monitor() {
     let now = Instant::now();
     let mut app = window(host());
     running(&mut app, 2, now);
-    // "Monitor settings…" from the bar
+    // "Monitor settings…" from the bar: the settings window's section
     app.apply(vec![HostAct::Bar(Request::Show(Page::Monitors))], now);
-    assert_eq!(app.comfort.page, super::super::comfort::Page::Monitors);
-    draw(&mut app, 1120, 760);
-    let (drawn, pixels) = draw(&mut app, 1120, 760);
+    assert_eq!(
+        app.host.desk.settings_window().section,
+        ::folderstorm_session::settings::Section::Monitors
+    );
+    app.settings.view = Some(app.look.view());
+    draw_in(&mut app, Which::Settings, 1000, 760);
+    let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 760);
     for text in [
-        tr!("folderstorm-monitors-page-heading"),
+        tr!("folderstorm-settings-monitors"),
         tr!("folderstorm-monitors-page-defaults"),
         tr!("folderstorm-monitor-budget-note"),
         tr!("folderstorm-cycling-open"),
@@ -922,7 +926,7 @@ fn the_monitors_page_has_the_defaults_and_the_cycling_monitor() {
         assert!(shows(&drawn, text), "{text}: {drawn:?}");
     }
     assert!(!shows(&drawn, "use of widget"), "two widgets share an id: {drawn:?}");
-    keep("monitors-page", &pixels, 1120, 760);
+    keep("monitors-page", &pixels, 1000, 760);
     // its choices
     act(&mut app, Act::Cycling(true), now);
     assert!(app.host.desk.monitors().cycling.open);
