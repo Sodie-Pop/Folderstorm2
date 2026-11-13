@@ -79,9 +79,11 @@ fn wanted_here() -> bool {
 
 /// The splash process of this executable, its lines on its standard input;
 /// `shown`: its line back once on screen is read.
-fn spawn(title: Option<&str>, language: Option<&str>, shown: bool) -> std::io::Result<std::process::Child> {
+// Folderstorm: `extra`, a character's profile and slot (folderstorm_characters/splash.rs)
+fn spawn(title: Option<&str>, language: Option<&str>, extra: &[String], shown: bool) -> std::io::Result<std::process::Child> {
     let mut command = std::process::Command::new(std::env::current_exe()?);
     command.arg(ARG);
+    command.args(extra); // Folderstorm
     if let Some(title) = title {
         command.arg("--title").arg(title);
     }
@@ -127,7 +129,7 @@ impl UpdateWindow {
             }
             // no log yet in the helper: a missing window only leaves the
             // switch silent, as it was
-            self.child = spawn(None, None, false).ok();
+            self.child = spawn(None, None, &[], false).ok(); // Folderstorm: nothing more
             self.send(&Message::Version(version.to_owned()));
         }
         self.send(&Message::Step(Step::Update(step)));
@@ -209,7 +211,9 @@ pub fn close() {
 /// The splash process, then its steps until the viewer shows.
 fn feed(started: Instant) {
     let cli = crate::cli::get();
-    let mut child = match spawn(cli.title.as_deref(), cli.language.as_deref(), true) {
+    // Folderstorm: a character's profile and slot (folderstorm_characters/splash.rs)
+    let extra = crate::folderstorm_characters::splash::arguments();
+    let mut child = match spawn(cli.title.as_deref(), cli.language.as_deref(), &extra, true) {
         Ok(c) => c,
         Err(e) => {
             log::warn!("startup splash: not started ({e})");

@@ -33,6 +33,10 @@
 //! - [`foreground`]: the window brought to the front without releasing an
 //!   Alt key the user holds (the global hotkeys).
 //!
+//! A splash per character (follow-up to the upstream startup splash):
+//! - [`splash`]: a character's splash names it, in its language, and the
+//!   host's characters' splashes do not stack.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod chat_export;
@@ -41,6 +45,7 @@ pub mod host;
 pub mod managed;
 pub mod profile;
 pub mod profile_copy;
+pub mod splash;
 pub mod transport;
 
 use ::folderstorm_session::behind::{self, Behind3d};

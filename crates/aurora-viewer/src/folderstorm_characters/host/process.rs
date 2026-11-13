@@ -138,10 +138,16 @@ impl Drop for Viewer {
     }
 }
 
-/// The arguments of a character's viewer: its profile, `--managed`, and
-/// the host's own language and title when it was given them.
-fn arguments(profile: &ProfileName, language: Option<&str>, title: Option<&str>) -> Vec<String> {
-    let mut args = vec!["--profile".to_owned(), profile.shown().to_owned(), "--managed".to_owned()];
+/// The arguments of a character's viewer: its profile, `--managed`, its
+/// slot (where its startup splash sits, `splash.rs`), and the host's own
+/// language and title when it was given them.
+fn arguments(profile: &ProfileName, slot: usize, language: Option<&str>, title: Option<&str>) -> Vec<String> {
+    let mut args = vec![
+        "--profile".to_owned(),
+        profile.shown().to_owned(),
+        "--managed".to_owned(),
+        super::super::splash::slot_argument(slot),
+    ];
     if let Some(language) = language {
         args.extend(["--language".to_owned(), language.to_owned()]);
     }
@@ -165,7 +171,7 @@ pub fn spawn(slot: usize, launch: u32, profile: &ProfileName, events: &Sender<Ev
     let cli = crate::cli::get();
     let mut command = Command::new(std::env::current_exe()?);
     command
-        .args(arguments(profile, cli.language.as_deref(), cli.title.as_deref()))
+        .args(arguments(profile, slot, cli.language.as_deref(), cli.title.as_deref()))
         // the demo's "start a host" is the host's, not its viewers'
         .env_remove(super::DEMO_VARIABLE)
         .stdin(Stdio::piped());
@@ -530,9 +536,24 @@ mod tests {
     #[test]
     fn a_character_s_viewer_gets_its_profile_and_never_a_login() {
         let name = ProfileName::parse("Alt1").expect("name");
-        assert_eq!(arguments(&name, None, None), ["--profile", "Alt1", "--managed"]);
-        let args = arguments(&name, Some("fr"), Some("Test host"));
-        assert_eq!(args, ["--profile", "Alt1", "--managed", "--language", "fr", "--title", "Test host"]);
+        assert_eq!(
+            arguments(&name, 0, None, None),
+            ["--profile", "Alt1", "--managed", "--folderstorm-slot=0"]
+        );
+        let args = arguments(&name, 2, Some("fr"), Some("Test host"));
+        assert_eq!(
+            args,
+            [
+                "--profile",
+                "Alt1",
+                "--managed",
+                "--folderstorm-slot=2",
+                "--language",
+                "fr",
+                "--title",
+                "Test host"
+            ]
+        );
         assert!(!args.iter().any(|a| a == "--login" || a == "--url" || a == "--session-host"));
     }
 
