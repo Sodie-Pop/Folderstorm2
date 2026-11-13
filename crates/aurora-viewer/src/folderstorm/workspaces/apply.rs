@@ -52,6 +52,8 @@ const ARRIVED: f32 = 1.0;
 const RETRIES: u8 = 2;
 /// Frames a window is given to take a request before it is looked at.
 const TAKEN_AFTER: u64 = 2;
+/// Seconds a card that asks nothing stays up.
+const TOLD_FOR: f64 = 12.0;
 /// Frames the interface is given to take the viewer window's new size
 /// before the layout's windows are placed in it.
 const RESIZED_AFTER: u64 = 2;
@@ -191,6 +193,8 @@ struct Session {
     report: Option<Report>,
     viewer: viewer::State,
     notice: Option<Notice>,
+    /// When the card was put up, in seconds.
+    notice_at: f64,
     /// What the menu's view was made from ([`menu::stamp`]).
     menu: u64,
 }
@@ -627,10 +631,9 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
             Request::Previous => outcome.save |= previous(ctx, live),
             Request::Unlock => outcome.save |= unlock(live.store),
             Request::Preferences => outcome.preferences = true,
-            Request::Dismiss => {}
+            // (an apply and a way back take the card away themselves)
+            Request::Dismiss => session(ctx, |s| s.notice = None),
         }
-        // any answer takes the card away
-        session(ctx, |s| s.notice = None);
     }
 }
 
@@ -649,8 +652,14 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcom
     let found = s.viewer.frame(ctx, live.store, seen, &mut outcome.commands);
     outcome.save |= found.save;
     let mut apply_now = None;
+    let t = ctx.input(|i| i.time);
     if let Some(setup) = &found.setup {
         (s.notice, apply_now) = on_setup(live.store, setup, found.unlocked);
+        s.notice_at = t;
+    }
+    // a card that only tells goes away by itself; one that asks waits
+    if matches!(s.notice, Some(Notice::Applied { .. } | Notice::Unlocked)) && t - s.notice_at > TOLD_FOR {
+        s.notice = None;
     }
     if found.placed
         && let Some(queued) = &mut s.queued
@@ -673,7 +682,10 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcom
     {
         outcome.save = true;
         let name = live.store.layout(index).map(|layout| layout.name.clone());
-        session(ctx, |s| s.notice = name.map(|name| Notice::Applied { name }));
+        session(ctx, |s| {
+            s.notice = name.map(|name| Notice::Applied { name });
+            s.notice_at = t;
+        });
     }
     outcome
 }

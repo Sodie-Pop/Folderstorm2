@@ -324,7 +324,11 @@ pub fn name_error(name: &str) -> Option<NameError> {
 /// Two names are the same layout's: equal ignoring case and the spaces
 /// around them.
 pub fn same_name(a: &str, b: &str) -> bool {
-    tidy(a).to_lowercase() == tidy(b).to_lowercase()
+    // (asked every frame while a layout holds the window: no allocation)
+    tidy(a)
+        .chars()
+        .flat_map(char::to_lowercase)
+        .eq(tidy(b).chars().flat_map(char::to_lowercase))
 }
 
 fn finite(values: &[f32]) -> bool {

@@ -227,6 +227,7 @@ pub struct Watch {
 
 impl Watch {
     /// The setup last settled on.
+    #[cfg(test)]
     pub fn settled(&self) -> Option<&[Monitor]> {
         self.settled.as_deref()
     }

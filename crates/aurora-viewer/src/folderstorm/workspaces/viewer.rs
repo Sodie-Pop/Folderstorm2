@@ -192,8 +192,10 @@ impl State {
                 let plan = asked.plan.filter(|plan| asked.missing == 0 && plan.hold != Hold::FREE);
                 self.complete = plan.is_some();
                 match plan {
-                    // put back over its monitors, without its border
-                    Some(plan) if !plan.hold.decorated => {
+                    // not where the layout has it (Aurora reopens a
+                    // stretched window smaller, and any window with its
+                    // border): put back, then held
+                    Some(plan) if !plan.is_there(&seen) => {
                         self.running = Some(Steps::new(plan));
                         return found;
                     }

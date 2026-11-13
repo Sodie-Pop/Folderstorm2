@@ -205,6 +205,14 @@ fn a_restart_locks_again_when_the_monitors_are_all_there() {
     assert!(!next.seen().resizable);
     assert!(next.store.window_held);
     assert_eq!(next.pretend().log, [Command::Resizable(false)], "locked, and not moved");
+    // a restart where Aurora reopened the stretched window smaller (its
+    // 80 % rule): put back as the layout has it, then locked
+    let mut next = v.restarted();
+    next.window = Some(Pretend::new(192, 108, 1536, 864));
+    next.settle();
+    assert_eq!((next.seen().outer, next.seen().inner), (Some((0, 0)), (3840, 1040)));
+    assert!(!next.seen().resizable);
+    assert!(!next.modified());
     // the same restart with the right monitor unplugged: left free
     let mut next = v.restarted();
     next.monitors = vec![LEFT];
@@ -700,6 +708,24 @@ fn the_card_s_buttons_apply_or_put_it_away() {
     v.settle();
     assert_eq!(v.store.active_layout.as_deref(), Some("Wide"));
     assert_eq!(v.notice(), None);
+    // left alone, a card that only tells goes away by itself
+    v.plug();
+    v.monitors = vec![LEFT];
+    v.frames(200);
+    v.settle();
+    assert!(matches!(v.notice(), Some(Notice::Applied { .. })));
+    v.frames(13 * 60);
+    assert_eq!(v.notice(), None);
+    // one that asks waits for its answer
+    v.store.on_monitor_change = MonitorPolicy::Ask;
+    v.plug();
+    assert!(matches!(v.notice(), Some(Notice::Offer { .. })));
+    v.frames(13 * 60);
+    assert!(matches!(v.notice(), Some(Notice::Offer { .. })));
+    // the menu's other entries leave it up
+    menu::ask(&v.ctx, Request::Preferences);
+    v.frames(3);
+    assert!(matches!(v.notice(), Some(Notice::Offer { .. })));
 }
 
 #[test]
@@ -900,6 +926,6 @@ fn the_card_and_the_menu_are_drawn() {
         tr!("fs-layouts-previous").to_owned(),
         tr!("fs-layouts-unlock").to_owned(),
     ] {
-        assert!(texts.iter().any(|t| *t == expected), "“{expected}” is drawn");
+        assert!(texts.contains(&expected), "“{expected}” is drawn");
     }
 }

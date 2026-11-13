@@ -29,7 +29,8 @@ impl App {
             self.folderstorm_viewer_command(window, *command);
         }
         if outcome.preferences {
-            self.panels.settings = true;
+            // as the Me menu's Preferences does, on our tab
+            ui::widgets::open_floater(&self.egui_ctx, "options", &mut self.panels.settings);
             self.options_ui.open(ui::options::Page::Layout, 3);
         }
         if outcome.save {

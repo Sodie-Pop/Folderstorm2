@@ -116,6 +116,43 @@ pub struct Plan {
     pub hold: Hold,
 }
 
+/// A window this close to its goal, in pixels, is there already (a start,
+/// a window made anew: nothing to move).
+const THERE: i32 = 4;
+
+/// Whether `seen` has the inside `size` and, where both are known, the
+/// outer corner `at`, within `slack` pixels.
+fn stands(seen: &Seen, at: Option<(i32, i32)>, size: (u32, u32), slack: i32) -> bool {
+    let near = |a: i32, b: i32| (i64::from(a) - i64::from(b)).abs() <= i64::from(slack);
+    let sized = near(to_i32(seen.inner.0), to_i32(size.0)) && near(to_i32(seen.inner.1), to_i32(size.1));
+    let placed = match (at, seen.outer) {
+        (Some((x, y)), Some((sx, sy))) => near(x, sx) && near(y, sy),
+        _ => true,
+    };
+    sized && placed
+}
+
+impl Plan {
+    /// Whether the window is already as the goal has it: only the hold is
+    /// left to give.
+    pub fn is_there(&self, seen: &Seen) -> bool {
+        let windowed = !seen.fullscreen && !seen.minimized;
+        match self.goal {
+            Goal::Normal { maximized: true, .. } => windowed && seen.decorated && seen.maximized,
+            Goal::Normal { at, size, .. } => windowed && seen.decorated && !seen.maximized && stands(seen, at, size, THERE),
+            Goal::Borderless {
+                rect: [x, y, width, height],
+            } => {
+                windowed
+                    && !seen.decorated
+                    && !seen.maximized
+                    && stands(seen, Some((x, y)), (width.max(1) as u32, height.max(1) as u32), THERE)
+            }
+            Goal::Fullscreen { on } => seen.fullscreen && on.is_none(),
+        }
+    }
+}
+
 /// Seconds the window is given to leave full screen.
 const LEAVE: f64 = 1.5;
 /// Seconds it is given to take or lose its border.
@@ -283,18 +320,12 @@ impl Steps {
 
     /// The window is where the goal puts it.
     fn arrived(&self, seen: &Seen) -> bool {
-        let near = |a: i32, b: i32| (a - b).abs() <= NEAR;
-        let sized = |size: (u32, u32)| near(to_i32(seen.inner.0), to_i32(size.0)) && near(to_i32(seen.inner.1), to_i32(size.1));
-        let placed = |at: Option<(i32, i32)>| match (at, seen.outer) {
-            (Some((x, y)), Some((sx, sy))) => near(x, sx) && near(y, sy),
-            _ => true,
-        };
         match self.plan.goal {
-            Goal::Normal { at, size, .. } => sized(size) && placed(at),
+            Goal::Normal { at, size, .. } => stands(seen, at, size, NEAR),
             Goal::Borderless {
                 rect: [x, y, width, height],
-            } => sized((width.max(1) as u32, height.max(1) as u32)) && placed(Some((x, y))),
-            Goal::Fullscreen { on } => placed(on),
+            } => stands(seen, Some((x, y)), (width.max(1) as u32, height.max(1) as u32), NEAR),
+            Goal::Fullscreen { on } => stands(seen, on, seen.inner, NEAR),
         }
     }
 }
