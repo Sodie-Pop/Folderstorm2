@@ -830,6 +830,186 @@ checkpoint's report.
   and Win+arrows on a locked window; borderless over two monitors; restart
   while locked.
 
+#### Checkpoint 4 in detail (2026-11-13)
+
+Written before the build, from `claude/workspaces-cp3` at `2f93583` (PR #48,
+not merged: this checkpoint is stacked on it). What differs from the
+sketches of sections 7 to 10 is said here; "As built" below is filled in
+when the checkpoint is done.
+
+**Scope.** The third part of a layout, the *viewer window*, in its three
+modes, with the lock; the automatic unlock; the notice when the monitors
+change; World › Layouts. And two of checkpoint 3's known limits: the
+diagram's bars for *Around the world*, and a window first opened after an
+apply being watched for the "modified" mark. Not here: the switcher, the
+toolbar toggle, favorites and shortcuts (5), workspaces (6).
+
+**1. Store.** A layout gains `window`, absent on every layout saved so far
+(the viewer window is then left alone, as today):
+
+```json
+"window": { "mode": "normal", "x": -8, "y": 0, "width": 3840, "height": 1040,
+            "maximized": false, "locked": true }
+"window": { "mode": "fullscreen", "monitor": 0 }
+"window": { "mode": "borderless", "monitors": [0, 1], "locked": true }
+```
+
+- Desktop pixels. `x`, `y` are the window's outer corner as the system
+  gives it (absent where it does not: Wayland), `width`, `height` its
+  inside: the pair winit reads and sets, so a save and an apply agree
+  whatever the invisible borders of Windows are.
+- `monitor` and `monitors` are places in the layout's own `monitors` list.
+- The store gains `window_held` (the active layout's lock or borderless
+  mode is in force: what a restart puts back) and `on_monitor_change`
+  (`"ask"`, the default, `"apply"` or `"nothing"`; an unknown word reads as
+  `"ask"`).
+- Limits: the frame within ±32 768 pixels, sizes of 1 to 32 768, monitor
+  places inside the list, no place twice. A layout that breaks one is kept
+  as read and never applied, like the others. A file written here and read
+  by checkpoint 3's build keeps `window` untouched (`Layout::other`).
+
+**2. Monitors** (`monitors.rs`, pure): two setups are the same when they
+hold the same monitors (place, size, scale) in any order; which of a
+layout's monitors are present; the rectangle covering chosen monitors; the
+start-up test of `App::resumed` (the title bar's corner on a monitor); a
+watch that reports a new setup once it has not changed for 2 s; and the
+rules of section 8.5, as one function from (saved frame, saved monitors,
+monitors of now, window of now) to what is asked of the window:
+
+| Saved | Asked of the window |
+|---|---|
+| Normal | Position only if its title bar lands on a monitor of now, else left where it is; size cut to the rectangle covering the monitors of now, and never under the viewer's minimum (800 × 560 points); maximized as saved. Locked only if every monitor of the layout is present |
+| Full screen on monitor N | Aurora's full screen on N; N missing: on the monitor the window is on |
+| Borderless over monitors | No border, over the chosen monitors still present; none present: left alone. Locked only if every monitor of the layout is present |
+| any, where the system gives no monitor list | Normal: the size only. Full screen: where the window is. Borderless: left alone |
+
+**3. The window, step by step** (`window.rs`, pure). The module never
+touches winit. Each frame the app tells it what the window is like
+(`Seen`: inside size, outer corner, scale, maximized, full screen,
+minimized, border, resizable, and which window it is) and runs the
+commands it gets back (`Command`: full screen on or off, maximized, border,
+resizable, position, size). Applying a frame is a small machine fed by
+`Seen`:
+
+1. unlock; leave full screen if the goal is not full screen (through
+   Aurora's own setting, so its saved "windowed" geometry stays right) and
+   wait until the window says so;
+2. leave maximized, set the border, wait until the window says so (or
+   0.5 s);
+3. position and size; wait until the window reports the size asked, or 10
+   frames without change, or 1.5 s (section 8.2);
+4. maximize or enter full screen if the goal says so; lock.
+
+Only then are the layout's windows placed (they are fitted to the
+interface of that moment, and the report's "fitted" count is taken then).
+A new apply replaces the machine. No viewer window to drive (a capture, a
+forced size, no window yet): the window part is skipped and the rest
+applies as in checkpoint 3.
+
+**4. Lock** (`viewer.rs`). What is wanted of the window comes from the
+store alone: `window_held` and the active layout's frame give *locked*
+(not resizable) and *borderless* (no border), or neither. The keeper
+compares that with what it last asked and sends the difference, so:
+
+- **Unlock** (World › Layouts, Preferences) clears `window_held`: border
+  and resizing come back at once; the window keeps its place and size.
+- Applying a layout without a lock, or without a window part, unlocks.
+- Entering Aurora's full screen unlocks.
+- A monitor setup that has lost one of the layout's monitors unlocks (once
+  settled, 2 s).
+- A window made anew (GPU recovery) is locked again; at start a held
+  layout is locked again when its monitors are all present, a borderless
+  one put back over them, and otherwise `window_held` is cleared. All of it
+  once the world shows, like the rest of the layouts (section 8.7).
+- Nothing is ever sent to a window no layout holds: without layouts the
+  viewer window behaves exactly as Aurora's.
+
+**5. Save, Update, Previous, modified.**
+
+- *Save as a new layout* gains the part *Viewer window* and the box *Lock
+  the window size*. It records the window of now (section 8.1): Aurora's
+  full screen → full screen on its monitor; no border and exactly over
+  monitors → borderless over them; else normal (maximized: with the normal
+  geometry Aurora remembers for it). Ticking the lock locks at once.
+- *Update* reads the window again for a layout that has the part and keeps
+  that layout's lock box.
+- *Previous arrangement* brings the window back too, when the apply it
+  undoes moved it; the lock in force then comes back with it.
+- *Modified*: the window is compared with what it was once the apply had
+  settled (as the windows are): more than 4 pixels of position or size, or
+  another maximized or full-screen state, marks the layout.
+- The selected layout's window can be edited in the tab: mode (Normal /
+  Full screen / Borderless over monitors), the monitors on a small picture
+  of the layout's monitors (click to choose), the lock box. Editing the
+  layout in use marks it modified; *Apply* then does it.
+
+**6. When the monitors change** (`viewer.rs`, section 8.5). The setup is
+read from what `publish_monitors` already publishes each second. Once a
+new setup has held for 2 s: the automatic unlock above, then by
+`on_monitor_change`:
+
+- *Ask*: a card at the top of the world, "Your monitors changed. Use the
+  layout “1 monitor”?" [Apply] [Not now], for the first layout of the list
+  saved on exactly this setup, unless the layout in use is already one.
+  No such layout and the window was just unlocked: the card says so, [OK].
+- *Apply the matching layout*: applied at once; the card says which, with
+  [Go back] (Previous arrangement) and [OK].
+- *Do nothing*: no card.
+
+The card is not modal, never takes the keyboard, and goes away when a
+layout is applied or the monitors change again. The first setup seen in a
+session is only noted: nothing is offered at start (section 8.3).
+
+**7. World › Layouts** (`menu.rs`): the usable layouts (a click applies;
+the one in use ticked), *Layouts…* (Preferences › Layout › Layouts until
+the switcher of checkpoint 5), *Previous arrangement*, and *Unlock the
+viewer window* while it is held. The menu has no access to the settings:
+it reads a small view the frame call publishes when the list changes, and
+leaves requests the next frame call runs.
+
+**8. Preferences.** The tab gains: the *Viewer window* part and the lock
+box in *Save as a new layout*; a lock on the lines of locked layouts; the
+window editor of point 5; under *Arrangement*, *Unlock the viewer window*
+and *When the monitors change* (Ask / Apply the matching layout / Do
+nothing).
+
+**9. Checkpoint 3's limits.**
+
+- The diagram draws the bars where the settings put them: for *Around the
+  world*, on the area `viewport::bars::around` gives with the bars'
+  thickness as last measured, so a side with room shows its bars in the
+  margin and a side without shows them inside; as thick as they are, to
+  scale (at least 2 points of the diagram).
+- A window of the layout the baseline did not know (never shown before in
+  this session) joins the baseline the first time it is seen, and is
+  watched from then on.
+
+**10. Demo.** `AURORA_DEMO_LAYOUTS=toggle` applies "Wide" and "Single" in
+turn every 5 s; `=lock` gives "Wide" a locked viewer window and applies
+it; `=unplug`, with two pretend monitors in `AURORA_DEMO_MONITORS`, takes
+the last one away after 10 s (the card offers "Single"). The viewer-window
+part needs a real window: not under `AURORA_WINDOW_SIZE` or a capture.
+
+**11. Upstream hooks** (each marked `// Folderstorm:`), beside checkpoint
+3's: `ui/bars.rs`, World menu: one call (section 10); `app.rs`, interface
+pass: one call drawing the card, beside the session host's notice. This is
+section 10's "one call showing the switcher", brought forward: checkpoint
+5 draws the switcher from the same call. The three catalogues;
+`docs/TESTING.md`.
+
+**12. Tests.** Pure: the store's new fields and limits, a file from
+checkpoint 3 read unchanged; `monitors` (same setup in any order, missing,
+covering rectangle, title bar with negative coordinates, the watch's 2 s,
+each row of the table above); `window` (the machine against a pretend
+window that answers at once, late, or never: every wait and every
+timeout; a replaced apply). Frame tests with a pretend viewer window:
+save → apply → same frame; the windows placed only once the window has
+its size; lock, unlock, the lock after a "restart" and after a new
+window; full screen unlocks; a lost monitor unlocks and offers the
+matching layout; the three policies; Previous; the modified mark of the
+window; a newly shown window watched. The tab, the card and the menu
+drawn with the software painter.
+
 ### Checkpoint 5: switcher and quick toggle (row 1.5)
 
 - Switcher with filter, Enter, favorites, Save new, Update, preview;
