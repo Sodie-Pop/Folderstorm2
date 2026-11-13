@@ -32,6 +32,7 @@ pub enum BarsPlace {
 }
 
 impl BarsPlace {
+    #[cfg(test)]
     pub const ALL: [Self; 3] = [Self::Inside, Self::Around, Self::Window];
 
     /// The choice the settings hold. `bars_around` only counts with
