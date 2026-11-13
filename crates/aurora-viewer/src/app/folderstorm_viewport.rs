@@ -76,7 +76,6 @@ impl App {
             in_mouselook: mode != "mouselook-full",
             bars_in_viewport: mode != "bars-window",
             bars_around: mode == "bars-around",
-            ..Default::default()
         };
         if mode == "inventory" {
             let ppp = self.egui_ctx.pixels_per_point();

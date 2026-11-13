@@ -237,6 +237,36 @@ window or barely under it says why it cannot; that margins set too large with
 the sliders show a dashed outline and the note that the world fills the
 window; and that with `wayland` the window is drawn alone.
 
+**Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
+demo's own settings, opens Inventory, the world map and People, and opens
+Preferences › Layout › Layouts. "Wide" has the world on the right half of the
+window with the bars around it and the three windows in the left margin;
+"Single" has no viewport and the windows over the world. `apply-wide` applies
+"Wide" by itself at frame 180; `apply-single` applies "Wide" then, at frame
+360, "Single". Try it on a wide window:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test layouts"
+```
+
+Check that a click selects a layout and Apply (or a double click) moves the
+world, the bars and the three windows, and says how many windows it placed;
+that the layout in use shows "In use", then "In use · modified" within a
+second of moving one of its windows or changing the viewport, until Update
+(which asks first) or another Apply; that "Previous arrangement" goes back and
+forth; that "Save as a new layout" refuses an empty or taken name and saves
+only the ticked parts; that Rename, Delete (asks first) and the arrows work;
+that a window closed when a layout is applied takes its place when opened; and
+that "Reset bars and world" turns the viewport off without moving a window.
+Preferences itself is never moved. The bars' three places are under
+Preferences › Layout › Bars and windows › World viewport › Bars;
+`AURORA_DEMO_VIEWPORT=bars-around` shows "Around the world" alone: the world
+on the right two thirds with an eighth of the height free above and below, the
+top bars above the world, the bottom bar below it and a side toolbar (add one
+with `AURORA_DEMO_TOOLBAR=side`) in the left margin.
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
@@ -5887,6 +5917,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world) |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
+| `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself. `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
