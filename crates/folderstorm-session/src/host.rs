@@ -29,14 +29,26 @@
 //!   plain background character again, its 3D off. The active character
 //!   has no monitor: it is in front. A character whose monitor is open is
 //!   not minimised behind (a minimised window has no picture).
+//! - **The bar (checkpoint 8).** What the bar shows of the desk
+//!   ([`Desk::bar_state`]) and what its clicks do ([`Desk::bar_request`]):
+//!   nothing the host's own window could not do. "Mute background sound"
+//!   cuts every background character whatever its own choice; "Voice
+//!   follows active" off leaves the voice with the character that holds
+//!   it ([`Desk::voice_holder`]): still one voice, given up before it is
+//!   given. While the bar is docked and the user wants one taskbar
+//!   button, a character behind the active one is asked off the taskbar
+//!   (`Assignment::off_taskbar`), never when no character is in front.
 
+use crate::bar;
 use crate::behind::Behind3d;
 use crate::hotkeys;
 use crate::identity::{self, AliasError, Colour};
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
 use crate::monitor::{self, FrameHeader, MAX_MONITORS};
+use crate::monitor_windows;
 use crate::panels;
 use crate::profile::ProfileName;
+use crate::settings;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -89,6 +101,16 @@ pub struct SlotConfig {
     /// Only ever in this file and in the host's windows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
+    /// Checkpoint 9: its monitor's own window (place, pin, chat part).
+    #[serde(default, skip_serializing_if = "monitor_windows::Window::is_default")]
+    pub monitor_window: monitor_windows::Window,
+    /// Checkpoint 10: its questions are listed in Attention.
+    #[serde(default = "settings::yes", skip_serializing_if = "settings::is_yes")]
+    pub attention: bool,
+    /// Checkpoint 10: what sounds the host's alert for it while another
+    /// character is active.
+    #[serde(default, skip_serializing_if = "settings::Alerts::is_default")]
+    pub alerts: settings::Alerts,
 }
 
 /// The host's settings file (`session-host.json`): the characters, and the
@@ -111,6 +133,26 @@ pub struct Config {
     pub panels: panels::Config,
     /// Checkpoint 7: the characters are shown one line each.
     pub condensed: bool,
+    /// Checkpoint 8: the bar, docked in the viewers or popped out.
+    pub bar: bar::Config,
+    /// Checkpoint 8: every background character is cut, whatever its own
+    /// `sound` (which is kept).
+    pub mute_background: bool,
+    /// Checkpoint 8: the voice goes to the character that becomes active
+    /// (as it always did). Off: it stays with the one that holds it.
+    pub voice_follows: bool,
+    /// Checkpoint 9: what a new monitor opens with, and the cycling
+    /// monitor. (Each character's own monitor is with its character.)
+    pub monitors: monitor_windows::Config,
+    /// Checkpoint 10: what the shared chat and the monitors' chat show.
+    pub chat_shown: settings::ChatShown,
+    /// Checkpoint 10: what is read by being shown, and the active
+    /// character's chats read after a while.
+    pub reading: settings::Reading,
+    /// Checkpoint 10: what Attention lists, and in which order.
+    pub attention: settings::Attention,
+    /// Checkpoint 10: the settings window's place and section.
+    pub settings_window: settings::Window,
 }
 
 impl Default for Config {
@@ -123,6 +165,14 @@ impl Default for Config {
             hotkeys: hotkeys::Config::default(),
             panels: panels::Config::default(),
             condensed: false,
+            bar: bar::Config::default(),
+            mute_background: false,
+            voice_follows: true,
+            monitors: monitor_windows::Config::default(),
+            chat_shown: settings::ChatShown::default(),
+            reading: settings::Reading::default(),
+            attention: settings::Attention::default(),
+            settings_window: settings::Window::default(),
         }
     }
 }
@@ -137,6 +187,7 @@ impl Config {
         for mut slot in self.slots {
             // (an alias that is none is dropped, never cut into another)
             slot.alias = slot.alias.and_then(|alias| identity::alias(&alias).ok().flatten());
+            slot.monitor_window = slot.monitor_window.cleaned();
             let Ok(name) = ProfileName::parse(&slot.profile) else {
                 continue;
             };
@@ -152,6 +203,10 @@ impl Config {
         self.stage_rect = self.stage_rect.filter(Stage::valid);
         self.hotkeys = self.hotkeys.cleaned();
         self.panels = self.panels.cleaned();
+        self.bar = self.bar.cleaned();
+        self.monitors = self.monitors.cleaned();
+        self.reading = self.reading.cleaned();
+        self.settings_window = self.settings_window.cleaned();
         self
     }
 
@@ -168,6 +223,9 @@ impl Config {
                     monitor: None,
                     colour: Colour::None,
                     alias: None,
+                    monitor_window: monitor_windows::Window::default(),
+                    attention: true,
+                    alerts: settings::Alerts::default(),
                 })
                 .collect(),
             ..Self::default()
@@ -229,7 +287,13 @@ pub struct Slot {
     pub colour: Colour,
     /// The name the host shows for it in place of its own.
     pub alias: Option<String>,
-    /// Its monitor is on screen in the host's window.
+    /// Checkpoint 9: what is remembered of its monitor's window.
+    pub monitor_window: monitor_windows::Window,
+    /// Checkpoint 10: its questions are listed in Attention.
+    pub attention: bool,
+    /// Checkpoint 10: what sounds the host's alert for it.
+    pub alerts: settings::Alerts,
+    /// Its monitor is on screen in one of the host's windows.
     seen: bool,
     pub phase: Phase,
     /// The viewer's last report.
@@ -263,6 +327,9 @@ impl Slot {
             monitor: None,
             colour: Colour::None,
             alias: None,
+            monitor_window: monitor_windows::Window::default(),
+            attention: true,
+            alerts: settings::Alerts::default(),
             seen: false,
             phase: Phase::Stopped,
             status: None,
@@ -281,6 +348,24 @@ impl Slot {
             placed: None,
             starting_since: None,
         }
+    }
+
+    /// The avatar's name once logged in, the profile's before.
+    pub fn real_name(&self) -> &str {
+        match self.status.as_ref().filter(|s| !s.name.is_empty()) {
+            Some(status) => &status.name,
+            None => self.profile.shown(),
+        }
+    }
+
+    /// The name it is shown by: its alias when it has one.
+    pub fn shown_name(&self) -> &str {
+        self.alias.as_deref().unwrap_or_else(|| self.real_name())
+    }
+
+    /// Logged in: its viewer runs and is in the world.
+    pub fn in_world(&self) -> bool {
+        self.phase == Phase::Running && self.status.as_ref().is_some_and(|s| s.screen == Screen::World)
     }
 
     /// Its process is there and managed (or on its way to be).
@@ -355,6 +440,24 @@ pub struct Desk {
     hotkeys: hotkeys::Config,
     panels: panels::Config,
     condensed: bool,
+    bar: bar::Config,
+    mute_background: bool,
+    voice_follows: bool,
+    /// With `voice_follows` off: the character the voice stays with.
+    voice_home: Option<usize>,
+    /// Checkpoint 9: the monitors' defaults and the cycling monitor.
+    monitors: monitor_windows::Config,
+    /// Checkpoint 10: what the chats show, reading, Attention, the
+    /// settings window.
+    chat_shown: settings::ChatShown,
+    reading: settings::Reading,
+    attention: settings::Attention,
+    settings_window: settings::Window,
+    /// The character the cycling monitor shows on screen now.
+    cycling_seen: Option<usize>,
+    /// Monitors that moved from one character to another since the
+    /// windows last looked ([`Desk::take_monitor_moves`]).
+    monitor_moves: Vec<(usize, usize)>,
     quitting: Option<Instant>,
     effects: Vec<Effect>,
 }
@@ -381,7 +484,7 @@ pub enum Watch {
 /// What a character's quick action does now (plan section 13): the one
 /// button, and the one hotkey, that does the right thing for where its
 /// viewer is. Whatever it is, a slot never gets a second process.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Quick {
     /// It runs behind the active character: it becomes the active one.
     Switch,
@@ -398,6 +501,7 @@ pub enum Quick {
     Restart,
     /// Nothing can be done now: it is closing, its viewer runs unmanaged,
     /// "Quit all" is under way, or the slot is empty.
+    #[default]
     Nothing,
 }
 
@@ -417,13 +521,19 @@ pub enum Voice {
 }
 
 #[cfg(test)]
+mod bar_tests;
+#[cfg(test)]
 mod comfort_tests;
 #[cfg(test)]
 mod monitor_tests;
 #[cfg(test)]
+mod monitor_window_tests;
+#[cfg(test)]
 mod panel_tests;
 #[cfg(test)]
 mod polish_tests;
+#[cfg(test)]
+mod settings_tests;
 
 impl Desk {
     pub fn new(config: Config) -> Self {
@@ -436,6 +546,9 @@ impl Desk {
                     monitor: s.monitor,
                     colour: s.colour,
                     alias: s.alias,
+                    monitor_window: s.monitor_window,
+                    attention: s.attention,
+                    alerts: s.alerts,
                     ..Slot::new(name, s.standby)
                 });
             }
@@ -449,6 +562,17 @@ impl Desk {
             hotkeys: config.hotkeys,
             panels: config.panels,
             condensed: config.condensed,
+            bar: config.bar,
+            mute_background: config.mute_background,
+            voice_follows: config.voice_follows,
+            voice_home: None,
+            monitors: config.monitors,
+            chat_shown: config.chat_shown,
+            reading: config.reading,
+            attention: config.attention,
+            settings_window: config.settings_window,
+            cycling_seen: None,
+            monitor_moves: Vec::new(),
             quitting: None,
             effects: Vec::new(),
         }
@@ -467,6 +591,9 @@ impl Desk {
                     monitor: s.monitor,
                     colour: s.colour,
                     alias: s.alias.clone(),
+                    monitor_window: s.monitor_window,
+                    attention: s.attention,
+                    alerts: s.alerts,
                 })
                 .collect(),
             stage: self.stage,
@@ -475,7 +602,139 @@ impl Desk {
             hotkeys: self.hotkeys.clone(),
             panels: self.panels,
             condensed: self.condensed,
+            bar: self.bar.clone(),
+            mute_background: self.mute_background,
+            voice_follows: self.voice_follows,
+            monitors: self.monitors,
+            chat_shown: self.chat_shown,
+            reading: self.reading,
+            attention: self.attention,
+            settings_window: self.settings_window,
         }
+    }
+
+    /// Checkpoint 10: what the shared chat and the monitors' chat show.
+    pub fn chat_shown(&self) -> settings::ChatShown {
+        self.chat_shown
+    }
+
+    pub fn set_chat_shown(&mut self, shown: settings::ChatShown) {
+        if std::mem::replace(&mut self.chat_shown, shown) != shown {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: reading.
+    pub fn reading(&self) -> settings::Reading {
+        self.reading
+    }
+
+    pub fn set_reading(&mut self, reading: settings::Reading) {
+        let reading = reading.cleaned();
+        if std::mem::replace(&mut self.reading, reading) != reading {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: what Attention lists.
+    pub fn attention(&self) -> settings::Attention {
+        self.attention
+    }
+
+    pub fn set_attention(&mut self, attention: settings::Attention) {
+        if std::mem::replace(&mut self.attention, attention) != attention {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// A question of that kind, of that character, is listed in
+    /// Attention.
+    pub fn attention_lists(&self, slot: usize, kind: crate::ipc::AttentionKind) -> bool {
+        let included = self.slot(slot).is_none_or(|s| s.attention);
+        self.attention.lists(included, kind)
+    }
+
+    /// Checkpoint 10: the character's questions are listed in Attention.
+    pub fn set_attention_included(&mut self, slot: usize, included: bool) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.attention != included) {
+            s.attention = included;
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: what sounds the host's alert for the character.
+    pub fn set_alerts(&mut self, slot: usize, alerts: settings::Alerts) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.alerts != alerts) {
+            s.alerts = alerts;
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// A new line of that kind, in a conversation of that kind, of a
+    /// character that is not the active one, calls for the host's alert
+    /// by the character's own choice (the alert sounds when
+    /// [`Desk::chat_sound`] is on too).
+    pub fn alert_wanted(&self, slot: usize, conversation: crate::ipc::SessionKind, line: crate::ipc::LineKind) -> bool {
+        self.active != Some(slot) && self.slot(slot).is_some_and(|s| s.alerts.sounds(conversation, line))
+    }
+
+    /// Checkpoint 10: the settings window's place and section.
+    pub fn settings_window(&self) -> settings::Window {
+        self.settings_window
+    }
+
+    /// Changes what is remembered of the settings window; saved when that
+    /// changed something.
+    pub fn edit_settings_window(&mut self, edit: impl FnOnce(&mut settings::Window)) {
+        let mut window = self.settings_window;
+        edit(&mut window);
+        let window = window.cleaned();
+        if std::mem::replace(&mut self.settings_window, window) != window {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// Checkpoint 10: two characters' cards may swap their places (their
+    /// numbers, for their hotkeys and quick actions): neither has a viewer
+    /// or an open monitor, so that nothing running changes number. Never
+    /// while "Quit all" is under way.
+    pub fn can_swap(&self, slot: usize, other: usize) -> bool {
+        let still = |s: &Slot| !s.has_process() && s.monitor.is_none();
+        slot != other && self.quitting.is_none() && self.slot(slot).is_some_and(still) && self.slot(other).is_some_and(still)
+    }
+
+    /// The card before (`up`) or after this character's, if any: the one
+    /// it would swap with.
+    pub fn neighbour_card(&self, slot: usize, up: bool) -> Option<usize> {
+        if up {
+            (0..slot).rev().find(|i| self.slot(*i).is_some())
+        } else {
+            (slot + 1..MAX_SLOTS).find(|i| self.slot(*i).is_some())
+        }
+    }
+
+    /// Two characters' cards swap their places ([`Desk::can_swap`]). Each
+    /// place keeps its own count of launches (what comes from an earlier
+    /// launch of a place is dropped by its number). True when they did.
+    pub fn swap_slots(&mut self, slot: usize, other: usize) -> bool {
+        if !self.can_swap(slot, other) {
+            return false;
+        }
+        self.slots.swap(slot, other);
+        let (a, b) = (
+            self.slots[slot].as_ref().map(|s| s.launch),
+            self.slots[other].as_ref().map(|s| s.launch),
+        );
+        if let (Some(a), Some(b)) = (a, b) {
+            if let Some(s) = self.slots[slot].as_mut() {
+                s.launch = b;
+            }
+            if let Some(s) = self.slots[other].as_mut() {
+                s.launch = a;
+            }
+        }
+        self.effects.push(Effect::Save);
+        true
     }
 
     /// The characters, with their slot numbers.
@@ -581,8 +840,10 @@ impl Desk {
         self.sync(None);
     }
 
-    /// Checkpoint 7: a character's colour in the host's windows. Nothing
-    /// is told to its viewer.
+    /// Checkpoint 7: a character's colour in the host's windows. The desk
+    /// sends no message for it: since checkpoint 8 it is part of the bar's
+    /// state, which the host hands to the viewers it manages for their
+    /// bar and nothing else.
     pub fn set_colour(&mut self, slot: usize, colour: Colour) {
         let Some(s) = self.slot_mut(slot).filter(|s| s.colour != colour) else {
             return;
@@ -592,8 +853,9 @@ impl Desk {
     }
 
     /// Checkpoint 7: the name the host shows for a character in place of
-    /// its own; an empty text takes the alias away. Nothing is told to
-    /// its viewer. A text that is no alias changes nothing.
+    /// its own; an empty text takes the alias away. As the colour: no
+    /// message of the desk's, only the bar's state. A text that is no
+    /// alias changes nothing.
     pub fn set_alias(&mut self, slot: usize, text: &str) -> Result<(), AliasError> {
         let alias = identity::alias(text)?;
         if let Some(s) = self.slot_mut(slot).filter(|s| s.alias != alias) {
@@ -700,12 +962,24 @@ impl Desk {
         (self.quick_act(slot, now) != Quick::Nothing).then_some(slot)
     }
 
+    /// The character the voice belongs with: the active one while the
+    /// voice follows; otherwise the one it stays with for as long as its
+    /// viewer runs, then the active one again.
+    pub fn voice_holder(&self) -> Option<usize> {
+        if self.voice_follows {
+            return self.active;
+        }
+        self.voice_home
+            .filter(|home| self.slot(*home).is_some_and(|s| s.phase == Phase::Running))
+            .or(self.active)
+    }
+
     /// What a character holds of the voice.
     pub fn voice(&self, slot: usize) -> Voice {
         let Some(s) = self.slot(slot).filter(|s| s.phase == Phase::Running) else {
             return Voice::Off;
         };
-        if self.active != Some(slot) {
+        if self.voice_holder() != Some(slot) {
             return if s.voice_out { Voice::GivingUp } else { Voice::Off };
         }
         if let Some(other) = self.voice_waits_for() {
@@ -716,6 +990,173 @@ impl Desk {
             Voice::Allowed
         } else {
             Voice::Off
+        }
+    }
+
+    /// Checkpoint 8: the bar's settings.
+    pub fn bar(&self) -> &bar::Config {
+        &self.bar
+    }
+
+    /// Changes the bar's settings; true when something changed (it is
+    /// then saved, and the viewers' assignments follow: the taskbar's
+    /// rule depends on where the bar is).
+    pub fn edit_bar(&mut self, edit: impl FnOnce(&mut bar::Config)) -> bool {
+        let mut edited = self.bar.clone();
+        edit(&mut edited);
+        let edited = edited.cleaned();
+        if edited == self.bar {
+            return false;
+        }
+        self.bar = edited;
+        self.effects.push(Effect::Save);
+        self.sync(None);
+        true
+    }
+
+    /// Every background character is cut, whatever its own choice.
+    pub fn mute_background(&self) -> bool {
+        self.mute_background
+    }
+
+    pub fn set_mute_background(&mut self, mute: bool) {
+        if self.mute_background != mute {
+            self.mute_background = mute;
+            self.effects.push(Effect::Save);
+            self.sync(None);
+        }
+    }
+
+    /// The voice goes to the character that becomes active.
+    pub fn voice_follows(&self) -> bool {
+        self.voice_follows
+    }
+
+    /// Off: the voice stays with the character that holds it now. On: it
+    /// goes to the active one, once the one that held it gave it up.
+    pub fn set_voice_follows(&mut self, follows: bool) {
+        if self.voice_follows != follows {
+            // (where it stays is where it is)
+            self.voice_home = self.voice_holder();
+            self.voice_follows = follows;
+            self.effects.push(Effect::Save);
+            self.sync(None);
+        }
+    }
+
+    /// What the bar shows of the desk. `inbox`: how many questions wait;
+    /// `chat_unread`: the shared chat's unread lines.
+    pub fn bar_state(&self, inbox: u32, chat_unread: u32) -> bar::State {
+        bar::State {
+            docked: self.bar.placement == bar::Placement::Docked,
+            collapsed: self.bar.collapsed,
+            characters: self
+                .slots()
+                .map(|(i, s)| bar::Character {
+                    slot: i as u8,
+                    name: s.shown_name().to_owned(),
+                    real: s.alias.as_ref().map(|_| s.real_name().to_owned()),
+                    colour: s.colour,
+                    presence: match (s.in_world(), self.active == Some(i)) {
+                        (false, _) => bar::Presence::Out,
+                        (true, true) => bar::Presence::Active,
+                        (true, false) => bar::Presence::Inactive,
+                    },
+                    quick: self.quick(i),
+                    monitor: s.monitor.is_some(),
+                })
+                .collect(),
+            inbox,
+            chat_open: self.panels.out(panels::Panel::Chat),
+            chat_unread,
+            cycling: self.monitors.cycling.open,
+            mute_background: self.mute_background,
+            voice_follows: self.voice_follows,
+            quick: self.bar.quick.clone(),
+            quick_labels: self.bar.quick_labels,
+            toolbar_labels: self.bar.toolbar_labels,
+            span_window: self.bar.span_window,
+        }
+        .cleaned()
+    }
+
+    /// How many viewers draw the docked bar now: managed, with a window,
+    /// not closing.
+    pub fn bars_shown(&self) -> usize {
+        if self.bar.placement != bar::Placement::Docked {
+            return 0;
+        }
+        self.slots()
+            .filter(|(_, s)| s.phase == Phase::Running && !s.closing && s.status.as_ref().is_some_and(|st| st.screen != Screen::Starting))
+            .count()
+    }
+
+    /// A click on the bar, from a viewer or from the host's compact
+    /// window: what the desk does for it. What concerns the host's
+    /// windows alone ([`bar::Request::Show`], the pin) is the host's.
+    /// Nothing here does more than the host's own window does: a pick is
+    /// the character's quick action, a monitor is the card's choice.
+    pub fn bar_request(&mut self, request: bar::Request, now: Instant) {
+        if !request.valid() {
+            return;
+        }
+        match request {
+            bar::Request::Pick(slot) => {
+                self.quick_act(usize::from(slot), now);
+            }
+            bar::Request::OpenLogin(asked) => {
+                // only ever a character that is not logged in: never a
+                // switch to one that is
+                let state = self.bar_state(0, 0);
+                let slot = match asked {
+                    Some(slot) => state.logins().find(|c| c.slot == slot).map(|c| c.slot),
+                    None => state.next_login().map(|c| c.slot),
+                };
+                if let Some(slot) = slot {
+                    self.quick_act(usize::from(slot), now);
+                }
+            }
+            bar::Request::Chat(open) => self.set_panel_out(panels::Panel::Chat, open),
+            // (checkpoint 9: each monitor has its own window)
+            bar::Request::Monitor(slot, open) => {
+                let slot = usize::from(slot);
+                if open {
+                    self.open_monitor(slot);
+                } else {
+                    self.set_monitor(slot, None);
+                }
+            }
+            bar::Request::OpenMonitors => {
+                let behind: Vec<usize> = self
+                    .slots()
+                    .filter(|(i, s)| s.in_world() && self.active != Some(*i) && s.monitor.is_none())
+                    .map(|(i, _)| i)
+                    .collect();
+                for slot in behind {
+                    self.open_monitor(slot);
+                }
+            }
+            bar::Request::CloseMonitors => {
+                for slot in 0..MAX_SLOTS {
+                    self.set_monitor(slot, None);
+                }
+                self.set_cycling(false);
+            }
+            bar::Request::Cycling(open) => self.set_cycling(open),
+            bar::Request::Inbox => self.set_panel_out(panels::Panel::Inbox, true),
+            bar::Request::MuteBackground(mute) => self.set_mute_background(mute),
+            bar::Request::VoiceFollows(follows) => self.set_voice_follows(follows),
+            bar::Request::Dock(docked) => {
+                let placement = if docked { bar::Placement::Docked } else { bar::Placement::Popped };
+                self.edit_bar(|bar| bar.placement = placement);
+            }
+            bar::Request::Collapse(collapsed) => {
+                self.edit_bar(|bar| bar.collapsed = collapsed);
+            }
+            bar::Request::Pin(pinned) => {
+                self.edit_bar(|bar| bar.pinned = pinned);
+            }
+            bar::Request::Show(_) => {}
         }
     }
 
@@ -761,6 +1202,142 @@ impl Desk {
         self.sync(None);
     }
 
+    /// Opens a character's monitor with the size and rate a new monitor
+    /// has ([`monitor_windows::Config::defaults`]); one that is open
+    /// keeps its own.
+    pub fn open_monitor(&mut self, slot: usize) {
+        if self.slot(slot).is_some_and(|s| s.monitor.is_none()) {
+            self.set_monitor(slot, Some(self.monitors.defaults));
+        }
+    }
+
+    /// Checkpoint 9: the monitors' defaults and the cycling monitor.
+    pub fn monitors(&self) -> &monitor_windows::Config {
+        &self.monitors
+    }
+
+    /// Changes them; true when something changed (it is then saved, and
+    /// the viewers' assignments follow: the cycling monitor asks for
+    /// pictures too).
+    pub fn edit_monitors(&mut self, edit: impl FnOnce(&mut monitor_windows::Config)) -> bool {
+        let mut edited = self.monitors;
+        edit(&mut edited);
+        let edited = edited.cleaned();
+        if edited == self.monitors {
+            return false;
+        }
+        self.monitors = edited;
+        if !edited.cycling.open {
+            self.cycling_seen = None;
+        }
+        self.effects.push(Effect::Save);
+        self.sync(None);
+        true
+    }
+
+    /// Opens or closes the cycling monitor.
+    pub fn set_cycling(&mut self, open: bool) {
+        self.edit_monitors(|monitors| monitors.cycling.open = open);
+    }
+
+    /// Changes what is remembered of a character's monitor's window (its
+    /// place, its pin, its chat part); true when something changed. No
+    /// viewer is told anything of it.
+    pub fn edit_monitor_window(&mut self, slot: usize, edit: impl FnOnce(&mut monitor_windows::Window)) -> bool {
+        let Some(s) = self.slot_mut(slot) else {
+            return false;
+        };
+        let mut edited = s.monitor_window;
+        edit(&mut edited);
+        if edited == s.monitor_window {
+            return false;
+        }
+        s.monitor_window = edited;
+        self.effects.push(Effect::Save);
+        true
+    }
+
+    /// The monitors that moved from one character to another since the
+    /// last call, each (from, to), in the order they moved: the host
+    /// moves their windows the same way.
+    pub fn take_monitor_moves(&mut self) -> Vec<(usize, usize)> {
+        std::mem::take(&mut self.monitor_moves)
+    }
+
+    /// A monitor follows the character that is not in front
+    /// ([`monitor_windows::follow`]): `to` came to the front, `from` left
+    /// it. The monitor of `to`, with its window, becomes `from`'s; what
+    /// `from` remembered of a window of its own becomes `to`'s.
+    fn monitor_follows(&mut self, from: Option<usize>, to: usize) {
+        let open: [bool; MAX_SLOTS] = std::array::from_fn(|slot| self.slot(slot).is_some_and(|s| s.monitor.is_some()));
+        // (a character whose viewer is gone left nothing to watch)
+        let from = from.filter(|from| self.slot(*from).is_some_and(|s| s.phase == Phase::Running && !s.closing));
+        let Some((to, from)) = monitor_windows::follow(open, from, to) else {
+            return;
+        };
+        let Some((spec, window)) = self.slot_mut(to).map(|s| (s.monitor.take(), s.monitor_window)) else {
+            return;
+        };
+        if let Some(s) = self.slot_mut(to) {
+            s.seen = false;
+        }
+        let Some(s) = self.slot_mut(from) else {
+            return;
+        };
+        s.monitor = spec;
+        let left = std::mem::replace(&mut s.monitor_window, window);
+        // (seen until the window says otherwise: it is the same window)
+        s.seen = true;
+        if let Some(s) = self.slot_mut(to) {
+            s.monitor_window = left;
+        }
+        self.monitor_moves.push((to, from));
+        self.effects.push(Effect::Save);
+    }
+
+    /// The character the cycling monitor shows on screen now (None: its
+    /// window is closed, hidden, minimised or covered, or shows nobody).
+    /// Only that character is asked for the cycling monitor's pictures.
+    pub fn cycling_seen(&mut self, slot: Option<usize>, now: Instant) {
+        let slot = slot.filter(|slot| self.monitors.cycling.open && self.slot(*slot).is_some());
+        if std::mem::replace(&mut self.cycling_seen, slot) != slot {
+            self.sync(Some(now));
+        }
+    }
+
+    /// The characters the cycling monitor goes round, in slot order: in
+    /// the world, behind the active one, not closing.
+    pub fn cycling_candidates(&self) -> Vec<usize> {
+        self.slots()
+            .filter(|(i, s)| Some(*i) != self.active && s.in_world() && !s.closing)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Where the cycling monitor is with that character ([`Desk::watch`],
+    /// for the cycling monitor's window).
+    pub fn cycling_watch(&self, slot: usize) -> Watch {
+        let cycling = self.monitors.cycling;
+        let Some(s) = self.slot(slot).filter(|_| cycling.open) else {
+            return Watch::Closed;
+        };
+        if s.phase != Phase::Running || s.closing {
+            Watch::NoViewer
+        } else if self.active == Some(slot) {
+            Watch::InFront
+        } else if self.cycling_seen != Some(slot) {
+            Watch::Hidden
+        } else {
+            match self.orders()[slot] {
+                Some(order) => Watch::Asked {
+                    order,
+                    lowered: order.interval_ms > cycling.spec.rate.interval_ms(),
+                },
+                None => Watch::TooMany,
+            }
+        }
+    }
+
     /// Which monitors are on screen in one of the host's windows now
     /// (`panels::seen`): none of a window that is minimised or hidden. A monitor nobody can see
     /// asks nothing of its viewer.
@@ -778,12 +1355,18 @@ impl Desk {
     }
 
     /// The characters watched now, in slot order: running in the
-    /// background, not closing, their monitor open and on screen. The
-    /// first [`MAX_MONITORS`] only.
+    /// background, not closing, their monitor open and on screen, or
+    /// shown by the cycling monitor (both: the larger size and the faster
+    /// rate of the two). The first [`MAX_MONITORS`] only.
     fn watched(&self) -> Vec<(usize, monitor::Spec)> {
+        let cycling = self.monitors.cycling;
         self.slots()
-            .filter(|(i, s)| Some(*i) != self.active && s.phase == Phase::Running && !s.closing && s.seen)
-            .filter_map(|(i, s)| s.monitor.map(|spec| (i, spec)))
+            .filter(|(i, s)| Some(*i) != self.active && s.phase == Phase::Running && !s.closing)
+            .filter_map(|(i, s)| {
+                let own = s.monitor.filter(|_| s.seen);
+                let cycled = (cycling.open && self.cycling_seen == Some(i)).then_some(cycling.spec);
+                monitor_windows::cover(own, cycled).map(|spec| (i, spec))
+            })
             .take(MAX_MONITORS)
             .collect()
     }
@@ -858,6 +1441,14 @@ impl Desk {
             sound: s.sound,
             monitor: s.monitor,
             seen: s.seen,
+            // (the user's settings of the character are its own, whatever
+            // its launches: checkpoint 10 found the colour, the alias and
+            // the monitor's window dropped here)
+            colour: s.colour,
+            alias: s.alias.take(),
+            monitor_window: s.monitor_window,
+            attention: s.attention,
+            alerts: s.alerts,
             phase: Phase::Starting,
             ..Slot::new(s.profile.clone(), s.standby)
         };
@@ -885,7 +1476,7 @@ impl Desk {
             self.activate(slot, true, now);
         } else {
             self.sync(Some(now));
-            if self.slot(slot).is_some_and(|s| s.waits() == Standby::Economy) {
+            if self.slot(slot).is_some_and(|s| self.waits(s) == Standby::Economy) {
                 self.send(slot, ToViewer::Minimise);
             }
         }
@@ -1091,6 +1682,21 @@ impl Desk {
             .is_some_and(|since| now.saturating_duration_since(since) >= START_NOTE_AFTER)
     }
 
+    /// How long the viewer has been on its way, from its launch until it
+    /// shows its first frame (its first report past [`Screen::Starting`]):
+    /// shown beside "Starting…", so that a slow start never looks stuck.
+    /// None when it is not starting.
+    pub fn starting_for(&self, slot: usize, now: Instant) -> Option<Duration> {
+        let s = self.slot(slot)?;
+        let on_its_way = match s.phase {
+            Phase::Starting => true,
+            Phase::Running => !s.closing && s.status.as_ref().is_none_or(|st| st.screen == Screen::Starting),
+            _ => false,
+        };
+        let since = s.starting_since.filter(|_| on_its_way)?;
+        Some(now.saturating_duration_since(since))
+    }
+
     /// How a viewer answers. Never a reason to end it.
     pub fn health(&self, slot: usize, now: Instant) -> Health {
         let Some(s) = self.slot(slot).filter(|s| s.phase == Phase::Running) else {
@@ -1106,11 +1712,11 @@ impl Desk {
         }
     }
 
-    /// The character whose voice the active one waits for: it was allowed
-    /// voice and has not said it gave it up.
+    /// The character whose voice the one that should hold it waits for:
+    /// it was allowed voice and has not said it gave it up.
     pub fn voice_waits_for(&self) -> Option<usize> {
-        let active = self.active?;
-        self.slots().find(|(i, s)| *i != active && s.voice_out).map(|(i, _)| i)
+        let holder = self.voice_holder()?;
+        self.slots().find(|(i, s)| *i != holder && s.voice_out).map(|(i, _)| i)
     }
 
     /// Another running slot logged in on the same account and grid.
@@ -1126,6 +1732,13 @@ impl Desk {
             .map(|(i, _)| i)
     }
 
+    /// How a character waits behind: as [`Slot::waits`], and never
+    /// minimised while the cycling monitor is open (it shows every
+    /// background character in turn).
+    fn waits(&self, s: &Slot) -> Standby {
+        if self.monitors.cycling.open { Standby::Warm } else { s.waits() }
+    }
+
     fn send(&mut self, slot: usize, message: ToViewer) {
         if let Some(s) = self.slot(slot).filter(|s| s.live()) {
             let launch = s.launch;
@@ -1137,6 +1750,9 @@ impl Desk {
     /// forward (not when the user already went to it).
     fn activate(&mut self, slot: usize, show: bool, now: Instant) {
         let before = self.active.replace(slot);
+        // (checkpoint 9) a monitor follows the character that is not in
+        // front: this one's becomes the monitor of the one that left
+        self.monitor_follows(before, slot);
         // roles first: each window knows what it is before it moves
         self.sync(Some(now));
         if show {
@@ -1150,7 +1766,7 @@ impl Desk {
         if let Some(before) = before.filter(|b| *b != slot)
             && self
                 .slot(before)
-                .is_some_and(|s| s.phase == Phase::Running && s.waits() == Standby::Economy)
+                .is_some_and(|s| s.phase == Phase::Running && self.waits(s) == Standby::Economy)
         {
             self.send(before, ToViewer::Minimise);
         }
@@ -1160,12 +1776,21 @@ impl Desk {
     /// when it is sent (None: nothing can have changed but the standby).
     fn sync(&mut self, now: Option<Instant>) {
         let active = self.active;
+        // (with the voice not following, it stays where it is now)
+        let holder = self.voice_holder();
+        self.voice_home = holder.filter(|_| !self.voice_follows);
+        let mute_background = self.mute_background;
+        let cycling_open = self.monitors.cycling.open;
+        // one taskbar button: only behind a character that is in front
+        let someone_in_front = active.is_some_and(|a| self.slot(a).is_some_and(|s| s.phase == Phase::Running));
+        let one_button = self.bar.one_taskbar_button && self.bar.placement == bar::Placement::Docked && someone_in_front;
         for (slot, order) in self.orders().into_iter().enumerate() {
             let voice_held_elsewhere = self.slots().any(|(i, s)| i != slot && s.voice_out);
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running) else {
                 continue;
             };
             let is_active = active == Some(slot);
+            let holds_voice = holder == Some(slot);
             let mut wanted = Assignment {
                 seq: 0,
                 role: match order {
@@ -1174,9 +1799,12 @@ impl Desk {
                     None => Role::Background,
                 },
                 behind: Behind3d::Off,
-                standby: s.waits(),
-                sound_muted: !is_active && s.sound == BackgroundSound::Muted,
-                voice_allowed: is_active && !voice_held_elsewhere,
+                standby: if cycling_open { Standby::Warm } else { s.waits() },
+                // (a character that holds the voice behind is heard: a
+                // viewer that is cut neither plays nor transmits it)
+                sound_muted: !is_active && (mute_background || (s.sound == BackgroundSound::Muted && !holds_voice)),
+                voice_allowed: holds_voice && !voice_held_elsewhere,
+                off_taskbar: one_button && !is_active,
             };
             if s.sent.is_some_and(|(sent, _)| Assignment { seq: 0, ..sent } == wanted) {
                 continue;
@@ -1249,6 +1877,9 @@ mod tests {
             monitor: None,
             colour: Colour::None,
             alias: None,
+            monitor_window: monitor_windows::Window::default(),
+            attention: true,
+            alerts: settings::Alerts::default(),
         };
         let config = Config {
             slots: vec![
@@ -1272,6 +1903,7 @@ mod tests {
             hotkeys: hotkeys::Config::default(),
             panels: panels::Config::default(),
             condensed: false,
+            ..Config::default()
         }
         .cleaned();
         assert!(config.chat_sound);
@@ -1621,7 +2253,18 @@ mod tests {
         assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: true });
         assert_eq!(d.active(), None);
         let effects = d.take_effects();
-        assert!(sends(&effects, 1).is_empty(), "slot 1 keeps its assignment");
+        // slot 1 stays what it was: a background character, where it is.
+        // (Checkpoint 8: with nobody in front it gets its taskbar button
+        // back, the one thing its new assignment changes.)
+        let kept = assigned(&d, 1);
+        assert_eq!(
+            sends(&effects, 1),
+            vec![&ToViewer::Assign(Assignment {
+                off_taskbar: false,
+                ..kept
+            })]
+        );
+        assert_eq!((kept.role, kept.sound_muted, kept.voice_allowed), (Role::Background, true, false));
         assert!(!effects.iter().any(|e| matches!(e, Effect::Kill { .. } | Effect::Spawn { .. })));
         // Restart: the same profile again, never by itself
         d.switch(0, now);
@@ -1720,6 +2363,32 @@ mod tests {
         // it reports at last: no note any more
         d.connected(0, 1, now + START_NOTE_AFTER);
         assert!(!d.starting_too_long(0, now + START_NOTE_AFTER * 2));
+    }
+
+    #[test]
+    fn a_starting_viewer_shows_how_long_until_its_first_frame() {
+        let (mut d, now) = desk(1);
+        assert_eq!(d.starting_for(0, now), None, "not started");
+        d.launch(0, true);
+        d.tick(now);
+        let later = now + Duration::from_secs(12);
+        assert_eq!(d.starting_for(0, later), Some(Duration::from_secs(12)));
+        // linked, its window not drawn yet: still on its way
+        d.connected(0, 1, later);
+        assert_eq!(d.starting_for(0, later), Some(Duration::from_secs(12)));
+        let starting = Status {
+            screen: Screen::Starting,
+            ..Status::default()
+        };
+        d.status(0, 1, starting.clone(), later);
+        assert!(d.starting_for(0, later).is_some());
+        // its first frame: the login screen
+        let login = Status {
+            screen: Screen::Login,
+            ..starting
+        };
+        d.status(0, 1, login, later);
+        assert_eq!(d.starting_for(0, later), None);
     }
 
     #[test]

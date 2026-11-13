@@ -53,8 +53,20 @@ impl App {
         photo_viewport::set_area(&self.egui_ctx, area);
     }
 
-    /// The world's part of a window of `size` this frame, None for all of it.
+    /// The world's part of a window of `size` this frame, None for all of
+    /// it: under the session host's bar when the bar is over the world
+    /// viewport (`app/folderstorm_characters/bar.rs`).
     pub(super) fn world_viewport(&self, size: (u32, u32)) -> Option<[u32; 4]> {
+        let world = self.whole_world_viewport(size)?;
+        Some(match self.folderstorm_bar_strip(size) {
+            Some(crate::folderstorm_characters::bar::Strip::World(strip)) => crate::folderstorm_characters::bar::world_under(world, strip),
+            _ => world,
+        })
+    }
+
+    /// The world's part of a window of `size` this frame by the viewport's
+    /// settings alone, before the session host's bar takes its strip.
+    pub(super) fn whole_world_viewport(&self, size: (u32, u32)) -> Option<[u32; 4]> {
         viewport::world_rect(size, &self.settings.folderstorm_viewport, self.viewport_overrides())
     }
 

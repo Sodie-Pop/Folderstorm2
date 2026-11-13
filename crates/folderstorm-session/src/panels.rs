@@ -1,7 +1,9 @@
 //! Checkpoint 6 of the session host, pop-out panels (session-host plan,
-//! section 7): the host's chat, its characters' controls and its monitors
-//! can each leave the host's window for a window of their own, and come
-//! back.
+//! section 7): the host's chat, its characters' controls and (checkpoint
+//! 7) its inbox can each leave the host's window for a window of their
+//! own, and come back. (The monitors were a panel until checkpoint 9
+//! gave each of them a window of its own: `monitor_windows`. A settings
+//! file that still has `panels.monitors` reads; it is not written again.)
 //!
 //! The rules, all pure:
 //! - which panels are out, and where their windows were ([`Config`]),
@@ -22,24 +24,21 @@ pub enum Panel {
     Chat,
     /// The characters and what can be done with each.
     Controls,
-    /// The background characters' pictures.
-    Monitors,
     /// Checkpoint 7: what waits for an answer, across all characters.
     Inbox,
 }
 
 /// How many panels there are.
-pub const PANELS: usize = 4;
+pub const PANELS: usize = 3;
 
 impl Panel {
-    pub const ALL: [Panel; PANELS] = [Panel::Chat, Panel::Controls, Panel::Monitors, Panel::Inbox];
+    pub const ALL: [Panel; PANELS] = [Panel::Chat, Panel::Controls, Panel::Inbox];
 
     pub fn index(self) -> usize {
         match self {
             Panel::Chat => 0,
             Panel::Controls => 1,
-            Panel::Monitors => 2,
-            Panel::Inbox => 3,
+            Panel::Inbox => 2,
         }
     }
 
@@ -48,7 +47,6 @@ impl Panel {
         match self {
             Panel::Chat => "chat",
             Panel::Controls => "controls",
-            Panel::Monitors => "monitors",
             Panel::Inbox => "inbox",
         }
     }
@@ -59,7 +57,6 @@ impl Panel {
         match self {
             Panel::Chat => [620, 640],
             Panel::Controls => [540, 720],
-            Panel::Monitors => [700, 520],
             Panel::Inbox => [520, 380],
         }
     }
@@ -68,7 +65,7 @@ impl Panel {
 /// The smallest window of a panel, in the screen's points.
 pub const MIN_SIZE: [u32; 2] = [360, 280];
 
-/// The panels named in a list such as `chat,monitors` (the demo's
+/// The panels named in a list such as `chat,inbox` (the demo's
 /// variable), each once, in the panels' own order. Unknown names are
 /// dropped; `all` names them all.
 pub fn parse_list(list: &str) -> Vec<Panel> {
@@ -127,7 +124,6 @@ pub struct PanelConfig {
 pub struct Config {
     pub chat: PanelConfig,
     pub controls: PanelConfig,
-    pub monitors: PanelConfig,
     /// (absent from a file of before checkpoint 7: docked)
     pub inbox: PanelConfig,
 }
@@ -137,7 +133,6 @@ impl Config {
         match panel {
             Panel::Chat => self.chat,
             Panel::Controls => self.controls,
-            Panel::Monitors => self.monitors,
             Panel::Inbox => self.inbox,
         }
     }
@@ -146,7 +141,6 @@ impl Config {
         match panel {
             Panel::Chat => &mut self.chat,
             Panel::Controls => &mut self.controls,
-            Panel::Monitors => &mut self.monitors,
             Panel::Inbox => &mut self.inbox,
         }
     }
@@ -318,8 +312,10 @@ mod tests {
 
     #[test]
     fn the_demo_s_list_names_panels() {
-        assert_eq!(parse_list("chat,monitors"), [Panel::Chat, Panel::Monitors]);
-        assert_eq!(parse_list(" Monitors , chat ,chat"), [Panel::Chat, Panel::Monitors]);
+        assert_eq!(parse_list("chat,inbox"), [Panel::Chat, Panel::Inbox]);
+        assert_eq!(parse_list(" Inbox , chat ,chat"), [Panel::Chat, Panel::Inbox]);
+        // (the monitors are no panel since checkpoint 9: a name of before)
+        assert_eq!(parse_list("chat,monitors"), [Panel::Chat]);
         assert_eq!(parse_list("characters"), [Panel::Controls]);
         assert_eq!(parse_list("controls"), [Panel::Controls]);
         assert_eq!(parse_list("all"), Panel::ALL);
@@ -337,7 +333,7 @@ mod tests {
         assert!(Panel::ALL.into_iter().all(|panel| !panels.out(panel)));
         assert!(panels.set_out(Panel::Chat, true));
         assert!(!panels.set_out(Panel::Chat, true), "already out");
-        assert!(panels.out(Panel::Chat) && !panels.out(Panel::Controls) && !panels.out(Panel::Monitors));
+        assert!(panels.out(Panel::Chat) && !panels.out(Panel::Controls) && !panels.out(Panel::Inbox));
         let at = place(100, 80, 600, 500);
         assert!(panels.placed(Panel::Chat, at));
         assert!(!panels.placed(Panel::Chat, at), "the same place changes nothing");
@@ -360,13 +356,13 @@ mod tests {
     fn closing_a_panel_s_window_docks_it_and_nothing_else() {
         let mut panels = Config::default();
         panels.set_out(Panel::Chat, true);
-        panels.set_out(Panel::Monitors, true);
-        panels.placed(Panel::Monitors, place(10, 10, 700, 500));
-        assert!(panels.closed(Panel::Monitors));
-        assert!(!panels.out(Panel::Monitors));
+        panels.set_out(Panel::Inbox, true);
+        panels.placed(Panel::Inbox, place(10, 10, 700, 500));
+        assert!(panels.closed(Panel::Inbox));
+        assert!(!panels.out(Panel::Inbox));
         assert!(panels.out(Panel::Chat), "the other panels stay where they are");
-        assert_eq!(panels.get(Panel::Monitors).place, Some(place(10, 10, 700, 500)));
-        assert!(!panels.closed(Panel::Monitors), "closed twice: nothing more");
+        assert_eq!(panels.get(Panel::Inbox).place, Some(place(10, 10, 700, 500)));
+        assert!(!panels.closed(Panel::Inbox), "closed twice: nothing more");
     }
 
     #[test]
@@ -378,7 +374,8 @@ mod tests {
             r#"{
                 "chat": {"out": true, "place": {"position": [100, 50], "size": [640, 480]}},
                 "controls": {"out": true, "place": {"position": [0, 0], "size": [4000000000, 480]}},
-                "monitors": {"place": {"position": [2000000000, 0], "size": [640, 480]}}
+                "inbox": {"place": {"position": [2000000000, 0], "size": [640, 480]}},
+                "monitors": {"out": true, "place": {"position": [10, 10], "size": [700, 520]}}
             }"#,
         )
         .expect("reads");
@@ -387,7 +384,10 @@ mod tests {
         // the size or the position of no window: the panel is still out,
         // at its first size
         assert_eq!(cleaned.controls, PanelConfig { out: true, place: None });
-        assert_eq!(cleaned.monitors, PanelConfig::default());
+        assert_eq!(cleaned.inbox, PanelConfig::default());
+        // (checkpoint 6's monitors' window, in a file of before
+        // checkpoint 9: read past, and not written again)
+        assert!(!serde_json::to_string(&cleaned).expect("writes").contains("monitors"));
         // a place without a position (Wayland) is a place
         let wayland: PanelConfig = serde_json::from_str(r#"{"out": true, "place": {"size": [640, 480]}}"#).expect("reads");
         assert!(wayland.place.is_some_and(|p| p.valid() && p.position.is_none()));
