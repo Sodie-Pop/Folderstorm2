@@ -826,6 +826,17 @@ mod tests {
             read_frame::<ToHost>(&mut rest).expect("read"),
             ToHost::Bar(bar::Request::Show(bar::Page::Quit))
         );
+        // a bar's state without the word on spanning the window: over the
+        // world viewport, as the default is
+        let mut without = serde_json::to_value(bar::State {
+            docked: true,
+            span_window: true,
+            ..bar::State::default()
+        })
+        .expect("json");
+        without.as_object_mut().expect("an object").remove("span_window");
+        let read = serde_json::from_value::<bar::State>(without).expect("reads");
+        assert!(read.docked && !read.span_window);
         // an assignment of before protocol 4 has no word on the taskbar
         let old = r#"{"seq":3,"role":"Background","behind":"Off","standby":"Warm","sound_muted":true,"voice_allowed":false}"#;
         assert!(!serde_json::from_str::<Assignment>(old).expect("reads").off_taskbar);
