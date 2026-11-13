@@ -689,7 +689,7 @@ mod tests {
         for n in 0..ipc::MAX_ATTENTION {
             w.notifications.push(
                 Kind::Friendship,
-                &format!("Friend {n}"),
+                format!("Friend {n}"),
                 "offers friendship",
                 Data::Friend {
                     from: Uuid::from_u128(n as u128 + 1),
