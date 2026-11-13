@@ -3362,6 +3362,11 @@ impl App {
             };
             let gesture = item.asset_type == 21;
             let id = item.id;
+            // Folderstorm: the local assistant's new item: no rename in the inventory
+            if crate::mcp_bridge::created_by_assistant(id) {
+                self.world.inventory.add_items(vec![item]);
+                return;
+            }
             if self.create_landmark_ui.created(id, item.parent, item.asset_type) {
                 // the Create Landmark window edits it: no rename in the inventory
                 self.world.inventory.add_items(vec![item]);
@@ -11625,6 +11630,7 @@ impl App {
         self.poll_key_to_name();
 
         self.poll_outfit_photo(&gfx.renderer);
+        self.local_assistant_photo(&gfx.renderer); // Folderstorm: the local assistant's pictures
         if let Some(request) = self.inventory_images.capture.take() {
             if self.scene_capture_pending
                 || self.inventory_images.capturing.is_some()
