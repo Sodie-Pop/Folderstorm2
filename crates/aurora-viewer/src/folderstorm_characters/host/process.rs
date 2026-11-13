@@ -940,6 +940,7 @@ mod tests {
             generation,
             conversation,
             text,
+            ..
         }) = viewer_event()
         else {
             panic!("not a line to say");
