@@ -1416,6 +1416,75 @@ folderstorm-viewport-not-under = This monitor is not under the viewer window.
 folderstorm-viewport-too-small = Too little of this monitor is under the viewer window.
 folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
 
+# Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
+fs-layouts-tab = Layouts
+fs-layouts-group = Saved layouts
+fs-layouts-intro = A layout remembers where things go: the world viewport with the bars, and the position and size of your windows. It never opens or closes a window, and never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here.
+fs-layouts-list = Layouts
+fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the world, the bars and the windows where the layout has them. Windows you move afterwards are only saved when you choose Update.
+fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
+fs-layouts-unnamed = (no name)
+fs-layouts-active = In use
+fs-layouts-modified = In use · modified
+fs-layouts-newer = Made by a newer version
+fs-layouts-invalid = Cannot be used
+fs-layouts-newer-help = This layout was made by a newer version of the viewer. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-layouts-invalid-help = This entry of the settings file is not a layout this version can read. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-layouts-apply = Apply
+fs-layouts-update = Update
+fs-layouts-rename = Rename
+fs-layouts-move-up = Move up
+fs-layouts-move-down = Move down
+fs-layouts-ask-update = Replace “{ $name }” with the current arrangement?
+fs-layouts-ask-delete = Delete the layout “{ $name }”?
+fs-layouts-part-world = World viewport and bars
+fs-layouts-part-windows = Window positions
+fs-layouts-holds-windows = { $count ->
+    [one] { $count } window
+   *[other] { $count } windows
+    }
+fs-layouts-holds-monitors = { $count ->
+    [one] saved on { $count } monitor
+   *[other] saved on { $count } monitors
+    }
+fs-layouts-applied = “{ $name }” applied.
+fs-layouts-applied-windows = { $count ->
+    [one] “{ $name }” applied: { $count } window placed.
+   *[other] “{ $name }” applied: { $count } windows placed.
+    }
+fs-layouts-applied-fitted = { $count ->
+    [one] { $count } did not fit the viewer window at its saved place and was fitted for now; the layout itself is unchanged.
+   *[other] { $count } did not fit the viewer window at their saved places and were fitted for now; the layout itself is unchanged.
+    }
+fs-layouts-applied-unknown = { $count ->
+    [one] { $count } window of this layout is not known to this version and was left alone.
+   *[other] { $count } windows of this layout are not known to this version and were left alone.
+    }
+fs-layouts-waiting = { $count ->
+    [one] { $count } closed window will take its place when you open it.
+   *[other] { $count } closed windows will take their places when you open them.
+    }
+fs-layouts-previous-done = Back to the arrangement before.
+fs-layouts-save-group = Save the current arrangement
+fs-layouts-save-new = Save as a new layout
+fs-layouts-save-new-help = Saves where things are now under a new name. Untick a part to leave it out: a layout without window positions only changes the world and the bars, and the other way round.
+fs-layouts-name-hint = Name, for example 2 monitors
+fs-layouts-save = Save
+fs-layouts-error-empty = Give the layout a name.
+fs-layouts-error-long = A name has at most { $count } characters.
+fs-layouts-error-control = A name cannot contain line breaks or tabs.
+fs-layouts-error-taken = Another layout already has this name.
+fs-layouts-error-full = There are already { $count } layouts: delete one first.
+fs-layouts-error-parts = Choose at least one part to save.
+fs-layouts-error-invalid = The current arrangement could not be read. Try again in a moment.
+fs-layouts-arrangement = Arrangement
+fs-layouts-previous = Previous arrangement
+fs-layouts-previous-help = Goes back to the world, the bars and the window positions in place before the last layout was applied, or before Reset bars and world. Pressing it again comes back. Remembered until the viewer closes.
+fs-layouts-previous-button = Go back
+fs-layouts-reset = Reset bars and world
+fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
+fs-layouts-reset-button = Reset
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
 fs-chat-upload-choose-title = Choose an image to upload
