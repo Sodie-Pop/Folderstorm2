@@ -936,40 +936,26 @@ mod tests {
         assert_eq!(w.store(), &saved);
     }
 
-    /// The picture of the tab with a layout in use and modified, another
-    /// one, and an entry from a newer version:
-    /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps it as
-    /// `<folder>/preferences-layouts.png`.
-    #[test]
-    fn the_tab_is_drawn_with_its_list_and_actions() {
+    /// Draws Preferences on `tab` of the Layout page for a few frames with
+    /// the software painter; the texts of the last frame.
+    /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the picture as
+    /// `<folder>/<name>.png`.
+    fn drawn(name: &str, tab: usize, mut s: Settings, cogs: bool) -> Vec<String> {
         let theme = crate::theme::Theme::default();
         let p = theme.skin_palette();
         let ctx = egui::Context::default();
         theme.apply(&ctx, 1.0);
         ctx.all_styles_mut(|s| s.animation_time = 0.0);
         let icons = crate::ui::icons::Icons::load(&ctx, None);
-        let mut s = Settings {
-            folderstorm_workspaces: serde_json::from_value(serde_json::json!({
-                "layouts": [
-                    Layout::new("2 monitors", Some(wide()), None, Vec::new()),
-                    Layout::new("1 monitor", Some(Default::default()), None, Vec::new()),
-                    { "schema": 7, "name": "From a later version" },
-                ],
-                "active_layout": "2 monitors",
-                "modified": true,
-            }))
-            .expect("read"),
-            folderstorm_viewport: wide(),
-            ..Default::default()
-        };
         let mut st = OptionsUi::default();
-        st.open(Page::Layout, 3);
+        st.open(Page::Layout, tab);
+        st.demo_open_cogs = cogs;
         let (width, height) = (1280u32, 900u32);
         let window = Rect::from_min_size(egui::Pos2::ZERO, vec2(width as f32, height as f32));
         let mut pixels = vec![0u32; (width * height) as usize];
         let mut painter = crate::crash::software::Painter::default();
         let mut texts = Vec::new();
-        for frame in 0..6 {
+        for frame in 0..8 {
             let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(window),
@@ -1003,6 +989,36 @@ mod tests {
             );
             output.textures_delta.clear();
         }
+        if let Some(dir) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR") {
+            let rgba: Vec<_> = pixels
+                .iter()
+                .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+                .collect();
+            let path = std::path::Path::new(&dir).join(format!("{name}.png"));
+            image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+        }
+        texts
+    }
+
+    /// The picture of the tab with a layout in use and modified, another
+    /// one, and an entry from a newer version (`preferences-layouts.png`).
+    #[test]
+    fn the_tab_is_drawn_with_its_list_and_actions() {
+        let s = Settings {
+            folderstorm_workspaces: serde_json::from_value(serde_json::json!({
+                "layouts": [
+                    Layout::new("2 monitors", Some(wide()), None, Vec::new()),
+                    Layout::new("1 monitor", Some(Default::default()), None, Vec::new()),
+                    { "schema": 7, "name": "From a later version" },
+                ],
+                "active_layout": "2 monitors",
+                "modified": true,
+            }))
+            .expect("read"),
+            folderstorm_viewport: wide(),
+            ..Default::default()
+        };
+        let texts = drawn("preferences-layouts", 3, s, false);
         for icon in [
             ICON_CHECK,
             ICON_SAVE,
@@ -1029,13 +1045,24 @@ mod tests {
         ] {
             assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }
-        if let Some(dir) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR") {
-            let rgba: Vec<_> = pixels
-                .iter()
-                .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
-                .collect();
-            let path = std::path::Path::new(&dir).join("preferences-layouts.png");
-            image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+    }
+
+    /// The bars' three places are one choice of the World viewport group
+    /// (`preferences-bars-place.png`).
+    #[test]
+    fn the_bars_place_is_one_choice_of_three() {
+        let s = Settings {
+            folderstorm_viewport: wide(),
+            ..Default::default()
+        };
+        let texts = drawn("preferences-bars-place", 0, s, true);
+        for expected in [
+            tr!("folderstorm-viewport-bars"),
+            tr!("folderstorm-viewport-bars-inside"),
+            tr!("folderstorm-viewport-bars-around"),
+            tr!("folderstorm-viewport-bars-window"),
+        ] {
+            assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }
     }
 }
