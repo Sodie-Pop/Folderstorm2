@@ -3,9 +3,9 @@
 Step 3 of the MCP parity order: the foundation that the later tool groups
 need (navigation, uploads, content editing, object dialogs, task scripts,
 history and undo, session routing). Checkpoint 1 is PR #28 and
-checkpoint 2 is built on top of it (see "As built" below); the rest is
-design only. It extends [mcp.md](mcp.md) (phases 1 and 2) and assumes the two open
-catalogue PRs, #21 (camera, `claude/mcp-camera`) and #25 (inventory gaps,
+checkpoint 2 is built on top of it, checkpoints 3 to 5 on
+`claude/mcp-receipts` (see "As built" below). It extends [mcp.md](mcp.md)
+(phases 1 and 2) and assumes the two open catalogue PRs, #21 (camera, `claude/mcp-camera`) and #25 (inventory gaps,
 `claude/mcp-inventory-gaps`), land first: both touch `protocol.rs`,
 `desk.rs` and `mcp_bridge.rs`.
 
@@ -571,6 +571,128 @@ snapshot stopped), one sent left to the server; a thumbnail not sent going
 back to the dialog; access off; and end to end over a real socket (sidecar
 → bridge → desk → studio) a relog between the frame and the photo:
 `session_changed`, nothing captured, never resent, the next call runs.
+
+### Checkpoints 3 to 5: receipts, plans, operations
+
+Branch `claude/mcp-receipts` on `main` (checkpoints 1, 2 and the studio fix
+merged), one commit per checkpoint; PR #45 (session routing) is not on its
+base: nothing here touches the sidecar's routing or the host controller
+beyond one line in `connect.rs` and one in `jsonrpc.rs`'s tool list.
+
+**Checkpoint 3, receipts.**
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/receipts.rs` (new, with `receipts/tests.rs`) | `Store` (admit, duplicates and conflicts, retired ids, eviction, retention, row bound, finish from an answer, late settle, redaction in `Receipt::to_json`), `Ledger` (the frame thread's store, shared by the calls it took), `Tracked` (one call's receipt: its answer ends it), the id helpers |
+| `protocol.rs`, `protocol/assistant.rs` (new) | `ErrorCode::Conflict`; `ToolError::operation_id` (also in `Display`); `ToolSpec::input_schema` (every change takes `client_request_id`); `ToolSpec::bound` also for the `receipts` and `operations` groups; `assistant_operation_status` |
+| `server.rs` | an `operation_id` for each change when it arrives; `Pending::track`, `receipt`, `tracked`; `Pending::answer` ends the receipt and adds `operation_id` and `state`; the listener's own timeout names the operation; `Activity::operation_id`; every change waits the dialog's 60 s on top (a class may go from Allow to Ask while it waits) |
+| `binding.rs` | `receipts: 1`; `check_arguments` (a `client_request_id` needs `receipts`) |
+| viewer `mcp_bridge/desk.rs` | a receipt for every change taken (after the login check), `client_request_id` taken out of the arguments, duplicates and conflicts answered; states `waiting`, `asking`, `queued`, `running`; the user's decision noted; a change not confirmed in 30 s answers `unconfirmed` and keeps listening 10 minutes (16 at most) for the server, a created item or the Image window; `Outcome::Queued` for `moves_queued`; receipts kept at access off, cleared at a login change; `assistant_operation_status` |
+| `mcp_bridge.rs`, `ui/options/pages/local_assistant.rs` | the studio's waits mark their receipts `running`; `Status::receipts`; Recent activity shows a change's line as its summary and state, the program in the tooltip |
+| sidecar `connect.rs`, `jsonrpc.rs` | `check_arguments` before sending; `input_schema` in `tools/list`; the instructions' extra paragraph |
+
+Choices and differences:
+
+- **One exit point**: a call's answer ends its receipt (`Pending::answer`
+  through `Tracked`), so no path of the desk, the studio or the app can
+  forget one. The store is the pure type of the plan, in the bridge crate;
+  the `Ledger` handle each taken call carries is only touched on the frame
+  thread.
+- A call pinned to another login and refused when taken gets **no
+  receipt**: it belongs to no login this desk can show. Calls refused by
+  the listener stay Activity lines only, as planned.
+- Fields beyond the table: `error` (the code it ended with), `times_ms`
+  (Unix milliseconds), `row_counts`; decision `refused_session_changed`.
+  `server_reason` is given with names only (Read on Allow), since a server's
+  message may name an entry.
+- **Duplicates** answer `{operation_id, state, duplicate: true, receipt}`,
+  whatever the first call's end; **conflict** is `409`, mapped to
+  `invalid_arguments` for a sidecar without `receipts`.
+- **Queued moves** (`Reply::moves_queued`): the answer now says
+  `done: false, queued: true` (it said `done: true`), the receipt
+  `unconfirmed` with server `queued`: never `done`.
+- **The Wait answer**: the desk already answers a change 30 s after it was
+  sent, well inside the listener's wait (10 s + the tool's own + 60 s for
+  every change now), with `unconfirmed` and its `operation_id`; the
+  listener's own timeout (a frame thread stalled) carries the
+  `operation_id` too, and the receipt goes on.
+- A camera move, a picture and a thumbnail are `running` from the moment
+  the studio holds them (a queued picture included).
+
+**Checkpoint 4, plans.**
+
+| Where | What |
+|---|---|
+| viewer `folderstorm/bulk_plan.rs` (new) | `Kind`, `Row`, `apply_pattern`, `plan_rename`, `plan_rename_to` (explicit names, new), `plan_move`, `mutation`; `ui/inventory/bulk_review.rs` re-exports them (its tests unchanged) |
+| viewer `mcp_bridge/plans.rs` (new) | `Plans` (5 min, 8 per login, used once), the previews' parsing and rows with the bridge's rules, the frozen execute, `plan` (planned again, must equal), the dialog's lines |
+| `desk.rs`, `changes.rs`, `ask.rs` | previews answered by the desk; an executed plan answers its operation; the execute takes its plan (receipt rows, targets, `plan_id`), carries it frozen in its arguments and decides by `Pending::plan_class`; `Question::detail` under the sentence |
+| bridge `protocol/assistant.rs`, `server.rs` | the three tools; `ErrorCode::Stale` (`not_allowed` for a sidecar without `plans`); `any_decision` (the listener refuses an execute only when Edit and Move are both Never); `plans: 1` |
+
+Choices and differences:
+
+- The frozen plan travels in the call's own arguments, so `changes::plan`
+  stays a pure function and the app's re-plan just before the send checks
+  the rows again with no extra state.
+- `stale` says so and that the plan is gone; it does not carry the new rows
+  (the assistant previews again, which shows them).
+- The execute's answer gives each row's id and outcome; the names stay in
+  the preview and in the receipt (Read-gated).
+- Bridge extras beyond the plan: a pattern for several entries must hold
+  `{name}` or `{n}` (otherwise every row would get the same name); entries
+  under the Marketplace Listings folder are left out with their reason; a
+  destination in the Trash (`inventory_move`'s rule) or the Marketplace
+  folder is refused.
+
+**Checkpoint 5, operations.**
+
+| Where | What |
+|---|---|
+| bridge `protocol.rs`, `protocol/assistant.rs`, `server.rs`, `receipts.rs` | `ErrorCode::Cancelled` (`permission_denied` for a sidecar without `operations`); `assistant_operation_cancel`; `answers_early` (`inventory_execute_plan` with `wait: false`); `Pending::early`, set by the listener only for a sidecar declaring `operations`, and `Pending::answer_early`; `LIVE_MAX` (8) and `Store::live`; `operations: 1` |
+| viewer `desk.rs` | the early answer once the call is asking or queued; `Desk::cancel` (dialog closes, queued call removed, sent: not recalled); 8 live operations per login, 16 questions waiting; the deadline (the listener's whole wait) checked in `recheck`, just before the send |
+| `mcp_bridge.rs`, `ui/options/pages/local_assistant.rs` | `mcp_bridge::cancel`; a Stop button on a live line of Recent activity |
+
+Choices and differences:
+
+- `cancelled` is a new error code (not in the plan's list): a cancelled
+  call that still waits gets it. Preferences' Stop says it was the user.
+- **Multi-step operations**: none exists yet (a plan is one inventory
+  change). The guard is `Desk::recheck`, which every send passes through
+  (`local_assistant_run` → `replan`): login, levels, deadline, then the
+  viewer's rules and a plan's rows. A later multi-step tool calls it before
+  each step; `stopped` is the receipt state of a cancel after a step was
+  sent.
+- The studio's calls (camera, pictures, thumbnails) are not cancelled: once
+  in the studio they have acted or wait for the photo; the cancel answers
+  `cancelled: false` with their state.
+- Lanes are the busy checks that already exist (the inventory window's
+  pending change, Appearance's, the gallery's snapshot); no queue behind
+  them, as planned.
+
+**Tests.** Bridge crate: the store (`receipts/tests.rs`: id forms, text
+cut, duplicates, conflicts, eviction order, live never evicted, busy,
+retention, login change, other login not found, rows bound, every end from
+an answer, late settle, redaction with Read on Never, result ids never other
+values, a tracked answer's `operation_id`), the catalogue (status bound
+without class, `client_request_id` in change schemas, previews as reads,
+execute's class from the plan, cancel bound, early only for `wait: false`),
+the listener (`operation_id` at arrival, in its timeout and in activity;
+`conflict`, `stale`, `cancelled` mapped for older sidecars; execute refused
+only when both classes are Never; early only for a sidecar declaring
+`operations`). Sidecar (`tests/binding.rs`): a `client_request_id` to a
+viewer without `receipts` answers `unsupported`, nothing sent. Viewer
+(`change_tests/receipts.rs`, `plans.rs`, `operations.rs`): a receipt for
+every end (refused in the dialog, approved and confirmed, refused by the
+rules, timed out), one run for a reused id (also while the first waits),
+conflict, status on this login only and names only with Read, no asset id
+in any receipt (full-permission items, a picture from a texture, an answer
+carrying an asset id), a late confirmation, queued moves, access off and a
+login change; the preview's rows equal the native review's, the refusals,
+execute's class, one dialog with five rows and "N more", stale before the
+dialog and before the send, expiry, once, 8 plans, login change, the
+server's three answers in the rows; early answers and polling, cancel while
+asking, queued and sent, Stop, the bounds; end to end over a real socket: a
+retry with the same id, a previewed plan executed after the dialog, a plan
+with `wait: false` polled to `done`.
 
 ## Tests
 

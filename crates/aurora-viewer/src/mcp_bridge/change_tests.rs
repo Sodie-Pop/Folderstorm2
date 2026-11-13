@@ -823,3 +823,6 @@ mod receipts;
 
 /// Batch plans: preview, then execute.
 mod plans;
+
+/// Guarded operations: early answers, cancel, bounds.
+mod operations;

@@ -39,6 +39,9 @@ pub const RECEIPTS: &str = "receipts";
 /// Batch plans (mcp-receipts.md, section 6): the previews,
 /// `inventory_execute_plan`, the `stale` code.
 pub const PLANS: &str = "plans";
+/// Guarded operations (mcp-receipts.md, section 5): early answers,
+/// `assistant_operation_cancel`, the `cancelled` code.
+pub const OPERATIONS: &str = "operations";
 
 /// What this build implements. Later groups add theirs: `plans`,
 /// `operations`…
@@ -48,8 +51,9 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (INVENTORY_GAPS, 1),
     (WORLD, 1),
     (LOGIN_BINDING, 1),
-    (RECEIPTS, 1), // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
-    (PLANS, 1),    // Folderstorm: batch plans (checkpoint 4)
+    (RECEIPTS, 1),   // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
+    (PLANS, 1),      // Folderstorm: batch plans (checkpoint 4)
+    (OPERATIONS, 1), // Folderstorm: guarded operations (checkpoint 5)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -220,7 +224,7 @@ mod tests {
         assert!(missing(&mine).is_empty());
         assert_eq!(
             missing(&assumed()),
-            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS, PLANS]
+            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS, PLANS, OPERATIONS]
         );
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();

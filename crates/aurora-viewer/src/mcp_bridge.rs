@@ -417,6 +417,16 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
     })
 }
 
+/// Folderstorm: Preferences' Stop: the operation is cancelled if it was not
+/// sent yet (folderstorm/plans/mcp-receipts.md, section 5).
+pub fn cancel(operation_id: &str) {
+    with(|rt| {
+        if let Err(e) = rt.desk.cancel(operation_id, true) {
+            log::info!("local assistant: nothing to stop: {e}");
+        }
+    });
+}
+
 /// Folderstorm: whether `item` was just created by the local assistant
 /// (asked once, when the app files it: it then neither selects nor renames
 /// it in the inventory, as Folderstorm (C++) opens no editor for it).

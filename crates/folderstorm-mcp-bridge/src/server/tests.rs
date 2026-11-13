@@ -519,3 +519,29 @@ fn a_plans_execute_is_refused_here_only_when_both_classes_are_never() {
     bridge.stop();
     assert_eq!(viewer.join().expect("responder"), 1);
 }
+
+/// Folderstorm: operations (mcp-receipts.md, section 5): an early answer
+/// only for a sidecar that declares `operations`.
+#[test]
+fn an_early_answer_only_for_a_sidecar_that_declares_operations() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Move, Level::Allow);
+    bridge.set_permissions(permissions);
+    let viewer = std::thread::spawn(move || {
+        let mut early = Vec::new();
+        while let Ok(call) = calls.recv() {
+            early.push(call.early);
+            call.answer(Ok(json!({})));
+        }
+        early
+    });
+    let body = |features: Option<crate::binding::Capabilities>| json!({"tool": "inventory_execute_plan", "arguments": {"plan_id": "p", "wait": false}, "features": features});
+    post(&bridge, &body(Some(crate::binding::capabilities())));
+    post(&bridge, &body(None));
+    let mut older = crate::binding::capabilities();
+    older.remove(crate::binding::OPERATIONS);
+    post(&bridge, &body(Some(older)));
+    bridge.stop();
+    assert_eq!(viewer.join().expect("viewer"), vec![true, false, false]);
+}

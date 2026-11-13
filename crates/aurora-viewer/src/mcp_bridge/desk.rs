@@ -25,15 +25,23 @@
 //! `state`. A `client_request_id` seen before answers the first receipt and
 //! runs nothing. A change the server does not confirm in time answers
 //! `unconfirmed` and keeps listening for its answer ([`LateWait`]).
+//!
+//! Operations (section 5): 8 live per login and 16 questions waiting for
+//! the dialog at most (`busy` beyond); a call asked to answer early does so
+//! once the desk took it ([`Pending::answer_early`]); the assistant's
+//! `assistant_operation_cancel` and Preferences' Stop cancel what has not
+//! been sent ([`Desk::cancel`]); just before the send, a call whose time ran
+//! out is cancelled.
 
 use super::changes::{self, Planned, Work};
 use super::plans::{self, Plans}; // Folderstorm: batch plans
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
-use folderstorm_mcp_bridge::protocol::assistant::EXECUTE_PLAN;
+use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
+use folderstorm_mcp_bridge::server::VIEWER_TIMEOUT;
 use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
@@ -223,6 +231,14 @@ pub const LOGIN_CHANGED: &str =
     "the viewer's login changed while the call waited: refused, nothing was sent. Call viewer_status and look again before retrying";
 /// The user turned local assistant access off while the call waited.
 pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
+/// Folderstorm: questions waiting for the dialog at most (operations).
+pub const ASKS_MAX: usize = 16;
+/// Folderstorm: the assistant cancelled it.
+pub const CANCELLED: &str = "cancelled by the assistant before it was sent: nothing was sent";
+/// Folderstorm: the user stopped it in Preferences.
+pub const STOPPED: &str = "stopped by the user in Preferences › Privacy › Local assistant before it was sent: nothing was sent";
+/// Folderstorm: its time ran out before it was sent.
+pub const OUT_OF_TIME: &str = "its time ran out before it was sent: nothing was sent";
 
 /// Folderstorm: what [`Desk::review`] says of a call waiting outside the
 /// desk.
@@ -308,6 +324,16 @@ impl Desk {
             let result = self.status(&call.arguments);
             return call.answer(result);
         }
+        if call.tool == CANCEL {
+            let result = match call.arguments.as_object() {
+                Some(a) if a.len() == 1 && a.contains_key("operation_id") => match a["operation_id"].as_str() {
+                    Some(id) => self.cancel(id, false),
+                    None => Err(ToolError::new(ErrorCode::InvalidArguments, "`operation_id` is a string")),
+                },
+                _ => Err(ToolError::new(ErrorCode::InvalidArguments, "give `operation_id` only")),
+            };
+            return call.answer(result);
+        }
         // Folderstorm: a plan's execute takes its plan (once)
         if call.tool == EXECUTE_PLAN && call.plan_class.is_none() {
             match self.take_plan(call, now) {
@@ -376,14 +402,54 @@ impl Desk {
     }
 
     /// Folderstorm: an allowed change waits for its turn.
-    fn queue(&mut self, call: Pending, summary: String) {
+    fn queue(&mut self, mut call: Pending, summary: String) {
         call.receipt(|r| {
             if r.decision.is_none() {
                 r.decide(receipts::Decision::Allowed);
             }
             r.state = State::Queued;
         });
+        call.answer_early();
         self.ready.push(Ready { call, summary });
+    }
+
+    /// Folderstorm: stop operation `operation_id` before it is sent (the
+    /// assistant's `assistant_operation_cancel` on this login, or the
+    /// user's Stop, `by_user`). In the dialog or waiting for its turn it is
+    /// cancelled (the dialog closes); sent or under way, it cannot be
+    /// recalled, and the answer says so.
+    pub fn cancel(&mut self, operation_id: &str, by_user: bool) -> Result<Value, ToolError> {
+        let session = self.session.clone();
+        let state = self.receipts.with(|s| {
+            if by_user {
+                s.all().find(|r| r.operation_id == operation_id).map(|r| r.state)
+            } else {
+                s.find(session.as_deref(), operation_id).map(|r| r.state)
+            }
+        });
+        let Some(state) = state else {
+            return Err(ToolError::new(ErrorCode::NotFound, "no such operation on this login"));
+        };
+        let mine = |call: &Pending| call.operation_id.as_deref() == Some(operation_id);
+        let waiting = if let Some(index) = self.asks.iter().position(|a| mine(&a.call)) {
+            self.asks.remove(index).map(|a| a.call)
+        } else {
+            self.ready
+                .iter()
+                .position(|r| mine(&r.call))
+                .map(|index| self.ready.remove(index).call)
+        };
+        if let Some(call) = waiting {
+            let why = if by_user { STOPPED } else { CANCELLED };
+            call.answer(Err(ToolError::new(ErrorCode::Cancelled, why)));
+            return Ok(json!({"operation_id": operation_id, "cancelled": true, "state": State::Cancelled}));
+        }
+        let message = if state.live() {
+            "already sent or under way: a change sent cannot be recalled. assistant_operation_status gives its end"
+        } else {
+            "it had already ended"
+        };
+        Ok(json!({"operation_id": operation_id, "cancelled": false, "state": state, "message": message}))
     }
 
     /// Folderstorm: the receipt of a change just taken, its
@@ -400,6 +466,21 @@ impl Desk {
         if call.operation_id.is_none() {
             // a call made in the process (the demo, the tests)
             call.operation_id = receipts::new_operation_id().ok();
+        }
+        // 8 live operations per login (a request seen before still answers)
+        let session = self.session.clone();
+        let busy = self.receipts.with(|s| {
+            s.live(session.as_deref()) >= receipts::LIVE_MAX
+                && client_request_id
+                    .as_deref()
+                    .is_none_or(|id| s.find_request(session.as_deref(), id).is_none())
+        });
+        if busy {
+            call.answer(Err(ToolError::new(
+                ErrorCode::Busy,
+                format!("{} changes are still under way: try again once one ends", receipts::LIVE_MAX),
+            )));
+            return None;
         }
         let Some(operation_id) = call.operation_id.clone() else {
             return Some(call);
@@ -451,8 +532,16 @@ impl Desk {
     /// the plan frozen so that the send plans it again. None: answered.
     fn take_plan(&mut self, mut call: Pending, now: Instant) -> Option<Pending> {
         let invalid = |m: &str| ToolError::new(ErrorCode::InvalidArguments, m);
-        if call.arguments.as_object().is_none_or(|a| a.keys().any(|k| k != "plan_id")) {
+        if call
+            .arguments
+            .as_object()
+            .is_none_or(|a| a.keys().any(|k| k != "plan_id" && k != "wait"))
+        {
             call.answer(Err(invalid("unknown argument")));
+            return None;
+        }
+        if !call.arguments["wait"].is_null() && !call.arguments["wait"].is_boolean() {
+            call.answer(Err(invalid("`wait` is true or false")));
             return None;
         }
         let Some(id) = call.arguments["plan_id"].as_str().map(str::to_owned) else {
@@ -663,6 +752,13 @@ impl Desk {
     /// levels and the login in force. Some: send it now. None: it was
     /// refused, or it goes back to the dialog (its class asks now).
     pub fn recheck(&mut self, call: Pending, login: u64, session: Option<String>, cx: &Ctx, now: Instant) -> Option<Pending> {
+        // Folderstorm: its deadline, the listener's whole wait (operations)
+        let wait = protocol::tool(&call.tool).map_or(Duration::ZERO, |spec| spec.wait);
+        let age = call.receipt(|r| r.asked.elapsed().unwrap_or_default());
+        if age.is_some_and(|age| age > ASK_TIMEOUT + VIEWER_TIMEOUT + wait) {
+            call.answer(Err(ToolError::new(ErrorCode::Cancelled, OUT_OF_TIME)));
+            return None;
+        }
         let taken = self.login;
         self.set_login(login, session);
         match self.review_as(taken, call_decision(&self.permissions, &call)) {
@@ -762,8 +858,17 @@ impl Desk {
     }
 
     fn ask(&mut self, mut call: Pending, summary: String, now: Instant) {
+        // Folderstorm: 16 questions waiting at most (operations)
+        if self.asks.len() >= ASKS_MAX {
+            call.answer(Err(ToolError::new(
+                ErrorCode::Busy,
+                "too many requests are waiting for the user's answer: try again later",
+            )));
+            return;
+        }
         call.ask = true;
         call.receipt(|r| r.state = State::Asking);
+        call.answer_early();
         self.asked += 1;
         self.asks.push_back(Asking {
             number: self.asked,

@@ -351,6 +351,23 @@ fn receipt_line(ui: &mut egui::Ui, p: &crate::theme::Palette, receipt: &mcp_brid
         Some(client) => tr!("fs-mcp-activity-program", client = client.clone()),
         None => tr!("fs-mcp-activity-program-unnamed").to_owned(),
     };
-    ui.add(egui::Label::new(egui::RichText::new(line).size(12.0).color(p.ink)).truncate())
-        .on_hover_text(who);
+    ui.horizontal(|ui| {
+        // Stop: what has not been sent is not sent (section 5)
+        if receipt.state.live()
+            && crate::ui::widgets::action_button(
+                ui,
+                p,
+                "hand-stop",
+                tr!("fs-mcp-activity-stop"),
+                crate::ui::widgets::ActionKind::Flat,
+                egui::vec2(70.0, 20.0),
+            )
+            .on_hover_text(tr!("fs-mcp-activity-stop-hint"))
+            .clicked()
+        {
+            mcp_bridge::cancel(&receipt.operation_id);
+        }
+        ui.add(egui::Label::new(egui::RichText::new(line).size(12.0).color(p.ink)).truncate())
+            .on_hover_text(who);
+    });
 }

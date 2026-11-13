@@ -5550,7 +5550,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5612,6 +5612,34 @@ front, back, left, right), `camera_shot`, `camera_reset`, `camera_snapshot`
 demo outfit (the Outfit Gallery shows the new picture). A picture with
 `interface: true` asks even with Camera on Allow. Capture the dialogs in
 English, French and Japanese.
+
+`AURORA_DEMO_MCP=plan` (Folderstorm2, folderstorm/plans/mcp-receipts.md
+checkpoints 3 to 5: `src/mcp_bridge/plans.rs`, `desk.rs`,
+`src/folderstorm/bulk_plan.rs`): the same session settings ("Ask before
+changes"), and once the demo inventory is there the demo previews moving
+the demo object, the demo script and the instructions notecard into the
+demo subfolder, then asks, as "Demo assistant", to execute that plan: the
+Ask dialog says "Move 3 entries to “…”:" and lists the three names under it
+(a longer plan lists five, then "…and N more", and the number left out).
+The log reads `local assistant demo: plan previewed: …` with the rows.
+Allow: the three entries move in one change (the inventory window shows them
+in the subfolder), and the log reads `inventory_execute_plan answered {…
+"state":"done"…}`. Refuse: nothing moves (`… "permission_denied" …
+(operation_id op-…)`). With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+Recent activity shows the plan's line as its sentence and its state ("…
+· done", "… · refused"), the program's name in the line's tooltip, and a
+Stop button on a line still waiting (in the dialog or for its turn): Stop
+closes the dialog and the line reads "… · cancelled". A real client can
+then call `inventory_preview_batch_rename` (`items` with explicit names,
+or `ids` with a pattern such as `Sorted {n} - {name}`) and
+`inventory_preview_batch_move`, run the plan with `inventory_execute_plan`
+(`wait: false` answers at once with `"state":"asking"`; poll
+`assistant_operation_status`), stop it with `assistant_operation_cancel`,
+and retry a change with the same `client_request_id` (the second call
+answers `"duplicate":true` and runs nothing). Rename an entry of a plan
+between the preview and the execute: the execute answers `stale` and
+nothing moves. Capture the dialog and the activity lines in English, French
+and Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and

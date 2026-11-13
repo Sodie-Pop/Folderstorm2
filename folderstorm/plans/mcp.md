@@ -580,3 +580,10 @@ The foundation the FEATURES.md 4.6 groups need (step 3 of the MCP parity
 order) is planned in [mcp-receipts.md](mcp-receipts.md): re-checking
 permissions while a call waits, binding each call to one login, capability
 versions, receipts, batch preview and execute plans, and guarded operations.
+Checkpoints 1 and 2 are merged; checkpoints 3 (receipts), 4 (batch plans)
+and 5 (guarded operations) are built on `claude/mcp-receipts` (their "As
+built" sections in mcp-receipts.md). New tools: `assistant_operation_status`,
+`assistant_operation_cancel`, `inventory_preview_batch_rename`,
+`inventory_preview_batch_move`, `inventory_execute_plan`; every change takes
+an optional `client_request_id` and answers with its `operation_id` and
+`state`. Capabilities `receipts: 1`, `plans: 1`, `operations: 1`.

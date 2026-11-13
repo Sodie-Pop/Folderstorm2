@@ -115,6 +115,10 @@ pub enum ErrorCode {
     /// Folderstorm: the world changed since the plan or the dialog (a
     /// plan's rows no longer match): nothing was sent (plans).
     Stale,
+    /// Folderstorm: stopped by the assistant (`assistant_operation_cancel`)
+    /// or the user (Stop in Preferences), or its time ran out, before it
+    /// was sent (operations).
+    Cancelled,
 }
 
 impl ErrorCode {
@@ -126,7 +130,7 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::Conflict | ErrorCode::Stale => 409,
+            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::Conflict | ErrorCode::Stale | ErrorCode::Cancelled => 409,
             ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
@@ -147,6 +151,7 @@ impl ErrorCode {
             // Folderstorm: receipts (mcp-receipts.md, section 3)
             ErrorCode::Conflict => Some((binding::RECEIPTS, ErrorCode::InvalidArguments)),
             ErrorCode::Stale => Some((binding::PLANS, ErrorCode::NotAllowed)),
+            ErrorCode::Cancelled => Some((binding::OPERATIONS, ErrorCode::PermissionDenied)),
             _ => None,
         }
     }

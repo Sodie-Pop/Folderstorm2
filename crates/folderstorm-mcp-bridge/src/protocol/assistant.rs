@@ -13,6 +13,13 @@
 //!   once, with the plan's own class (Edit for a rename, Move for a move),
 //!   which only the viewer knows: the listener refuses it only when both
 //!   are on Never ([`any_decision`]).
+//! - `assistant_operation_cancel` (`operations`): stops the assistant's own
+//!   operation before it is sent. No class, bound to the login: it works
+//!   after the permissions were lowered, since it only stops.
+//! - Early answers: `inventory_execute_plan` with `wait: false` answers as
+//!   soon as the viewer took it, for a sidecar that declares `operations`
+//!   ([`answers_early`]); the assistant then polls
+//!   `assistant_operation_status`.
 
 use super::{CHANGE_MAX, CHANGE_WAIT, ToolSpec};
 use crate::binding;
@@ -24,7 +31,24 @@ use std::time::Duration;
 /// Whether the tools of `group` belong to one login although they need no
 /// class ([`ToolSpec::bound`]).
 pub fn bound_group(group: &str) -> bool {
-    group == binding::RECEIPTS
+    group == binding::RECEIPTS || group == binding::OPERATIONS
+}
+
+pub const CANCEL: &str = "assistant_operation_cancel";
+
+/// Whether a call of `spec` with these arguments answers early (once the
+/// viewer took it) rather than when it ends.
+pub fn answers_early(spec: &ToolSpec, arguments: &Value) -> bool {
+    spec.name == EXECUTE_PLAN && arguments.get("wait").and_then(Value::as_bool) == Some(false)
+}
+
+fn cancel_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {"operation_id": {"type": "string", "description": "The operation to stop."}},
+        "required": ["operation_id"],
+        "additionalProperties": false
+    })
 }
 
 /// The `client_request_id` every change takes ([`ToolSpec::input_schema`]).
@@ -102,7 +126,8 @@ fn execute_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "plan_id": {"type": "string", "description": "The plan_id a preview answered with (valid 5 minutes, once)."}
+            "plan_id": {"type": "string", "description": "The plan_id a preview answered with (valid 5 minutes, once)."},
+            "wait": {"type": "boolean", "default": true, "description": "false: answer at once with the operation_id and its state (often `asking` while the user reads the dialog), then poll assistant_operation_status."}
         },
         "required": ["plan_id"],
         "additionalProperties": false
@@ -146,6 +171,15 @@ pub const ASSISTANT_TOOLS: &[ToolSpec] = &[
         schema: execute_schema,
         group: binding::PLANS,
         wait: CHANGE_WAIT,
+    },
+    ToolSpec {
+        name: CANCEL,
+        description: "Stop one of your operations before it is sent: waiting, in the user's dialog (it closes) or waiting for its turn, it becomes `cancelled`. A change already sent cannot be recalled: the answer says so, and assistant_operation_status gives its end.",
+        class: None,
+        also: None,
+        schema: cancel_schema,
+        group: binding::OPERATIONS,
+        wait: Duration::ZERO,
     },
 ];
 
@@ -193,5 +227,18 @@ mod tests {
             crate::ErrorCode::Stale.for_sidecar(Some(&binding::capabilities())),
             crate::ErrorCode::Stale
         );
+    }
+
+    #[test]
+    fn cancel_is_bound_and_only_a_plan_without_waiting_answers_early() {
+        let cancel = protocol::tool(CANCEL).expect("listed");
+        assert!(cancel.class.is_none() && cancel.bound() && !cancel.changes());
+        let execute = protocol::tool(EXECUTE_PLAN).expect("listed");
+        assert!(answers_early(execute, &json!({"plan_id": "p", "wait": false})));
+        assert!(!answers_early(execute, &json!({"plan_id": "p"})));
+        assert!(!answers_early(execute, &json!({"plan_id": "p", "wait": true})));
+        let rename = protocol::tool("inventory_rename").expect("listed");
+        assert!(!answers_early(rename, &json!({"wait": false})));
+        assert_eq!(crate::ErrorCode::Cancelled.for_sidecar(None), crate::ErrorCode::PermissionDenied);
     }
 }

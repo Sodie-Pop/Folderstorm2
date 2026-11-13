@@ -79,6 +79,11 @@ pub struct Pending {
     /// Folderstorm: the class `inventory_execute_plan` needs, decided by
     /// the frame thread from its plan (plans); None for any other call.
     pub plan_class: Option<Class>,
+    /// Folderstorm: it answers early, with its operation and state, as soon
+    /// as the frame thread took it (a long tool asked to, for a sidecar
+    /// that declares `operations`); its end then only updates its receipt.
+    pub early: bool,
+    early_sent: bool,
     reply: SyncSender<Result<Value, ToolError>>,
 }
 
@@ -97,6 +102,8 @@ impl Pending {
                 operation_id: None,
                 tracked: None,
                 plan_class: None,
+                early: false,
+                early_sent: false,
                 reply,
             },
             answer,
@@ -111,7 +118,27 @@ impl Pending {
             Some(tracked) => tracked.decorate(result),
             None => result,
         };
-        let _ = self.reply.try_send(result);
+        if !self.early_sent {
+            let _ = self.reply.try_send(result);
+        }
+    }
+
+    /// Folderstorm: an early call answers now, once, with its operation and
+    /// state (operations); the call itself goes on. Nothing for any other.
+    pub fn answer_early(&mut self) {
+        if !self.early || self.early_sent {
+            return;
+        }
+        let Some(tracked) = &self.tracked else { return };
+        let state = tracked.update(|r| r.state);
+        let answer = json!({
+            "operation_id": tracked.operation_id,
+            "state": state,
+            "early": true,
+            "next": "the change goes on in the viewer: poll assistant_operation_status with this operation_id (assistant_operation_cancel stops it before it is sent)",
+        });
+        let _ = self.reply.try_send(Ok(answer));
+        self.early_sent = true;
     }
 
     /// Folderstorm: the receipt of this call is kept in `ledger` (its
@@ -488,10 +515,14 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
     // thread's own timeout can name it (receipts)
     let operation_id = spec.changes().then(receipts::new_operation_id).and_then(Result::ok);
     let (pending, answer) = Pending::detached(&call.tool, call.arguments.clone(), ask, None);
+    // Folderstorm: an early answer only for a sidecar that knows it
+    let early = protocol::assistant::answers_early(spec, &call.arguments)
+        && call.features.as_ref().is_some_and(|f| f.contains_key(binding::OPERATIONS));
     let pending = Pending {
         client,
         session: call.session.clone(),
         operation_id: operation_id.clone(),
+        early,
         ..pending
     };
     match shared.queue.try_send(pending) {

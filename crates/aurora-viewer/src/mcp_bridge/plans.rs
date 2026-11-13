@@ -123,11 +123,6 @@ impl Plans {
     fn prune(&mut self, now: Instant) {
         self.plans.retain(|p| now.saturating_duration_since(p.created) < PLAN_TTL);
     }
-
-    #[cfg(test)]
-    pub fn len(&self) -> usize {
-        self.plans.len()
-    }
 }
 
 /// The class a plan's execute needs: Edit for a rename, Move for a move.

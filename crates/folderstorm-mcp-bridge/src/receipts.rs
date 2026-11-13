@@ -55,6 +55,9 @@ pub const LATE_WAIT: Duration = Duration::from_secs(10 * 60);
 pub const LATE_MAX: usize = 16;
 /// The receipts `assistant_operation_status` gives without arguments.
 pub const STATUS_RECENT: usize = 20;
+/// Live operations per login (section 5): a new change past them answers
+/// `busy`.
+pub const LIVE_MAX: usize = 8;
 
 /// An operation's lifecycle (section 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -446,6 +449,14 @@ impl Store {
             .collect()
     }
 
+    /// The live receipts of `session`.
+    pub fn live(&self, session: Option<&str>) -> usize {
+        self.receipts
+            .iter()
+            .filter(|r| r.state.live() && r.viewer_session.as_deref() == session)
+            .count()
+    }
+
     /// Every receipt, oldest first (Preferences).
     pub fn all(&self) -> impl Iterator<Item = &Receipt> {
         self.receipts.iter()
@@ -608,6 +619,8 @@ fn end(r: &mut Receipt, result: &Result<Value, ToolError>) {
                 }
                 ErrorCode::SessionChanged => (State::Refused, Some(Decision::RefusedSessionChanged), RowOutcome::NotSent),
                 ErrorCode::Stale => (State::Stale, Some(Decision::Stale), RowOutcome::NotSent),
+                ErrorCode::Cancelled if sent => (State::Stopped, None, RowOutcome::Unknown),
+                ErrorCode::Cancelled => (State::Cancelled, None, RowOutcome::NotSent),
                 _ if sent => (State::Unconfirmed, None, RowOutcome::Unknown),
                 _ => (State::Refused, Some(Decision::RefusedByViewer), RowOutcome::NotSent),
             };

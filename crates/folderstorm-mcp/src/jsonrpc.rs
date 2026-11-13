@@ -163,7 +163,7 @@ fn initialize(params: &Value) -> Value {
 }
 
 /// Folderstorm: how an assistant uses receipts, plans and operations.
-const RECEIPTS_HINT: &str = "Every change answers with an operation_id and its state, in errors and timeouts too: after a timeout or a lost answer, call assistant_operation_status instead of retrying. A change may take your own client_request_id: sent again with the same arguments, it returns the first receipt and runs nothing.";
+const RECEIPTS_HINT: &str = "Every change answers with an operation_id and its state, in errors and timeouts too: after a timeout or a lost answer, call assistant_operation_status instead of retrying. A change may take your own client_request_id: sent again with the same arguments, it returns the first receipt and runs nothing. For several renames or moves, preview a plan (inventory_preview_batch_rename, inventory_preview_batch_move), show it to the user, then inventory_execute_plan runs it once (stale if the inventory changed: preview again); with wait false it answers at once and you poll assistant_operation_status. assistant_operation_cancel stops an operation not sent yet.";
 
 fn tools_list() -> Value {
     let tools: Vec<Value> = protocol::all()
