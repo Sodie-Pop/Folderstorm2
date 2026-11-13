@@ -20,10 +20,12 @@ pub enum Class {
     /// Move to Trash, restore from it. Permanent delete and Empty
     /// Trash are never a class: always refused.
     Trash,
+    /// Move the camera, take a picture (phase 3).
+    Camera,
 }
 
 impl Class {
-    pub const ALL: [Class; 5] = [Class::Read, Class::Edit, Class::Move, Class::Wear, Class::Trash];
+    pub const ALL: [Class; 6] = [Class::Read, Class::Edit, Class::Move, Class::Wear, Class::Trash, Class::Camera];
 
     /// Whether the class can ask the user before each call (every class
     /// that changes something; reading does not ask).
@@ -42,9 +44,11 @@ pub enum Level {
 }
 
 /// One level per class. Unknown or missing levels read as the safe default
-/// of the field (Read: Allow, the others: Never).
+/// of the field (Read: Allow, the others: Never); a Camera level missing
+/// from settings saved before phase 3 follows "Ask before changes" when the
+/// other changes all ask ([`Saved`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(from = "Saved")]
 pub struct Permissions {
     pub read: Level,
     pub edit: Level,
@@ -52,6 +56,51 @@ pub struct Permissions {
     pub move_: Level,
     pub wear: Level,
     pub trash: Level,
+    pub camera: Level,
+}
+
+/// [`Permissions`] as saved: Camera came with phase 3.
+#[derive(Deserialize)]
+#[serde(default)]
+struct Saved {
+    read: Level,
+    edit: Level,
+    #[serde(rename = "move")]
+    move_: Level,
+    wear: Level,
+    trash: Level,
+    camera: Option<Level>,
+}
+
+impl Default for Saved {
+    fn default() -> Self {
+        let p = Permissions::default();
+        Saved {
+            read: p.read,
+            edit: p.edit,
+            move_: p.move_,
+            wear: p.wear,
+            trash: p.trash,
+            camera: None,
+        }
+    }
+}
+
+impl From<Saved> for Permissions {
+    fn from(s: Saved) -> Self {
+        // "Ask before changes" chosen before the camera existed keeps that
+        // preset: asking first is what it promised for every change
+        let asked = [s.edit, s.move_, s.wear, s.trash].iter().all(|l| *l == Level::Ask);
+        let camera = s.camera.unwrap_or(if asked { Level::Ask } else { Level::Never });
+        Permissions {
+            read: s.read,
+            edit: s.edit,
+            move_: s.move_,
+            wear: s.wear,
+            trash: s.trash,
+            camera,
+        }
+    }
 }
 
 impl Default for Permissions {
@@ -69,6 +118,7 @@ impl Permissions {
             Class::Move => self.move_,
             Class::Wear => self.wear,
             Class::Trash => self.trash,
+            Class::Camera => self.camera,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -90,6 +140,7 @@ impl Permissions {
             Class::Move => self.move_ = level,
             Class::Wear => self.wear = level,
             Class::Trash => self.trash = level,
+            Class::Camera => self.camera = level,
         }
     }
 
@@ -118,6 +169,20 @@ impl Permissions {
             Level::Ask => Decision::Ask,
             Level::Never => Decision::Refuse,
         }
+    }
+
+    /// The decision for a call that needs several classes (a thumbnail
+    /// from a picture: Edit and Camera): any Never refuses, else any Ask
+    /// asks once, else it runs.
+    pub fn decide_all(&self, classes: impl IntoIterator<Item = Class>) -> Decision {
+        classes
+            .into_iter()
+            .map(|c| self.decide(c))
+            .fold(Decision::Run, |all, one| match (all, one) {
+                (Decision::Refuse, _) | (_, Decision::Refuse) => Decision::Refuse,
+                (Decision::Ask, _) | (_, Decision::Ask) => Decision::Ask,
+                _ => Decision::Run,
+            })
     }
 }
 
@@ -154,6 +219,7 @@ impl Preset {
             move_: changes,
             wear: changes,
             trash: changes,
+            camera: changes,
         }
     }
 }
@@ -177,9 +243,53 @@ mod tests {
         assert!(!d.enabled);
         assert_eq!(d.permissions.preset(), Preset::ReadOnly);
         assert_eq!(d.permissions.check(Class::Read), Ok(()));
-        for class in [Class::Edit, Class::Move, Class::Wear, Class::Trash] {
+        for class in [Class::Edit, Class::Move, Class::Wear, Class::Trash, Class::Camera] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
+    }
+
+    #[test]
+    fn camera_asks_in_ask_before_changes_and_is_never_in_read_only() {
+        assert_eq!(Preset::AskBeforeChanges.permissions().level(Class::Camera), Level::Ask);
+        assert_eq!(Preset::ReadOnly.permissions().level(Class::Camera), Level::Never);
+        let mut p = Preset::AskBeforeChanges.permissions();
+        p.set(Class::Camera, Level::Allow);
+        assert_eq!(p.preset(), Preset::Custom);
+        assert_eq!(p.decide(Class::Camera), Decision::Run);
+    }
+
+    #[test]
+    fn settings_saved_before_the_camera_keep_their_preset() {
+        // "Ask before changes" saved by phase 2
+        let asked: Permissions =
+            serde_json::from_str(r#"{"read":"allow","edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#).expect("parsed");
+        assert_eq!(asked.level(Class::Camera), Level::Ask);
+        assert_eq!(asked.preset(), Preset::AskBeforeChanges);
+        // any other combination: the camera is not allowed
+        let custom: Permissions = serde_json::from_str(r#"{"edit":"allow","move":"ask","wear":"ask","trash":"ask"}"#).expect("parsed");
+        assert_eq!(custom.level(Class::Camera), Level::Never);
+        let read_only: Permissions = serde_json::from_str("{}").expect("parsed");
+        assert_eq!(read_only, Permissions::default());
+        // a saved camera level is kept, and written back
+        let kept: Permissions =
+            serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"never"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Camera), Level::Never);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""camera":"never""#), "{json}");
+    }
+
+    #[test]
+    fn several_classes_decide_together() {
+        let mut p = Preset::ReadOnly.permissions();
+        p.set(Class::Edit, Level::Allow);
+        assert_eq!(p.decide_all([Class::Edit, Class::Camera]), Decision::Refuse, "Camera on Never");
+        p.set(Class::Camera, Level::Ask);
+        assert_eq!(p.decide_all([Class::Edit, Class::Camera]), Decision::Ask);
+        p.set(Class::Camera, Level::Allow);
+        assert_eq!(p.decide_all([Class::Edit, Class::Camera]), Decision::Run);
+        p.set(Class::Edit, Level::Never);
+        assert_eq!(p.decide_all([Class::Edit, Class::Camera]), Decision::Refuse, "Edit on Never");
+        assert_eq!(p.decide_all([]), Decision::Run);
     }
 
     #[test]

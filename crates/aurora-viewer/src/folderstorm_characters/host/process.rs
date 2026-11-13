@@ -53,9 +53,26 @@ pub enum Kind {
     Attention(Box<AttentionList>),
     /// What became of a line the host asked it to say.
     SendResult(u64, SendOutcome),
+    /// Checkpoint 8: a click on the bar it draws.
+    Bar(::folderstorm_session::bar::Request),
     /// The viewer never reached its endpoint: only other clients came, or
     /// the endpoint failed. Nothing more comes from this launch.
     Unreachable,
+}
+
+/// Wakes the host's window for an event that should not wait for its
+/// next look (checkpoint 8: a click on a viewer's bar). Set once by the
+/// window's loop; without one (the tests) events wait for the next look.
+static WAKER: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>> = std::sync::OnceLock::new();
+
+pub fn set_waker(wake: impl Fn() + Send + Sync + 'static) {
+    let _ = WAKER.set(Box::new(wake));
+}
+
+fn wake() {
+    if let Some(wake) = WAKER.get() {
+        wake();
+    }
 }
 
 /// A monitor's picture as the window shows it.
@@ -138,10 +155,16 @@ impl Drop for Viewer {
     }
 }
 
-/// The arguments of a character's viewer: its profile, `--managed`, and
-/// the host's own language and title when it was given them.
-fn arguments(profile: &ProfileName, language: Option<&str>, title: Option<&str>) -> Vec<String> {
-    let mut args = vec!["--profile".to_owned(), profile.shown().to_owned(), "--managed".to_owned()];
+/// The arguments of a character's viewer: its profile, `--managed`, its
+/// slot (where its startup splash sits, `splash.rs`), and the host's own
+/// language and title when it was given them.
+fn arguments(profile: &ProfileName, slot: usize, language: Option<&str>, title: Option<&str>) -> Vec<String> {
+    let mut args = vec![
+        "--profile".to_owned(),
+        profile.shown().to_owned(),
+        "--managed".to_owned(),
+        super::super::splash::slot_argument(slot),
+    ];
     if let Some(language) = language {
         args.extend(["--language".to_owned(), language.to_owned()]);
     }
@@ -165,7 +188,7 @@ pub fn spawn(slot: usize, launch: u32, profile: &ProfileName, events: &Sender<Ev
     let cli = crate::cli::get();
     let mut command = Command::new(std::env::current_exe()?);
     command
-        .args(arguments(profile, cli.language.as_deref(), cli.title.as_deref()))
+        .args(arguments(profile, slot, cli.language.as_deref(), cli.title.as_deref()))
         // the demo's "start a host" is the host's, not its viewers'
         .env_remove(super::DEMO_VARIABLE)
         .stdin(Stdio::piped());
@@ -264,6 +287,7 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
             Ok(ToHost::Chat(batch)) => Kind::Chat(batch),
             Ok(ToHost::Attention(list)) => Kind::Attention(list),
             Ok(ToHost::SendResult { id, outcome }) => Kind::SendResult(id, outcome),
+            Ok(ToHost::Bar(request)) => Kind::Bar(request),
             Ok(ToHost::Frame(header)) => {
                 // its size is checked before a byte of it is read
                 match ipc::read_picture(&mut from_viewer, &header) {
@@ -297,8 +321,12 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
                 return;
             }
         };
+        let urgent = matches!(kind, Kind::Bar(_));
         if !tell(kind) {
             return;
+        }
+        if urgent {
+            wake();
         }
     }
 }
@@ -530,9 +558,24 @@ mod tests {
     #[test]
     fn a_character_s_viewer_gets_its_profile_and_never_a_login() {
         let name = ProfileName::parse("Alt1").expect("name");
-        assert_eq!(arguments(&name, None, None), ["--profile", "Alt1", "--managed"]);
-        let args = arguments(&name, Some("fr"), Some("Test host"));
-        assert_eq!(args, ["--profile", "Alt1", "--managed", "--language", "fr", "--title", "Test host"]);
+        assert_eq!(
+            arguments(&name, 0, None, None),
+            ["--profile", "Alt1", "--managed", "--folderstorm-slot=0"]
+        );
+        let args = arguments(&name, 2, Some("fr"), Some("Test host"));
+        assert_eq!(
+            args,
+            [
+                "--profile",
+                "Alt1",
+                "--managed",
+                "--folderstorm-slot=2",
+                "--language",
+                "fr",
+                "--title",
+                "Test host"
+            ]
+        );
         assert!(!args.iter().any(|a| a == "--login" || a == "--url" || a == "--session-host"));
     }
 
@@ -604,7 +647,7 @@ mod tests {
                 Kind::Status(status) => desk.status(slot, launch, (**status).clone(), now),
                 Kind::Heartbeat(count) => desk.heartbeat(slot, launch, *count, now),
                 Kind::Refused(refusal) => desk.refused(slot, launch, *refusal),
-                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) => {}
+                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) | Kind::Bar(_) => {}
                 Kind::Unreachable => desk.unreachable(slot, launch),
             }
             kinds.push(kind);
@@ -707,6 +750,7 @@ mod tests {
             standby: ::folderstorm_session::ipc::Standby::Warm,
             sound_muted: true,
             voice_allowed: false,
+            off_taskbar: false,
         };
         ipc::write_frame(&mut to_viewer, &ToViewer::Assign(assignment)).expect("written");
         let managed::Event::Command(ToViewer::Assign(taken)) = viewer_event() else {
@@ -829,7 +873,7 @@ mod tests {
                     Kind::Chat(batch) => chat.batch(slot, launch, *batch),
                     Kind::Attention(list) => chat.attention_list(slot, launch, *list),
                     Kind::SendResult(id, outcome) => chat.result(slot, launch, id, outcome),
-                    Kind::Connected | Kind::Heartbeat(_) => {}
+                    Kind::Connected | Kind::Heartbeat(_) | Kind::Bar(_) => {}
                     Kind::Refused(refusal) => panic!("refused: {refusal:?}"),
                     Kind::Unreachable => panic!("the viewer never reached its endpoint"),
                 }

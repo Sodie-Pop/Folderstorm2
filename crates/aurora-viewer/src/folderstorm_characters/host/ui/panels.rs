@@ -1,6 +1,8 @@
 //! The window's side of checkpoint 6, pop-out panels (session-host plan,
-//! section 7): the chat, the characters' controls and the monitors can
-//! each leave the host's window for a window of their own, and come back.
+//! section 7): the chat, the characters' controls and the inbox can each
+//! leave the host's window for a window of their own, and come back.
+//! (Until checkpoint 9 the monitors were such a panel; each monitor now
+//! has its own window: `monitor_windows.rs`.)
 //! Which are out and where is the `folderstorm-session` crate's
 //! (`panels`); this module opens, places and closes their windows.
 //!
@@ -18,6 +20,7 @@
 //! - **A window opens where a screen shows it** (`panels::on_screen`): a
 //!   place saved on a screen that is gone comes back on one that is there.
 
+use super::monitor_windows::Seat;
 use super::{Act, BUTTON, Window_};
 use crate::theme::{Palette, Theme};
 use crate::ui::{
@@ -40,6 +43,14 @@ use winit::{
 pub(in super::super) enum Which {
     Main,
     Pane(Panel),
+    /// Checkpoint 8: the bar's compact window (`ui/bar.rs`).
+    Bar,
+    /// Checkpoint 9: a character's monitor, and the cycling monitor
+    /// (`ui/monitor_windows.rs`).
+    Monitor(usize),
+    Cycling,
+    /// Checkpoint 10: the settings' window (`ui/settings.rs`).
+    Settings,
 }
 
 /// What every window of the host is drawn with.
@@ -70,6 +81,7 @@ impl Look {
             redraw: true,
             focused: false,
             occluded: false,
+            hidden: false,
             monitors: Default::default(),
         }
     }
@@ -89,6 +101,9 @@ pub(super) struct View {
     pub focused: bool,
     /// The window is covered whole by others, as the system says.
     pub occluded: bool,
+    /// Checkpoint 8: the window is hidden (the host's own, while a bar is
+    /// on screen): nothing in it is seen.
+    pub hidden: bool,
     /// The monitors' textures in this window, and which are on screen.
     pub monitors: super::monitors::Panel,
 }
@@ -131,7 +146,7 @@ impl View {
     pub fn sight(&self) -> Sight {
         Sight {
             seen: self.monitors.seen,
-            minimised: self.minimised(),
+            minimised: self.minimised() || self.hidden,
             occluded: self.occluded,
         }
     }
@@ -153,7 +168,7 @@ impl View {
 }
 
 /// The connected screens, for a saved place to be checked against.
-fn screens(event_loop: &ActiveEventLoop) -> Vec<panels::Screen> {
+pub(super) fn screens(event_loop: &ActiveEventLoop) -> Vec<panels::Screen> {
     event_loop
         .available_monitors()
         .map(|monitor| {
@@ -173,7 +188,6 @@ pub(super) fn name(panel: Panel) -> &'static str {
     match panel {
         Panel::Chat => tr!("folderstorm-chat-heading"),
         Panel::Controls => tr!("folderstorm-host-heading"),
-        Panel::Monitors => tr!("folderstorm-panel-monitors"),
         Panel::Inbox => tr!("folderstorm-inbox"),
     }
 }
@@ -183,6 +197,9 @@ impl Window_ {
         match which {
             Which::Main => Some(&self.main),
             Which::Pane(panel) => self.panes[panel.index()].as_ref(),
+            Which::Bar => self.bar.view.as_ref(),
+            Which::Monitor(_) | Which::Cycling => Seat::of(which).and_then(|seat| self.monitors.view(seat)),
+            Which::Settings => self.settings.view.as_ref(),
         }
     }
 
@@ -190,6 +207,9 @@ impl Window_ {
         match which {
             Which::Main => Some(&mut self.main),
             Which::Pane(panel) => self.panes[panel.index()].as_mut(),
+            Which::Bar => self.bar.view.as_mut(),
+            Which::Monitor(_) | Which::Cycling => Seat::of(which).and_then(|seat| self.monitors.view_mut(seat)),
+            Which::Settings => self.settings.view.as_mut(),
         }
     }
 
@@ -203,21 +223,20 @@ impl Window_ {
         if self.out(panel) { Which::Pane(panel) } else { Which::Main }
     }
 
-    /// The window that draws the monitors' pictures: the monitors' own,
-    /// or the one of the characters' cards.
-    pub(super) fn pictures_home(&self) -> Which {
-        if self.out(Panel::Monitors) {
-            Which::Pane(Panel::Monitors)
-        } else {
-            self.home(Panel::Controls)
-        }
-    }
-
     /// The window an event is for.
     pub(super) fn which(&self, id: WindowId) -> Option<Which> {
         let is = |view: &View| view.window.as_ref().is_some_and(|w| w.id() == id);
         if is(&self.main) {
             return Some(Which::Main);
+        }
+        if self.bar.view.as_ref().is_some_and(is) {
+            return Some(Which::Bar);
+        }
+        if self.settings.view.as_ref().is_some_and(is) {
+            return Some(Which::Settings);
+        }
+        if let Some((seat, _)) = self.monitors.views().find(|(_, view)| is(view)) {
+            return Some(seat.which());
         }
         Panel::ALL
             .into_iter()
@@ -228,8 +247,17 @@ impl Window_ {
     /// Every window is drawn again.
     pub(super) fn redraw_all(&mut self) {
         self.main.redraw = true;
-        for pane in self.panes.iter_mut().flatten() {
+        for pane in self
+            .panes
+            .iter_mut()
+            .flatten()
+            .chain(&mut self.bar.view)
+            .chain(&mut self.settings.view)
+        {
             pane.redraw = true;
+        }
+        for view in self.monitors.views_mut() {
+            view.redraw = true;
         }
     }
 
@@ -387,9 +415,7 @@ mod tests {
     use super::super::super::chat_ui::tests::{heard, host};
     use super::super::tests::{draw, draw_in, window};
     use super::*;
-    use ::folderstorm_session::host::Watch;
-    use ::folderstorm_session::ipc::{Conversation, LineKind, MAX_SLOTS};
-    use ::folderstorm_session::monitor::Spec;
+    use ::folderstorm_session::ipc::{Conversation, LineKind};
     use std::time::Instant;
 
     fn shows(drawn: &[String], text: &str) -> bool {
@@ -423,7 +449,6 @@ mod tests {
             assert_eq!(app.home(panel), Which::Main);
             assert!(!name(panel).is_empty());
         }
-        assert_eq!(app.pictures_home(), Which::Main);
     }
 
     #[test]
@@ -439,7 +464,7 @@ mod tests {
             "hello neighbours",
         );
         let mut app = window(host);
-        // docked: the host's window offers the three panels and shows the chat
+        // docked: the host's window offers the panels and shows the chat
         draw(&mut app, 1120, 760);
         let (drawn, _) = draw(&mut app, 1120, 760);
         assert!(shows(&drawn, tr!("folderstorm-panel-own-window")));
@@ -510,7 +535,7 @@ mod tests {
             shows(&drawn, &out(Panel::Chat)) && shows(&drawn, &out(Panel::Controls)),
             "{drawn:?}"
         );
-        assert!(!shows(&drawn, &out(Panel::Monitors)));
+        assert!(!shows(&drawn, &out(Panel::Inbox)));
         assert!(shows(&drawn, tr!("folderstorm-panel-dock")));
         assert!(painted(&pixels) > 1_000);
     }
@@ -530,73 +555,18 @@ mod tests {
     }
 
     #[test]
-    fn the_monitors_are_drawn_in_their_own_window_and_pause_with_it() {
+    fn closing_a_panel_s_window_docks_it_and_keeps_the_host_open() {
         let now = Instant::now();
         let mut app = window(host());
         running(&mut app, now);
-        app.host.desk.set_monitor(1, Some(Spec::default()));
-        // docked: the picture is in the character's card
-        draw(&mut app, 1120, 1100);
-        assert!(app.main.monitors.seen[1]);
-        app.host.test_picture(1, [480, 270], egui::Color32::from_rgb(200, 30, 30), now);
-        draw(&mut app, 1120, 1100);
-        assert!(app.main.monitors.texture(1).is_some());
-        pop_out(&mut app, Panel::Monitors);
-        assert_eq!(app.pictures_home(), Which::Pane(Panel::Monitors));
-        // the card keeps the choices and says where the picture is; the
-        // host's window draws no picture and keeps no texture
-        let (drawn, pixels) = draw(&mut app, 1120, 1100);
-        let reds = |pixels: &[u32]| pixels.iter().filter(|p| **p == 0x00C8_1E1E).count();
-        assert!(shows(&drawn, "480 × 270") && shows(&drawn, tr!("folderstorm-monitor-in-window")));
-        assert_eq!(app.main.monitors.seen, [false; MAX_SLOTS]);
-        assert!(app.main.monitors.texture(1).is_none());
-        assert_eq!(reds(&pixels), 0);
-        // the monitors' window: the picture that was there already, at
-        // once, with the character's name
-        let (drawn, pixels) = draw_in(&mut app, Which::Pane(Panel::Monitors), 700, 520);
-        assert!(shows(&drawn, "demo-2") && shows(&drawn, tr!("folderstorm-panel-dock")), "{drawn:?}");
-        assert!(reds(&pixels) > 480 * 270 / 2, "{} red pixels", reds(&pixels));
-        app.monitors_watch(now);
-        assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
-        // the host's window is covered: the monitors' window goes on
-        app.main.occluded = true;
-        app.monitors_watch(now);
-        assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
-        // the monitors' window is covered: its monitors pause, although
-        // the host's window shows
-        app.main.occluded = false;
-        if let Some(pane) = &mut app.panes[Panel::Monitors.index()] {
-            pane.occluded = true;
-        }
-        app.monitors_watch(now);
-        assert_eq!(app.host.desk.watch(1), Watch::Hidden);
-        if let Some(pane) = &mut app.panes[Panel::Monitors.index()] {
-            pane.occluded = false;
-        }
-        app.monitors_watch(now);
-        assert!(matches!(app.host.desk.watch(1), Watch::Asked { .. }));
-        // no monitor open: the window says how to open one
-        app.host.desk.set_monitor(1, None);
-        app.host.tick_monitors(now);
-        let (drawn, _) = draw_in(&mut app, Which::Pane(Panel::Monitors), 700, 520);
-        assert!(shows(&drawn, tr!("folderstorm-panel-monitors-empty")));
-    }
-
-    #[test]
-    fn closing_a_panel_s_window_docks_it_with_its_picture_and_keeps_the_host_open() {
-        let now = Instant::now();
-        let mut app = window(host());
-        running(&mut app, now);
-        app.host.desk.set_monitor(1, Some(Spec::default()));
-        pop_out(&mut app, Panel::Monitors);
+        pop_out(&mut app, Panel::Inbox);
         pop_out(&mut app, Panel::Chat);
-        app.host.test_picture(1, [480, 270], egui::Color32::from_rgb(200, 30, 30), now);
-        draw_in(&mut app, Which::Pane(Panel::Monitors), 700, 520);
+        draw_in(&mut app, Which::Pane(Panel::Inbox), 520, 380);
         app.host.desk.take_effects();
         // the window's close button
-        assert!(app.pane_event(Panel::Monitors, &WindowEvent::CloseRequested));
-        assert!(app.panes[Panel::Monitors.index()].is_none());
-        assert!(!app.out(Panel::Monitors) && app.out(Panel::Chat));
+        assert!(app.pane_event(Panel::Inbox, &WindowEvent::CloseRequested));
+        assert!(app.panes[Panel::Inbox.index()].is_none());
+        assert!(!app.out(Panel::Inbox) && app.out(Panel::Chat));
         assert!(app.panes[Panel::Chat.index()].is_some(), "the other panel's window stays");
         assert!(!app.host.exit && !app.closing);
         assert_eq!(app.host.desk.live(), 2);
@@ -605,11 +575,6 @@ mod tests {
             matches!(effects.as_slice(), [::folderstorm_session::host::Effect::Save]),
             "{effects:?}"
         );
-        // back in the card, the latest picture with it, before a new one
-        // comes
-        let (_, pixels) = draw(&mut app, 1120, 1100);
-        assert!(app.main.monitors.seen[1]);
-        assert!(pixels.iter().filter(|p| **p == 0x00C8_1E1E).count() > 480 * 270 / 2);
         // "Dock back" does the same from inside the interface
         let acts = vec![Act::Panel(Panel::Chat, false)];
         app.apply(acts, now);

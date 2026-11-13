@@ -9,9 +9,10 @@
 //! is dropped as soon as the monitor closes, the character comes to the
 //! front, leaves the world or its viewer ends. Nothing is written to a
 //! file, a log or the clipboard, and no earlier picture is kept. The
-//! picture stays here while a window shows it, so that the monitors'
-//! own window (checkpoint 6) and the characters' cards can take turns
-//! at drawing it without waiting for the next one.
+//! picture stays here, and each window that shows that character makes
+//! its texture of it (checkpoint 9: the character's own monitor, and the
+//! cycling monitor while it is that character's turn; a character the
+//! cycling monitor has left keeps nothing).
 
 use super::Host;
 use ::folderstorm_session::host::Watch;
@@ -68,10 +69,13 @@ impl Host {
                 .slot(slot)
                 .and_then(|s| s.status.as_ref())
                 .is_some_and(|status| status.monitor == monitor::State::NotInWorld);
-            let keeps = match self.desk.watch(slot) {
+            let own = match self.desk.watch(slot) {
                 Watch::Closed | Watch::NoViewer | Watch::InFront => false,
-                Watch::Hidden | Watch::TooMany | Watch::Asked { .. } => !left_the_world,
+                Watch::Hidden | Watch::TooMany | Watch::Asked { .. } => true,
             };
+            // (the cycling monitor: only the character it shows now)
+            let cycled = matches!(self.desk.cycling_watch(slot), Watch::TooMany | Watch::Asked { .. });
+            let keeps = (own || cycled) && !left_the_world;
             let screen = &mut self.screens[slot];
             if !keeps {
                 screen.drop_picture();

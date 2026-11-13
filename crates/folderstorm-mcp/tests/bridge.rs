@@ -122,6 +122,9 @@ fn diagnose_reports_without_the_token() {
     assert_eq!(report["port"], bridge.port());
     assert_eq!(report["read_allowed"], true);
     assert_eq!(report["inventory_usable"], true);
+    assert_eq!(report["missing_capabilities"], json!([]));
+    assert_eq!(report["viewer_capabilities"]["login_binding"], 1);
+    assert_eq!(report["login_bound"], false, "the fake viewer reports no login");
     assert!(!report.to_string().contains(bridge.token().secret()));
     assert!(bridge.activity().is_empty(), "a probe is not an assistant's activity");
     let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), Some(778));
@@ -146,8 +149,9 @@ fn a_stale_file_is_skipped() {
     assert!(matches!(find(Some(dir.path()), None, false), Err(NotFound::NoAnswer)));
     let (bridge, calls) = start(dir.path(), 2);
     let viewer = fake_viewer(calls);
-    let (_, pid) = find(Some(dir.path()), None, false).expect("the live viewer");
-    assert_eq!(pid, 2);
+    let found = find(Some(dir.path()), None, false).expect("the live viewer");
+    assert_eq!(found.pid, 2);
+    assert_eq!(found.health.capabilities, Some(folderstorm_mcp_bridge::binding::capabilities()));
     assert_eq!(discovery::find(dir.path(), None).len(), 2);
     assert!(stale.exists());
     bridge.stop();

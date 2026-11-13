@@ -55,9 +55,30 @@
 //! - [`identity`]: a character's colour, fitted to the theme's contrast,
 //!   and its alias; both only ever in the host's settings file;
 //! - [`host`]: the condensed layout's choice, with the other settings.
+//!
+//! Checkpoint 8 (the docked bar, section 15):
+//! - [`bar`]: the row at the top of every managed viewer: its settings,
+//!   what the host tells a viewer to draw and what a click asks of the
+//!   host, when the host's own window hides, and what a background
+//!   window is on the taskbar;
+//! - [`host`]: "Mute background sound", "Voice follows active", what the
+//!   bar shows of the desk and what its clicks do.
+//!
+//! Checkpoint 9 (monitors in their own windows):
+//! - [`monitor_windows`]: what is remembered of each monitor's window, a
+//!   monitor that follows the character that is not in front, and the
+//!   cycling monitor's turns, which do not pass while the user types;
+//! - [`chips`]: a character's conversations as chips: their order, names
+//!   that shrink to fit, two rows at most and "+N" for the rest;
+//! - [`chat`]: a conversation closed or pinned in the host, and what
+//!   several windows show of the chat;
+//! - [`host`]: the monitors' settings, the swap on a switch, what the
+//!   cycling monitor asks.
 
+pub mod bar;
 pub mod behind;
 pub mod chat;
+pub mod chips;
 pub mod copy;
 pub mod export;
 pub mod gpu;
@@ -68,5 +89,7 @@ pub mod inbox;
 pub mod ipc;
 pub mod managed;
 pub mod monitor;
+pub mod monitor_windows;
 pub mod panels;
 pub mod profile;
+pub mod settings;

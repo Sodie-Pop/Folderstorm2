@@ -35,6 +35,21 @@ pub fn bring_forward(window: &Window) {
     window.focus_window();
 }
 
+/// The user clicked this window's bar for something another window of
+/// the session shows (checkpoint 8: the host's chat, its settings, another
+/// character): this process has the foreground, and lets whichever
+/// process answers take it. Without it Windows would only flash that
+/// window's taskbar button. Nothing elsewhere.
+pub fn allow_others() {
+    #[cfg(windows)]
+    // SAFETY: no pointer; a refusal changes nothing (the window asked for
+    // then falls back to `bring_forward`'s own way).
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};
+        AllowSetForegroundWindow(ASFW_ANY);
+    }
+}
+
 /// The Alt key events (true: pressed) sent to lift the foreground lock,
 /// given whether the user holds Alt: a press, and the key left as the
 /// user holds it.

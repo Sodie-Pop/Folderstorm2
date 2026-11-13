@@ -8,9 +8,12 @@
 //! - [`token`]: the bearer token, compared in constant time;
 //! - [`discovery`]: the `folderstorm2-mcp-<pid>.json` file the sidecar reads;
 //! - [`protocol`]: the tool catalogue and the wire types;
+//! - [`binding`]: the login binding (`viewer_session`) and the capability
+//!   versions both sides advertise;
 //! - [`server`]: the 127.0.0.1 listener;
 //! - [`client`]: the sidecar's side of the wire.
 
+pub mod binding;
 pub mod client;
 pub mod discovery;
 mod http;
