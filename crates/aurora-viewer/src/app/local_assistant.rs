@@ -46,9 +46,7 @@ impl App {
             // phase 3, part 4: what the viewer itself does with the avatar
             navigation: crate::mcp_bridge::navigation::Native {
                 pilot: self.autopilot.is_some(),
-                blocks_walk: self
-                    .native_anchor
-                    .blocks_walk(self.world.agent.seated, self.world.agent.ground_sit),
+                blocks_walk: self.native_anchor.blocks_walk(self.world.agent.seated, self.world.agent.ground_sit),
             },
         }
     }
@@ -183,7 +181,11 @@ impl App {
                 self.autopilot_stop_pending = false;
                 self.autopilot_flags = 0;
                 self.release_native_movelock();
-                log::info!("local assistant: {} of {:.1} m started", mv.mode.name(), navigation::distance(mv.mode, from, mv.target));
+                log::info!(
+                    "local assistant: {} of {:.1} m started",
+                    mv.mode.name(),
+                    navigation::distance(mv.mode, from, mv.target)
+                );
                 mcp_bridge::navigation_moving(call, mv, navigation::PilotId(now));
             }
             navigation::Work::Flying(flying) => {
@@ -196,7 +198,10 @@ impl App {
                 // LLAgent::setFlying's rules, through the Fly button
                 self.toggle_fly();
                 if self.world.agent.flying != flying {
-                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "the viewer did not let the avatar take off here")));
+                    return call.answer(Err(ToolError::new(
+                        ErrorCode::NotAllowed,
+                        "the viewer did not let the avatar take off here",
+                    )));
                 }
                 call.receipt(folderstorm_mcp_bridge::receipts::Receipt::mark_sent);
                 call.answer(Ok(serde_json::json!({"flying": flying, "changed": true})));
@@ -220,9 +225,15 @@ impl App {
                 if !self.world.rlva_allows_command(&command, Uuid::nil())
                     || !self.request_user_teleport(command, teleport.label.clone(), remote)
                 {
-                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction refuses this teleport")));
+                    return call.answer(Err(ToolError::new(
+                        ErrorCode::NotAllowed,
+                        "an RLV restriction refuses this teleport",
+                    )));
                 }
-                log::info!("local assistant: teleport submitted ({})", if remote { "another region" } else { "this region" });
+                log::info!(
+                    "local assistant: teleport submitted ({})",
+                    if remote { "another region" } else { "this region" }
+                );
                 mcp_bridge::navigation_teleporting(call, teleport);
             }
         }

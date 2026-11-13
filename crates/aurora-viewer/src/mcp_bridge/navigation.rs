@@ -21,8 +21,8 @@ use super::changes::{Planned, Work as ChangeWork};
 use super::tools::{Ctx, Session, err};
 use crate::world::World;
 use folderstorm_mcp_bridge::protocol::navigation::{
-    FLYING_SET, HEIGHT_MAX, MOVE_DISTANCE_MAX, MOVE_TIMEOUT_DEFAULT, MOVE_TIMEOUT_MAX, MOVE_TO, STOP_DISTANCE,
-    STOP_DISTANCE_DEFAULT, TELEPORT, TELEPORT_INTERVAL, TELEPORT_WAIT,
+    FLYING_SET, HEIGHT_MAX, MOVE_DISTANCE_MAX, MOVE_TIMEOUT_DEFAULT, MOVE_TIMEOUT_MAX, MOVE_TO, STOP_DISTANCE, STOP_DISTANCE_DEFAULT,
+    TELEPORT, TELEPORT_INTERVAL, TELEPORT_WAIT,
 };
 use folderstorm_mcp_bridge::receipts::{Receipt, State};
 use folderstorm_mcp_bridge::server::Pending;

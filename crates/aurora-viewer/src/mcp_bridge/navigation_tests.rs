@@ -104,7 +104,11 @@ fn a_move_stays_in_its_region_within_64_m() {
     let p = plan(&world, MOVE_TO, json!({"global_position": global.to_array()})).expect("planned");
     assert_eq!(move_of(&p).target, Vec3::new(130.0, 120.0, 25.0));
     // a walk is measured flat, a flight in 3D
-    let p = plan(&world, MOVE_TO, json!({"position": [170.0, 120.0, 80.0], "stop_distance": 2.5, "timeout_seconds": 5}));
+    let p = plan(
+        &world,
+        MOVE_TO,
+        json!({"position": [170.0, 120.0, 80.0], "stop_distance": 2.5, "timeout_seconds": 5}),
+    );
     let mv = move_of(&p.expect("a walk 50 m away"));
     assert_eq!((mv.stop_distance, mv.timeout), (2.5, Duration::from_secs(5)));
     // outside the region, too far, wrong arguments
@@ -116,11 +120,26 @@ fn a_move_stays_in_its_region_within_64_m() {
         (json!({"position": [130.0, 120.0]}), ErrorCode::InvalidArguments),
         (json!({"position": [130.0, "a", 25.0]}), ErrorCode::InvalidArguments),
         (json!({}), ErrorCode::InvalidArguments),
-        (json!({"position": [130.0, 120.0, 25.0], "global_position": global.to_array()}), ErrorCode::InvalidArguments),
-        (json!({"position": [130.0, 120.0, 25.0], "mode": "run"}), ErrorCode::InvalidArguments),
-        (json!({"position": [130.0, 120.0, 25.0], "stop_distance": 5}), ErrorCode::InvalidArguments),
-        (json!({"position": [130.0, 120.0, 25.0], "timeout_seconds": 31}), ErrorCode::InvalidArguments),
-        (json!({"position": [130.0, 120.0, 25.0], "timeout_seconds": 0}), ErrorCode::InvalidArguments),
+        (
+            json!({"position": [130.0, 120.0, 25.0], "global_position": global.to_array()}),
+            ErrorCode::InvalidArguments,
+        ),
+        (
+            json!({"position": [130.0, 120.0, 25.0], "mode": "run"}),
+            ErrorCode::InvalidArguments,
+        ),
+        (
+            json!({"position": [130.0, 120.0, 25.0], "stop_distance": 5}),
+            ErrorCode::InvalidArguments,
+        ),
+        (
+            json!({"position": [130.0, 120.0, 25.0], "timeout_seconds": 31}),
+            ErrorCode::InvalidArguments,
+        ),
+        (
+            json!({"position": [130.0, 120.0, 25.0], "timeout_seconds": 0}),
+            ErrorCode::InvalidArguments,
+        ),
         (json!({"position": [130.0, 120.0, 25.0], "speed": 2}), ErrorCode::InvalidArguments),
     ] {
         assert_eq!(refused(&world, MOVE_TO, args.clone()), code, "{args}");
@@ -161,14 +180,19 @@ fn sitting_flying_and_the_viewer_s_own_walks() {
     c.nav.native.pilot = true;
     assert_eq!(super::changes::plan(MOVE_TO, &walk, &c).expect_err("busy").code, ErrorCode::Busy);
     assert_eq!(
-        super::changes::plan(FLYING_SET, &json!({"flying": true}), &c).expect_err("busy").code,
+        super::changes::plan(FLYING_SET, &json!({"flying": true}), &c)
+            .expect_err("busy")
+            .code,
         ErrorCode::Busy
     );
     c.nav.native = Native {
         pilot: false,
         blocks_walk: true,
     };
-    assert_eq!(super::changes::plan(MOVE_TO, &walk, &c).expect_err("held").code, ErrorCode::NotAllowed);
+    assert_eq!(
+        super::changes::plan(MOVE_TO, &walk, &c).expect_err("held").code,
+        ErrorCode::NotAllowed
+    );
     // no parcel known yet: no take-off, as the Fly button
     assert_eq!(refused(&world, MOVE_TO, fly.clone()), ErrorCode::NotAllowed);
     assert_eq!(refused(&world, FLYING_SET, json!({"flying": true})), ErrorCode::NotAllowed);
@@ -210,7 +234,10 @@ fn rlv_restrictions_refuse_as_the_viewer_does() {
     let (mut world, _) = plaza();
     restrict(&mut world, "tplocal:2=n");
     assert_eq!(refused(&world, MOVE_TO, walk.clone()), ErrorCode::NotAllowed);
-    assert!(plan(&world, MOVE_TO, json!({"position": [121.5, 120.0, 25.0]})).is_ok(), "within 2 m");
+    assert!(
+        plan(&world, MOVE_TO, json!({"position": [121.5, 120.0, 25.0]})).is_ok(),
+        "within 2 m"
+    );
     // @tploc: no teleport to another region; this region stays possible
     let (mut world, _) = plaza();
     restrict(&mut world, "tploc=n");
@@ -386,16 +413,104 @@ fn every_reason_a_move_stops() {
     let other = PilotId(now + Duration::from_millis(5));
     // (what the frame shows, the reason, whether its autopilot is stopped)
     let cases: Vec<(Box<dyn Fn(PilotId) -> (Frame, Instant)>, &str)> = vec![
-        (Box::new(|p| (Frame { manual: true, ..here(Some(p)) }, now)), "user_input"),
+        (
+            Box::new(|p| {
+                (
+                    Frame {
+                        manual: true,
+                        ..here(Some(p))
+                    },
+                    now,
+                )
+            }),
+            "user_input",
+        ),
         (Box::new(|_| (here(Some(other)), now)), "replaced"),
         (Box::new(|p| (here(Some(p)), now + Duration::from_secs(11))), "timeout"),
-        (Box::new(|p| (Frame { teleporting: true, ..here(Some(p)) }, now)), "teleported"),
-        (Box::new(|p| (Frame { region: Some(handle + 1), ..here(Some(p)) }, now)), "region_changed"),
-        (Box::new(|p| (Frame { sitting: true, ..here(Some(p)) }, now)), "sat_down"),
-        (Box::new(|p| (Frame { in_world: false, ..here(Some(p)) }, now)), "left_world"),
-        (Box::new(|_| (Frame { flying: true, ..here(None) }, now)), "flight_changed"),
-        (Box::new(|_| (Frame { sitting: true, ..here(None) }, now)), "sat_down"),
-        (Box::new(|_| (Frame { manual: true, ..here(None) }, now)), "user_input"),
+        (
+            Box::new(|p| {
+                (
+                    Frame {
+                        teleporting: true,
+                        ..here(Some(p))
+                    },
+                    now,
+                )
+            }),
+            "teleported",
+        ),
+        (
+            Box::new(|p| {
+                (
+                    Frame {
+                        region: Some(handle + 1),
+                        ..here(Some(p))
+                    },
+                    now,
+                )
+            }),
+            "region_changed",
+        ),
+        (
+            Box::new(|p| {
+                (
+                    Frame {
+                        sitting: true,
+                        ..here(Some(p))
+                    },
+                    now,
+                )
+            }),
+            "sat_down",
+        ),
+        (
+            Box::new(|p| {
+                (
+                    Frame {
+                        in_world: false,
+                        ..here(Some(p))
+                    },
+                    now,
+                )
+            }),
+            "left_world",
+        ),
+        (
+            Box::new(|_| {
+                (
+                    Frame {
+                        flying: true,
+                        ..here(None)
+                    },
+                    now,
+                )
+            }),
+            "flight_changed",
+        ),
+        (
+            Box::new(|_| {
+                (
+                    Frame {
+                        sitting: true,
+                        ..here(None)
+                    },
+                    now,
+                )
+            }),
+            "sat_down",
+        ),
+        (
+            Box::new(|_| {
+                (
+                    Frame {
+                        manual: true,
+                        ..here(None)
+                    },
+                    now,
+                )
+            }),
+            "user_input",
+        ),
         (Box::new(|_| (here(None), now)), "stopped_short"),
     ];
     for (make, reason) in cases {
@@ -423,7 +538,10 @@ fn stop_by_operation_id_and_only_navigation() {
     let (c, stop) = call(STOP, json!({"operation_id": operation}), false);
     desk.take(c, &cx(&inv, &world), now);
     let stopped = answered(&stop).expect("stopped");
-    assert_eq!((stopped["stopped"].as_bool(), stopped["state"].as_str()), (Some(true), Some("stopped")));
+    assert_eq!(
+        (stopped["stopped"].as_bool(), stopped["state"].as_str()),
+        (Some(true), Some("stopped"))
+    );
     assert_eq!(answered(&answer).expect_err("ended").code, ErrorCode::Cancelled);
     assert_eq!(last_reason(&desk), "assistant_stop");
     assert_eq!(desk.navigate(&frame(handle, ME, Some(pilot)), now), vec![Act::StopPilot(pilot)]);
@@ -440,11 +558,7 @@ fn stop_by_operation_id_and_only_navigation() {
         p.set(Class::Edit, Level::Ask);
         p
     });
-    let (c, _rename) = call(
-        "inventory_create_folder",
-        json!({"name": "x"}),
-        false,
-    );
+    let (c, _rename) = call("inventory_create_folder", json!({"name": "x"}), false);
     desk.take(c, &cx(&inv, &world), now);
     let folder = desk.ledger().with(|s| s.recent(None, 1)[0].operation_id.clone());
     let (c, wrong) = call(STOP, json!({"operation_id": folder}), false);
@@ -472,7 +586,10 @@ fn never_a_login_change_or_access_off_stop_a_running_move() {
     let mut desk = desk_with(levels(Level::Allow));
     let (answer, _, pilot) = walking(&mut desk, &world, now);
     desk.set_permissions(levels(Level::Ask));
-    assert!(desk.navigate(&frame(handle, ME, Some(pilot)), now).is_empty(), "Ask: the approved move goes on");
+    assert!(
+        desk.navigate(&frame(handle, ME, Some(pilot)), now).is_empty(),
+        "Ask: the approved move goes on"
+    );
     desk.set_permissions(levels(Level::Never));
     assert_eq!(desk.navigate(&frame(handle, ME, Some(pilot)), now), vec![Act::StopPilot(pilot)]);
     assert_eq!(answered(&answer).expect_err("stopped").code, ErrorCode::Cancelled);
@@ -558,7 +675,16 @@ fn a_teleport_is_followed_to_its_end_and_never_sent_twice() {
     // arrived at the target
     let mut desk = desk_with(levels(Level::Allow));
     let (answer, operation) = teleporting(&mut desk, &world, "tp-a", now);
-    assert!(desk.navigate(&Frame { teleporting: true, ..frame(handle, ME, None) }, now).is_empty());
+    assert!(
+        desk.navigate(
+            &Frame {
+                teleporting: true,
+                ..frame(handle, ME, None)
+            },
+            now
+        )
+        .is_empty()
+    );
     assert!(answer.try_recv().is_err());
     desk.navigate(&frame(handle, target + Vec3::new(1.0, 0.0, -4.0), None), now);
     let done = answered(&answer).expect("arrived");
@@ -568,7 +694,10 @@ fn a_teleport_is_followed_to_its_end_and_never_sent_twice() {
     let (c, again) = call(TELEPORT, teleport_args(&world, "tp-a"), false);
     desk.take(c, &cx(&inv, &world), now);
     let duplicate = answered(&again).expect("the first receipt");
-    assert_eq!((duplicate["duplicate"].as_bool(), duplicate["operation_id"].as_str()), (Some(true), Some(operation.as_str())));
+    assert_eq!(
+        (duplicate["duplicate"].as_bool(), duplicate["operation_id"].as_str()),
+        (Some(true), Some(operation.as_str()))
+    );
     assert!(desk.question(now).is_none() && desk.tick(&IDLE, now).is_empty(), "never sent twice");
     // too soon after the last one, then fine
     let (c, soon) = call(TELEPORT, teleport_args(&world, "tp-b"), false);
@@ -607,10 +736,19 @@ fn a_teleport_fails_is_cancelled_or_unconfirmed() {
     let (c, stop) = call(STOP, json!({"operation_id": operation}), false);
     desk.take(c, &cx(&inv, &world), now);
     let asked = answered(&stop).expect("asked");
-    assert_eq!((asked["cancel_requested"].as_bool(), asked["state"].as_str()), (Some(true), Some("running")));
+    assert_eq!(
+        (asked["cancel_requested"].as_bool(), asked["state"].as_str()),
+        (Some(true), Some("running"))
+    );
     assert_eq!(desk.navigate(&flying(frame(handle, ME, None)), now), vec![Act::CancelTeleport]);
     assert!(answer.try_recv().is_err(), "not ended by asking");
-    desk.navigate(&Frame { teleport_failed: true, ..frame(handle, ME, None) }, now);
+    desk.navigate(
+        &Frame {
+            teleport_failed: true,
+            ..frame(handle, ME, None)
+        },
+        now,
+    );
     assert_eq!(answered(&answer).expect_err("cancelled").code, ErrorCode::Cancelled);
     assert_eq!(state(&mut desk, &world, &operation), "stopped");
     assert_eq!(last_reason(&desk), "teleport_cancelled");
@@ -705,9 +843,24 @@ fn reasons_name_themselves_and_reach_a_move_s_error() {
     ] {
         assert!(!r.code().is_empty() && !r.message().is_empty());
     }
-    assert!(navigation::reached(Mode::Walk, 1.0, Vec3::new(10.0, 0.0, 0.0), Vec3::new(8.6, 0.0, 9.0)));
-    assert!(!navigation::reached(Mode::Walk, 1.0, Vec3::new(10.0, 0.0, 0.0), Vec3::new(8.4, 0.0, 0.0)));
-    assert!(!navigation::reached(Mode::Fly, 1.0, Vec3::new(10.0, 0.0, 0.0), Vec3::new(10.0, 0.0, 3.0)));
+    assert!(navigation::reached(
+        Mode::Walk,
+        1.0,
+        Vec3::new(10.0, 0.0, 0.0),
+        Vec3::new(8.6, 0.0, 9.0)
+    ));
+    assert!(!navigation::reached(
+        Mode::Walk,
+        1.0,
+        Vec3::new(10.0, 0.0, 0.0),
+        Vec3::new(8.4, 0.0, 0.0)
+    ));
+    assert!(!navigation::reached(
+        Mode::Fly,
+        1.0,
+        Vec3::new(10.0, 0.0, 0.0),
+        Vec3::new(10.0, 0.0, 3.0)
+    ));
     assert_eq!(navigation::distance(Mode::Walk, Vec3::ZERO, Vec3::new(3.0, 4.0, 12.0)), 5.0);
     assert_eq!(navigation::distance(Mode::Fly, Vec3::ZERO, Vec3::new(3.0, 4.0, 12.0)), 13.0);
     let mut input = crate::agent::MoveInput::default();
@@ -745,9 +898,7 @@ fn an_assistant_walks_and_teleports_through_the_sidecar() {
     let allow_now = allow.clone();
     let assistant = std::thread::spawn(move || {
         let mut viewer = Viewer::new(Some(folder), None);
-        let early = viewer
-            .call(MOVE_TO, json!({"position": [130.0, 120.0, 25.0]}))
-            .expect("at once");
+        let early = viewer.call(MOVE_TO, json!({"position": [130.0, 120.0, 25.0]})).expect("at once");
         let operation = early["operation_id"].as_str().unwrap_or_default().to_owned();
         let first = early["state"].as_str().unwrap_or_default().to_owned();
         allow_now.store(true, Ordering::SeqCst);
@@ -802,7 +953,11 @@ fn an_assistant_walks_and_teleports_through_the_sidecar() {
             }
         }
         // the autopilot arrives on the next frame; the teleport lands
-        let position = if walking.take().is_some() { Vec3::new(129.5, 120.0, 25.0) } else { ME };
+        let position = if walking.take().is_some() {
+            Vec3::new(129.5, 120.0, 25.0)
+        } else {
+            ME
+        };
         desk.navigate(&frame(handle, position, None), now);
         std::thread::sleep(Duration::from_millis(5));
     }

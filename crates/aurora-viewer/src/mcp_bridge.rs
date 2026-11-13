@@ -397,8 +397,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             let cx = cx.get_or_insert_with(context);
             rt.desk.take(call, cx, now);
         }
-        let demo_ready =
-            !view.world.inventory.root.is_nil() && (!(demo_camera() || demo_navigation()) || view.stage.in_world);
+        let demo_ready = !view.world.inventory.root.is_nil() && (!(demo_camera() || demo_navigation()) || view.stage.in_world);
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
