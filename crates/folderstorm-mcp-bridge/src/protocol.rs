@@ -27,6 +27,9 @@ pub mod world;
 // Folderstorm: receipts, plans and operations (mcp-receipts.md)
 pub mod assistant;
 
+// Folderstorm: phase 3, part 4 (navigation), its own catalogue
+pub mod navigation;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -268,7 +271,21 @@ impl ToolSpec {
         {
             properties.insert(crate::receipts::CLIENT_REQUEST_ID.to_owned(), assistant::client_request_id_schema());
         }
+        // a teleport cannot be looked at afterwards: its id is required
+        if self.needs_client_request_id() {
+            match schema["required"].as_array_mut() {
+                Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
+                None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
+            }
+        }
         schema
+    }
+
+    /// Folderstorm: whether a call must give a `client_request_id`: a change
+    /// whose effect cannot be looked at afterwards (mcp-receipts.md,
+    /// decision 3), so that a retry after a lost answer is never sent twice.
+    pub fn needs_client_request_id(&self) -> bool {
+        navigation::needs_client_request_id(self.name)
     }
 }
 
@@ -276,7 +293,9 @@ impl ToolSpec {
 /// with the viewer's interface shows its windows, chat included. Never
 /// still refuses them.
 pub fn always_asks(tool: &str, arguments: &Value) -> bool {
-    tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true)
+    (tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true))
+        // Folderstorm: a teleport never happens without the user seeing where
+        || navigation::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -792,6 +811,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(inventory::INVENTORY_TOOLS)
         .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
         .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
+        .chain(navigation::NAVIGATION_TOOLS) // Folderstorm: navigation
 }
 
 #[cfg(test)]

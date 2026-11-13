@@ -42,6 +42,9 @@ pub const PLANS: &str = "plans";
 /// Guarded operations (mcp-receipts.md, section 5): early answers,
 /// `assistant_operation_cancel`, the `cancelled` code.
 pub const OPERATIONS: &str = "operations";
+/// Folderstorm: the navigation tools (phase 3, part 4): `navigation_*`, the
+/// `navigation` permission class.
+pub const NAVIGATION: &str = "navigation";
 
 /// What this build implements. Later groups add theirs: `plans`,
 /// `operations`…
@@ -54,6 +57,7 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (RECEIPTS, 1),   // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
     (PLANS, 1),      // Folderstorm: batch plans (checkpoint 4)
     (OPERATIONS, 1), // Folderstorm: guarded operations (checkpoint 5)
+    (NAVIGATION, 1), // Folderstorm: navigation (phase 3, part 4)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -224,7 +228,16 @@ mod tests {
         assert!(missing(&mine).is_empty());
         assert_eq!(
             missing(&assumed()),
-            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS, PLANS, OPERATIONS]
+            vec![
+                CAMERA,
+                INVENTORY_GAPS,
+                WORLD,
+                LOGIN_BINDING,
+                RECEIPTS,
+                PLANS,
+                OPERATIONS,
+                NAVIGATION
+            ]
         );
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();
@@ -233,13 +246,13 @@ mod tests {
         assert!(protocol::all().all(|t| supports(&newer, t)));
         assert!(missing(&newer).is_empty());
         // a tool of a group the viewer lacks
-        let navigation = ToolSpec {
-            name: "navigation_teleport",
-            group: "navigation",
+        let later = ToolSpec {
+            name: "chat_send",
+            group: "chat",
             ..*protocol::tool("worn_items").expect("a tool")
         };
-        assert!(!supports(&mine, &navigation));
-        let e = unsupported(&navigation);
+        assert!(!supports(&mine, &later));
+        let e = unsupported(&later);
         assert_eq!(e.code, ErrorCode::Unsupported);
         assert!(e.message.contains("Update"), "{e}");
     }

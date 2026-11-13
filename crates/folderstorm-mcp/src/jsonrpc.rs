@@ -157,13 +157,16 @@ fn initialize(params: &Value) -> Value {
     });
     // Folderstorm: receipts, plans and operations (mcp-receipts.md)
     if let Some(text) = answer["instructions"].as_str() {
-        answer["instructions"] = json!(format!("{text} {RECEIPTS_HINT}"));
+        answer["instructions"] = json!(format!("{text} {RECEIPTS_HINT} {NAVIGATION_HINT}"));
     }
     answer
 }
 
 /// Folderstorm: how an assistant uses receipts, plans and operations.
 const RECEIPTS_HINT: &str = "Every change answers with an operation_id and its state, in errors and timeouts too: after a timeout or a lost answer, call assistant_operation_status instead of retrying. A change may take your own client_request_id: sent again with the same arguments, it returns the first receipt and runs nothing. For several renames or moves, preview a plan (inventory_preview_batch_rename, inventory_preview_batch_move), show it to the user, then inventory_execute_plan runs it once (stale if the inventory changed: preview again); with wait false it answers at once and you poll assistant_operation_status. assistant_operation_cancel stops an operation not sent yet.";
+
+/// Folderstorm: how an assistant moves the avatar (phase 3, part 4).
+const NAVIGATION_HINT: &str = "To move the avatar, read navigation_status (or world_location) first; navigation_move_to walks or flies to a point of the same region within 64 m and answers at once with an operation_id: poll navigation_status until `last` says how it ended (it stops when the user moves the avatar). navigation_teleport always asks the user, needs a client_request_id and is never sent twice: after a lost answer, call it again with the same id or ask assistant_operation_status, never with a new id. navigation_stop stops your own move.";
 
 fn tools_list() -> Value {
     let tools: Vec<Value> = protocol::all()
@@ -173,7 +176,8 @@ fn tools_list() -> Value {
                 "description": t.description,
                 "inputSchema": t.input_schema(),
                 "annotations": {
-                    "readOnlyHint": !t.changes(),
+                    // Folderstorm: navigation_stop stops the avatar
+                    "readOnlyHint": !t.changes() && t.name != folderstorm_mcp_bridge::protocol::navigation::STOP,
                     "destructiveHint": false,
                     "openWorldHint": false
                 }
@@ -444,5 +448,42 @@ mod tests {
         );
         assert_eq!(a["result"]["isError"], false);
         assert_eq!(s.backend.0, vec!["world_location".to_owned()]);
+    }
+
+    /// Folderstorm: phase 3, part 4 (navigation).
+    #[test]
+    fn lists_the_navigation_tools() {
+        let mut s = Server::new(Fake(Vec::new()));
+        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+        let instructions = a["result"]["instructions"].as_str().expect("instructions");
+        assert!(instructions.contains("navigation_teleport always asks"), "{instructions}");
+        let a = ask(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+        let tools = a["result"]["tools"].as_array().expect("tools");
+        let tool = |name: &str| {
+            tools
+                .iter()
+                .find(|t| t["name"] == name)
+                .unwrap_or_else(|| panic!("{name} listed"))
+                .clone()
+        };
+        assert_eq!(tool("navigation_status")["annotations"]["readOnlyHint"], true);
+        for name in [
+            "navigation_move_to",
+            "navigation_flying_set",
+            "navigation_teleport",
+            "navigation_stop",
+        ] {
+            assert_eq!(tool(name)["annotations"]["readOnlyHint"], false, "{name}");
+        }
+        assert_eq!(
+            tool("navigation_teleport")["inputSchema"]["required"],
+            json!(["global_position", "client_request_id"])
+        );
+        let a = ask(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"navigation_status","arguments":{}}}"#,
+        );
+        assert_eq!(a["result"]["isError"], false);
+        assert_eq!(s.backend.0, vec!["navigation_status".to_owned()]);
     }
 }
