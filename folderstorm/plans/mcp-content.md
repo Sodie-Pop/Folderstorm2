@@ -116,7 +116,7 @@ saved here; nothing is rezzed, run, reset or attached.
 |---|---|
 | Text, both kinds | 65,536 UTF-8 bytes (`Notecard::MAX_TEXT_BYTES`; scripts: the same, stricter than Aurora's 1 MiB editor limit, as Folderstorm (C++)); no NUL |
 | Read of a larger script | `complete: false`, the text cut at 65,536 bytes on a character boundary, no snapshot |
-| Diff in a preview | 16 KiB of text; a changed middle longer than 2,000 lines on each side is shown as one replaced block |
+| Diff in a preview | 16 KiB of text; a changed middle of more than 1,000,000 line pairs (1,000 × 1,000) is shown as one replaced block (the counts stay true) |
 | Compile errors | 64 entries, 8 KiB in all |
 | Content outcomes | 32 per login |
 | Bridge request body | raised from 64 KiB to 512 KiB (a 64 KiB text escaped in JSON) |
@@ -190,3 +190,58 @@ app's demo answers).
 
 Not testable here: the dialog's look, the grid's real capabilities
 (SL and OpenSim compile answers), and editors open on the grid.
+
+## As built
+
+Branch `claude/mcp-content`, on `claude/mcp-receipts` (PR #47, not
+merged). Everything above is built; the details that differ or that the
+plan left open:
+
+- **The frozen save.** When the desk takes a save the first time
+  (`Desk::take`, a call without a receipt yet), `Content::freeze` checks it
+  against its snapshot and replaces its arguments by `item_id` and a
+  `frozen_content` object: the encoded notecard (base64) or the source, the
+  asset it was checked against, the counts and the dialog's lines. The
+  plan just before the upload (`content::plan`, through `changes::plan`
+  from `mcp_bridge::replan`) is then a pure function of them and of the
+  context, as a batch plan is. A call from the sidecar carrying
+  `frozen_content` itself is refused (`unknown argument`): only the desk
+  freezes. The receipt's argument hash is taken before the freeze, so a
+  retry with the same `client_request_id` and the same text is a
+  duplicate.
+- **One exit, as every change**: the server's answer (`InventoryContentSaved`,
+  or `ScriptSaved` with an inventory target) maps to
+  `desk::Outcome::Content`, which only a content save's flight takes (and a
+  content save takes no other answer); `Desk::finish` gives it to
+  `Content::saved`, which writes the answer and the content record. An
+  unconfirmed save records `source_saved: null`; its late answer updates the
+  record (`Content::settle`) and the receipt.
+- **Uncertain errors**: a save error that the editors' own uploads raise
+  after the text left (`script-save-unconfirmed`, `script-timeout`,
+  `notecard-save-unconfirmed`, "saved but could not read it back"…) answers
+  `timeout` (receipt `unconfirmed`, `source_saved: null`); any other error
+  answers `failed` (`source_saved: false`).
+- **The script's inventory item** gets its new asset from the app one frame
+  later (`mcp_bridge::content_updates`, then `FetchItems`), since the
+  viewer's `script_saved` only updates the items of its own editors. A
+  notecard's item goes through the viewer's own `inventory_content_saved`.
+- **Reads in the demo**: the demo's `PreviewInventoryItem` answers the
+  editors directly, so the app hands the demo notecard to the bridge itself
+  (`mcp_bridge::content_demo_notecard`); scripts go through `LoadScript` and
+  the demo's own script sources, as in the script editor.
+- **Compile positions**: the grid's `(line, column)` count from 0; the
+  answer gives them from 1 (`line`, `column`) with the grid's line as it
+  came (`raw`).
+- **Open editors**: any open editor on the item (the inventory's preview, a
+  document window, a script editor on the inventory item), dirty or not,
+  answers `busy`: the editors' "dirty" state is private to `ui/scripts.rs`
+  (upstream), and a clean editor would show a stale text after the save.
+- **Upstream hooks**: none. The new code is in Folderstorm files; the only
+  upstream files touched are the three catalogues (`fs-mcp-*` block) and
+  `docs/TESTING.md`.
+
+Tests: `mcp_bridge/content_tests.rs` (19), `content/diff.rs` (6), the
+catalogue (`protocol/content.rs`), the policy (Content and its migration),
+the sidecar's `tools/list` and instructions. The end-to-end test runs the
+sidecar's `Viewer` over a real socket to the bridge and the desk: read,
+preview, save, and the same save again answering its receipt.

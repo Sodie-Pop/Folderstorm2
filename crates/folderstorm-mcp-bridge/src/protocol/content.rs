@@ -40,6 +40,10 @@ pub const FETCH_WAIT: Duration = Duration::from_secs(45);
 /// The only compiler: raw LSL for Mono.
 pub const COMPILERS: &[&str] = &["mono"];
 
+// a whole text fits in a request, however JSON escapes it (\u0001 is 6
+// bytes for one)
+const _: () = assert!(TEXT_MAX * 6 + 4096 < crate::http::MAX_REQUEST_BODY);
+
 /// Whether `tool` is one of this group's.
 pub fn handles(tool: &str) -> bool {
     CONTENT_TOOLS.iter().any(|t| t.name == tool)
@@ -215,11 +219,5 @@ mod tests {
         assert!(handles(GET) && handles(STATUS) && !handles("inventory_item"));
         assert!(CONTENT_TOOLS.iter().all(|t| t.group == binding::CONTENT));
         assert!(FETCH_WAIT > Duration::from_secs(30));
-    }
-
-    #[test]
-    fn a_whole_text_fits_in_a_request() {
-        // the worst JSON escaping of a full text (\u0001 is 6 bytes for one)
-        assert!(TEXT_MAX * 6 + 4096 < crate::http::MAX_REQUEST_BODY);
     }
 }

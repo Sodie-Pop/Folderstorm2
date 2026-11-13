@@ -587,3 +587,11 @@ built" sections in mcp-receipts.md). New tools: `assistant_operation_status`,
 `inventory_preview_batch_move`, `inventory_execute_plan`; every change takes
 an optional `client_request_id` and answers with its `operation_id` and
 `state`. Capabilities `receipts: 1`, `plans: 1`, `operations: 1`.
+
+## Next: content editing
+
+Notecard and script reads, previews, saves and compiles (step 7 of the
+parity order) are planned and built in [mcp-content.md](mcp-content.md), on
+`claude/mcp-content` (stacked on `claude/mcp-receipts`): a new **Content**
+class (Never in "Read only", Ask in "Ask before changes"), capability
+`content: 1`, and a bridge request body raised to 512 KiB.
