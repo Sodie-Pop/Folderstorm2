@@ -5,6 +5,7 @@
 //! behind the cog as the keyboard route and edit the same settings.
 
 use super::super::cx::{Cx, field, fields};
+use crate::folderstorm::viewport::bars::BarsPlace;
 use crate::folderstorm::{diagram, viewport};
 
 pub(super) fn group(cx: &mut Cx) {
@@ -62,10 +63,27 @@ pub(super) fn group(cx: &mut Cx) {
                 tr!("folderstorm-viewport-mouselook-help"),
                 &field!(folderstorm_viewport.in_mouselook),
             );
-            cx.toggle(
+            // inside the world, around it, or over the whole window
+            // (`viewport::bars`); kept in two switches of the settings
+            let p = cx.p;
+            let places = [
+                (BarsPlace::Inside, tr!("folderstorm-viewport-bars-inside"), false),
+                (BarsPlace::Around, tr!("folderstorm-viewport-bars-around"), false),
+                (BarsPlace::Window, tr!("folderstorm-viewport-bars-window"), false),
+            ];
+            let words: Vec<&str> = places.iter().map(|(_, label, _)| *label).collect();
+            cx.keywords(&words.join(" ")).wide().row(
                 tr!("folderstorm-viewport-bars"),
                 tr!("folderstorm-viewport-bars-help"),
-                &field!(folderstorm_viewport.bars_in_viewport),
+                &fields!(folderstorm_viewport.bars_in_viewport, folderstorm_viewport.bars_around),
+                |ui, s| {
+                    let mut place = BarsPlace::of(&s.folderstorm_viewport);
+                    let changed = super::super::segmented(ui, &p, &mut place, &places);
+                    if changed {
+                        place.set(&mut s.folderstorm_viewport);
+                    }
+                    changed
+                },
             );
         });
         // the diagram shows as soon as the viewport is on, without opening

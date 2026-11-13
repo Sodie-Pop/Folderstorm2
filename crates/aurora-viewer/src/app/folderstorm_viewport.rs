@@ -53,8 +53,10 @@ impl App {
     /// `AURORA_DEMO_VIEWPORT=<mode>`: the viewport turned on once, at the
     /// start of a demo run (in the demo's own settings): `1` keeps the
     /// right two thirds of the window, `bars-window` the same with the bars
-    /// over the whole window, `middle` the middle third (as the middle one
-    /// of three monitors), `mouselook-full` drops it in mouselook,
+    /// over the whole window, `bars-around` the same with an eighth of the
+    /// height left above and below and the bars around the world, `middle`
+    /// the middle third (as the middle one of three monitors),
+    /// `mouselook-full` drops it in mouselook,
     /// `inventory` keeps the right 40 % and opens Inventory in the left
     /// margin, half the window wide: wider than the world, and kept so.
     pub(super) fn viewport_demo(&mut self, size: (u32, u32)) {
@@ -69,8 +71,11 @@ impl App {
             enabled: true,
             left: if mode == "inventory" { size.0 / 5 * 3 } else { third },
             right: if mode == "middle" { third } else { 0 },
+            top: if mode == "bars-around" { size.1 / 8 } else { 0 },
+            bottom: if mode == "bars-around" { size.1 / 8 } else { 0 },
             in_mouselook: mode != "mouselook-full",
             bars_in_viewport: mode != "bars-window",
+            bars_around: mode == "bars-around",
             ..Default::default()
         };
         if mode == "inventory" {

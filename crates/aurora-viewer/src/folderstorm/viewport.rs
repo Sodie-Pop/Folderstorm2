@@ -18,6 +18,8 @@
 //! into the window there (`aurora_render::Renderer::set_world_rect`); this
 //! module only decides the rectangle.
 
+pub mod bars;
+
 use serde::{Deserialize, Serialize};
 
 /// The least share of the window's width and height the world keeps; below
@@ -39,6 +41,10 @@ pub struct ViewportSettings {
     /// The top, bottom and side bars stay inside the viewport; off, they
     /// follow the whole window as in Aurora.
     pub bars_in_viewport: bool,
+    /// With `bars_in_viewport`: the bars go around the world instead, each
+    /// in the margin beside it when that margin has room ([`bars`]). Off in
+    /// every settings file written before the choice existed.
+    pub bars_around: bool,
 }
 
 impl Default for ViewportSettings {
@@ -51,6 +57,7 @@ impl Default for ViewportSettings {
             bottom: 0,
             in_mouselook: true,
             bars_in_viewport: true,
+            bars_around: false,
         }
     }
 }
