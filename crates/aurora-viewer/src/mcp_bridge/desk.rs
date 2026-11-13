@@ -559,7 +559,7 @@ impl Desk {
                 )));
                 None
             }
-            plans::Found::Used(_) => {
+            plans::Found::Used => {
                 call.answer(Err(ToolError::new(ErrorCode::NotFound, "this plan was already executed")));
                 None
             }
