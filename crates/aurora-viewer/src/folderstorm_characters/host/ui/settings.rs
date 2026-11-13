@@ -121,7 +121,7 @@ pub(super) fn section_icon(section: Section) -> &'static str {
         Section::Monitors => "device-desktop-filled",
         Section::Hotkeys => "keyboard-filled",
         Section::Advanced => "adjustments-filled",
-        Section::Controller => "sparkles",
+        Section::Controller => "wand",
         Section::Updates => "download-filled",
     }
 }

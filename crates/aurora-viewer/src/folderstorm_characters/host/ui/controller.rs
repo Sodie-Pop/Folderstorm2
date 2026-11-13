@@ -301,6 +301,7 @@ mod tests {
             ::folderstorm_session::settings::Section::Controller,
             None,
         ));
+        app.settings.view = Some(app.look.view());
         draw_in(&mut app, Which::Settings, 1000, 900);
         let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 900);
         assert!(pixels.iter().any(|p| *p != pixels[0]));
@@ -352,6 +353,7 @@ mod tests {
             .controller
             .questions
             .ask(&app.host.desk, Some(1), request, Some("Claude Code".into()), call, now);
+        app.ask.view = Some(app.look.view());
         let (drawn, _) = draw_in(&mut app, Which::Ask, 460, 250);
         let text = drawn.join("\n");
         assert!(text.contains("Claude Code"), "{text}");

@@ -362,3 +362,12 @@ characters from one sidecar at once: one sidecar per character, or
 `viewer_select`, instead); controller receipts and request ids (C++'s
 `controller_operation_status`): an action answers once the desk has taken
 it; monitor arrangement and cycling controls beyond open / close.
+
+**Checks run here (Linux):** `cargo fmt --all --check`; `cargo clippy
+--profile ci --workspace --all-targets --locked -- -D warnings -A
+dead-code` clean (and nothing of this branch among the dead-code
+warnings without `-A dead-code`); `cargo test --profile ci --workspace
+--locked --no-fail-fast`: everything passes but the known root-only
+`world::chat_log::import::tests::a_failure_leaves_the_file_as_it_was`.
+**Not run here:** the Ask window and the settings section on a real
+screen, a real MCP client, the host and two real characters on Windows.
