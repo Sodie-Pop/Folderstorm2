@@ -27,6 +27,8 @@ pub(super) enum Page {
     Characters,
     Hotkeys,
     NewProfile,
+    /// Checkpoint 8: the bar and its quick actions (`ui/bar.rs`).
+    Bar,
 }
 
 /// What the window keeps for checkpoint 4.
@@ -126,6 +128,7 @@ impl Window_ {
             Page::Characters => return false,
             Page::Hotkeys => self.hotkeys_page(ui, &p, &mut asked),
             Page::NewProfile => self.new_profile_page(ui, &p, &mut asked),
+            Page::Bar => self.bar_page(ui, &p, acts),
         }
         acts.extend(asked.into_iter().map(super::Act::Comfort));
         true
@@ -191,6 +194,14 @@ impl Window_ {
                 .clicked()
             {
                 acts.push(super::Act::Comfort(Act::Page(Page::Hotkeys)));
+            }
+            // (checkpoint 8: the bar's and the quick actions' page)
+            let bar = tr!("folderstorm-bar-settings-bar");
+            if widgets::action_button(ui, p, "settings-filled", bar, ActionKind::Flat, BUTTON)
+                .on_hover_text(tr!("folderstorm-bar-page-intro"))
+                .clicked()
+            {
+                acts.push(super::Act::Comfort(Act::Page(Page::Bar)));
             }
         });
         if let Some(note) = &self.comfort.note {

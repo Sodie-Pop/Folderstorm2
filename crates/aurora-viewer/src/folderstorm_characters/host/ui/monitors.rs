@@ -374,6 +374,10 @@ mod tests {
             ..Default::default()
         };
         app.host.desk.status(slot, 1, status, now);
+        // a status comes over a live link, whose heartbeat comes with it:
+        // without it a slow test run passes the silence limit and the
+        // monitor says "not answering" instead
+        app.host.desk.heartbeat(slot, 1, 0, now);
     }
 
     fn shows(drawn: &[String], text: &str) -> bool {
@@ -533,8 +537,10 @@ mod tests {
         assert_eq!(app.main.monitors.texture(1).map(egui::TextureHandle::id), id);
         assert_eq!(reds(&pixels), 0);
         assert!(pixels.iter().filter(|p| **p == 0x0014_B43C).count() > 480 * 270 / 2);
-        // a busy card is said under the picture
-        report(&mut app, 1, State::Slowed, now);
+        // a busy card is said under the picture (reported now: the drawings
+        // above can take seconds on a slow machine, and a status that old
+        // would read as a viewer not answering)
+        report(&mut app, 1, State::Slowed, Instant::now());
         let (drawn, _) = draw(&mut app, 1120, 1100);
         assert!(shows(&drawn, tr!("folderstorm-monitor-slowed")));
     }

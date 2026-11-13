@@ -537,6 +537,8 @@ pub(super) mod tests {
             demo: true,
             unsaved: None,
             exit: false,
+            bar_sent: Default::default(),
+            bar_asked: Vec::new(),
         };
         for slot in 0..2 {
             host.chat.status(slot, 1, 1, true);

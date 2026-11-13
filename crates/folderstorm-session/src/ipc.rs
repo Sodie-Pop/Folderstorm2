@@ -31,6 +31,11 @@
 //! may be asked for its monitor's pictures ([`Role::Monitor`]) and sends
 //! them ([`ToHost::Frame`]).
 //!
+//! Since protocol 4 (checkpoint 8, plan section 15) the host hands each
+//! viewer the bar to draw at the top of its window ([`ToViewer::Bar`]),
+//! hears the clicks on it ([`ToHost::Bar`]), and may ask a background
+//! character's window off the taskbar ([`Assignment::off_taskbar`]).
+//!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
 //! and bounded before anything shows it ([`Status::cleaned`]).
@@ -48,6 +53,7 @@
 //! viewer already reports on, with its checks (this logon only, the
 //! launch's process and one-time token).
 
+use crate::bar;
 use crate::behind::Behind3d;
 use crate::monitor::{self, FrameHeader};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -55,7 +61,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 3;
+pub const PROTOCOL: u32 = 4;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -173,6 +179,11 @@ pub struct Assignment {
     /// Voice may connect and transmit: the active character only, and only
     /// once every other character has given it up.
     pub voice_allowed: bool,
+    /// Checkpoint 8, Windows: this window stays off the taskbar and out
+    /// of Alt-Tab while it is behind the active character's (the viewer
+    /// decides how, `bar::taskbar`, and puts everything back by itself).
+    #[serde(default)]
+    pub off_taskbar: bool,
 }
 
 /// Where the characters' windows go: the outer rectangle of a window in
@@ -228,6 +239,8 @@ pub enum ToViewer {
         generation: u32,
         conversation: Conversation,
     },
+    /// Checkpoint 8: the bar to draw at the top of the window, whole.
+    Bar(Box<bar::State>),
 }
 
 impl ToViewer {
@@ -246,6 +259,7 @@ impl ToViewer {
                 conversation,
                 text: clean_text(&text, MAX_SEND),
             },
+            Self::Bar(state) => Self::Bar(Box::new(state.cleaned())),
             other => other,
         }
     }
@@ -626,6 +640,8 @@ pub enum ToHost {
     /// A monitor's picture follows: exactly the header's bytes, raw, right
     /// after this message ([`write_picture`], [`read_picture`]).
     Frame(FrameHeader),
+    /// Checkpoint 8: a click on the bar this viewer draws.
+    Bar(bar::Request),
 }
 
 /// Why a frame was not read.
@@ -741,7 +757,78 @@ mod tests {
             standby: Standby::Economy,
             sound_muted: true,
             voice_allowed: false,
+            off_taskbar: false,
         }
+    }
+
+    #[test]
+    fn the_bar_goes_down_whole_and_cleaned_and_its_clicks_come_up() {
+        let state = bar::State {
+            docked: true,
+            characters: vec![bar::Character {
+                slot: 1,
+                name: "Shop\u{7} keeper".to_owned(),
+                real: Some("Jane Doe".to_owned()),
+                colour: crate::identity::Colour::Teal,
+                presence: bar::Presence::Inactive,
+                quick: crate::host::Quick::Switch,
+                monitor: true,
+            }],
+            inbox: 2,
+            quick: vec![bar::QuickAction::Character(1), bar::QuickAction::Attention],
+            ..bar::State::default()
+        };
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToViewer::Bar(Box::new(state.clone()))).expect("written");
+        assert!(wire.len() < MAX_FRAME / 16, "{} bytes", wire.len());
+        let read: ToViewer = read_frame(&mut wire.as_slice()).expect("read");
+        assert_eq!(read, ToViewer::Bar(Box::new(state)));
+        // what a viewer acts on is cleaned
+        let ToViewer::Bar(cleaned) = read.cleaned() else {
+            panic!("not the bar");
+        };
+        assert_eq!(cleaned.characters[0].name, "Shop keeper");
+        assert_eq!(cleaned.characters[0].colour, crate::identity::Colour::Teal);
+        // the fullest bar there can be fits a frame many times over
+        let full = bar::State {
+            characters: (0..MAX_SLOTS as u8)
+                .map(|slot| bar::Character {
+                    slot,
+                    name: "ç".repeat(MAX_NAME),
+                    real: Some("ç".repeat(MAX_NAME)),
+                    ..bar::Character::default()
+                })
+                .collect(),
+            quick: vec![bar::QuickAction::MuteBackground; bar::MAX_QUICK],
+            ..bar::State::default()
+        }
+        .cleaned();
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToViewer::Bar(Box::new(full))).expect("written");
+        assert!(wire.len() < MAX_FRAME / 8, "{} bytes", wire.len());
+        // a click
+        let mut wire = Vec::new();
+        for request in [
+            bar::Request::Pick(2),
+            bar::Request::Show(bar::Page::Quit),
+            bar::Request::Dock(false),
+        ] {
+            write_frame(&mut wire, &ToHost::Bar(request)).expect("written");
+        }
+        let mut rest = wire.as_slice();
+        assert_eq!(read_frame::<ToHost>(&mut rest).expect("read"), ToHost::Bar(bar::Request::Pick(2)));
+        assert_eq!(
+            read_frame::<ToHost>(&mut rest).expect("read"),
+            ToHost::Bar(bar::Request::Show(bar::Page::Quit))
+        );
+        // a bar's state without the word on spanning the window: over the
+        // world viewport, as the default is
+        let without = r#"{"docked":true,"collapsed":false,"characters":[],"inbox":0,"chat_open":false,"chat_unread":0,"mute_background":false,"voice_follows":false,"quick":[],"quick_labels":"icon-only","toolbar_labels":"icon-only"}"#;
+        let read = serde_json::from_str::<bar::State>(without).expect("reads");
+        assert!(read.docked && !read.span_window);
+        // an assignment of before protocol 4 has no word on the taskbar
+        let old = r#"{"seq":3,"role":"Background","behind":"Off","standby":"Warm","sound_muted":true,"voice_allowed":false}"#;
+        assert!(!serde_json::from_str::<Assignment>(old).expect("reads").off_taskbar);
     }
 
     #[test]

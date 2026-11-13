@@ -53,9 +53,26 @@ pub enum Kind {
     Attention(Box<AttentionList>),
     /// What became of a line the host asked it to say.
     SendResult(u64, SendOutcome),
+    /// Checkpoint 8: a click on the bar it draws.
+    Bar(::folderstorm_session::bar::Request),
     /// The viewer never reached its endpoint: only other clients came, or
     /// the endpoint failed. Nothing more comes from this launch.
     Unreachable,
+}
+
+/// Wakes the host's window for an event that should not wait for its
+/// next look (checkpoint 8: a click on a viewer's bar). Set once by the
+/// window's loop; without one (the tests) events wait for the next look.
+static WAKER: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>> = std::sync::OnceLock::new();
+
+pub fn set_waker(wake: impl Fn() + Send + Sync + 'static) {
+    let _ = WAKER.set(Box::new(wake));
+}
+
+fn wake() {
+    if let Some(wake) = WAKER.get() {
+        wake();
+    }
 }
 
 /// A monitor's picture as the window shows it.
@@ -270,6 +287,7 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
             Ok(ToHost::Chat(batch)) => Kind::Chat(batch),
             Ok(ToHost::Attention(list)) => Kind::Attention(list),
             Ok(ToHost::SendResult { id, outcome }) => Kind::SendResult(id, outcome),
+            Ok(ToHost::Bar(request)) => Kind::Bar(request),
             Ok(ToHost::Frame(header)) => {
                 // its size is checked before a byte of it is read
                 match ipc::read_picture(&mut from_viewer, &header) {
@@ -303,8 +321,12 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
                 return;
             }
         };
+        let urgent = matches!(kind, Kind::Bar(_));
         if !tell(kind) {
             return;
+        }
+        if urgent {
+            wake();
         }
     }
 }
@@ -625,7 +647,7 @@ mod tests {
                 Kind::Status(status) => desk.status(slot, launch, (**status).clone(), now),
                 Kind::Heartbeat(count) => desk.heartbeat(slot, launch, *count, now),
                 Kind::Refused(refusal) => desk.refused(slot, launch, *refusal),
-                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) => {}
+                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) | Kind::Bar(_) => {}
                 Kind::Unreachable => desk.unreachable(slot, launch),
             }
             kinds.push(kind);
@@ -728,6 +750,7 @@ mod tests {
             standby: ::folderstorm_session::ipc::Standby::Warm,
             sound_muted: true,
             voice_allowed: false,
+            off_taskbar: false,
         };
         ipc::write_frame(&mut to_viewer, &ToViewer::Assign(assignment)).expect("written");
         let managed::Event::Command(ToViewer::Assign(taken)) = viewer_event() else {
@@ -850,7 +873,7 @@ mod tests {
                     Kind::Chat(batch) => chat.batch(slot, launch, *batch),
                     Kind::Attention(list) => chat.attention_list(slot, launch, *list),
                     Kind::SendResult(id, outcome) => chat.result(slot, launch, id, outcome),
-                    Kind::Connected | Kind::Heartbeat(_) => {}
+                    Kind::Connected | Kind::Heartbeat(_) | Kind::Bar(_) => {}
                     Kind::Refused(refusal) => panic!("refused: {refusal:?}"),
                     Kind::Unreachable => panic!("the viewer never reached its endpoint"),
                 }

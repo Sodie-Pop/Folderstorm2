@@ -40,6 +40,8 @@ use winit::{
 pub(in super::super) enum Which {
     Main,
     Pane(Panel),
+    /// Checkpoint 8: the bar's compact window (`ui/bar.rs`).
+    Bar,
 }
 
 /// What every window of the host is drawn with.
@@ -70,6 +72,7 @@ impl Look {
             redraw: true,
             focused: false,
             occluded: false,
+            hidden: false,
             monitors: Default::default(),
         }
     }
@@ -89,6 +92,9 @@ pub(super) struct View {
     pub focused: bool,
     /// The window is covered whole by others, as the system says.
     pub occluded: bool,
+    /// Checkpoint 8: the window is hidden (the host's own, while a bar is
+    /// on screen): nothing in it is seen.
+    pub hidden: bool,
     /// The monitors' textures in this window, and which are on screen.
     pub monitors: super::monitors::Panel,
 }
@@ -131,7 +137,7 @@ impl View {
     pub fn sight(&self) -> Sight {
         Sight {
             seen: self.monitors.seen,
-            minimised: self.minimised(),
+            minimised: self.minimised() || self.hidden,
             occluded: self.occluded,
         }
     }
@@ -153,7 +159,7 @@ impl View {
 }
 
 /// The connected screens, for a saved place to be checked against.
-fn screens(event_loop: &ActiveEventLoop) -> Vec<panels::Screen> {
+pub(super) fn screens(event_loop: &ActiveEventLoop) -> Vec<panels::Screen> {
     event_loop
         .available_monitors()
         .map(|monitor| {
@@ -183,6 +189,7 @@ impl Window_ {
         match which {
             Which::Main => Some(&self.main),
             Which::Pane(panel) => self.panes[panel.index()].as_ref(),
+            Which::Bar => self.bar.view.as_ref(),
         }
     }
 
@@ -190,6 +197,7 @@ impl Window_ {
         match which {
             Which::Main => Some(&mut self.main),
             Which::Pane(panel) => self.panes[panel.index()].as_mut(),
+            Which::Bar => self.bar.view.as_mut(),
         }
     }
 
@@ -219,6 +227,9 @@ impl Window_ {
         if is(&self.main) {
             return Some(Which::Main);
         }
+        if self.bar.view.as_ref().is_some_and(is) {
+            return Some(Which::Bar);
+        }
         Panel::ALL
             .into_iter()
             .find(|panel| self.panes[panel.index()].as_ref().is_some_and(is))
@@ -228,7 +239,7 @@ impl Window_ {
     /// Every window is drawn again.
     pub(super) fn redraw_all(&mut self) {
         self.main.redraw = true;
-        for pane in self.panes.iter_mut().flatten() {
+        for pane in self.panes.iter_mut().flatten().chain(&mut self.bar.view) {
             pane.redraw = true;
         }
     }

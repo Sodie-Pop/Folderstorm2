@@ -5892,7 +5892,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view); with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; a monitor per background character (a small picture of its own view); with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,monitors,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions; add `AURORA_DEMO_VIEWPORT=1` (inherited by the demo viewers) to see the docked bar over the world viewport only (the option "Span the whole window" on the bar's page puts it across the window) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7459,7 +7459,9 @@ failure. Grid validation and any paid upload are performed by the human.
       always says the real name too. Hover a tab or a quick-action button
       for the real name. Outside the demo both are in
       `session-host.json` (`colour`, `alias` per slot); no viewer's
-      window, title or log shows either.
+      title, log, settings or chat shows either. (Since checkpoint 8 a
+      managed viewer draws them in its bar, from what the host tells it:
+      there and nowhere else.)
     - **condensed** (`condensed`: the host starts in it). "Condensed" at
       the top of the characters' panel: one line per character (colour,
       number and alias or name, where its viewer is, what is wrong,
@@ -7473,11 +7475,77 @@ failure. Grid validation and any paid upload are performed by the human.
       picture is in the cards); with the monitors in their own window it
       goes on. Outside the demo the choice is `condensed` in
       `session-host.json`.
+  - **the docked bar and the compact controls** (checkpoint 8).
+    `AURORA_DEMO_SESSION_HOST_BAR=docked|popped` (with
+    `AURORA_DEMO_SESSION_HOST`; without it the bar is docked too, the
+    variable also puts "Mute background" and "Voice follows" among the
+    quick actions):
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_BAR=docked AURORA_DEMO_SESSION_HOST_POLISH=colours cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - **docked**: each demo viewer has one row at the top of its window,
+      above its own bars, on every screen (login, loading, world); the
+      viewer's interface starts under it (the islands or Firestorm's
+      bars, the windows' room, the login screen). Left to right: the
+      characters' list ("1: Main": every character with "Active",
+      "Inactive" or nothing; picking one switches to it, brings it forward
+      at its login screen or starts it), **Open a login** (the first
+      character not logged in; right-click to choose), **Chat** (the
+      shared chat in its own window, shown or hidden; its unread count),
+      **Monitors** (each character, greyed when it is not in the world or
+      is the active one, ticked when its monitor is open; "Open all
+      inactive monitors", a greyed "Cycling monitor", "Close all
+      monitors", "Monitor settings…"), **Settings** ("Bar and quick
+      actions…", "Hotkeys…", the two toggles, "Show the host's window",
+      "Quit…"); in the middle the quick actions (a button per character
+      with its number, alias and colour, "Attention" with its count,
+      which opens the inbox, and the two toggles); at the right **Pop
+      out** and **Collapse** (the bar becomes a thin handle; a click on it
+      opens it again). Every viewer's bar shows the same, and follows
+      within a moment what is clicked in another one or in the host.
+      Make a viewer's window narrow: the labels go, then the active
+      character's name; the quick actions scroll with the wheel. Hover a
+      cut name for the whole one (and the real name behind an alias).
+    - **the host's own window** hides as soon as a viewer shows the bar
+      and you leave the host's window; "Show the host's window" (or any
+      entry of the Settings menu) brings it back in front, and it stays
+      until you close it, which only hides it. "Quit…" asks the usual
+      question there (Quit all / Close only this window / Cancel). Close
+      every demo viewer: the host's window is back by itself. Its page
+      "Bar and quick actions" (also a button under the cards) has where
+      the bar is, "Hide this window while the bar is shown", "One taskbar
+      button", the two label modes, the two sound and voice rules, and
+      the twelve positions of the quick actions: change one and watch the
+      viewers' bars.
+    - **Mute background** (quick action, Settings menu, or the page):
+      every background viewer's log says `sound cut` even with "Heard in
+      the background" ticked on its card, and the choice is still ticked
+      when the toggle goes off. **Voice follows** off, then a switch: the
+      log of the character left still says `voice allowed`, the one
+      brought forward `voice off`; on again, the first gives it up, then
+      the second gets it.
+    - **popped** (or "Pop out"): the bar leaves every viewer (their
+      interface takes the whole window again) for the host's compact
+      window "Character controls", one row. Its **pin** keeps it above the
+      other windows (an upright pin on the accent colour when pinned, a
+      tilted plain one when not; the hover says which); **Dock**, or its
+      close button, puts the bar back in the viewers: nothing closes. Its
+      place, its width and the pin are remembered (outside the demo, in
+      `session-host.json`: `bar`).
+    - **a viewer without its host** (end the host's process): the bar
+      goes from every viewer within a second, and each is on the taskbar
+      as any window.
+    - **one taskbar button (Windows only)**: with the bar docked, only
+      the active character's window has a taskbar button and is in
+      Alt-Tab; switching swaps them (each viewer's log says `this window
+      is off the taskbar and out of Alt-Tab` or `on … in`). An Economy
+      (minimised) character only loses its button. Untick "One taskbar
+      button", pop the bar out, or close the host: every window is back.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames (its monitors included), and
   each panel's own window to `<file>-chat.png`, `<file>-controls.png`,
-  `<file>-monitors.png` or `<file>-inbox.png`.
+  `<file>-monitors.png` or `<file>-inbox.png`, the compact window to
+  `<file>-bar.png`.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

@@ -1259,6 +1259,15 @@ exe before publishing; the local build also writes it to `version.txt`.
   transcript, no cache; an existing profile is never overwritten. Only the
   active character may use voice; "Heard in the background" keeps a
   background character's sounds.
+  While characters run, a **bar** at the top of each one's window drives
+  them all: the characters' list, "Open a login", the shared chat, the
+  monitors, the host's settings, and up to twelve quick actions of your
+  choice (a character, "Attention", "Mute background", "Voice follows").
+  The host's own window then hides until the bar asks for it. "Pop out"
+  moves the bar into a small "Character controls" window that can be
+  pinned above the others; "Collapse" shrinks it to a thin handle. On
+  Windows only the active character's window is on the taskbar ("One
+  taskbar button", in the bar's settings).
   Closing or losing the host closes no viewer: they stay logged in and go
   back to their own settings. The list is saved in
   `…\config\session-host.json`; the log is `aurora-session-host.log`.

@@ -29,7 +29,17 @@
 //!   plain background character again, its 3D off. The active character
 //!   has no monitor: it is in front. A character whose monitor is open is
 //!   not minimised behind (a minimised window has no picture).
+//! - **The bar (checkpoint 8).** What the bar shows of the desk
+//!   ([`Desk::bar_state`]) and what its clicks do ([`Desk::bar_request`]):
+//!   nothing the host's own window could not do. "Mute background sound"
+//!   cuts every background character whatever its own choice; "Voice
+//!   follows active" off leaves the voice with the character that holds
+//!   it ([`Desk::voice_holder`]): still one voice, given up before it is
+//!   given. While the bar is docked and the user wants one taskbar
+//!   button, a character behind the active one is asked off the taskbar
+//!   (`Assignment::off_taskbar`), never when no character is in front.
 
+use crate::bar;
 use crate::behind::Behind3d;
 use crate::hotkeys;
 use crate::identity::{self, AliasError, Colour};
@@ -111,6 +121,14 @@ pub struct Config {
     pub panels: panels::Config,
     /// Checkpoint 7: the characters are shown one line each.
     pub condensed: bool,
+    /// Checkpoint 8: the bar, docked in the viewers or popped out.
+    pub bar: bar::Config,
+    /// Checkpoint 8: every background character is cut, whatever its own
+    /// `sound` (which is kept).
+    pub mute_background: bool,
+    /// Checkpoint 8: the voice goes to the character that becomes active
+    /// (as it always did). Off: it stays with the one that holds it.
+    pub voice_follows: bool,
 }
 
 impl Default for Config {
@@ -123,6 +141,9 @@ impl Default for Config {
             hotkeys: hotkeys::Config::default(),
             panels: panels::Config::default(),
             condensed: false,
+            bar: bar::Config::default(),
+            mute_background: false,
+            voice_follows: true,
         }
     }
 }
@@ -152,6 +173,7 @@ impl Config {
         self.stage_rect = self.stage_rect.filter(Stage::valid);
         self.hotkeys = self.hotkeys.cleaned();
         self.panels = self.panels.cleaned();
+        self.bar = self.bar.cleaned();
         self
     }
 
@@ -283,6 +305,24 @@ impl Slot {
         }
     }
 
+    /// The avatar's name once logged in, the profile's before.
+    pub fn real_name(&self) -> &str {
+        match self.status.as_ref().filter(|s| !s.name.is_empty()) {
+            Some(status) => &status.name,
+            None => self.profile.shown(),
+        }
+    }
+
+    /// The name it is shown by: its alias when it has one.
+    pub fn shown_name(&self) -> &str {
+        self.alias.as_deref().unwrap_or_else(|| self.real_name())
+    }
+
+    /// Logged in: its viewer runs and is in the world.
+    pub fn in_world(&self) -> bool {
+        self.phase == Phase::Running && self.status.as_ref().is_some_and(|s| s.screen == Screen::World)
+    }
+
     /// Its process is there and managed (or on its way to be).
     pub fn live(&self) -> bool {
         matches!(self.phase, Phase::Starting | Phase::Running)
@@ -355,6 +395,11 @@ pub struct Desk {
     hotkeys: hotkeys::Config,
     panels: panels::Config,
     condensed: bool,
+    bar: bar::Config,
+    mute_background: bool,
+    voice_follows: bool,
+    /// With `voice_follows` off: the character the voice stays with.
+    voice_home: Option<usize>,
     quitting: Option<Instant>,
     effects: Vec<Effect>,
 }
@@ -381,7 +426,7 @@ pub enum Watch {
 /// What a character's quick action does now (plan section 13): the one
 /// button, and the one hotkey, that does the right thing for where its
 /// viewer is. Whatever it is, a slot never gets a second process.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Quick {
     /// It runs behind the active character: it becomes the active one.
     Switch,
@@ -398,6 +443,7 @@ pub enum Quick {
     Restart,
     /// Nothing can be done now: it is closing, its viewer runs unmanaged,
     /// "Quit all" is under way, or the slot is empty.
+    #[default]
     Nothing,
 }
 
@@ -416,6 +462,8 @@ pub enum Voice {
     Off,
 }
 
+#[cfg(test)]
+mod bar_tests;
 #[cfg(test)]
 mod comfort_tests;
 #[cfg(test)]
@@ -449,6 +497,10 @@ impl Desk {
             hotkeys: config.hotkeys,
             panels: config.panels,
             condensed: config.condensed,
+            bar: config.bar,
+            mute_background: config.mute_background,
+            voice_follows: config.voice_follows,
+            voice_home: None,
             quitting: None,
             effects: Vec::new(),
         }
@@ -475,6 +527,9 @@ impl Desk {
             hotkeys: self.hotkeys.clone(),
             panels: self.panels,
             condensed: self.condensed,
+            bar: self.bar.clone(),
+            mute_background: self.mute_background,
+            voice_follows: self.voice_follows,
         }
     }
 
@@ -581,8 +636,10 @@ impl Desk {
         self.sync(None);
     }
 
-    /// Checkpoint 7: a character's colour in the host's windows. Nothing
-    /// is told to its viewer.
+    /// Checkpoint 7: a character's colour in the host's windows. The desk
+    /// sends no message for it: since checkpoint 8 it is part of the bar's
+    /// state, which the host hands to the viewers it manages for their
+    /// bar and nothing else.
     pub fn set_colour(&mut self, slot: usize, colour: Colour) {
         let Some(s) = self.slot_mut(slot).filter(|s| s.colour != colour) else {
             return;
@@ -592,8 +649,9 @@ impl Desk {
     }
 
     /// Checkpoint 7: the name the host shows for a character in place of
-    /// its own; an empty text takes the alias away. Nothing is told to
-    /// its viewer. A text that is no alias changes nothing.
+    /// its own; an empty text takes the alias away. As the colour: no
+    /// message of the desk's, only the bar's state. A text that is no
+    /// alias changes nothing.
     pub fn set_alias(&mut self, slot: usize, text: &str) -> Result<(), AliasError> {
         let alias = identity::alias(text)?;
         if let Some(s) = self.slot_mut(slot).filter(|s| s.alias != alias) {
@@ -700,12 +758,24 @@ impl Desk {
         (self.quick_act(slot, now) != Quick::Nothing).then_some(slot)
     }
 
+    /// The character the voice belongs with: the active one while the
+    /// voice follows; otherwise the one it stays with for as long as its
+    /// viewer runs, then the active one again.
+    pub fn voice_holder(&self) -> Option<usize> {
+        if self.voice_follows {
+            return self.active;
+        }
+        self.voice_home
+            .filter(|home| self.slot(*home).is_some_and(|s| s.phase == Phase::Running))
+            .or(self.active)
+    }
+
     /// What a character holds of the voice.
     pub fn voice(&self, slot: usize) -> Voice {
         let Some(s) = self.slot(slot).filter(|s| s.phase == Phase::Running) else {
             return Voice::Off;
         };
-        if self.active != Some(slot) {
+        if self.voice_holder() != Some(slot) {
             return if s.voice_out { Voice::GivingUp } else { Voice::Off };
         }
         if let Some(other) = self.voice_waits_for() {
@@ -716,6 +786,176 @@ impl Desk {
             Voice::Allowed
         } else {
             Voice::Off
+        }
+    }
+
+    /// Checkpoint 8: the bar's settings.
+    pub fn bar(&self) -> &bar::Config {
+        &self.bar
+    }
+
+    /// Changes the bar's settings; true when something changed (it is
+    /// then saved, and the viewers' assignments follow: the taskbar's
+    /// rule depends on where the bar is).
+    pub fn edit_bar(&mut self, edit: impl FnOnce(&mut bar::Config)) -> bool {
+        let mut edited = self.bar.clone();
+        edit(&mut edited);
+        let edited = edited.cleaned();
+        if edited == self.bar {
+            return false;
+        }
+        self.bar = edited;
+        self.effects.push(Effect::Save);
+        self.sync(None);
+        true
+    }
+
+    /// Every background character is cut, whatever its own choice.
+    pub fn mute_background(&self) -> bool {
+        self.mute_background
+    }
+
+    pub fn set_mute_background(&mut self, mute: bool) {
+        if self.mute_background != mute {
+            self.mute_background = mute;
+            self.effects.push(Effect::Save);
+            self.sync(None);
+        }
+    }
+
+    /// The voice goes to the character that becomes active.
+    pub fn voice_follows(&self) -> bool {
+        self.voice_follows
+    }
+
+    /// Off: the voice stays with the character that holds it now. On: it
+    /// goes to the active one, once the one that held it gave it up.
+    pub fn set_voice_follows(&mut self, follows: bool) {
+        if self.voice_follows != follows {
+            // (where it stays is where it is)
+            self.voice_home = self.voice_holder();
+            self.voice_follows = follows;
+            self.effects.push(Effect::Save);
+            self.sync(None);
+        }
+    }
+
+    /// What the bar shows of the desk. `inbox`: how many questions wait;
+    /// `chat_unread`: the shared chat's unread lines.
+    pub fn bar_state(&self, inbox: u32, chat_unread: u32) -> bar::State {
+        bar::State {
+            docked: self.bar.placement == bar::Placement::Docked,
+            collapsed: self.bar.collapsed,
+            characters: self
+                .slots()
+                .map(|(i, s)| bar::Character {
+                    slot: i as u8,
+                    name: s.shown_name().to_owned(),
+                    real: s.alias.as_ref().map(|_| s.real_name().to_owned()),
+                    colour: s.colour,
+                    presence: match (s.in_world(), self.active == Some(i)) {
+                        (false, _) => bar::Presence::Out,
+                        (true, true) => bar::Presence::Active,
+                        (true, false) => bar::Presence::Inactive,
+                    },
+                    quick: self.quick(i),
+                    monitor: s.monitor.is_some(),
+                })
+                .collect(),
+            inbox,
+            chat_open: self.panels.out(panels::Panel::Chat),
+            chat_unread,
+            mute_background: self.mute_background,
+            voice_follows: self.voice_follows,
+            quick: self.bar.quick.clone(),
+            quick_labels: self.bar.quick_labels,
+            toolbar_labels: self.bar.toolbar_labels,
+            span_window: self.bar.span_window,
+        }
+        .cleaned()
+    }
+
+    /// How many viewers draw the docked bar now: managed, with a window,
+    /// not closing.
+    pub fn bars_shown(&self) -> usize {
+        if self.bar.placement != bar::Placement::Docked {
+            return 0;
+        }
+        self.slots()
+            .filter(|(_, s)| s.phase == Phase::Running && !s.closing && s.status.as_ref().is_some_and(|st| st.screen != Screen::Starting))
+            .count()
+    }
+
+    /// A click on the bar, from a viewer or from the host's compact
+    /// window: what the desk does for it. What concerns the host's
+    /// windows alone ([`bar::Request::Show`], the pin) is the host's.
+    /// Nothing here does more than the host's own window does: a pick is
+    /// the character's quick action, a monitor is the card's choice.
+    pub fn bar_request(&mut self, request: bar::Request, now: Instant) {
+        if !request.valid() {
+            return;
+        }
+        match request {
+            bar::Request::Pick(slot) => {
+                self.quick_act(usize::from(slot), now);
+            }
+            bar::Request::OpenLogin(asked) => {
+                // only ever a character that is not logged in: never a
+                // switch to one that is
+                let state = self.bar_state(0, 0);
+                let slot = match asked {
+                    Some(slot) => state.logins().find(|c| c.slot == slot).map(|c| c.slot),
+                    None => state.next_login().map(|c| c.slot),
+                };
+                if let Some(slot) = slot {
+                    self.quick_act(usize::from(slot), now);
+                }
+            }
+            bar::Request::Chat(open) => self.set_panel_out(panels::Panel::Chat, open),
+            bar::Request::Monitor(slot, open) => {
+                let slot = usize::from(slot);
+                if open {
+                    if self.slot(slot).is_some_and(|s| s.monitor.is_none()) {
+                        self.set_monitor(slot, Some(monitor::Spec::default()));
+                    }
+                    // (the pictures are where the host's window may be
+                    // hidden: they get their own)
+                    self.set_panel_out(panels::Panel::Monitors, true);
+                } else {
+                    self.set_monitor(slot, None);
+                }
+            }
+            bar::Request::OpenMonitors => {
+                let behind: Vec<usize> = self
+                    .slots()
+                    .filter(|(i, s)| s.in_world() && self.active != Some(*i) && s.monitor.is_none())
+                    .map(|(i, _)| i)
+                    .collect();
+                for slot in behind {
+                    self.set_monitor(slot, Some(monitor::Spec::default()));
+                }
+                self.set_panel_out(panels::Panel::Monitors, true);
+            }
+            bar::Request::CloseMonitors => {
+                for slot in 0..MAX_SLOTS {
+                    self.set_monitor(slot, None);
+                }
+                self.set_panel_out(panels::Panel::Monitors, false);
+            }
+            bar::Request::Inbox => self.set_panel_out(panels::Panel::Inbox, true),
+            bar::Request::MuteBackground(mute) => self.set_mute_background(mute),
+            bar::Request::VoiceFollows(follows) => self.set_voice_follows(follows),
+            bar::Request::Dock(docked) => {
+                let placement = if docked { bar::Placement::Docked } else { bar::Placement::Popped };
+                self.edit_bar(|bar| bar.placement = placement);
+            }
+            bar::Request::Collapse(collapsed) => {
+                self.edit_bar(|bar| bar.collapsed = collapsed);
+            }
+            bar::Request::Pin(pinned) => {
+                self.edit_bar(|bar| bar.pinned = pinned);
+            }
+            bar::Request::Show(_) => {}
         }
     }
 
@@ -1121,11 +1361,11 @@ impl Desk {
         }
     }
 
-    /// The character whose voice the active one waits for: it was allowed
-    /// voice and has not said it gave it up.
+    /// The character whose voice the one that should hold it waits for:
+    /// it was allowed voice and has not said it gave it up.
     pub fn voice_waits_for(&self) -> Option<usize> {
-        let active = self.active?;
-        self.slots().find(|(i, s)| *i != active && s.voice_out).map(|(i, _)| i)
+        let holder = self.voice_holder()?;
+        self.slots().find(|(i, s)| *i != holder && s.voice_out).map(|(i, _)| i)
     }
 
     /// Another running slot logged in on the same account and grid.
@@ -1175,12 +1415,20 @@ impl Desk {
     /// when it is sent (None: nothing can have changed but the standby).
     fn sync(&mut self, now: Option<Instant>) {
         let active = self.active;
+        // (with the voice not following, it stays where it is now)
+        let holder = self.voice_holder();
+        self.voice_home = holder.filter(|_| !self.voice_follows);
+        let mute_background = self.mute_background;
+        // one taskbar button: only behind a character that is in front
+        let someone_in_front = active.is_some_and(|a| self.slot(a).is_some_and(|s| s.phase == Phase::Running));
+        let one_button = self.bar.one_taskbar_button && self.bar.placement == bar::Placement::Docked && someone_in_front;
         for (slot, order) in self.orders().into_iter().enumerate() {
             let voice_held_elsewhere = self.slots().any(|(i, s)| i != slot && s.voice_out);
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running) else {
                 continue;
             };
             let is_active = active == Some(slot);
+            let holds_voice = holder == Some(slot);
             let mut wanted = Assignment {
                 seq: 0,
                 role: match order {
@@ -1190,8 +1438,11 @@ impl Desk {
                 },
                 behind: Behind3d::Off,
                 standby: s.waits(),
-                sound_muted: !is_active && s.sound == BackgroundSound::Muted,
-                voice_allowed: is_active && !voice_held_elsewhere,
+                // (a character that holds the voice behind is heard: a
+                // viewer that is cut neither plays nor transmits it)
+                sound_muted: !is_active && (mute_background || (s.sound == BackgroundSound::Muted && !holds_voice)),
+                voice_allowed: holds_voice && !voice_held_elsewhere,
+                off_taskbar: one_button && !is_active,
             };
             if s.sent.is_some_and(|(sent, _)| Assignment { seq: 0, ..sent } == wanted) {
                 continue;
@@ -1287,6 +1538,7 @@ mod tests {
             hotkeys: hotkeys::Config::default(),
             panels: panels::Config::default(),
             condensed: false,
+            ..Config::default()
         }
         .cleaned();
         assert!(config.chat_sound);
@@ -1636,7 +1888,18 @@ mod tests {
         assert_eq!(d.slot(0).expect("slot").phase, Phase::Ended { crashed: true });
         assert_eq!(d.active(), None);
         let effects = d.take_effects();
-        assert!(sends(&effects, 1).is_empty(), "slot 1 keeps its assignment");
+        // slot 1 stays what it was: a background character, where it is.
+        // (Checkpoint 8: with nobody in front it gets its taskbar button
+        // back, the one thing its new assignment changes.)
+        let kept = assigned(&d, 1);
+        assert_eq!(
+            sends(&effects, 1),
+            vec![&ToViewer::Assign(Assignment {
+                off_taskbar: false,
+                ..kept
+            })]
+        );
+        assert_eq!((kept.role, kept.sound_muted, kept.voice_allowed), (Role::Background, true, false));
         assert!(!effects.iter().any(|e| matches!(e, Effect::Kill { .. } | Effect::Spawn { .. })));
         // Restart: the same profile again, never by itself
         d.switch(0, now);

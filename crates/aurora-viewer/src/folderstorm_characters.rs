@@ -33,12 +33,20 @@
 //! - [`foreground`]: the window brought to the front without releasing an
 //!   Alt key the user holds (the global hotkeys).
 //!
+//! Checkpoint 8, the docked bar:
+//! - [`bar`]: the row from which the characters are driven, drawn at the
+//!   top of a managed viewer's window (`app/folderstorm_characters/bar.rs`)
+//!   and in the host's compact window;
+//! - [`taskbar`]: a background character's window off the taskbar and out
+//!   of Alt-Tab (Windows), and everything put back.
+//!
 //! A splash per character (follow-up to the upstream startup splash):
 //! - [`splash`]: a character's splash names it, in its language, and the
 //!   host's characters' splashes do not stack.
 //!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
+pub mod bar;
 pub mod chat_export;
 pub mod foreground;
 pub mod host;
@@ -46,6 +54,7 @@ pub mod managed;
 pub mod profile;
 pub mod profile_copy;
 pub mod splash;
+pub mod taskbar;
 pub mod transport;
 
 use ::folderstorm_session::behind::{self, Behind3d};
@@ -106,6 +115,13 @@ pub struct State {
     pub window_focus: std::cell::Cell<Option<bool>>,
     /// The monitor's pictures taken for the session host (checkpoint 5).
     pub monitor: Monitoring,
+    /// The bar the session host asks this viewer to draw (checkpoint 8):
+    /// kept here only, for the bar's drawing only, and dropped with the
+    /// link. Nothing of it (an alias, a colour, another character's name)
+    /// is used anywhere else in the viewer.
+    pub bar: Option<::folderstorm_session::bar::State>,
+    /// What this window was last made on the taskbar (checkpoint 8).
+    pub taskbar: taskbar::Tracker,
 }
 
 /// What a managed viewer keeps of its monitor (plan section 12): when the

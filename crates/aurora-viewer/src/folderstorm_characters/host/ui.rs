@@ -10,8 +10,10 @@
 //! monitors each in a window of their own) in `ui/panels.rs`, checkpoint
 //! 7's in `ui/inbox.rs` (the attention inbox), `ui/identity.rs` (a
 //! character's alias and colour) and `ui/condensed.rs` (one line per
-//! character).
+//! character), checkpoint 8's in `ui/bar.rs` (the bar's compact window, its
+//! page, and the host's own window hiding while a bar is on screen).
 
+mod bar;
 mod comfort;
 mod condensed;
 mod identity;
@@ -58,6 +60,12 @@ pub fn run(mut host: Host) -> anyhow::Result<()> {
     host.comfort.hotkeys = super::hotkeys::Registrar::install(&mut builder);
     host.apply_hotkeys();
     let event_loop = builder.build()?;
+    // (checkpoint 8: a click on a viewer's bar is heard at once, not at
+    // the window's next look at its viewers)
+    let proxy = event_loop.create_proxy();
+    super::process::set_waker(move || {
+        let _ = proxy.send_event(());
+    });
     let settings = crate::settings::Settings::load();
     // (drawn on events and ticks: the system font scan is waited for here)
     fonts::fallback::wait();
@@ -117,6 +125,9 @@ struct Window_ {
     identity: identity::Editor,
     /// The count the inbox's own window has in its title.
     inbox_titled: u32,
+    /// Checkpoint 8: the bar's compact window, and the host's own window
+    /// hidden while a bar is on screen.
+    bar: bar::Bar,
 }
 
 impl Window_ {
@@ -147,6 +158,7 @@ impl Window_ {
             chat_page: false,
             identity: Default::default(),
             inbox_titled: 0,
+            bar: Default::default(),
         }
     }
 }
@@ -208,6 +220,10 @@ enum Act {
     InboxDismiss(usize, u64),
     InboxDismissSlot(usize),
     InboxDismissAll,
+    /// Checkpoint 8 (`ui/bar.rs`): a click on the bar, from the host's
+    /// compact window or its page; a change of the bar's settings.
+    Bar(::folderstorm_session::bar::Request),
+    BarEdit(bar::Edit),
 }
 
 impl Window_ {
@@ -241,6 +257,13 @@ impl Window_ {
                     Panel::Inbox => self.inbox_window(ui, &p, now, &mut acts),
                 });
                 panel == Panel::Chat
+            }
+            Which::Bar => {
+                // the compact window: the row, and nothing else
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::new().fill(p.panel))
+                    .show(ui, |ui| self.bar_window(ui, &mut acts));
+                false
             }
         };
         if self.home(Panel::Chat) == self.drawing {
@@ -683,6 +706,8 @@ impl Window_ {
                 Act::InboxDismissAll => {
                     self.host.inbox.dismiss_all();
                 }
+                Act::Bar(request) => self.bar_apply(request, now),
+                Act::BarEdit(edit) => self.bar_edit(edit),
                 Act::Condensed(condensed) => {
                     self.host.desk.set_condensed(condensed);
                     // (the cards' pages have no way back from the lines)
@@ -786,6 +811,10 @@ impl Window_ {
         if let Some(view) = self.view_mut(which) {
             view.redraw = again || !acts.is_empty();
         }
+        if which == Which::Bar {
+            // the compact window makes room for its menus and hovers
+            self.bar_fit(&context, &window);
+        }
         if !acts.is_empty() {
             self.apply(acts, Instant::now());
         }
@@ -796,11 +825,13 @@ impl Window_ {
 /// Where the demo's capture of a window goes: the file named for the
 /// host's own window, `<name>-<panel>.<ext>` for a panel's.
 fn capture_path(path: &std::path::Path, which: Which) -> std::path::PathBuf {
-    let Which::Pane(panel) = which else {
-        return path.to_owned();
+    let key = match which {
+        Which::Main => return path.to_owned(),
+        Which::Pane(panel) => panel.key(),
+        Which::Bar => "bar",
     };
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let mut name = format!("{stem}-{}", panel.key());
+    let mut name = format!("{stem}-{key}");
     if let Some(extension) = path.extension() {
         name.push('.');
         name.push_str(&extension.to_string_lossy());
@@ -937,7 +968,10 @@ impl ApplicationHandler for Window_ {
         };
         match which {
             Which::Main if matches!(event, WindowEvent::CloseRequested) => {
-                if self.host.desk.live() == 0 {
+                if self.bar_closes_host() {
+                    // (checkpoint 8) a bar brings it back: it only hides
+                    self.redraw_all();
+                } else if self.host.desk.live() == 0 {
                     event_loop.exit();
                 } else {
                     // characters run: the user says what becomes of them
@@ -950,6 +984,8 @@ impl ApplicationHandler for Window_ {
             }
             // a panel's window closed docks the panel: the host stays
             Which::Pane(panel) if self.pane_event(panel, &event) => return,
+            // the compact window closed docks the bar: the host stays
+            Which::Bar if self.bar_event(&event) => return,
             _ => {}
         }
         if let WindowEvent::Focused(focused) = event
@@ -989,15 +1025,28 @@ impl ApplicationHandler for Window_ {
                     log::warn!("session host: {}'s window is not drawn ({error}): docked", panel.key());
                     self.host.desk.panel_closed(panel);
                 }
+                Which::Bar => {
+                    // nor the bar's: it goes back into the viewers
+                    log::warn!("session host: the bar's window is not drawn ({error}): docked");
+                    self.host
+                        .desk
+                        .edit_bar(|bar| bar.placement = ::folderstorm_session::bar::Placement::Docked);
+                }
             }
         }
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         self.main.detach();
-        for pane in self.panes.iter_mut().flatten() {
+        for pane in self.panes.iter_mut().flatten().chain(&mut self.bar.view) {
             pane.detach();
         }
+    }
+
+    /// A viewer's reader thread has something the window should not leave
+    /// waiting (a click on that viewer's bar): looked at now.
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        self.next_tick = Instant::now();
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -1010,6 +1059,10 @@ impl ApplicationHandler for Window_ {
         if now >= self.next_tick {
             self.monitors_watch(now);
             self.host.tick(now);
+            // (checkpoint 8) what the viewers' bars asked for since
+            if self.bar_pump(now) {
+                self.host.tick(now);
+            }
             let tick = if self.host.desk.live() > 0 { TICK } else { IDLE_TICK };
             self.next_tick = now + tick;
             self.redraw_all();
@@ -1033,8 +1086,14 @@ impl ApplicationHandler for Window_ {
         }
         // a panel popped out or docked back gets or loses its window
         self.sync_panes(event_loop);
+        // (checkpoint 8) and the bar's compact window; the host's own
+        // window hides or shows; what a bar asked for comes forward
+        self.sync_bar(event_loop);
         self.inbox_retitle();
-        for view in std::iter::once(&mut self.main).chain(self.panes.iter_mut().flatten()) {
+        for view in std::iter::once(&mut self.main)
+            .chain(self.panes.iter_mut().flatten())
+            .chain(&mut self.bar.view)
+        {
             if std::mem::take(&mut view.redraw)
                 && let Some(window) = &view.window
             {
@@ -1060,8 +1119,14 @@ mod tests {
 
     /// The same for any of the host's windows.
     pub(super) fn draw_in(app: &mut Window_, which: Which, width: u32, height: u32) -> (Vec<String>, Vec<u32>) {
+        draw_with(app, which, width, height, Vec::new())
+    }
+
+    /// The same, with what the user does in that frame.
+    pub(super) fn draw_with(app: &mut Window_, which: Which, width: u32, height: u32, events: Vec<egui::Event>) -> (Vec<String>, Vec<u32>) {
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32))),
+            events,
             ..Default::default()
         };
         let view = app.view_mut(which).expect("the window's view");
