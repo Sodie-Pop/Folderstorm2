@@ -54,6 +54,8 @@ pub struct Ctx<'a> {
     /// The login's `viewer_session` (None while logged out), which
     /// `viewer_status` gives.
     pub viewer_session: Option<String>,
+    /// Folderstorm: what the navigation tools read (phase 3, part 4).
+    pub nav: super::navigation::Stage<'a>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

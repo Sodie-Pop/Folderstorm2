@@ -154,6 +154,13 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-camera-hint"),
                     field!(local_assistant.permissions.camera),
                 ),
+                // Folderstorm: phase 3, part 4 (navigation)
+                (
+                    Class::Navigation,
+                    tr!("fs-mcp-navigation"),
+                    tr!("fs-mcp-navigation-hint"),
+                    field!(local_assistant.permissions.navigation),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

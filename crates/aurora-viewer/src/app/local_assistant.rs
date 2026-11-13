@@ -6,11 +6,15 @@
 //! Phase 3: the camera moves as `pstcampos` and Escape move it, a picture
 //! is a photo job of its own (`Purpose::Assistant`), and a thumbnail is the
 //! Outfit Gallery's Take snapshot (`outfit_snapshot`).
+//!
+//! Phase 3, part 4: a move is the viewer's own autopilot (as the double
+//! click on the ground and Go to start it), take-off and landing the Fly
+//! button, a teleport the double-click teleport's `request_user_teleport`.
 
 use super::*;
 use crate::mcp_bridge::camera::{self, Move, Pose, Skeleton, Stage};
 use crate::mcp_bridge::studio::PhotoStep;
-use crate::mcp_bridge::{self, View, changes::Work};
+use crate::mcp_bridge::{self, View, changes::Work, navigation};
 use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::{ErrorCode, ToolError};
 use uuid::Uuid;
@@ -39,6 +43,13 @@ impl App {
             // phase 3, part 3: only what the viewer already holds, never fetched for it
             object_props: vec![self.area_search_feed.props(), &self.interactions.props, &self.build.props],
             sounds: Some(&self.scene.sounds.history),
+            // phase 3, part 4: what the viewer itself does with the avatar
+            navigation: crate::mcp_bridge::navigation::Native {
+                pilot: self.autopilot.is_some(),
+                blocks_walk: self
+                    .native_anchor
+                    .blocks_walk(self.world.agent.seated, self.world.agent.ground_sit),
+            },
         }
     }
 
@@ -105,6 +116,7 @@ impl App {
             Work::Snapshot(request) => mcp_bridge::queue_photo(call, request),
             Work::Thumbnail(id) => self.local_assistant_thumbnail(call, id, planned.reply),
             Work::Create(creation) => self.local_assistant_create(call, planned, creation),
+            Work::Navigate(work) => self.local_assistant_navigate(call, work),
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));
@@ -123,6 +135,130 @@ impl App {
                         resize: true,
                     },
                 );
+            }
+        }
+    }
+
+    /// Phase 3, part 4: walk or fly to a point, take off or land, teleport,
+    /// each checked again for what the dialog's time may have changed.
+    fn local_assistant_navigate(&mut self, call: Pending, work: navigation::Work) {
+        use crate::autopilot::{AutoPilot, FlightTarget};
+        let busy = || {
+            ToolError::new(
+                ErrorCode::Busy,
+                "the avatar is already walking or following (the viewer's own autopilot): it is not interrupted",
+            )
+        };
+        match work {
+            navigation::Work::Move(mv) => {
+                let agent = &self.world.agent;
+                if self.autopilot.is_some() {
+                    return call.answer(Err(busy()));
+                }
+                if agent.is_sitting() || self.native_anchor.blocks_walk(agent.seated, agent.ground_sit) {
+                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "the avatar is sitting")));
+                }
+                // as `walk_to` and `travel_to_avatar` start theirs
+                let now = Instant::now();
+                let from = agent.position;
+                let pilot = match mv.mode {
+                    navigation::Mode::Walk => AutoPilot::start(from, mv.target, false, now).with_stop_distance(mv.stop_distance),
+                    navigation::Mode::Fly => {
+                        let mut pilot = AutoPilot::avatar(from, mv.target, None, agent.flying, now).with_stop_distance(mv.stop_distance);
+                        // Go to's flight target: take off if needed, hover at the point
+                        pilot.observe_flight(
+                            FlightTarget {
+                                flying: Some(true),
+                                landing_height: mv.target.z,
+                            },
+                            from,
+                        );
+                        pilot
+                    }
+                };
+                self.world.following_avatar = None;
+                self.follow_recovery = None;
+                self.follow_ui.open = false;
+                self.autopilot = Some(pilot);
+                self.autopilot_stop_pending = false;
+                self.autopilot_flags = 0;
+                self.release_native_movelock();
+                log::info!("local assistant: {} of {:.1} m started", mv.mode.name(), navigation::distance(mv.mode, from, mv.target));
+                mcp_bridge::navigation_moving(call, mv, navigation::PilotId(now));
+            }
+            navigation::Work::Flying(flying) => {
+                if self.autopilot.is_some() {
+                    return call.answer(Err(busy()));
+                }
+                if flying == self.world.agent.flying {
+                    return call.answer(Ok(serde_json::json!({"flying": flying, "changed": false})));
+                }
+                // LLAgent::setFlying's rules, through the Fly button
+                self.toggle_fly();
+                if self.world.agent.flying != flying {
+                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "the viewer did not let the avatar take off here")));
+                }
+                call.receipt(folderstorm_mcp_bridge::receipts::Receipt::mark_sent);
+                call.answer(Ok(serde_json::json!({"flying": flying, "changed": true})));
+            }
+            navigation::Work::Teleport(teleport) => {
+                match mcp_bridge::teleport_wait() {
+                    Some(wait) if wait.is_zero() => {}
+                    _ => {
+                        return call.answer(Err(ToolError::new(
+                            ErrorCode::Busy,
+                            "another teleport of yours is under way, or the last one was too recent: try again in a moment",
+                        )));
+                    }
+                }
+                if self.world.teleporting {
+                    return call.answer(Err(ToolError::new(ErrorCode::Busy, "a teleport is under way")));
+                }
+                let command = teleport.command();
+                let remote = Some(teleport.handle) != self.world.main_region;
+                // RLVa at the send boundary, as for the user's own teleport
+                if !self.world.rlva_allows_command(&command, Uuid::nil())
+                    || !self.request_user_teleport(command, teleport.label.clone(), remote)
+                {
+                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction refuses this teleport")));
+                }
+                log::info!("local assistant: teleport submitted ({})", if remote { "another region" } else { "this region" });
+                mcp_bridge::navigation_teleporting(call, teleport);
+            }
+        }
+    }
+
+    /// Phase 3, part 4: once per frame, just before the autopilot runs (it
+    /// reads the input of this frame): the assistant's move or teleport
+    /// under way learns what happened, and only its own autopilot is ever
+    /// stopped.
+    pub(super) fn local_assistant_navigation(&mut self) {
+        let agent = &self.world.agent;
+        let frame = navigation::Frame {
+            pilot: self.autopilot.as_ref().map(|ap| navigation::PilotId(ap.started)),
+            position: agent.position,
+            region: self.world.main_region,
+            global: self.world.agent_global(),
+            flying: agent.flying,
+            sitting: agent.is_sitting(),
+            teleporting: self.world.teleporting,
+            teleport_failed: self.world.tp_failed,
+            manual: navigation::manual_input(&self.input, self.mouse_mode == MouseMode::Steer),
+            in_world: self.in_world(),
+            location_hidden: self.world.rlva.has("showloc"),
+        };
+        for act in mcp_bridge::navigation_frame(&frame) {
+            match act {
+                navigation::Act::StopPilot(pilot) => {
+                    if self.autopilot.as_ref().is_some_and(|ap| navigation::PilotId(ap.started) == pilot) {
+                        self.stop_autopilot(true);
+                    }
+                }
+                navigation::Act::CancelTeleport => {
+                    if self.world.teleporting {
+                        self.cancel_teleport();
+                    }
+                }
             }
         }
     }

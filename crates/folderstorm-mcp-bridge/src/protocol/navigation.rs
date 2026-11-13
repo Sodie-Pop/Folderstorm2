@@ -79,8 +79,8 @@ fn move_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "position": vector("Where to, in this region's coordinates (metres), as world_location's `position` gives the avatar's."),
-            "global_position": vector("Instead of `position`: where to in global coordinates (metres), as world_location's `global_position`. It must lie in the avatar's region."),
+            "position": vector("Where to, in this region's coordinates (metres): [x, y, z] as world_location's `position` gives the avatar's centre."),
+            "global_position": vector("Instead of `position`: where to in global coordinates (metres), [x, y, z] as world_location's `global`. It must lie in the avatar's region."),
             "mode": {"type": "string", "enum": ["walk", "fly"], "default": "walk",
                 "description": "walk: on the ground (not while flying); fly: takes off if needed and hovers at the point."},
             "stop_distance": {"type": "number", "minimum": STOP_DISTANCE.0, "maximum": STOP_DISTANCE.1, "default": STOP_DISTANCE_DEFAULT,
