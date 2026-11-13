@@ -35,7 +35,7 @@ pub const MAX_OPENING: usize = 4;
 type Login = (u32, u32);
 
 /// What a search lists.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Which {
     /// The friends, online first.
     #[default]

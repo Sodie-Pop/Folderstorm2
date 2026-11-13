@@ -25,7 +25,7 @@
 //!   it). The picture senses neither clicks nor keys, and no picture is
 //!   written anywhere.
 
-use super::super::{chat_ui, chips, faces};
+use super::super::{chat_ui, chips, contacts_ui, faces};
 use super::panels::{View, Which};
 use super::{Act as HostAct, BUTTON, Window_};
 use crate::theme::Palette;
@@ -81,7 +81,7 @@ impl Seat {
 
     /// The window's number for `chat::Chat::look_from` (0 is the shared
     /// chat's).
-    fn look_key(self) -> u8 {
+    pub(super) fn look_key(self) -> u8 {
         self.index() as u8 + 1
     }
 
@@ -113,6 +113,11 @@ struct Pane {
     viewing: Viewing,
     /// The chat's field had the keyboard in its last drawing.
     typing: bool,
+    /// Checkpoint 11: the "New IM" or "Friends" sheet in the lines'
+    /// place, for that character.
+    sheet: Option<(usize, contacts_ui::Sheet)>,
+    /// Checkpoint 11: a web link that waits for the user's yes.
+    link: Option<chat_ui::LinkAsk>,
 }
 
 /// What the host's windows keep for the monitors' own.
@@ -130,6 +135,40 @@ pub(super) struct Monitors {
 }
 
 impl Monitors {
+    /// Checkpoint 11: a conversation opened from the window whose chat
+    /// number is `window`: its chat part shows it.
+    pub(super) fn opened(&mut self, window: u8, slot: usize, conversation: Conversation) {
+        if let Some(seat) = Seat::all().find(|seat| seat.look_key() == window)
+            && slot < MAX_SLOTS
+        {
+            let pane = self.pane_mut(seat);
+            pane.shown[slot] = conversation;
+            pane.sheet = None;
+            pane.more = false;
+        }
+    }
+
+    /// Tests: the seat's sheet for that character (or none), and what its
+    /// chat part shows of it.
+    #[cfg(test)]
+    pub(super) fn test_sheet(&mut self, seat: Seat, slot: usize, which: Option<::folderstorm_session::contacts::Which>) {
+        self.pane_mut(seat).sheet = which.map(|which| {
+            (
+                slot,
+                contacts_ui::Sheet {
+                    which,
+                    query: String::new(),
+                },
+            )
+        });
+    }
+
+    #[cfg(test)]
+    pub(super) fn test_shown(&self, seat: Seat, slot: usize) -> (Conversation, bool) {
+        let pane = self.pane(seat);
+        (pane.shown[slot], pane.sheet.is_some())
+    }
+
     fn pane(&self, seat: Seat) -> &Pane {
         &self.panes[seat.index()]
     }
@@ -587,7 +626,9 @@ impl Window_ {
             // the chat part under the picture, when there is room for
             // both; while the "+N" list is open it takes what the least
             // picture leaves
-            let wanted = if self.monitors.pane(seat).more {
+            // (checkpoint 11: and so does a "New IM" or "Friends" sheet)
+            let pane = self.monitors.pane(seat);
+            let wanted = if pane.more || pane.sheet.is_some() {
                 body.height()
             } else {
                 CHAT as f32
@@ -825,16 +866,40 @@ impl Window_ {
         let name = faces::shown_name(state);
         let pane = self.monitors.pane(seat);
         let (mut shown, mut more) = (pane.shown[slot], pane.more);
+        // (checkpoint 11: a sheet is that character's; the cycling
+        // monitor's next turn closes it)
+        let mut sheet = pane.sheet.clone().filter(|(of, _)| *of == slot).map(|(_, sheet)| sheet);
+        let mut link = pane.link.clone();
         let chat = &mut self.host.chat;
         if chat.open_thread(slot, shown).is_none() {
             shown = chat.open_threads(slot).next().map(|t| t.conversation).unwrap_or_default();
         }
-        let drawn = chips::row(&mut ui, p, chat, slot, Some(shown), more);
-        let mut acted = drawn.asked.apply(chat, slot, &mut shown, &mut more);
+        let (drawn, sheet_changed) =
+            contacts_ui::chips_and_buttons(&mut ui, p, |ui| chips::row(ui, p, chat, slot, Some(shown), more), &mut sheet, &name);
+        let mut acted = sheet_changed;
+        if sheet_changed {
+            more = false;
+        }
+        let was = (shown, more);
+        acted |= drawn.asked.apply(chat, slot, &mut shown, &mut more);
+        if (shown, more) != was {
+            sheet = None;
+        }
         more &= !drawn.hidden.is_empty();
         ui.add_space(3.0);
+        let book = &self.host.book;
+        let key = seat.look_key();
+        if contacts_ui::notice_row(&mut ui, p, book, key, &|_| name.clone()) {
+            self.host.book.dismiss(key);
+            acted = true;
+        }
+        let chat = &mut self.host.chat;
+        let book = &self.host.book;
+        let in_world = chat.login(slot).is_some();
         let mut answer = false;
-        let lines = (ui.available_height() - BOX_ROOM).max(24.0);
+        let mut open = None;
+        let mut web = None;
+        let lines = (ui.available_height() - if sheet.is_some() { 0.0 } else { BOX_ROOM }).max(24.0);
         egui::Frame::new()
             .fill(p.field)
             .inner_margin(6.0)
@@ -842,11 +907,27 @@ impl Window_ {
             .show(&mut ui, |ui| {
                 ui.set_width(ui.available_width());
                 egui::ScrollArea::vertical()
-                    .id_salt(("folderstorm-monitor-lines", seat, slot, shown, more))
+                    .id_salt((
+                        "folderstorm-monitor-lines",
+                        seat,
+                        slot,
+                        shown,
+                        more,
+                        sheet.as_ref().map(|s| s.which),
+                    ))
                     .auto_shrink([false, false])
                     .max_height((lines - 12.0).max(12.0))
-                    .stick_to_bottom(!more)
+                    .stick_to_bottom(!more && sheet.is_none())
                     .show(ui, |ui| {
+                        if let Some(open_sheet) = sheet.as_mut() {
+                            let clicks = contacts_ui::sheet(ui, p, book, slot, &name, in_world, open_sheet);
+                            if clicks.close {
+                                sheet = None;
+                                acted = true;
+                            }
+                            open = clicks.open;
+                            return;
+                        }
                         if more {
                             let clicks = chips::list(ui, p, chat, slot, &drawn.hidden);
                             acted |= clicks.apply(chat, slot, &mut shown, &mut more);
@@ -858,7 +939,11 @@ impl Window_ {
                                     ui.label(RichText::new(tr!("folderstorm-chat-earlier-login")).italics().color(p.muted));
                                 }
                                 for entry in thread.entries().filter(|entry| chat.shows_entry(entry)) {
-                                    answer |= chat_ui::entry_row(ui, p, entry, None) == chat_ui::Clicked::Answer;
+                                    match chat_ui::entry_row(ui, p, entry, None) {
+                                        chat_ui::Clicked::Answer | chat_ui::Clicked::Grid => answer = true,
+                                        chat_ui::Clicked::Web(target) => web = Some(target),
+                                        chat_ui::Clicked::Nothing | chat_ui::Clicked::Place => {}
+                                    }
                                 }
                             }
                             None => {
@@ -868,8 +953,18 @@ impl Window_ {
                     });
             });
         ui.add_space(3.0);
+        if let Some(target) = web {
+            link = chat_ui::follow_web(ui.ctx(), &target);
+        }
         let mut composed = chat_ui::Composed::default();
-        if chat.open_thread(slot, shown).is_some() {
+        if let Some(ask) = &link {
+            // (in the box's place: a monitor's window is small)
+            if chat_ui::link_question(&mut ui, p, ask) {
+                link = None;
+                acted = true;
+            }
+        } else if sheet.is_none() && chat.open_thread(slot, shown).is_some() {
+            // (the sheet takes the box's room too: nothing is typed there)
             let who = chat_ui::Speaker {
                 slot,
                 conversation: shown,
@@ -879,13 +974,25 @@ impl Window_ {
             composed = chat_ui::compose(&mut ui, p, chat, who, now);
         }
         let viewing = match chat.open_thread(slot, shown) {
-            Some(_) if !more => Viewing::Thread(slot, shown),
+            Some(_) if !more && sheet.is_none() => Viewing::Thread(slot, shown),
             _ => Viewing::Nothing,
         };
+        if let Some((what, who)) = open {
+            // asked of that character's viewer, which decides; a profile is
+            // in its own window: the character comes forward
+            match self.host.book.open(slot, self.host.chat.login(slot), key, what, &who, now) {
+                Ok(_) if contacts_ui::wants_switch(what) => answer = true,
+                Ok(_) => {}
+                Err(why) => log::info!("session host: nothing asked of character {} ({why:?})", slot + 1),
+            }
+            acted = true;
+        }
         let pane = self.monitors.pane_mut(seat);
         pane.shown[slot] = shown;
         pane.more = more;
         pane.typing = composed.focused;
+        pane.sheet = sheet.map(|sheet| (slot, sheet));
+        pane.link = link;
         if seat == Seat::Cycling && composed.typed {
             // a text typed here: the turn waits for it
             self.monitors.typed = Some((slot, shown));

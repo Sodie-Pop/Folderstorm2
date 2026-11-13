@@ -818,12 +818,20 @@ impl Chat {
     /// Sends the draft of that conversation as that character: handed to
     /// its viewer once, with the login it was typed for.
     pub fn submit(&mut self, slot: usize, conversation: Conversation, now: Instant) -> Result<u64, Blocked> {
+        let volume = self.volume(slot);
+        self.submit_at(slot, conversation, now, volume)
+    }
+
+    /// Checkpoint 11: the same at a volume for this line only (the chat
+    /// bar's Ctrl+Enter shouts and Shift+Enter whispers, whatever is
+    /// chosen); a conversation's lines are said normally whatever is asked.
+    pub fn submit_at(&mut self, slot: usize, conversation: Conversation, now: Instant, volume: Volume) -> Result<u64, Blocked> {
         self.can_send(slot, conversation)?;
         let (Some(draft), Some((launch, generation))) = (self.drafts.remove(&(slot, conversation)), self.characters[slot].login()) else {
             return Err(Blocked::Empty);
         };
         let text = clean_text(&draft.text, MAX_SEND);
-        let volume = self.characters[slot].volume.in_conversation(conversation);
+        let volume = volume.in_conversation(conversation);
         let id = self.next_id;
         self.next_id += 1;
         self.pending.push(Pending {
@@ -1825,6 +1833,13 @@ mod tests {
             c.submit(slot, conversation, now).expect("sent");
             assert_eq!(volume_of(&mut c), expected, "{slot} {conversation:?}");
         }
+        // a line of its own volume (Shift+Enter) leaves the choice as it was
+        assert!(c.set_draft(0, Conversation::Nearby, "psst"));
+        c.submit_at(0, Conversation::Nearby, now, Volume::Whisper).expect("sent");
+        assert_eq!(volume_of(&mut c), Volume::Whisper);
+        assert!(c.set_draft(0, JANE, "psst"));
+        c.submit_at(0, JANE, now, Volume::Shout).expect("sent");
+        assert_eq!(volume_of(&mut c), Volume::Normal, "never in a conversation");
         // it stays chosen for the next line, and goes with the character
         assert_eq!(c.volume(0), Volume::Shout);
         c.forget(0);

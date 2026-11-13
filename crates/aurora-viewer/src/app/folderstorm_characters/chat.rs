@@ -15,11 +15,19 @@
 //!   and reaches the host from there like any line.
 //! - A line is said only by the login it was typed for, in a conversation
 //!   open here, and at most once.
+//! - **Opened for the host** (checkpoint 11): a conversation or a profile
+//!   the user asked for in the host's window opens the way it opens from
+//!   this viewer's own People and Contacts (`App::open_conversation_to_type`,
+//!   `World::start_group_chat`, the profile's own action), with their
+//!   checks: RLVa's `@startim` and `@startimto` (whose own notice shows
+//!   here), the character's groups. Nothing is said to anyone: the
+//!   conversation waits for the user's first line. A group's chat is
+//!   joined as when it is opened here.
 
 use super::*;
 use crate::folderstorm_characters::chat_export;
 use crate::folderstorm_characters::managed::Link;
-use ::folderstorm_session::ipc::{Conversation, SendOutcome, SendRefusal, ToHost, ToViewer};
+use ::folderstorm_session::ipc::{Conversation, Open, OpenOutcome, OpenRefusal, SendOutcome, SendRefusal, ToHost, ToViewer, Volume};
 
 /// The demo's characters hear something this often.
 const DEMO_EVERY: Duration = Duration::from_secs(9);
@@ -34,12 +42,21 @@ impl App {
                 generation,
                 conversation,
                 text,
+                volume,
             } => {
-                let outcome = self.folderstorm_host_line(id, generation, conversation, text);
+                let outcome = self.folderstorm_host_line(id, generation, conversation, text, volume);
                 if let SendOutcome::Refused(why) = outcome {
                     log::info!("session host: line {id} not said ({why:?})");
                 }
                 self.folderstorm_characters.chat.answer(ToHost::SendResult { id, outcome });
+            }
+            ToViewer::Open { id, generation, open } => {
+                let outcome = self.folderstorm_host_open(id, generation, open);
+                match outcome {
+                    OpenOutcome::Opened => log::info!("session host: request {id} opened"),
+                    OpenOutcome::Refused(why) => log::info!("session host: request {id} not opened ({why:?})"),
+                }
+                self.folderstorm_characters.chat.answer(ToHost::Opened { id, outcome });
             }
             ToViewer::MarkRead { generation, conversation } => {
                 if !self.folderstorm_logged_in_as(generation) {
@@ -65,7 +82,7 @@ impl App {
 
     /// Says a line the user typed in the host's window, if it is this
     /// login's, new, and for a conversation open here.
-    fn folderstorm_host_line(&mut self, id: u64, generation: u32, conversation: Conversation, text: String) -> SendOutcome {
+    fn folderstorm_host_line(&mut self, id: u64, generation: u32, conversation: Conversation, text: String, volume: Volume) -> SendOutcome {
         if !self.folderstorm_characters.chat.sends.fresh(id) {
             return SendOutcome::Refused(SendRefusal::Repeated);
         }
@@ -83,10 +100,17 @@ impl App {
         let Some(to) = conversation.id().map(uuid::Uuid::from_u128) else {
             // the chat bar's line: "/5 text" goes to its channel
             let (channel, message) = ui::chat::parse_channel(&text);
+            // (the chat bar's whisper, say or shout: RLVa's `@chatshout`,
+            // `@chatwhisper` and `@chatnormal` apply in `App::send`)
+            let chat_type = match volume {
+                Volume::Whisper => aurora_net::ChatType::Whisper,
+                Volume::Normal => aurora_net::ChatType::Normal,
+                Volume::Shout => aurora_net::ChatType::Shout,
+            };
             self.send_local_chat(ui::chat::OutgoingChat {
                 message,
                 channel,
-                chat_type: aurora_net::ChatType::Normal,
+                chat_type,
             });
             return SendOutcome::Accepted;
         };
@@ -96,6 +120,62 @@ impl App {
         }
         self.folderstorm_send_im(to, text);
         SendOutcome::Accepted
+    }
+
+    /// Checkpoint 11: opens what the user asked for in the host's window,
+    /// if it is this login's, new, and allowed here; as this viewer's own
+    /// People and Contacts open it.
+    fn folderstorm_host_open(&mut self, id: u64, generation: u32, open: Open) -> OpenOutcome {
+        if !self.folderstorm_characters.chat.opens.fresh(id) {
+            return OpenOutcome::Refused(OpenRefusal::Repeated);
+        }
+        if !matches!(self.screen, Screen::World) {
+            return OpenOutcome::Refused(OpenRefusal::NotInWorld);
+        }
+        if !self.folderstorm_logged_in_as(generation) {
+            return OpenOutcome::Refused(OpenRefusal::Stale);
+        }
+        let Some(target) = open.target().map(uuid::Uuid::from_u128) else {
+            return OpenOutcome::Refused(OpenRefusal::Unknown);
+        };
+        let group = self.world.groups.is_member(&target);
+        match open {
+            Open::Im(_) => {
+                if target == self.world.agent_id || group || self.world.is_group_session(&target) {
+                    return OpenOutcome::Refused(OpenRefusal::Unknown);
+                }
+                // (RLVa's notice shows here, as for a click in this window)
+                if !self.world.rlva_start_ims(&[target]) {
+                    return OpenOutcome::Refused(OpenRefusal::Restricted);
+                }
+                self.open_conversation_to_type(target);
+                if !self.world.social.has_session(&target) {
+                    return OpenOutcome::Refused(OpenRefusal::Restricted);
+                }
+            }
+            Open::Group(_) => {
+                if !group {
+                    return OpenOutcome::Refused(OpenRefusal::NotAGroup);
+                }
+                if !self.world.rlva_start_ims(&[target]) {
+                    return OpenOutcome::Refused(OpenRefusal::Restricted);
+                }
+                // as Contacts › Groups' "Group chat"
+                self.world.ui_sounds.push(crate::ui_sound::UiSound::StartIm);
+                self.world.start_group_chat(target);
+                self.open_conversation_to_type(target);
+                if !self.world.social.has_session(&target) {
+                    return OpenOutcome::Refused(OpenRefusal::Restricted);
+                }
+            }
+            Open::Profile(_) => {
+                if group || !self.world.rlva_can_name(target) {
+                    return OpenOutcome::Refused(if group { OpenRefusal::Unknown } else { OpenRefusal::Restricted });
+                }
+                self.on_ctx_action(crate::ui::context::CtxAction::Profile(target));
+            }
+        }
+        OpenOutcome::Opened
     }
 
     /// The conversations window's send (`App::handle_actions`, its loop

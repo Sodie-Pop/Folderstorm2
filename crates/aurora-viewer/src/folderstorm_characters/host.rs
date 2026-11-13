@@ -31,6 +31,14 @@
 //! conversations are chips, in those windows and in the shared chat
 //! ([`chips`]).
 //!
+//! Checkpoint 11: conversations from the host. Each character's friends
+//! and groups, as its viewer tells them (`contacts::Book`, never saved),
+//! "New IM" and "Friends" in the shared chat and the monitors' chat
+//! (`contacts_ui.rs`): the host asks the viewer to open the conversation,
+//! the viewer decides and opens it as the user would there. A line's web
+//! links open in the system's browser after the viewer's own judge of
+//! the site (`chat_ui.rs`).
+//!
 //! Every window is drawn on the processor, like the crash window
 //! (`crash/software.rs`): the host opens no graphics device, so it takes
 //! nothing from the characters' card and no driver trouble reaches it.
@@ -42,6 +50,7 @@
 mod chat_ui;
 mod chips;
 mod comfort;
+mod contacts_ui;
 mod faces;
 mod hotkeys;
 mod monitors;
@@ -50,6 +59,7 @@ mod ui;
 
 use ::folderstorm_session::bar::{self, Placement, QuickAction};
 use ::folderstorm_session::chat::{self, Chat};
+use ::folderstorm_session::contacts::Book;
 use ::folderstorm_session::host::{Config, Desk, Effect, Note, Phase};
 use ::folderstorm_session::identity::Colour;
 use ::folderstorm_session::inbox::Inbox;
@@ -250,6 +260,9 @@ struct Host {
     desk: Desk,
     /// The characters' conversations and what is typed for them here.
     chat: Chat,
+    /// Checkpoint 11: the characters' friends and groups, and what the
+    /// host asked their viewers to open.
+    book: Book,
     /// Checkpoint 7: what waits for an answer in the characters' own
     /// windows, across all of them. Only ever shown.
     inbox: Inbox,
@@ -294,6 +307,7 @@ impl Host {
         let mut host = Self {
             desk: Desk::new(config),
             chat: Chat::default(),
+            book: Book::default(),
             inbox: Inbox::default(),
             sample_inbox: false,
             alert: false,
@@ -466,6 +480,8 @@ impl Host {
                 process::Kind::Chat(batch) if managed => self.chat.batch(slot, launch, *batch),
                 process::Kind::Attention(list) if managed => self.chat.attention_list(slot, launch, *list),
                 process::Kind::SendResult(id, outcome) if managed => self.chat.result(slot, launch, id, outcome),
+                process::Kind::Opened(id, outcome) if managed => self.book.answer(slot, launch, id, outcome, &mut self.chat),
+                process::Kind::Contacts(list) if managed => self.book.set(slot, launch, self.chat.login(slot), *list),
                 // a click on that viewer's bar: the window carries it out
                 // (`ui/bar.rs`), as it does its own clicks
                 process::Kind::Bar(request) if managed && request.valid() => {
@@ -473,7 +489,12 @@ impl Host {
                         self.bar_asked.push(request);
                     }
                 }
-                process::Kind::Chat(_) | process::Kind::Attention(_) | process::Kind::SendResult(..) | process::Kind::Bar(_) => {}
+                process::Kind::Chat(_)
+                | process::Kind::Attention(_)
+                | process::Kind::SendResult(..)
+                | process::Kind::Bar(_)
+                | process::Kind::Opened(..)
+                | process::Kind::Contacts(_) => {}
                 process::Kind::Unreachable => self.desk.unreachable(slot, launch),
             }
         }
@@ -490,6 +511,7 @@ impl Host {
                 self.desk.exited(slot, viewer.launch, clean, now);
                 // what it was asked to say and did not answer is uncertain
                 self.chat.ended(slot, viewer.launch);
+                self.book.ended(slot, viewer.launch);
                 self.viewers[slot] = None;
             }
         }
@@ -502,6 +524,11 @@ impl Host {
         }
         self.chat.tick(now);
         self.carry_out_chat();
+        for slot in 0..MAX_SLOTS {
+            self.book.sync(slot, self.chat.login(slot));
+        }
+        self.book.tick(now);
+        self.carry_out_book();
         self.sync_inbox(now);
         self.sync_bars();
         if self.unsaved.is_some_and(|since| now.duration_since(since) >= SAVE_AFTER) {
@@ -538,6 +565,7 @@ impl Host {
                     }
                     // nothing is said to, or kept waiting for, a viewer let go
                     self.chat.ended(slot, launch);
+                    self.book.ended(slot, launch);
                 }
                 Effect::Save => self.unsaved = self.unsaved.or(Some(now)),
                 Effect::Exit => self.exit = true,
@@ -573,6 +601,21 @@ impl Host {
                         self.alert = true;
                     }
                 }
+            }
+        }
+    }
+
+    /// Checkpoint 11: what the book asks for, a request to open on one
+    /// viewer's own pipe and no other.
+    fn carry_out_book(&mut self) {
+        for send in self.book.take_effects() {
+            let queued = self.viewers[send.slot]
+                .as_ref()
+                .filter(|v| v.launch == send.launch)
+                .is_some_and(|viewer| viewer.send(send.message));
+            if !queued {
+                log::warn!("session host: a request for character {} was not handed to it", send.slot + 1);
+                self.book.not_written(send.id);
             }
         }
     }

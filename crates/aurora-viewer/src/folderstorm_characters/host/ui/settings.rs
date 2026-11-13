@@ -215,6 +215,7 @@ impl Window_ {
                     // nothing of either stays with the other's number
                     for slot in [slot, other] {
                         self.host.chat.forget(slot);
+                        self.host.book.forget(slot);
                         self.host.inbox.clear(slot);
                     }
                     self.identity.close_for(slot);

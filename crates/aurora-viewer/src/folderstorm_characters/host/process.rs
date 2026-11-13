@@ -22,7 +22,9 @@
 //! as a viewer is slow, the window's thread only ever tries to queue.
 
 use super::super::{managed, transport};
-use ::folderstorm_session::ipc::{self, AttentionList, Bootstrap, ChatBatch, Refusal, SendOutcome, Status, ToHost, ToViewer};
+use ::folderstorm_session::ipc::{
+    self, AttentionList, Bootstrap, ChatBatch, Contacts, OpenOutcome, Refusal, SendOutcome, Status, ToHost, ToViewer,
+};
 use ::folderstorm_session::monitor::{FrameHeader, Latest};
 use ::folderstorm_session::profile::ProfileName;
 use crossbeam_channel::{Receiver, Sender};
@@ -55,6 +57,10 @@ pub enum Kind {
     SendResult(u64, SendOutcome),
     /// Checkpoint 8: a click on the bar it draws.
     Bar(::folderstorm_session::bar::Request),
+    /// Checkpoint 11: what became of a request to open something.
+    Opened(u64, OpenOutcome),
+    /// Checkpoint 11: its friends and groups, whole.
+    Contacts(Box<Contacts>),
     /// The viewer never reached its endpoint: only other clients came, or
     /// the endpoint failed. Nothing more comes from this launch.
     Unreachable,
@@ -288,6 +294,8 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
             Ok(ToHost::Attention(list)) => Kind::Attention(list),
             Ok(ToHost::SendResult { id, outcome }) => Kind::SendResult(id, outcome),
             Ok(ToHost::Bar(request)) => Kind::Bar(request),
+            Ok(ToHost::Opened { id, outcome }) => Kind::Opened(id, outcome),
+            Ok(ToHost::Contacts(list)) => Kind::Contacts(list),
             Ok(ToHost::Frame(header)) => {
                 // its size is checked before a byte of it is read
                 match ipc::read_picture(&mut from_viewer, &header) {
@@ -321,7 +329,7 @@ fn read_reports(mut from_viewer: impl Read, slot: usize, launch: u32, token: &st
                 return;
             }
         };
-        let urgent = matches!(kind, Kind::Bar(_));
+        let urgent = matches!(kind, Kind::Bar(_) | Kind::Opened(..));
         if !tell(kind) {
             return;
         }
@@ -647,7 +655,7 @@ mod tests {
                 Kind::Status(status) => desk.status(slot, launch, (**status).clone(), now),
                 Kind::Heartbeat(count) => desk.heartbeat(slot, launch, *count, now),
                 Kind::Refused(refusal) => desk.refused(slot, launch, *refusal),
-                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) | Kind::Bar(_) => {}
+                Kind::Chat(_) | Kind::Attention(_) | Kind::SendResult(..) | Kind::Bar(_) | Kind::Opened(..) | Kind::Contacts(_) => {}
                 Kind::Unreachable => desk.unreachable(slot, launch),
             }
             kinds.push(kind);
@@ -873,7 +881,7 @@ mod tests {
                     Kind::Chat(batch) => chat.batch(slot, launch, *batch),
                     Kind::Attention(list) => chat.attention_list(slot, launch, *list),
                     Kind::SendResult(id, outcome) => chat.result(slot, launch, id, outcome),
-                    Kind::Connected | Kind::Heartbeat(_) | Kind::Bar(_) => {}
+                    Kind::Connected | Kind::Heartbeat(_) | Kind::Bar(_) | Kind::Opened(..) | Kind::Contacts(_) => {}
                     Kind::Refused(refusal) => panic!("refused: {refusal:?}"),
                     Kind::Unreachable => panic!("the viewer never reached its endpoint"),
                 }
