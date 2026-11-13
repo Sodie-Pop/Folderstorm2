@@ -603,6 +603,8 @@ impl<'a> Floater<'a> {
         // The windows live between the bars (`layout::work_area`): none
         // opens larger than that room, nor outside it.
         let work = super::layout::work_area(ctx);
+        // Folderstorm: a window-centred floater opens in the world viewport
+        self.default_pos = crate::folderstorm::viewport::floater_default(ctx, window_id, self.default_pos, self.default_size);
         self.min_size = self.min_size.min(work.size());
         self.default_size = self.default_size.min(work.size());
         self.default_pos = fit_in(work, self.default_pos, self.default_size);

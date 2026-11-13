@@ -192,7 +192,11 @@ Dialogs centre in the world, not on the window: with
 `AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_MCP=ask AURORA_WINDOW_SIZE=3840,1080` the
 local assistant's Ask dialog opens in the middle of the right two thirds, as
 every modal dialog does (the Quit dialog, for one), and the friendship and
-region message prompts and the region restart alert. The notification toasts,
+region message prompts and the region restart alert. Floating windows that
+open on the window's centre (pay, buy land, a profile, a group, the script
+editor, the environment editors, report abuse…) open centred in the world
+the first time they are shown; one moved by hand or restored from the saved
+layout stays where it was. The notification toasts,
 the chat lines, the media bar and the banners under the top bar follow the
 bars: inside the world, or over the whole window with `bars-window`.
 
