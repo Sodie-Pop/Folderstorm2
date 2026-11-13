@@ -40,6 +40,10 @@
 //! - [`taskbar`]: a background character's window off the taskbar and out
 //!   of Alt-Tab (Windows), and everything put back.
 //!
+//! A splash per character (follow-up to the upstream startup splash):
+//! - [`splash`]: a character's splash names it, in its language, and the
+//!   host's characters' splashes do not stack.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod bar;
@@ -49,6 +53,7 @@ pub mod host;
 pub mod managed;
 pub mod profile;
 pub mod profile_copy;
+pub mod splash;
 pub mod taskbar;
 pub mod transport;
 

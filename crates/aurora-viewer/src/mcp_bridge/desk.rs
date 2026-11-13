@@ -3,12 +3,28 @@
 //! for the app to run them, for the server's confirmation, for the avatar's
 //! bake. Polled once per frame with the time given, so the tests drive it
 //! without a clock or a window.
+//!
+//! The listener thread decided Allow / Ask / Never when the call arrived;
+//! the desk is the authority after that. It decides again with the levels
+//! in force (given each frame) when it takes a call, on every frame while
+//! the call waits, when Allow is clicked and just before the app sends it
+//! ([`Desk::recheck`]): any class now on Never refuses, a call not asked yet
+//! whose class now asks goes back to asking, and an Allow never answers a
+//! question already asked. A login change or access turned off refuses
+//! every call still waiting. A change already sent is never undone.
+//!
+//! Login binding (folderstorm/plans/mcp-receipts.md, section 2): a bound
+//! tool pinned by its sidecar to another `viewer_session` than the login's
+//! now is refused with `session_changed` when the desk takes it; once taken,
+//! a call belongs to the login generation it was taken under, and a login
+//! change refuses it with `session_changed` too.
 
 use super::changes::{self, Planned, Work};
 use super::tools::{self, Ctx};
+use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::server::Pending;
-use folderstorm_mcp_bridge::{ErrorCode, ToolError};
+use folderstorm_mcp_bridge::{Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -33,6 +49,12 @@ struct InFlight {
     request: Option<Uuid>,
     outcome: Option<Outcome>,
     deadline: Instant,
+    /// A new item: the server's answer is the item arriving in `parent`,
+    /// of that asset type and name (phase 3).
+    expect: Option<(Uuid, i32, Option<String>)>,
+    /// A picture from a texture: the Image window's path ends it, or says
+    /// why it failed (phase 3).
+    image: bool,
 }
 
 struct BakeWait {
@@ -48,6 +70,8 @@ pub enum Outcome {
     Copying,
     /// Done; the folders it created, temporary id → the server's.
     Done(HashMap<Uuid, Uuid>),
+    /// The new item arrived (phase 3).
+    Created(Uuid),
     Failed(String),
 }
 
@@ -91,31 +115,107 @@ pub struct Question {
     pub waiting: usize,
 }
 
+/// A change allowed, to run on this frame.
+struct Ready {
+    call: Pending,
+    /// For the dialog, should the levels ask first after all.
+    summary: String,
+}
+
 #[derive(Default)]
 pub struct Desk {
     asks: VecDeque<Asking>,
     asked: u64,
     /// Changes to run on this frame (allowed, or needing no question).
-    ready: Vec<Pending>,
+    ready: Vec<Ready>,
     sent: Vec<InFlight>,
     /// The change the app is sending now: answers arriving meanwhile are
     /// its own (the demo answers at once, inside the send).
     sending: Option<InFlight>,
     bakes: Vec<BakeWait>,
+    /// `inventory_changes`' journal (phase 3).
+    journal: Journal,
+    /// `inventory_landmark` calls waiting for their landmark (phase 3).
+    landmarks: Vec<landmark::Wait>,
+    /// The user's levels in force ([`Desk::set_permissions`]); Read only
+    /// until the first frame gives them.
+    permissions: Permissions,
+    /// The login generation the waiting calls were taken under
+    /// ([`Desk::set_login`]).
+    login: u64,
+    /// That login's `viewer_session` (None while logged out), which a
+    /// bound call must be pinned to, when pinned at all.
+    session: Option<String>,
 }
 
 fn refused(message: &str) -> ToolError {
     ToolError::new(ErrorCode::PermissionDenied, message)
 }
 
+/// A class the call needs was set to Never while it waited.
+pub const PERMISSIONS_CHANGED: &str =
+    "the user changed the permissions in Preferences › Privacy › Local assistant while the call waited: refused, nothing was sent";
+/// The viewer logged out, or in again, while the call waited.
+pub const LOGIN_CHANGED: &str =
+    "the viewer's login changed while the call waited: refused, nothing was sent. Call viewer_status and look again before retrying";
+/// The user turned local assistant access off while the call waited.
+pub const ACCESS_OFF: &str = "local assistant access was turned off: refused, nothing was sent";
+
+/// Folderstorm: what [`Desk::review`] says of a call waiting outside the
+/// desk.
+#[derive(Debug)]
+pub enum Review {
+    /// It may go on.
+    Run,
+    /// Its classes ask now: a call not asked yet goes back to the desk
+    /// ([`Desk::take`]) before it acts.
+    Ask,
+    /// Refused (`session_changed`, or a class on Never): the refusal the
+    /// desk gives its own waiting calls.
+    Refuse(ToolError),
+}
+
+/// What the levels say of `call` now, for every class it needs
+/// (`ToolSpec::classes`: a thumbnail from a picture needs Edit and Camera):
+/// any class on Never refuses, else any on Ask asks (once), else it runs.
+/// An unknown tool is refused.
+pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
+    let Some(spec) = protocol::tool(tool) else {
+        return Decision::Refuse;
+    };
+    permissions.decide_all(spec.classes())
+}
+
 impl Desk {
+    /// The login changed under `call`: refused, with the login now.
+    fn login_changed(&self) -> ToolError {
+        ToolError {
+            viewer_session: self.session.clone(),
+            ..ToolError::new(ErrorCode::SessionChanged, LOGIN_CHANGED)
+        }
+    }
+
     /// A new call: a read is answered now; a change is checked, then asks
     /// the user or waits to run; `wait_for_bake` waits.
-    pub fn take(&mut self, call: Pending, cx: &Ctx, now: Instant) {
+    pub fn take(&mut self, mut call: Pending, cx: &Ctx, now: Instant) {
         let Some(spec) = protocol::tool(&call.tool) else {
             call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
             return;
         };
+        // pinned by its sidecar to another login than this one
+        if spec.bound()
+            && let Some(pinned) = &call.session
+            && self.session.as_deref() != Some(pinned.as_str())
+        {
+            let refusal = binding::session_changed(self.session.as_deref());
+            return call.answer(Err(refusal));
+        }
+        // the levels may have changed while the call was queued
+        match decision(&self.permissions, &call.tool) {
+            Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
+            Decision::Ask => call.ask = true,
+            Decision::Run => {}
+        }
         if call.tool == "wait_for_bake" {
             match bake_timeout(&call.arguments) {
                 Ok(wait) => self.bakes.push(BakeWait {
@@ -124,6 +224,16 @@ impl Desk {
                 }),
                 Err(e) => call.answer(Err(e)),
             }
+            return;
+        }
+        // Folderstorm: phase 3 reads that keep state or wait
+        if call.tool == "inventory_changes" {
+            let result = tools::ready(cx).and_then(|()| self.journal.answer(&call.arguments, cx.inv, now));
+            call.answer(result);
+            return;
+        }
+        if call.tool == "inventory_landmark" {
+            self.landmarks.extend(landmark::start(call, cx, now));
             return;
         }
         if !spec.changes() {
@@ -138,17 +248,123 @@ impl Desk {
                 reply,
                 ..
             }) => call.answer(Ok(reply)),
-            Ok(planned) if call.ask => {
-                self.asked += 1;
-                self.asks.push_back(Asking {
-                    number: self.asked,
-                    call,
-                    summary: planned.summary,
-                    deadline: now + ASK_TIMEOUT,
-                    decision: None,
-                });
+            Ok(planned) if call.ask => self.ask(call, planned.summary, now),
+            Ok(planned) => self.ready.push(Ready {
+                call,
+                summary: planned.summary,
+            }),
+        }
+    }
+
+    /// Folderstorm: a call answered outside the desk (the world reads, which
+    /// `mcp_bridge::frame` answers at once) is checked first as [`Desk::take`]
+    /// checks every call: pinned to another login, or needing a class now on
+    /// Never, it is refused. Some: answer it now.
+    pub fn admit(&self, call: Pending) -> Option<Pending> {
+        let Some(spec) = protocol::tool(&call.tool) else {
+            call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
+            return None;
+        };
+        if spec.bound()
+            && let Some(pinned) = &call.session
+            && self.session.as_deref() != Some(pinned.as_str())
+        {
+            call.answer(Err(binding::session_changed(self.session.as_deref())));
+            return None;
+        }
+        if decision(&self.permissions, &call.tool) == Decision::Refuse {
+            call.answer(Err(refused(PERMISSIONS_CHANGED)));
+            return None;
+        }
+        Some(call)
+    }
+
+    /// Folderstorm: the login generation the desk binds its calls to now
+    /// (the studio binds its camera moves, pictures and thumbnail to it).
+    pub fn login(&self) -> u64 {
+        self.login
+    }
+
+    /// Folderstorm: a call that waits outside the desk (the studio's camera
+    /// moves, pictures and thumbnail, #21), taken under login generation
+    /// `login`, decided again by the desk's own rules: under another login
+    /// than the one now it is refused with `session_changed`; needing a
+    /// class now on Never it is refused; else what the levels say now.
+    pub fn review(&self, tool: &str, login: u64) -> Review {
+        if login != self.login {
+            return Review::Refuse(self.login_changed());
+        }
+        match decision(&self.permissions, tool) {
+            Decision::Refuse => Review::Refuse(refused(PERMISSIONS_CHANGED)),
+            Decision::Ask => Review::Ask,
+            Decision::Run => Review::Run,
+        }
+    }
+
+    /// The user's levels in force, given each frame before the calls: the
+    /// calls waiting are decided again with them ([`Desk::tick`]).
+    pub fn set_permissions(&mut self, permissions: Permissions) {
+        self.permissions = permissions;
+    }
+
+    /// The login generation now and its `viewer_session`, given each frame
+    /// before the calls: when the generation moved, every call still
+    /// waiting (question, change not sent, bake wait) is refused with
+    /// `session_changed`. Changes already sent wait for their answer.
+    pub fn set_login(&mut self, generation: u64, session: Option<String>) {
+        self.session = session;
+        if generation == self.login {
+            return;
+        }
+        self.login = generation;
+        let refusal = self.login_changed();
+        self.refuse_waiting(&refusal);
+    }
+
+    fn refuse_waiting(&mut self, refusal: &ToolError) {
+        for ask in std::mem::take(&mut self.asks) {
+            ask.call.answer(Err(refusal.clone()));
+        }
+        for ready in std::mem::take(&mut self.ready) {
+            ready.call.answer(Err(refusal.clone()));
+        }
+        for wait in std::mem::take(&mut self.bakes) {
+            wait.call.answer(Err(refusal.clone()));
+        }
+        // Folderstorm: phase 3's landmark reads wait too
+        landmark::refuse_all(&mut self.landmarks, refusal);
+    }
+
+    /// Access is turned off: every call still waiting is refused, the
+    /// changes already sent answer that they may still land, and the desk
+    /// starts empty.
+    pub fn close(&mut self) {
+        let mut old = std::mem::take(self);
+        old.refuse_waiting(&refused(ACCESS_OFF));
+        for flight in old.sending.take().into_iter().chain(old.sent) {
+            flight.call.answer(Err(ToolError::new(
+                ErrorCode::Timeout,
+                "the change was sent before local assistant access was turned off; it may still land: look again before retrying",
+            )));
+        }
+    }
+
+    /// Just before the app sends `call`'s change: decided again with the
+    /// levels and the login in force. Some: send it now. None: it was
+    /// refused, or it goes back to the dialog (its class asks now).
+    pub fn recheck(&mut self, call: Pending, login: u64, session: Option<String>, cx: &Ctx, now: Instant) -> Option<Pending> {
+        let taken = self.login;
+        self.set_login(login, session);
+        match self.review(&call.tool, taken) {
+            Review::Refuse(refusal) => {
+                call.answer(Err(refusal));
+                None
             }
-            Ok(_) => self.ready.push(call),
+            Review::Ask if !call.ask => {
+                self.take(call, cx, now);
+                None
+            }
+            _ => Some(call),
         }
     }
 
@@ -168,9 +384,17 @@ impl Desk {
     /// The user's answer to question `number` (Allow, or Refuse / Escape /
     /// a click outside).
     pub fn decide(&mut self, number: u64, allow: bool) {
-        if let Some(ask) = self.asks.iter_mut().find(|a| a.number == number && a.decision.is_none()) {
-            ask.decision = Some(allow);
+        let Some(index) = self.asks.iter().position(|a| a.number == number && a.decision.is_none()) else {
+            return;
+        };
+        // an Allow for a class set to Never meanwhile refuses at once
+        if allow && decision(&self.permissions, &self.asks[index].call.tool) == Decision::Refuse {
+            if let Some(ask) = self.asks.remove(index) {
+                ask.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+            }
+            return;
         }
+        self.asks[index].decision = Some(allow);
     }
 
     /// Once per frame: settle the questions (answered or timed out), the
@@ -178,8 +402,16 @@ impl Desk {
     /// changes the app runs now.
     pub fn tick(&mut self, bake: &Bake, now: Instant) -> Vec<Pending> {
         for ask in std::mem::take(&mut self.asks) {
+            if decision(&self.permissions, &ask.call.tool) == Decision::Refuse {
+                // the dialog closes with it
+                ask.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+                continue;
+            }
             match ask.decision {
-                Some(true) => self.ready.push(ask.call),
+                Some(true) => self.ready.push(Ready {
+                    call: ask.call,
+                    summary: ask.summary,
+                }),
                 Some(false) => ask.call.answer(Err(refused("the user refused this change"))),
                 None if now >= ask.deadline => ask.call.answer(Err(refused(&format!(
                     "the user did not answer within {} seconds: refused",
@@ -199,13 +431,36 @@ impl Desk {
             }
         }
         for wait in std::mem::take(&mut self.bakes) {
-            if bake.settled() || now >= wait.deadline {
+            if decision(&self.permissions, &wait.call.tool) == Decision::Refuse {
+                wait.call.answer(Err(refused(PERMISSIONS_CHANGED)));
+            } else if bake.settled() || now >= wait.deadline {
                 wait.call.answer(Ok(bake.answer()));
             } else {
                 self.bakes.push(wait);
             }
         }
-        std::mem::take(&mut self.ready)
+        let mut runs = Vec::new();
+        for ready in std::mem::take(&mut self.ready) {
+            match decision(&self.permissions, &ready.call.tool) {
+                Decision::Refuse => ready.call.answer(Err(refused(PERMISSIONS_CHANGED))),
+                // not asked yet, and its class asks now
+                Decision::Ask if !ready.call.ask => self.ask(ready.call, ready.summary, now),
+                _ => runs.push(ready.call),
+            }
+        }
+        runs
+    }
+
+    fn ask(&mut self, mut call: Pending, summary: String, now: Instant) {
+        call.ask = true;
+        self.asked += 1;
+        self.asks.push_back(Asking {
+            number: self.asked,
+            call,
+            summary,
+            deadline: now + ASK_TIMEOUT,
+            decision: None,
+        });
     }
 
     /// The app starts sending `call`'s change.
@@ -213,6 +468,10 @@ impl Desk {
         if let Some(earlier) = self.sending.take() {
             self.sent_one(earlier, None, None);
         }
+        let expect = match &planned.work {
+            Work::Create(c) => Some((c.parent, c.asset_type(), c.name.clone())),
+            _ => None,
+        };
         self.sending = Some(InFlight {
             call,
             outfit,
@@ -221,6 +480,8 @@ impl Desk {
             request: None,
             outcome: None,
             deadline: now + CHANGE_WAIT,
+            expect,
+            image: matches!(planned.work, Work::Image { .. }),
         });
     }
 
@@ -238,7 +499,7 @@ impl Desk {
             return;
         }
         flight.request = flight.request.or(request);
-        if flight.request.is_some() {
+        if flight.request.is_some() || (flight.expect.is_some() && failure.is_none()) {
             self.sent.push(flight);
             return;
         }
@@ -254,7 +515,7 @@ impl Desk {
         if let Some(flight) = self
             .sending
             .as_mut()
-            .filter(|f| f.outfit == outfit && f.request.is_none_or(|r| r == request))
+            .filter(|f| f.outfit == outfit && f.expect.is_none() && f.request.is_none_or(|r| r == request))
         {
             flight.request = Some(request);
             if outcome != Outcome::Copying {
@@ -268,6 +529,54 @@ impl Desk {
         if let Some(index) = self.sent.iter().position(|f| f.outfit == outfit && f.request == Some(request)) {
             finish(self.sent.swap_remove(index), outcome);
         }
+    }
+
+    /// Folderstorm: a new item arrived; the creation waiting for it ends.
+    /// True when it was the local assistant's.
+    pub fn created(&mut self, item: &aurora_net::inventory::InvItem) -> bool {
+        let matches = |f: &InFlight| {
+            f.expect.as_ref().is_some_and(|(parent, asset_type, name)| {
+                *parent == item.parent && *asset_type == item.asset_type && name.as_ref().is_none_or(|n| *n == item.name)
+            })
+        };
+        if let Some(flight) = self.sending.as_mut().filter(|f| matches(f) && f.outcome.is_none()) {
+            flight.outcome = Some(Outcome::Created(item.id));
+            return true;
+        }
+        if let Some(index) = self.sent.iter().position(matches) {
+            finish(self.sent.swap_remove(index), Outcome::Created(item.id));
+            return true;
+        }
+        false
+    }
+
+    /// Folderstorm: whether `request` is a picture this desk waits for (the
+    /// Image window's path then runs without a window).
+    pub fn image_job(&self, request: Uuid) -> bool {
+        self.sent.iter().any(|f| f.image && f.request == Some(request))
+    }
+
+    /// Folderstorm: the Image window's path ended `request` with an error
+    /// before the server was asked (or the server refused it).
+    pub fn image_failed(&mut self, request: Uuid, error: &str) {
+        if let Some(index) = self.sent.iter().position(|f| f.image && f.request == Some(request)) {
+            let flight = self.sent.swap_remove(index);
+            flight
+                .call
+                .answer(Err(ToolError::new(ErrorCode::Failed, format!("the picture was not set: {error}"))));
+        }
+    }
+
+    /// Folderstorm: once per frame, the reads that wait or follow the
+    /// inventory (phase 3).
+    pub fn tick_reads(&mut self, world: &crate::world::World, now: Instant) {
+        self.journal.follow(&world.inventory, now);
+        landmark::tick(&mut self.landmarks, world, now);
+    }
+
+    /// Folderstorm: the landmark assets the waiting calls need.
+    pub fn wanted_landmarks(&self) -> Vec<Uuid> {
+        landmark::wanted(&self.landmarks)
     }
 
     /// Calls in each state, for the tests: asking, ready, sent, bake waits.
@@ -284,6 +593,12 @@ fn finish(flight: InFlight, outcome: Outcome) {
             if let Some(temporary) = flight.created {
                 reply["folder_id"] = json!(created.get(&temporary).copied().unwrap_or(temporary));
             }
+            reply["done"] = json!(true);
+            flight.call.answer(Ok(reply));
+        }
+        Outcome::Created(item) => {
+            let mut reply = flight.reply;
+            reply["item_id"] = json!(item);
             reply["done"] = json!(true);
             flight.call.answer(Ok(reply));
         }

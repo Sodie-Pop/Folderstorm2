@@ -61,6 +61,7 @@ const BARE: &[&str] = &[
     "ui-login-grid-link-text",
     "ui-options-about-confirmations",
     "ui-options-backup-",
+    "ui-options-browser-behavior-help",
     "ui-options-camera-vr-at-start-help",
     "ui-options-chat-logs-import-same",
     "ui-options-flash-on-",
