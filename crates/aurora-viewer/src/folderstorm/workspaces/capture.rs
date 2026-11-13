@@ -147,7 +147,8 @@ pub fn viewer_window(seen: &Seen, monitors: &[Monitor]) -> Option<WindowFrame> {
     let rect = seen.rect();
     let place = |index: usize| u8::try_from(index).ok();
     if seen.fullscreen {
-        let on = rect.and_then(|[x, y, w, h]| monitors::monitor_at(i64::from(x) + i64::from(w) / 2, i64::from(y) + i64::from(h) / 2, monitors));
+        let on =
+            rect.and_then(|[x, y, w, h]| monitors::monitor_at(i64::from(x) + i64::from(w) / 2, i64::from(y) + i64::from(h) / 2, monitors));
         return Some(WindowFrame::Fullscreen {
             monitor: on.and_then(place).unwrap_or(0),
         });

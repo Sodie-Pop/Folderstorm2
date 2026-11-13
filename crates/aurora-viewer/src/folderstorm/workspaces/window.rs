@@ -134,9 +134,13 @@ const NEAR: i32 = 1;
 enum Stage {
     Begin,
     /// Asked to leave full screen at `since`.
-    Windowed { since: f64 },
+    Windowed {
+        since: f64,
+    },
     /// Asked to leave maximized and to take the goal's border at `since`.
-    Border { since: f64 },
+    Border {
+        since: f64,
+    },
     /// Asked for its place and size at `since`; `last` is what it was like
     /// in the frame before, `still` for how many frames, `changed` whether
     /// it has changed at all since.
@@ -221,7 +225,9 @@ impl Steps {
                             }
                             out.push(Command::Size(size.0, size.1));
                         }
-                        Goal::Borderless { rect: [x, y, width, height] } => {
+                        Goal::Borderless {
+                            rect: [x, y, width, height],
+                        } => {
                             out.push(Command::Position(x, y));
                             out.push(Command::Size(width.max(1) as u32, height.max(1) as u32));
                         }
@@ -285,7 +291,9 @@ impl Steps {
         };
         match self.plan.goal {
             Goal::Normal { at, size, .. } => sized(size) && placed(at),
-            Goal::Borderless { rect: [x, y, width, height] } => sized((width.max(1) as u32, height.max(1) as u32)) && placed(Some((x, y))),
+            Goal::Borderless {
+                rect: [x, y, width, height],
+            } => sized((width.max(1) as u32, height.max(1) as u32)) && placed(Some((x, y))),
             Goal::Fullscreen { on } => placed(on),
         }
     }
@@ -419,6 +427,10 @@ mod tests {
             window.send(&out);
             window.frame();
             if done {
+                // what was asked last takes effect
+                for _ in 0..=window.lag.min(60) {
+                    window.frame();
+                }
                 return frame;
             }
         }

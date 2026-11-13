@@ -61,12 +61,22 @@ pub fn show(ctx: &egui::Context, p: &Palette) {
                             if widgets::action_button(ui, p, ICON_APPLY, tr!("fs-layouts-apply"), ActionKind::Primary, size).clicked() {
                                 request = Some(Request::Apply(name.clone()));
                             }
-                            if widgets::action_button(ui, p, ICON_LATER, tr!("fs-layouts-monitors-later"), ActionKind::Flat, size).clicked() {
+                            if widgets::action_button(ui, p, ICON_LATER, tr!("fs-layouts-monitors-later"), ActionKind::Flat, size).clicked()
+                            {
                                 request = Some(Request::Dismiss);
                             }
                         }
                         Notice::Applied { .. } => {
-                            if widgets::action_button(ui, p, menu::ICON_PREVIOUS, tr!("fs-layouts-previous-button"), ActionKind::Flat, size).clicked() {
+                            if widgets::action_button(
+                                ui,
+                                p,
+                                menu::ICON_PREVIOUS,
+                                tr!("fs-layouts-previous-button"),
+                                ActionKind::Flat,
+                                size,
+                            )
+                            .clicked()
+                            {
                                 request = Some(Request::Previous);
                             }
                             if widgets::action_button(ui, p, ICON_APPLY, tr!("common-ok"), ActionKind::Primary, size).clicked() {

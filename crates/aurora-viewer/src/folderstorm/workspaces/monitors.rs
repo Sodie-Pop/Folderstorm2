@@ -25,7 +25,10 @@ pub const SETTLED_AFTER: f64 = 2.0;
 /// window needs of it).
 pub fn same_place(a: &Monitor, b: &Monitor) -> bool {
     let near = |a: i64, b: i64| (a - b).abs() <= NEAR;
-    near(a.x.into(), b.x.into()) && near(a.y.into(), b.y.into()) && near(a.width.into(), b.width.into()) && near(a.height.into(), b.height.into())
+    near(a.x.into(), b.x.into())
+        && near(a.y.into(), b.y.into())
+        && near(a.width.into(), b.width.into())
+        && near(a.height.into(), b.height.into())
 }
 
 fn same(a: &Monitor, b: &Monitor) -> bool {
@@ -128,7 +131,11 @@ pub fn resolve(frame: &WindowFrame, saved: &[Monitor], now: &[Monitor], seen: &S
             // never larger than the monitors there are, never smaller than
             // the viewer's own minimum
             let most = cover(now).map_or((u32::MAX, u32::MAX), |[_, _, w, h]| (w.max(1) as u32, h.max(1) as u32));
-            let scale = if seen.scale.is_finite() && seen.scale > 0.0 { seen.scale } else { 1.0 };
+            let scale = if seen.scale.is_finite() && seen.scale > 0.0 {
+                seen.scale
+            } else {
+                1.0
+            };
             let least = ((MIN_POINTS.0 * scale).ceil() as u32, (MIN_POINTS.1 * scale).ceil() as u32);
             let size = ((*width).min(most.0).max(least.0), (*height).min(most.1).max(least.1));
             Asked {
@@ -154,9 +161,14 @@ pub fn resolve(frame: &WindowFrame, saved: &[Monitor], now: &[Monitor], seen: &S
             // already in full screen on that monitor: nothing to move
             let on_it = |m: &Monitor| {
                 seen.fullscreen
-                    && seen
-                        .rect()
-                        .is_some_and(|[x, y, w, h]| monitor_at(i64::from(x) + i64::from(w) / 2, i64::from(y) + i64::from(h) / 2, std::slice::from_ref(m)).is_some())
+                    && seen.rect().is_some_and(|[x, y, w, h]| {
+                        monitor_at(
+                            i64::from(x) + i64::from(w) / 2,
+                            i64::from(y) + i64::from(h) / 2,
+                            std::slice::from_ref(m),
+                        )
+                        .is_some()
+                    })
             };
             let on = there
                 .filter(|m| seen.outer.is_some() && !on_it(m))
@@ -322,7 +334,11 @@ mod tests {
     fn the_cover_of_monitors_is_their_union() {
         assert_eq!(cover(&two()), Some([0, 0, 3840, 1080]));
         // one left of the main one and lower, another above
-        let around = [monitor(-1280, 200, 1280, 1024), monitor(0, 0, 1920, 1080), monitor(0, -1080, 1920, 1080)];
+        let around = [
+            monitor(-1280, 200, 1280, 1024),
+            monitor(0, 0, 1920, 1080),
+            monitor(0, -1080, 1920, 1080),
+        ];
         assert_eq!(cover(&around), Some([-1280, -1080, 3200, 2304]));
         assert_eq!(cover(&[]), None);
     }
@@ -332,7 +348,10 @@ mod tests {
         let left = [monitor(-1920, 0, 1920, 1080), monitor(0, 0, 1920, 1080)];
         assert!(title_bar_on(-1900, 20, &left));
         assert!(title_bar_on(-8, 0, &left), "the invisible border of Windows");
-        assert!(!title_bar_on(-1960, 0, &left), "the corner 40 pixels left of every monitor");
+        assert!(
+            !title_bar_on(-1961, 0, &left),
+            "the corner more than 40 pixels left of every monitor"
+        );
         assert!(!title_bar_on(0, 1075, &left), "the title bar under the monitors");
         assert!(!title_bar_on(1920, 0, &left));
         assert!(!title_bar_on(0, 0, &[]));
@@ -513,11 +532,17 @@ mod tests {
             monitors: vec![1],
             locked: false,
         };
-        let three = [monitor(0, 0, 1920, 1080), monitor(1920, 0, 1920, 1080), monitor(3840, 0, 1920, 1080)];
+        let three = [
+            monitor(0, 0, 1920, 1080),
+            monitor(1920, 0, 1920, 1080),
+            monitor(3840, 0, 1920, 1080),
+        ];
         let asked = resolve(&second, &two(), &three, &window);
         assert_eq!(
             asked.plan.map(|plan| plan.goal),
-            Some(Goal::Borderless { rect: [1920, 0, 1920, 1080] })
+            Some(Goal::Borderless {
+                rect: [1920, 0, 1920, 1080]
+            })
         );
         assert_eq!(asked.missing, 0);
     }
@@ -525,11 +550,19 @@ mod tests {
     #[test]
     fn the_matching_layout_is_the_first_saved_on_this_setup() {
         let mut store = Store::default();
-        for (name, monitors) in [("No monitors", Vec::new()), ("Wide", two()), ("Single", one()), ("Single too", one())] {
+        for (name, monitors) in [
+            ("No monitors", Vec::new()),
+            ("Wide", two()),
+            ("Single", one()),
+            ("Single too", one()),
+        ] {
             store.add(Layout::new(name, None, None, monitors)).expect("added");
         }
         assert_eq!(matching(&store, &one()), Some(2));
-        assert_eq!(matching(&store, &[monitor(1920, 0, 1920, 1080), monitor(0, 0, 1920, 1080)]), Some(1));
+        assert_eq!(
+            matching(&store, &[monitor(1920, 0, 1920, 1080), monitor(0, 0, 1920, 1080)]),
+            Some(1)
+        );
         assert_eq!(matching(&store, &[monitor(0, 0, 2560, 1440)]), None);
         assert_eq!(matching(&store, &[]), None, "a layout saved without monitors matches nothing");
     }

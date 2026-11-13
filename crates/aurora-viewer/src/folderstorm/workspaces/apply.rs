@@ -314,7 +314,12 @@ fn window_now(ctx: &egui::Context) -> Option<(WindowFrame, Vec<Monitor>)> {
 /// that moves it.
 fn arrangement(ctx: &egui::Context, live: &Live, window: bool) -> Arrangement {
     let held = live.store.window_held;
-    let locked = held && live.store.active().and_then(|layout| layout.window.as_ref()).is_some_and(WindowFrame::locked);
+    let locked = held
+        && live
+            .store
+            .active()
+            .and_then(|layout| layout.window.as_ref())
+            .is_some_and(WindowFrame::locked);
     Arrangement {
         window: window
             .then(|| window_now(ctx))
@@ -464,7 +469,11 @@ fn rebaseline(ctx: &egui::Context) {
 /// `name`; it becomes the active layout.
 pub fn save_new(ctx: &egui::Context, live: &mut Live, name: &str, parts: Parts) -> Result<usize, StoreError> {
     let (window, monitors) = match parts.window.then(|| window_now(ctx)).flatten() {
-        Some((frame, monitors)) => (Some(frame.with_lock(parts.lock)), monitors),
+        // (a borderless window read as locked stays so)
+        Some((frame, monitors)) => {
+            let lock = parts.lock || frame.locked();
+            (Some(frame.with_lock(lock)), monitors)
+        }
         None => (None, capture::monitors(ctx)),
     };
     if window.is_none() && !parts.world && !parts.windows {
@@ -477,9 +486,7 @@ pub fn save_new(ctx: &egui::Context, live: &mut Live, name: &str, parts: Parts) 
     };
     // the window is where the layout has it: a lock asked holds at once
     let held = window.as_ref().is_some_and(WindowFrame::holds);
-    let index = live
-        .store
-        .add(Layout::new(name, world, windows, monitors).with_window(window))?;
+    let index = live.store.add(Layout::new(name, world, windows, monitors).with_window(window))?;
     live.store.window_held = held;
     rebaseline(ctx);
     Ok(index)
@@ -493,7 +500,11 @@ pub fn update(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<(), 
     // its lock box is the layout's own; the lock in force stays as it is
     // for the layout in use, and is the box for another one
     let locked = old.window.as_ref().is_some_and(WindowFrame::locked);
-    let was_held = if live.store.is_active(index) { live.store.window_held } else { true };
+    let was_held = if live.store.is_active(index) {
+        live.store.window_held
+    } else {
+        true
+    };
     let (window, monitors) = match old.window.as_ref().and_then(|_| window_now(ctx)) {
         Some((frame, monitors)) => (Some(frame.with_lock(locked)), monitors),
         None => (None, capture::monitors(ctx)),

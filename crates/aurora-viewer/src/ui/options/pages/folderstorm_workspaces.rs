@@ -125,8 +125,11 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 store(ui.ctx(), tab);
                 true
             });
-        cx.keywords("layout lock unlock window size borderless")
-            .row(tr!("fs-layouts-unlock"), tr!("fs-layouts-unlock-help"), &Nothing, |ui, s| {
+        cx.keywords("layout lock unlock window size borderless").row(
+            tr!("fs-layouts-unlock"),
+            tr!("fs-layouts-unlock-help"),
+            &Nothing,
+            |ui, s| {
                 let held = s.folderstorm_workspaces.window_held;
                 let clicked = widgets::action_button_if(
                     ui,
@@ -139,17 +142,19 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 )
                 .clicked();
                 clicked && apply::unlock(&mut s.folderstorm_workspaces)
-            });
+            },
+        );
         let policies = [
             (MonitorPolicy::Ask, tr!("fs-layouts-monitors-ask"), false),
             (MonitorPolicy::Apply, tr!("fs-layouts-monitors-apply"), false),
             (MonitorPolicy::Nothing, tr!("fs-layouts-monitors-nothing"), false),
         ];
-        cx.keywords("layout dual monitor two monitors unplug screen change")
-            .wide()
-            .row(tr!("fs-layouts-monitors"), tr!("fs-layouts-monitors-help"), &Nothing, |ui, s| {
-                super::super::segmented(ui, &p, &mut s.folderstorm_workspaces.on_monitor_change, &policies)
-            });
+        cx.keywords("layout dual monitor two monitors unplug screen change").wide().row(
+            tr!("fs-layouts-monitors"),
+            tr!("fs-layouts-monitors-help"),
+            &Nothing,
+            |ui, s| super::super::segmented(ui, &p, &mut s.folderstorm_workspaces.on_monitor_change, &policies),
+        );
         cx.keywords("layout default bars viewport")
             .row(tr!("fs-layouts-reset"), tr!("fs-layouts-reset-help"), &Nothing, |ui, s| {
                 let enabled = s.folderstorm_viewport != Default::default();
@@ -211,7 +216,16 @@ fn warning(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
 /// One line of the list: the mark of the layout in use, the name, a note
 /// at the right ("In use", "Modified", why it cannot be used).
 #[allow(clippy::too_many_arguments)]
-fn entry(ui: &mut egui::Ui, p: &Palette, name: &str, selected: bool, active: bool, usable: bool, locked: bool, note: &str) -> egui::Response {
+fn entry(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    name: &str,
+    selected: bool,
+    active: bool,
+    usable: bool,
+    locked: bool,
+    note: &str,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
     let fill = if selected {
         p.violet.gamma_multiply(0.35)
@@ -386,7 +400,10 @@ fn list(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
                 selected,
                 store.is_active(index),
                 record.layout().is_some(),
-                record.layout().and_then(|layout| layout.window.as_ref()).is_some_and(WindowFrame::locked),
+                record
+                    .layout()
+                    .and_then(|layout| layout.window.as_ref())
+                    .is_some_and(WindowFrame::locked),
                 note(store, &s.folderstorm_viewport, index, record),
             );
             if line.clicked() && !selected {
@@ -633,8 +650,14 @@ fn monitor_rect(m: &Monitor) -> [i32; 4] {
 fn frame_on(frame: &WindowFrame, saved: &[Monitor]) -> (Option<[i32; 4]>, Vec<usize>) {
     match frame {
         WindowFrame::Normal { x, y, width, height, .. } => (
-            x.zip(*y)
-                .map(|(x, y)| [x, y, i32::try_from(*width).unwrap_or(i32::MAX), i32::try_from(*height).unwrap_or(i32::MAX)]),
+            x.zip(*y).map(|(x, y)| {
+                [
+                    x,
+                    y,
+                    i32::try_from(*width).unwrap_or(i32::MAX),
+                    i32::try_from(*height).unwrap_or(i32::MAX),
+                ]
+            }),
             Vec::new(),
         ),
         WindowFrame::Fullscreen { monitor } => {

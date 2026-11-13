@@ -110,7 +110,10 @@ fn applying_puts_the_viewer_window_back_then_the_windows_in_it() {
     v.plug();
     v.pretend().lag = 20;
     let report = v.apply("Wide");
-    assert_eq!((report.missing, report.left, report.unlocked, report.no_window), (0, false, false, false));
+    assert_eq!(
+        (report.missing, report.left, report.unlocked, report.no_window),
+        (0, false, false, false)
+    );
     // the window has not answered yet: the layout's windows wait for it
     v.frames(10);
     assert_eq!(v.seen().inner, (1920, 1040));
@@ -128,14 +131,21 @@ fn applying_puts_the_viewer_window_back_then_the_windows_in_it() {
         "{:?}",
         v.rect(MAP)
     );
-    assert_eq!(apply::report(&v.ctx).map(|report| report.fitted), Some(0), "placed as saved, in the window as saved");
+    assert_eq!(
+        apply::report(&v.ctx).map(|report| report.fitted),
+        Some(0),
+        "placed as saved, in the window as saved"
+    );
     assert!(!v.modified());
     // and back to one monitor: the window first, the windows where they fit
     v.apply("Single");
     v.settle();
     v.settle();
     assert_eq!(v.seen().inner, (1920, 1040));
-    assert!(close(v.rect(INVENTORY), Rect::from_min_size(pos2(1500.0, 60.0), vec2(380.0, 500.0))));
+    assert!(close(
+        v.rect(INVENTORY),
+        Rect::from_min_size(pos2(1500.0, 60.0), vec2(380.0, 500.0))
+    ));
     assert!(!v.modified());
 }
 
@@ -579,7 +589,11 @@ fn without_a_window_to_drive_the_rest_of_the_layout_still_applies() {
     v.settle();
     assert!(v.world.enabled);
     assert!(!v.store.window_held);
-    assert!(close(v.rect(PEOPLE), Rect::from_min_size(pos2(920.0, 50.0), vec2(400.0, 600.0))));
+    assert!(
+        close(v.rect(INVENTORY), Rect::from_min_size(pos2(10.0, 50.0), vec2(900.0, 800.0))),
+        "{:?}",
+        v.rect(INVENTORY)
+    );
     // and a save leaves the part out
     v.save_new("No window", Parts::default()).expect("saved");
     assert_eq!(v.layout("No window").window, None);

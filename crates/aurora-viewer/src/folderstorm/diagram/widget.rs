@@ -378,7 +378,14 @@ const PREVIEW_H: f32 = 96.0;
 /// saved layout counts in, and where it puts the viewer window. The
 /// `chosen` ones are lit. With `pick`, a click on a monitor returns its
 /// place in the list.
-pub fn monitors(ui: &mut egui::Ui, p: &Palette, monitors: &[[i32; 4]], window: Option<[i32; 4]>, chosen: &[usize], pick: bool) -> Option<usize> {
+pub fn monitors(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    monitors: &[[i32; 4]],
+    window: Option<[i32; 4]>,
+    chosen: &[usize],
+    pick: bool,
+) -> Option<usize> {
     let rect_of = |[x, y, w, h]: [i32; 4]| Rect::from_min_size(egui::pos2(x as f32, y as f32), vec2(w.max(0) as f32, h.max(0) as f32));
     let rects: Vec<Rect> = monitors.iter().map(|m| rect_of(*m)).collect();
     let bounds = rects
@@ -395,7 +402,9 @@ pub fn monitors(ui: &mut egui::Ui, p: &Palette, monitors: &[[i32; 4]], window: O
     ui.painter().rect_filled(rect, ui.visuals().window_corner_radius, p.field);
     let painter = ui.painter().with_clip_rect(rect.shrink(1.0));
     let bold = egui::FontId::new(12.0, crate::ui::fonts::semibold(ui.ctx()));
-    let hovered = resp.hover_pos().and_then(|at| rects.iter().position(|r| r.contains(mapping.to_window(at))));
+    let hovered = resp
+        .hover_pos()
+        .and_then(|at| rects.iter().position(|r| r.contains(mapping.to_window(at))));
     for (n, r) in rects.iter().enumerate() {
         let d = mapping.rect_to_diagram(*r);
         let lit = chosen.contains(&n);
@@ -405,7 +414,13 @@ pub fn monitors(ui: &mut egui::Ui, p: &Palette, monitors: &[[i32; 4]], window: O
         painter.rect_stroke(d, none, Stroke::new(1.0, edge), StrokeKind::Inside);
         if d.width() >= 16.0 && d.height() >= 16.0 {
             let ink = if lit { p.ink } else { p.muted };
-            painter.text(d.left_top() + vec2(5.0, 3.0), egui::Align2::LEFT_TOP, (n + 1).to_string(), bold.clone(), ink);
+            painter.text(
+                d.left_top() + vec2(5.0, 3.0),
+                egui::Align2::LEFT_TOP,
+                (n + 1).to_string(),
+                bold.clone(),
+                ink,
+            );
         }
     }
     if let Some(window) = window.map(rect_of).filter(|r| r.is_positive()) {
