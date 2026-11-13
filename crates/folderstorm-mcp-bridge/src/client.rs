@@ -98,10 +98,20 @@ impl Client {
         serde_json::from_value(value).map_err(|e| ClientError::Protocol(e.to_string()))
     }
 
+    /// Call a tool, unbound.
     pub fn call(&self, tool: &str, arguments: Value) -> Result<Value, ClientError> {
+        self.call_in(tool, arguments, None)
+    }
+
+    /// Call a tool on the login `session` names (None: unbound). Every call
+    /// declares this build's capabilities, so that the viewer may answer
+    /// with the newer error codes.
+    pub fn call_in(&self, tool: &str, arguments: Value, session: Option<&str>) -> Result<Value, ClientError> {
         let body = serde_json::to_vec(&CallRequest {
             tool: tool.to_owned(),
             arguments,
+            session: session.map(str::to_owned),
+            features: Some(crate::binding::capabilities()),
         })
         .map_err(|e| ClientError::Protocol(e.to_string()))?;
         let extra = crate::protocol::tool(tool).map_or(Duration::ZERO, |spec| {
@@ -148,10 +158,29 @@ impl Client {
         let mut answer: Value = serde_json::from_slice(&body).map_err(|e| ClientError::Protocol(e.to_string()))?;
         match answer["ok"].as_bool() {
             Some(true) => Ok(answer["result"].take()),
-            Some(false) => Err(ClientError::Tool(
-                serde_json::from_value(answer["error"].take())
-                    .unwrap_or_else(|_| ToolError::new(ErrorCode::Internal, "unreadable error from the viewer")),
-            )),
+            Some(false) => {
+                let error = answer["error"].take();
+                Err(ClientError::Tool(serde_json::from_value(error.clone()).unwrap_or_else(|_| {
+                    // a code this build does not know (a newer viewer that
+                    // missed the fallback): keep its message
+                    let message: String = error["message"].as_str().unwrap_or_default().chars().take(500).collect();
+                    let code: String = error["code"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .chars()
+                        .filter(char::is_ascii_graphic)
+                        .take(48)
+                        .collect();
+                    ToolError::new(
+                        ErrorCode::Internal,
+                        if message.is_empty() {
+                            "unreadable error from the viewer".to_owned()
+                        } else {
+                            format!("{message} (viewer error `{code}`)")
+                        },
+                    )
+                })))
+            }
             None => Err(ClientError::Protocol("no `ok` field".into())),
         }
     }

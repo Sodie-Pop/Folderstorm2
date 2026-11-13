@@ -510,7 +510,7 @@ impl Window_ {
             // (checkpoint 7: its alias and colour)
             self.identity_button(ui, p, slot, acts);
         });
-        ui.label(RichText::new(status_line(state)).color(p.muted));
+        ui.label(RichText::new(status_now(&self.host.desk, slot, state, now)).color(p.muted));
         for (text, serious) in warnings(&self.host.desk, slot, state, now) {
             ui.label(RichText::new(text).color(if serious { p.danger } else { p.amber }));
         }
@@ -905,6 +905,17 @@ fn status_line(slot: &Slot) -> String {
                 }
             },
         },
+    }
+}
+
+/// Where a character is, with how long its viewer has been starting: a
+/// start that takes a while counts up instead of looking stuck (the
+/// viewer's own splash shows on screen meanwhile).
+fn status_now(desk: &::folderstorm_session::host::Desk, slot: usize, state: &Slot, now: Instant) -> String {
+    let line = status_line(state);
+    match desk.starting_for(slot, now).map(|d| d.as_secs()) {
+        Some(seconds) if seconds > 0 => format!("{line} · {}", tr!("folderstorm-host-starting-for", seconds = seconds)),
+        _ => line,
     }
 }
 

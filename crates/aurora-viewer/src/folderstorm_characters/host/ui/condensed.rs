@@ -20,7 +20,7 @@
 
 use super::super::faces;
 use super::comfort::quick_face;
-use super::{Act, Window_, comfort, status_line, warnings};
+use super::{Act, Window_, comfort, status_now, warnings};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::host::{Phase, Quick, Slot, Voice};
@@ -201,7 +201,13 @@ impl Window_ {
                     2 => p.muted,
                     _ => p.danger,
                 };
-                faces::sign(ui, icon, colour, &status_line(state));
+                let status = status_now(desk, slot, state, now);
+                faces::sign(ui, icon, colour, &status);
+                // a start that takes a while counts up beside its hourglass
+                if let Some(seconds) = desk.starting_for(slot, now).map(|d| d.as_secs()).filter(|s| *s > 0) {
+                    let text = tr!("folderstorm-host-starting-for", seconds = seconds);
+                    ui.label(RichText::new(text).small().color(p.muted)).on_hover_text(&status);
+                }
                 // the name takes what is left, cut short when it is long
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     let colour = if active { p.violet_light } else { p.ink };
@@ -213,7 +219,7 @@ impl Window_ {
                     if active {
                         tip.push(tr!("folderstorm-host-active").to_owned());
                     }
-                    tip.push(status_line(state));
+                    tip.push(status.clone());
                     ui.add(egui::Label::new(text).truncate()).on_hover_text(tip.join("\n"));
                 });
             });

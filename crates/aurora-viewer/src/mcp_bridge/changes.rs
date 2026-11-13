@@ -38,6 +38,17 @@ pub enum Work {
     Inventory(Mutation),
     /// An outfit change, through `App::apply_appearance_action`.
     Outfit(Action),
+    /// A camera move (phase 3, `camera`).
+    Camera(super::camera::Move),
+    /// A picture, drawn by a photo job (phase 3, `picture`).
+    Snapshot(super::picture::Request),
+    /// The gallery's Take snapshot as this entry's picture (phase 3).
+    Thumbnail(Uuid),
+    /// Folderstorm: a new item, through the New menu's path (phase 3).
+    Create(super::inventory_edits::Creation),
+    /// Folderstorm: an entry's picture from a texture, through the Image
+    /// window's path (phase 3).
+    Image { target: Uuid, texture: Uuid },
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +154,9 @@ fn what(inv: &Inventory, ids: &[Uuid]) -> String {
 
 /// Plan one change, checking it as the window would.
 pub fn plan(tool: &str, args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
+    if super::camera::handles(tool) {
+        return super::camera::plan(tool, args, cx);
+    }
     ready(cx)?;
     match tool {
         "inventory_create_folder" => create_folder(args, cx),
@@ -153,7 +167,8 @@ pub fn plan(tool: &str, args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
         "inventory_restore" => restore(args, cx),
         "outfit_wear" | "outfit_take_off" => outfit(tool, args, cx),
         "items_wear" | "items_take_off" => items(tool, args, cx),
-        _ => Err(err(ErrorCode::UnknownTool, "unknown tool")),
+        // Folderstorm: phase 3, part 2 (inventory gaps)
+        _ => super::inventory_edits::plan(tool, args, cx).unwrap_or_else(|| Err(err(ErrorCode::UnknownTool, "unknown tool"))),
     }
 }
 
