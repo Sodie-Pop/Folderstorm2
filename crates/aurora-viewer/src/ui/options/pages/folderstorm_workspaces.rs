@@ -1569,7 +1569,12 @@ mod tests {
     /// the software painter; the texts of the last frame.
     /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the picture as
     /// `<folder>/<name>.png`.
-    fn drawn(name: &str, tab: usize, mut s: Settings, cogs: bool) -> Vec<String> {
+    fn drawn(name: &str, tab: usize, s: Settings, cogs: bool) -> Vec<String> {
+        drawn_found(name, tab, s, cogs, "")
+    }
+
+    /// [`drawn`], with `query` typed in the window's search.
+    fn drawn_found(name: &str, tab: usize, mut s: Settings, cogs: bool, query: &str) -> Vec<String> {
         let theme = crate::theme::Theme::default();
         let p = theme.skin_palette();
         let ctx = egui::Context::default();
@@ -1579,6 +1584,7 @@ mod tests {
         let mut st = OptionsUi::default();
         st.open(Page::Layout, tab);
         st.demo_open_cogs = cogs;
+        st.query = query.to_owned();
         let (width, height) = (1280u32, 900u32);
         let window = Rect::from_min_size(egui::Pos2::ZERO, vec2(width as f32, height as f32));
         let mut pixels = vec![0u32; (width * height) as usize];
@@ -1627,6 +1633,33 @@ mod tests {
             image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
         }
         texts
+    }
+
+    /// The two pickers of *Quick switch*, the last group of the tab, as
+    /// the window's search shows them (`preferences-layouts-quick.png`).
+    #[test]
+    fn the_quick_switch_pickers_are_drawn() {
+        let s = Settings {
+            folderstorm_workspaces: serde_json::from_value(serde_json::json!({
+                "layouts": [
+                    Layout::new("2 monitors", Some(wide()), None, Vec::new()),
+                    Layout::new("1 monitor", Some(Default::default()), None, Vec::new()),
+                ],
+                "favorites": [{ "layout": "1 monitor" }],
+                "toggle": ["2 monitors", null],
+            }))
+            .expect("read"),
+            ..Default::default()
+        };
+        let texts = drawn_found("preferences-layouts-quick", 3, s, false, "switcher");
+        for expected in [
+            tr!("fs-layouts-toggle-first"),
+            tr!("fs-layouts-toggle-second"),
+            "2 monitors",
+            tr!("fs-layouts-toggle-none"),
+        ] {
+            assert!(texts.iter().any(|text| text == expected), "“{expected}” is drawn");
+        }
     }
 
     /// The picture of the tab with a layout in use and modified, another

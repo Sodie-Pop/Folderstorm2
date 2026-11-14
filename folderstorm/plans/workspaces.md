@@ -1353,10 +1353,11 @@ filter, the arrows, Esc, a click and a double click, the star, *Save new*
 and its refusal, *Update* and its question, *Previous* and *Preferences*,
 the two toolbar commands through `bars::run_command` and their look, each
 key's request, the favorites' round, the switcher never captured, the list
-following the store, the card while the interface is hidden. The tab (+2:
-the star, the toggle's two pickers). Drawn with the software painter
-(`FOLDERSTORM_TEST_CAPTURE_DIR`): `switcher.png`, `switcher-missing.png`,
-`switcher-save.png`.
+following the store, the card while the interface is hidden. The tab (+3:
+the star, the toggle's two pickers, their picture). Drawn with the software
+painter (`FOLDERSTORM_TEST_CAPTURE_DIR`): `switcher.png`,
+`switcher-missing.png`, `switcher-save.png`,
+`preferences-layouts-quick.png`.
 
 **Not checked here** (no graphics device, no window system in the
 sandbox): the two buttons on a real bar (their dimming, tooltip and lit
