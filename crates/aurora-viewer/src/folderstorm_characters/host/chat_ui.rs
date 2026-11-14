@@ -208,7 +208,15 @@ impl ChatPanel {
         }
         let mut open = None;
         let mut web = None;
-        let room = (ui.available_height() - COMPOSE_ROOM).max(80.0);
+        // a link's question keeps its whole room above the box's
+        let asked_before = self.link.is_some();
+        let question = match &self.link {
+            Some(ask) => measure(ui, "folderstorm-chat-link-probe", |ui| {
+                link_question(ui, p, ask);
+            }),
+            None => 0.0,
+        };
+        let room = (ui.available_height() - COMPOSE_ROOM - question).max(80.0);
         egui::Frame::new()
             .fill(p.field)
             .inner_margin(10.0)
@@ -281,9 +289,12 @@ impl ChatPanel {
         }
         if let Some(target) = web {
             self.link = follow_web(ui.ctx(), &target);
+            // (a question asked now has no room yet: it is drawn in the
+            // next frame, which this asks for)
+            asked.acted = true;
         }
         ui.add_space(6.0);
-        if let Some(ask) = &self.link
+        if let Some(ask) = self.link.as_ref().filter(|_| asked_before)
             && link_question(ui, p, ask)
         {
             self.link = None;
@@ -661,6 +672,22 @@ pub(super) fn follow_web(ctx: &egui::Context, target: &str) -> Option<LinkAsk> {
     }
 }
 
+/// The height `draw` takes at the width left in `ui`, drawn nowhere and
+/// asking nothing: what goes under a chat's lines (a link's question, the
+/// box) is measured first, so that the lines leave it its whole room.
+pub(super) fn measure(ui: &mut egui::Ui, salt: &str, draw: impl FnOnce(&mut egui::Ui)) -> f32 {
+    let mut probe = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(salt)
+            .max_rect(ui.available_rect_before_wrap())
+            .layout(egui::Layout::top_down(egui::Align::Min))
+            .sizing_pass()
+            .invisible(),
+    );
+    draw(&mut probe);
+    probe.min_rect().height()
+}
+
 /// The question of a web link not trusted, above the box: open it in the
 /// system's browser, or not. True when it was answered (it then goes).
 pub(super) fn link_question(ui: &mut egui::Ui, p: &Palette, ask: &LinkAsk) -> bool {
@@ -672,13 +699,14 @@ pub(super) fn link_question(ui: &mut egui::Ui, p: &Palette, ask: &LinkAsk) -> bo
         .corner_radius(ui.visuals().window_corner_radius)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.add(egui::Label::new(RichText::new(tr!("folderstorm-chat-link-question")).strong().color(p.ink)).truncate());
+            // (wrapped, as its buttons: whole in a monitor's narrow window)
+            ui.add(egui::Label::new(RichText::new(tr!("folderstorm-chat-link-question")).strong().color(p.ink)).wrap());
             ui.add(egui::Label::new(RichText::new(&ask.target).color(p.indigo_light)).truncate())
                 .on_hover_text(&ask.target);
             if let Some(why) = ask.why {
                 ui.add(egui::Label::new(RichText::new(why).color(p.danger)).wrap());
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let open = tr!("folderstorm-chat-link-open");
                 let kind = if ask.why.is_some() {
                     ActionKind::Danger
