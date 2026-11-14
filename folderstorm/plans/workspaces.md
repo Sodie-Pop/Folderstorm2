@@ -2,7 +2,7 @@
 
 Plan for [FEATURES.md](../FEATURES.md) rows **1.2** (the rest: the
 interactive viewport diagram), **1.3** layout profiles, **1.4** workspaces and
-**1.5** the switcher, with an outline of 1.6–1.9. Planning only: nothing here
+**1.5** the switcher, **1.6** the favorites strip, with an outline of 1.7–1.9. Planning only: nothing here
 is implemented, built or run yet. Written 2026-11-11 from Folderstorm2 `main`
 (`45bccb7`, custom world viewport merged) and Folderstorm (C++) `main`
 (`abbe3cb0ca`).
@@ -1811,12 +1811,97 @@ box, the limit of 16. `ui::inventory::folderstorm_windows` (1) and
 - The pictures of the switcher and of Preferences were not drawn again for
   the new box in the sandbox beyond the tests of part 1.
 
+### 1.6 in detail: the favorites strip (2026-11-14)
+
+Written before the build, from `claude/workspaces-cp6-folders` at `e335151`
+(PR #64, not merged: this row is stacked on it). "As built" below is filled
+in when the row is done.
+
+**What Folderstorm (C++) did.** First a row of its own under the navigation
+and landmark bars, with the labels "Workspaces:" and "Layouts:"
+(`doc/help.md`). Then, at the user's request, the favorites **on the
+landmark row itself**: the landmark buttons' look, a `|` divider, no labels,
+no second opaque row (`doc/plans/workspace-enhancements.md`, follow-up of
+October 4). In both: the same favorites as the switcher, in their order;
+full names in tooltips, long names cut; what does not fit in *More…*, which
+also opens the switcher, goes back to the previous arrangement and hides
+the strip; hidden until enabled; hidden in mouselook and with the interface.
+We port the second form.
+
+**1. Where it is.** Aurora's landmark row is the favourites' row of
+Preferences › Interface › *Favourites access* (`ui/bars/favorites.rs`,
+`row`), one glass row under the top bar, the same with the islands and with
+the Legacy bars. So the strip is the same in both looks, and has three
+places:
+
+- *the landmark row is shown*: our pills stand at its right end, before the
+  button that folds it, after a thin divider. They take at most half of the
+  row; the landmarks keep the rest and their own "n more";
+- *the landmark row is folded*: a short island of ours beside its tab;
+- *there is no landmark row* (favourites in the menu or in the dock, the
+  default): a short island of ours where the row would start. It is as wide
+  as what it holds, not the whole width, and the windows stay under it as
+  they do under the landmark row (`favorites_row_bottom`).
+
+It is drawn by the top bar's own code, so it goes with it: hidden with the
+bars, with the interface put away, peeking with the top bar when the bars
+hide themselves. In mouselook it is never drawn, even with *Show the
+interface in mouselook* (the pointer could not reach it).
+
+**2. What it shows.** The usable favorites in their order (`pick::entries`,
+the switcher's own list: layouts and workspaces mixed, as the user ordered
+them), each a pill: the icon of its kind (the menu's), its name cut at 18
+characters. The layout in use and the workspace in use are lit; the tooltip
+gives the full name, the kind, and "in use" or "in use · modified". Then
+*More…*, always there: the favorites that did not fit, then *Layouts &
+workspaces…* (the switcher), *Previous arrangement*, *Hide the favorites
+strip*. With no favorite yet, *More…* alone.
+
+A click asks what World › Layouts asks (`menu::Request::Apply`,
+`ApplyWorkspace`): one path, the same report. A click on the one in use
+applies it again (puts back what was moved). Not ported: "switching is
+disabled while Preferences is open" (Aurora's Preferences have no OK /
+Cancel, section 8.7); the two groups with labels (superseded in C++ itself).
+
+**3. The setting.** `Store.strip`, a boolean of `folderstorm_workspaces`,
+left out of the file while false, **off by default** as in Folderstorm
+(C++). Not a part of any layout or workspace: applying one never shows or
+hides the strip. Changed in Preferences › Layout › Layouts & workspaces ›
+Quick switch, in the switcher (a box), in World › Layouts (a check), and by
+*More…* › *Hide the favorites strip*.
+
+**4. Code.** `folderstorm/workspaces/strip.rs`: the rule of what fits
+(pure), the pills, the two entry points. It reads the view the frame call
+already publishes for the menu (`menu::View`, two more fields) and leaves
+requests (`menu::ask`, one more: `Strip(bool)`).
+
+**5. Upstream hooks** (three lines, each `// Folderstorm:`):
+
+| File | Hook |
+|---|---|
+| `ui/bars/favorites.rs`, `row` | One line after the fold button: our pills drawn at the row's right end; it gives back where the landmarks must stop |
+| `ui/bars/islands.rs`, `top` | One call after the favourites' row: our own island when the row did not hold the strip |
+| `ui/bars.rs`, the Legacy top bar | The same call |
+
+**6. Demo.** `AURORA_DEMO_STRIP=1`: the seed of `AURORA_DEMO_WORKSPACES=1`
+with the strip on; `=row` also shows the landmark row (the demo's
+favourites); `=many` adds favorites until some go to *More…*.
+
+**7. Tests.** Pure: how many pills fit, *More…* always kept. Frame tests
+(an `egui::Context`): the strip is not drawn while off or hidden; a click on
+a pill applies it and lights it; what does not fit is in *More…* and
+applies from there; *Hide the favorites strip* turns the setting off; on
+the landmark row the landmarks stop before our divider; the island of our
+own pushes `favorites_row_bottom`; the store writes nothing while off.
+
+**Human checks (Windows).** Both looks (islands, Legacy bars) with each
+*Favourites access*; a narrow window (overflow); mouselook with and without
+*Show the interface in mouselook*; the bars set to hide themselves; a
+custom world viewport with the bars inside and around it.
+
 ## 14. Later (outline only)
 
-- **1.6 Favorites strip.** Favorite layouts and workspaces after a divider on
-  the islands' favourites row (`ui/bars/islands.rs`,
-  `favorites_row_bottom`), overflow in *More…*, hidden with the bars and in
-  mouselook. Reads `Store.favorites`; one hook where the row is drawn.
+- **1.6 Favorites strip.** Being built: "1.6 in detail" above.
 - **1.7 Workspace context.** Optional parts of a workspace: a graphics
   profile *by name* (Aurora's `graphics_saved`), a camera preset, and HUDs to
   add, stored as the user's own Inventory item ids (never asset ids) and worn
