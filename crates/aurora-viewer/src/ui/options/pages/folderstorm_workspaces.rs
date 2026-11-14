@@ -4,16 +4,19 @@
 //! apply, rename, delete, Reset.
 //!
 //! The list of saved layouts, the actions on the selected one (Apply,
-//! Update, Rename, Delete, Move up and down), *Save as a new layout* with
-//! its parts, *Previous arrangement* and *Reset bars and world*. Like the
-//! rest of Preferences, everything applies at once; Update and Delete ask
-//! first, in the page. The rows edit no tracked setting: "Reset this page"
-//! never deletes a layout.
+//! Update, Rename, Delete, Move up and down) and its viewer window (mode,
+//! monitors, lock), *Save as a new layout* with its parts, *Previous
+//! arrangement*, *Unlock the viewer window*, *When the monitors change*
+//! and *Reset bars and world*. Like the rest of Preferences, everything
+//! applies at once; Update and Delete ask first, in the page. The rows
+//! edit no tracked setting: "Reset this page" never deletes a layout.
 
 use super::super::cx::{Cx, Nothing};
 use crate::folderstorm::workspaces::apply::{self, Live, Parts, Report};
-use crate::folderstorm::workspaces::store::{MAX_LAYOUTS, MAX_NAME, NameError, Record, Store, StoreError, Unusable};
-use crate::folderstorm::workspaces::windows;
+use crate::folderstorm::workspaces::store::{
+    Layout, MAX_LAYOUTS, MAX_NAME, Monitor, MonitorPolicy, NameError, Record, Store, StoreError, Unusable, WindowFrame,
+};
+use crate::folderstorm::workspaces::{monitors, windows};
 use crate::settings::Settings;
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
@@ -30,6 +33,8 @@ const ICON_BACK: &str = "arrow-back-up";
 const ICON_RESET: &str = "restore";
 const ICON_UP: &str = "arrow-up";
 const ICON_DOWN: &str = "arrow-down";
+const ICON_LOCK: &str = "lock-filled";
+const ICON_UNLOCK: &str = "lock-open";
 
 const ROW_H: f32 = 28.0;
 const BUTTON_H: f32 = 26.0;
@@ -120,6 +125,36 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 store(ui.ctx(), tab);
                 true
             });
+        cx.keywords("layout lock unlock window size borderless").row(
+            tr!("fs-layouts-unlock"),
+            tr!("fs-layouts-unlock-help"),
+            &Nothing,
+            |ui, s| {
+                let held = s.folderstorm_workspaces.window_held;
+                let clicked = widgets::action_button_if(
+                    ui,
+                    &p,
+                    ICON_UNLOCK,
+                    tr!("fs-layouts-unlock-button"),
+                    ActionKind::Flat,
+                    vec2(0.0, BUTTON_H),
+                    held,
+                )
+                .clicked();
+                clicked && apply::unlock(&mut s.folderstorm_workspaces)
+            },
+        );
+        let policies = [
+            (MonitorPolicy::Ask, tr!("fs-layouts-monitors-ask"), false),
+            (MonitorPolicy::Apply, tr!("fs-layouts-monitors-apply"), false),
+            (MonitorPolicy::Nothing, tr!("fs-layouts-monitors-nothing"), false),
+        ];
+        cx.keywords("layout dual monitor two monitors unplug screen change").wide().row(
+            tr!("fs-layouts-monitors"),
+            tr!("fs-layouts-monitors-help"),
+            &Nothing,
+            |ui, s| super::super::segmented(ui, &p, &mut s.folderstorm_workspaces.on_monitor_change, &policies),
+        );
         cx.keywords("layout default bars viewport")
             .row(tr!("fs-layouts-reset"), tr!("fs-layouts-reset-help"), &Nothing, |ui, s| {
                 let enabled = s.folderstorm_viewport != Default::default();
@@ -180,7 +215,17 @@ fn warning(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
 
 /// One line of the list: the mark of the layout in use, the name, a note
 /// at the right ("In use", "Modified", why it cannot be used).
-fn entry(ui: &mut egui::Ui, p: &Palette, name: &str, selected: bool, active: bool, usable: bool, note: &str) -> egui::Response {
+#[allow(clippy::too_many_arguments)]
+fn entry(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    name: &str,
+    selected: bool,
+    active: bool,
+    usable: bool,
+    locked: bool,
+    note: &str,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
     let fill = if selected {
         p.violet.gamma_multiply(0.35)
@@ -202,7 +247,18 @@ fn entry(ui: &mut egui::Ui, p: &Palette, name: &str, selected: bool, active: boo
     let note_galley = ui
         .painter()
         .layout_no_wrap(note.to_owned(), egui::FontId::proportional(11.5), note_ink);
-    let note_w = if note.is_empty() { 0.0 } else { note_galley.size().x + 12.0 };
+    let mut note_w = if note.is_empty() { 0.0 } else { note_galley.size().x + 12.0 };
+    // a layout that locks the viewer window: a lock before its note
+    if locked && let Some(icon) = crate::ui::icons::global(ICON_LOCK) {
+        note_w += 20.0;
+        ui.painter().image(
+            icon.id(),
+            egui::Rect::from_center_size(pos2(rect.right() - note_w, rect.center().y), Vec2::splat(13.0)),
+            egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            p.muted,
+        );
+        note_w += 8.0;
+    }
     let name_left = rect.left() + 30.0;
     let ink = if usable { p.ink } else { p.muted };
     widgets::paint_elided(
@@ -220,7 +276,8 @@ fn entry(ui: &mut egui::Ui, p: &Palette, name: &str, selected: bool, active: boo
         );
         ui.painter().galley(at, note_galley, note_ink);
     }
-    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{name} {note}")));
+    let lock = if locked { tr!("fs-layouts-locked") } else { "" };
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{name} {lock} {note}")));
     response
 }
 
@@ -257,7 +314,34 @@ fn report_text(report: &Report, waiting: usize) -> String {
     if waiting > 0 {
         add(tr!("fs-layouts-waiting", count = waiting));
     }
+    if report.missing > 0 {
+        add(tr!("fs-layouts-applied-missing", count = report.missing));
+    }
+    if report.left {
+        add(tr!("fs-layouts-applied-left").to_owned());
+    }
+    if report.unlocked {
+        add(tr!("fs-layouts-applied-unlocked").to_owned());
+    }
+    if report.no_window {
+        add(tr!("fs-layouts-applied-no-window").to_owned());
+    }
     text
+}
+
+/// A layout's viewer window, in a few words.
+fn window_words(frame: &WindowFrame) -> String {
+    let mut words = match frame {
+        WindowFrame::Normal { maximized: true, .. } => tr!("fs-layouts-holds-window-maximized").to_owned(),
+        WindowFrame::Normal { width, height, .. } => tr!("fs-layouts-holds-window", width = *width, height = *height),
+        WindowFrame::Fullscreen { monitor } => tr!("fs-layouts-holds-window-fullscreen", n = usize::from(*monitor) + 1),
+        WindowFrame::Borderless { monitors, .. } => tr!("fs-layouts-holds-window-borderless", count = monitors.len()),
+    };
+    if frame.locked() {
+        words.push_str(", ");
+        words.push_str(tr!("fs-layouts-holds-locked"));
+    }
+    words
 }
 
 /// What a layout holds, in a line.
@@ -266,6 +350,9 @@ fn holds(record: &Record) -> String {
         return String::new();
     };
     let mut parts = Vec::new();
+    if let Some(frame) = &layout.window {
+        parts.push(window_words(frame));
+    }
     if layout.world.is_some() {
         parts.push(tr!("fs-layouts-part-world").to_owned());
     }
@@ -313,6 +400,10 @@ fn list(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
                 selected,
                 store.is_active(index),
                 record.layout().is_some(),
+                record
+                    .layout()
+                    .and_then(|layout| layout.window.as_ref())
+                    .is_some_and(WindowFrame::locked),
                 note(store, &s.folderstorm_viewport, index, record),
             );
             if line.clicked() && !selected {
@@ -512,7 +603,187 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
     if let Some(Refused::Rename(error) | Refused::Selected(error)) = tab.refused {
         warning(ui, p, refusal(error));
     }
+    if tab.rename.is_none()
+        && tab.ask.is_none()
+        && let Some(layout) = record.layout()
+        && let Some(frame) = &layout.window
+        && let Some(edited) = window_editor(ui, p, layout, frame, apply::viewer_window(&ctx))
+    {
+        match apply::set_window(&mut s.folderstorm_workspaces, index, edited) {
+            Ok(()) => {
+                tab.refused = None;
+                changed = true;
+            }
+            Err(error) => tab.refused = Some(Refused::Selected(error)),
+        }
+    }
     changed
+}
+
+/// The three modes of a viewer window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    Normal,
+    Fullscreen,
+    Borderless,
+}
+
+fn mode_of(frame: &WindowFrame) -> Mode {
+    match frame {
+        WindowFrame::Normal { .. } => Mode::Normal,
+        WindowFrame::Fullscreen { .. } => Mode::Fullscreen,
+        WindowFrame::Borderless { .. } => Mode::Borderless,
+    }
+}
+
+fn monitor_rect(m: &Monitor) -> [i32; 4] {
+    [
+        m.x,
+        m.y,
+        i32::try_from(m.width).unwrap_or(i32::MAX),
+        i32::try_from(m.height).unwrap_or(i32::MAX),
+    ]
+}
+
+/// Where `frame` puts the window on the monitors it was saved on, and the
+/// places of the monitors it names.
+fn frame_on(frame: &WindowFrame, saved: &[Monitor]) -> (Option<[i32; 4]>, Vec<usize>) {
+    match frame {
+        WindowFrame::Normal { x, y, width, height, .. } => (
+            x.zip(*y).map(|(x, y)| {
+                [
+                    x,
+                    y,
+                    i32::try_from(*width).unwrap_or(i32::MAX),
+                    i32::try_from(*height).unwrap_or(i32::MAX),
+                ]
+            }),
+            Vec::new(),
+        ),
+        WindowFrame::Fullscreen { monitor } => {
+            let n = usize::from(*monitor);
+            (saved.get(n).map(monitor_rect), vec![n])
+        }
+        WindowFrame::Borderless { monitors: chosen, .. } => {
+            let places: Vec<usize> = chosen.iter().map(|n| usize::from(*n)).collect();
+            (monitors::cover(places.iter().filter_map(|n| saved.get(*n))), places)
+        }
+    }
+}
+
+/// `frame` in another mode, on the monitors `saved`: the monitor a normal
+/// window is on for full screen and borderless; the rectangle of the
+/// monitors named, a little inside it, for a normal window. `now` is the
+/// viewer window as it is, when it can be read as a normal one.
+fn in_mode(frame: &WindowFrame, mode: Mode, saved: &[Monitor], now: Option<WindowFrame>) -> WindowFrame {
+    let (rect, places) = frame_on(frame, saved);
+    let centre = rect.map(|[x, y, w, h]| (i64::from(x) + i64::from(w) / 2, i64::from(y) + i64::from(h) / 2));
+    let on = places
+        .first()
+        .copied()
+        .or_else(|| centre.and_then(|(x, y)| monitors::monitor_at(x, y, saved)))
+        .unwrap_or(0);
+    let on = u8::try_from(on).unwrap_or(0);
+    let locked = frame.locked();
+    match mode {
+        Mode::Fullscreen => WindowFrame::Fullscreen { monitor: on },
+        Mode::Borderless => WindowFrame::Borderless {
+            monitors: if places.is_empty() {
+                vec![on]
+            } else {
+                places.iter().filter_map(|n| u8::try_from(*n).ok()).collect()
+            },
+            locked,
+        },
+        Mode::Normal => match (now, rect) {
+            (Some(now @ WindowFrame::Normal { .. }), _) => now.with_lock(locked),
+            (_, Some([x, y, w, h])) => WindowFrame::Normal {
+                x: Some(x.saturating_add(w / 10)),
+                y: Some(y.saturating_add(h / 10)),
+                width: (w - w / 5).max(1) as u32,
+                height: (h - h / 5).max(1) as u32,
+                maximized: false,
+                locked,
+            },
+            _ => WindowFrame::Normal {
+                x: None,
+                y: None,
+                width: 1280,
+                height: 720,
+                maximized: false,
+                locked,
+            },
+        },
+    }
+}
+
+/// `frame` after a click on the monitor at `place`: full screen goes
+/// there; borderless takes it in or lets it go (never its last one).
+fn with_monitor(frame: &WindowFrame, place: usize) -> Option<WindowFrame> {
+    let place = u8::try_from(place).ok()?;
+    match frame {
+        WindowFrame::Normal { .. } => None,
+        WindowFrame::Fullscreen { .. } => Some(WindowFrame::Fullscreen { monitor: place }),
+        WindowFrame::Borderless { monitors: chosen, locked } => {
+            let mut chosen = chosen.clone();
+            match chosen.iter().position(|n| *n == place) {
+                Some(_) if chosen.len() == 1 => return None,
+                Some(at) => {
+                    chosen.remove(at);
+                }
+                None => chosen.push(place),
+            }
+            chosen.sort_unstable();
+            Some(WindowFrame::Borderless {
+                monitors: chosen,
+                locked: *locked,
+            })
+        }
+    }
+}
+
+/// The selected layout's viewer window: its mode, its monitors on a small
+/// picture of the layout's own, its lock box. The frame as edited, when it
+/// was.
+fn window_editor(ui: &mut egui::Ui, p: &Palette, layout: &Layout, frame: &WindowFrame, now: Option<WindowFrame>) -> Option<WindowFrame> {
+    let saved = &layout.monitors;
+    let mut edited = None;
+    ui.add_space(4.0);
+    ui.label(egui::RichText::new(tr!("fs-layouts-part-window")).size(12.5).color(p.ink));
+    let mut mode = mode_of(frame);
+    // full screen and borderless name monitors of the layout's own list
+    let modes = [
+        (Mode::Normal, tr!("fs-layouts-mode-normal"), false),
+        (Mode::Fullscreen, tr!("fs-layouts-mode-fullscreen"), false),
+        (Mode::Borderless, tr!("fs-layouts-mode-borderless"), false),
+    ];
+    ui.add_enabled_ui(!saved.is_empty(), |ui| {
+        if super::super::segmented(ui, p, &mut mode, &modes) {
+            edited = Some(in_mode(frame, mode, saved, now));
+        }
+    });
+    if saved.is_empty() {
+        muted(ui, p, tr!("fs-layouts-mode-no-monitors"));
+    } else {
+        let rects: Vec<[i32; 4]> = saved.iter().map(monitor_rect).collect();
+        let (window, chosen) = frame_on(frame, saved);
+        let pick = mode != Mode::Normal;
+        if let Some(place) = crate::folderstorm::diagram::widget::monitors(ui, p, &rects, window, &chosen, pick) {
+            edited = with_monitor(frame, place).or(edited);
+        }
+        match mode {
+            Mode::Normal => {}
+            Mode::Fullscreen => muted(ui, p, tr!("fs-layouts-mode-pick-fullscreen")),
+            Mode::Borderless => muted(ui, p, tr!("fs-layouts-mode-pick-borderless")),
+        }
+    }
+    if mode != Mode::Fullscreen {
+        let mut locked = frame.locked();
+        if widgets::checkbox(ui, p, &mut locked, tr!("fs-layouts-lock")).changed() {
+            edited = Some(frame.clone().with_lock(locked));
+        }
+    }
+    edited
 }
 
 /// *Save as a new layout*: a name, the parts, Save. True when the settings
@@ -536,11 +807,26 @@ fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
             save |= field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             save |= widgets::action_button(ui, p, ICON_SAVE, tr!("fs-layouts-save"), ActionKind::Primary, vec2(0.0, BUTTON_H)).clicked();
         });
+        // (no viewer window to read under a forced size or a capture)
+        let readable = apply::has_viewer_window(&ctx);
         ui.horizontal_wrapped(|ui| {
+            ui.add_enabled_ui(readable, |ui| {
+                let mut window = tab.parts.window && readable;
+                if widgets::checkbox(ui, p, &mut window, tr!("fs-layouts-part-window")).changed() {
+                    tab.parts.window = window;
+                }
+            });
             widgets::checkbox(ui, p, &mut tab.parts.world, tr!("fs-layouts-part-world"));
             widgets::checkbox(ui, p, &mut tab.parts.windows, tr!("fs-layouts-part-windows"));
         });
-        if !tab.parts.world && !tab.parts.windows {
+        let with_window = tab.parts.window && readable;
+        ui.add_enabled_ui(with_window, |ui| {
+            let mut lock = tab.parts.lock && with_window;
+            if widgets::checkbox(ui, p, &mut lock, tr!("fs-layouts-lock")).changed() {
+                tab.parts.lock = lock;
+            }
+        });
+        if !with_window && !tab.parts.world && !tab.parts.windows {
             warning(ui, p, tr!("fs-layouts-error-parts"));
         } else if save {
             match apply::save_new(&ctx, &mut Live::of(s), &tab.new_name, tab.parts) {
@@ -569,7 +855,7 @@ fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::folderstorm::workspaces::store::Layout;
+    use crate::folderstorm::workspaces::window::{Command, Pretend};
     use crate::ui::options::{OptionsUi, Page, show};
     use crate::ui::widgets::Floater;
     use crate::ui::widgets::elide_tests::{Frames, Text};
@@ -583,9 +869,27 @@ mod tests {
         s: Settings,
         st: OptionsUi,
         changed: bool,
+        /// A pretend viewer window over two pretend monitors, when the
+        /// test has one (`Window::with_viewer`).
+        viewer: Option<Pretend>,
     }
 
+    const MONITORS: [[i32; 4]; 2] = [[0, 0, 1920, 1080], [1920, 0, 1920, 1080]];
+
     impl Window {
+        /// The same, with a viewer window the layouts can read and drive,
+        /// on the left one of two monitors.
+        fn with_viewer() -> Self {
+            let mut window = Window::new();
+            window.viewer = Some(Pretend::new(100, 60, 1280, 900));
+            window.settle();
+            window
+        }
+
+        fn seen(&self) -> crate::folderstorm::workspaces::window::Seen {
+            self.viewer.as_ref().expect("a pretend window").seen
+        }
+
         fn new() -> Self {
             let frames = Frames::new();
             let theme = crate::theme::Theme::default();
@@ -601,6 +905,7 @@ mod tests {
                 s: Settings::default(),
                 st,
                 changed: false,
+                viewer: None,
             };
             window.run(Vec::new());
             // the two windows out of the way of Preferences, at known places
@@ -614,7 +919,25 @@ mod tests {
         /// windows, then Preferences.
         fn run(&mut self, events: Vec<egui::Event>) -> Vec<Text> {
             let ctx = self.frames.ctx.clone();
-            self.changed |= apply::frame(&ctx, &mut Live::of(&mut self.s));
+            if let Some(viewer) = &self.viewer {
+                crate::folderstorm::diagram::set_desktop(
+                    &ctx,
+                    crate::folderstorm::diagram::Desktop {
+                        window: viewer.seen.inner,
+                        position: viewer.seen.outer,
+                        monitors: MONITORS
+                            .iter()
+                            .map(|rect| crate::folderstorm::diagram::Monitor { rect: *rect, scale: 1.0 })
+                            .collect(),
+                    },
+                );
+            }
+            let outcome = apply::frame(&ctx, &mut Live::of(&mut self.s), self.viewer.as_ref().map(|viewer| viewer.seen));
+            self.changed |= outcome.save;
+            if let Some(viewer) = &mut self.viewer {
+                viewer.send(&outcome.commands);
+                viewer.frame();
+            }
             let (p, icons, s, st, changed) = (&self.p, &self.icons, &mut self.s, &mut self.st, &mut self.changed);
             self.frames.run(events, |ui| {
                 let ctx = ui.ctx();
@@ -936,6 +1259,274 @@ mod tests {
         assert_eq!(w.store(), &saved);
     }
 
+    fn two_monitors() -> Vec<Monitor> {
+        MONITORS
+            .iter()
+            .map(|[x, y, width, height]| Monitor {
+                x: *x,
+                y: *y,
+                width: *width as u32,
+                height: *height as u32,
+                scale: 1.0,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_layout_is_saved_with_the_viewer_window_and_its_lock() {
+        // no viewer window to read: the part is greyed and left out
+        let mut w = Window::new();
+        w.save_as("No window");
+        assert_eq!(w.store().layout(0).and_then(|layout| layout.window.clone()), None);
+        // with one: saved by default, locked when the box is ticked
+        let mut w = Window::with_viewer();
+        assert!(w.shows(tr!("fs-layouts-part-window")) && w.shows(tr!("fs-layouts-lock")));
+        w.click(tr!("fs-layouts-lock"));
+        w.changed = false;
+        w.save_as("Locked");
+        assert!(w.changed);
+        assert_eq!(
+            w.store().layout(0).and_then(|layout| layout.window.clone()),
+            Some(WindowFrame::Normal {
+                x: Some(100),
+                y: Some(60),
+                width: 1280,
+                height: 900,
+                maximized: false,
+                locked: true,
+            })
+        );
+        assert!(w.store().window_held);
+        assert!(!w.seen().resizable, "locked at once");
+        let words = format!(
+            "{}, {}",
+            tr!("fs-layouts-holds-window", width = 1280, height = 900),
+            tr!("fs-layouts-holds-locked")
+        );
+        let texts = w.run(Vec::new());
+        assert!(
+            texts.iter().any(|t| t.source.starts_with(&words)),
+            "what it holds starts with its window"
+        );
+    }
+
+    #[test]
+    fn unlock_is_greyed_until_a_layout_holds_the_window() {
+        let mut w = Window::with_viewer();
+        w.click(tr!("fs-layouts-unlock-button"));
+        assert!(w.seen().resizable);
+        w.click(tr!("fs-layouts-lock"));
+        w.save_as("Locked");
+        assert!(!w.seen().resizable);
+        // (the row is below the fold with a layout selected: found by the search)
+        w.st.query = "unlock".to_owned();
+        w.settle();
+        w.changed = false;
+        w.click(tr!("fs-layouts-unlock-button"));
+        w.run(Vec::new());
+        w.st.query.clear();
+        w.settle();
+        assert!(w.changed);
+        assert!(!w.store().window_held);
+        assert!(w.seen().resizable);
+        assert_eq!(
+            w.viewer.as_ref().and_then(|viewer| viewer.log.last()),
+            Some(&Command::Resizable(true))
+        );
+        // the layout keeps its lock box: applying it locks again
+        w.click(tr!("fs-layouts-apply"));
+        w.settle();
+        assert!(w.store().window_held && !w.seen().resizable);
+    }
+
+    #[test]
+    fn the_selected_layout_s_window_is_edited_in_the_tab() {
+        let mut w = Window::with_viewer();
+        w.save_as("Desk");
+        assert_eq!(w.store().layout(0).map(|layout| layout.monitors.clone()), Some(two_monitors()));
+        let window = |w: &Window| w.store().layout(0).and_then(|layout| layout.window.clone());
+        // its lock box (the first of the two on the page): at once, for the layout in use
+        w.click(tr!("fs-layouts-lock"));
+        w.run(Vec::new());
+        assert!(window(&w).is_some_and(|frame| frame.locked()));
+        assert!(w.store().window_held && !w.seen().resizable);
+        assert!(!w.shows(tr!("fs-layouts-modified")));
+        // borderless: over the monitor the window is on, then over both
+        w.click(tr!("fs-layouts-mode-borderless"));
+        assert_eq!(
+            window(&w),
+            Some(WindowFrame::Borderless {
+                monitors: vec![0],
+                locked: true,
+            })
+        );
+        assert!(w.shows(tr!("fs-layouts-modified")), "the viewer's window is not that yet");
+        assert!(w.shows(tr!("fs-layouts-mode-pick-borderless")));
+        w.click("2");
+        assert_eq!(
+            window(&w),
+            Some(WindowFrame::Borderless {
+                monitors: vec![0, 1],
+                locked: true,
+            })
+        );
+        // never without a monitor
+        w.click("2");
+        w.click("1");
+        assert_eq!(
+            window(&w),
+            Some(WindowFrame::Borderless {
+                monitors: vec![0],
+                locked: true,
+            })
+        );
+        w.click("2");
+        // Apply does it
+        w.click(tr!("fs-layouts-apply"));
+        w.settle();
+        assert!(!w.seen().decorated && !w.seen().resizable);
+        assert_eq!((w.seen().outer, w.seen().inner), (Some((0, 0)), (3840, 1080)));
+        assert!(!w.shows(tr!("fs-layouts-modified")));
+        // full screen on the second monitor
+        w.click(tr!("fs-layouts-mode-fullscreen"));
+        assert_eq!(window(&w), Some(WindowFrame::Fullscreen { monitor: 0 }));
+        assert!(w.shows(tr!("fs-layouts-mode-pick-fullscreen")));
+        w.click("2");
+        assert_eq!(window(&w), Some(WindowFrame::Fullscreen { monitor: 1 }));
+        // and a normal window again: the viewer's own, as it is
+        w.click(tr!("fs-layouts-mode-normal"));
+        assert!(matches!(window(&w), Some(WindowFrame::Normal { .. })));
+    }
+
+    #[test]
+    fn a_layout_saved_without_monitors_only_has_a_normal_window() {
+        let mut w = Window::new();
+        w.s.folderstorm_workspaces
+            .add(
+                Layout::new("Wayland", None, None, Vec::new()).with_window(Some(WindowFrame::Normal {
+                    x: None,
+                    y: None,
+                    width: 1600,
+                    height: 900,
+                    maximized: false,
+                    locked: false,
+                })),
+            )
+            .expect("added");
+        assert!(w.shows(tr!("fs-layouts-mode-no-monitors")));
+        w.click(tr!("fs-layouts-mode-borderless"));
+        assert!(matches!(
+            w.store().layout(0).and_then(|layout| layout.window.clone()),
+            Some(WindowFrame::Normal { .. })
+        ));
+    }
+
+    #[test]
+    fn what_happens_when_the_monitors_change_is_a_choice_of_three() {
+        let mut w = Window::new();
+        assert_eq!(w.store().on_monitor_change, MonitorPolicy::Ask);
+        w.changed = false;
+        w.click(tr!("fs-layouts-monitors-nothing"));
+        assert_eq!(w.store().on_monitor_change, MonitorPolicy::Nothing);
+        assert!(w.changed);
+        w.click(tr!("fs-layouts-monitors-apply"));
+        assert_eq!(w.store().on_monitor_change, MonitorPolicy::Apply);
+        w.click(tr!("fs-layouts-monitors-ask"));
+        assert_eq!(w.store().on_monitor_change, MonitorPolicy::Ask);
+    }
+
+    #[test]
+    fn the_report_says_what_became_of_the_viewer_window() {
+        let report = Report {
+            name: Some("2 monitors".into()),
+            windows: 3,
+            fitted: 2,
+            missing: 1,
+            left: true,
+            unlocked: true,
+            ..Default::default()
+        };
+        let text = report_text(&report, 0);
+        for part in [
+            tr!("fs-layouts-applied-missing", count = 1),
+            tr!("fs-layouts-applied-left").to_owned(),
+            tr!("fs-layouts-applied-unlocked").to_owned(),
+            tr!("fs-layouts-applied-fitted", count = 2),
+        ] {
+            assert!(text.contains(&part), "{text}");
+        }
+        let skipped = Report {
+            no_window: true,
+            ..Default::default()
+        };
+        assert!(report_text(&skipped, 0).contains(tr!("fs-layouts-applied-no-window")));
+    }
+
+    #[test]
+    fn a_window_in_another_mode_keeps_what_it_can() {
+        let saved = two_monitors();
+        // a normal window on the right monitor
+        let normal = WindowFrame::Normal {
+            x: Some(2000),
+            y: Some(100),
+            width: 1600,
+            height: 900,
+            maximized: false,
+            locked: true,
+        };
+        assert_eq!(
+            in_mode(&normal, Mode::Fullscreen, &saved, None),
+            WindowFrame::Fullscreen { monitor: 1 }
+        );
+        let borderless = in_mode(&normal, Mode::Borderless, &saved, None);
+        assert_eq!(
+            borderless,
+            WindowFrame::Borderless {
+                monitors: vec![1],
+                locked: true,
+            }
+        );
+        // back to a normal window: inside the monitors it covered
+        assert_eq!(
+            in_mode(&borderless, Mode::Normal, &saved, None),
+            WindowFrame::Normal {
+                x: Some(2112),
+                y: Some(108),
+                width: 1536,
+                height: 864,
+                maximized: false,
+                locked: true,
+            }
+        );
+        // or the viewer's own window when it can be read, with the layout's lock box
+        let now = WindowFrame::Normal {
+            x: Some(5),
+            y: Some(6),
+            width: 1000,
+            height: 700,
+            maximized: false,
+            locked: false,
+        };
+        assert_eq!(in_mode(&borderless, Mode::Normal, &saved, Some(now.clone())), now.with_lock(true));
+        // every result is a window the store takes
+        for mode in [Mode::Normal, Mode::Fullscreen, Mode::Borderless] {
+            for frame in [&normal, &borderless, &WindowFrame::Fullscreen { monitor: 0 }] {
+                let layout = Layout::new("L", None, None, saved.clone()).with_window(Some(in_mode(frame, mode, &saved, None)));
+                assert_eq!(layout.check(), Ok(()), "{frame:?} as {mode:?}");
+            }
+        }
+        // a click on a monitor
+        assert_eq!(with_monitor(&normal, 0), None);
+        assert_eq!(with_monitor(&borderless, 1), None, "its last monitor stays");
+        assert_eq!(
+            with_monitor(&borderless, 0),
+            Some(WindowFrame::Borderless {
+                monitors: vec![0, 1],
+                locked: true,
+            })
+        );
+    }
+
     /// Draws Preferences on `tab` of the Layout page for a few frames with
     /// the software painter; the texts of the last frame.
     /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the picture as
@@ -1042,6 +1633,57 @@ mod tests {
             tr!("fs-layouts-save"),
             tr!("fs-layouts-previous-button"),
             tr!("fs-layouts-reset-button"),
+        ] {
+            assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
+        }
+    }
+
+    /// The picture of the tab with a locked borderless layout selected:
+    /// its window editor, the lock on its line, Unlock and the monitors'
+    /// choice (`preferences-layouts-window.png`).
+    #[test]
+    fn the_tab_is_drawn_with_the_viewer_window_s_editor() {
+        let s = Settings {
+            folderstorm_workspaces: serde_json::from_value(serde_json::json!({
+                "layouts": [
+                    Layout::new("2 monitors", Some(wide()), None, two_monitors()).with_window(Some(WindowFrame::Borderless {
+                        monitors: vec![0, 1],
+                        locked: true,
+                    })),
+                    Layout::new("1 monitor", Some(Default::default()), None, two_monitors()[..1].to_vec()).with_window(Some(
+                        WindowFrame::Normal {
+                            x: Some(0),
+                            y: Some(0),
+                            width: 1920,
+                            height: 1040,
+                            maximized: false,
+                            locked: false,
+                        }
+                    )),
+                ],
+                "active_layout": "2 monitors",
+                "window_held": true,
+            }))
+            .expect("read"),
+            folderstorm_viewport: wide(),
+            ..Default::default()
+        };
+        assert!(s.folderstorm_workspaces.window_held);
+        let texts = drawn("preferences-layouts-window", 3, s, false);
+        for icon in [ICON_LOCK, ICON_UNLOCK] {
+            assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
+        }
+        for expected in [
+            tr!("fs-layouts-part-window"),
+            tr!("fs-layouts-mode-normal"),
+            tr!("fs-layouts-mode-fullscreen"),
+            tr!("fs-layouts-mode-borderless"),
+            tr!("fs-layouts-mode-pick-borderless"),
+            tr!("fs-layouts-lock"),
+            tr!("fs-layouts-unlock-button"),
+            tr!("fs-layouts-monitors-ask"),
+            tr!("fs-layouts-monitors-apply"),
+            tr!("fs-layouts-monitors-nothing"),
         ] {
             assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }

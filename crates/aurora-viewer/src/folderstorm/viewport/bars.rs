@@ -145,6 +145,31 @@ pub fn thickness(ctx: &egui::Context, room: Option<Rect>) -> Thickness {
     }
 }
 
+/// The last measure [`thickness`] took, for the diagram of the world
+/// viewport; None before the bars were ever measured.
+pub fn last_thickness(ctx: &egui::Context) -> Option<Thickness> {
+    ctx.data(|d| d.get_temp::<Thickness>(thickness_id()))
+}
+
+/// As if the bars had been measured this thick.
+#[cfg(test)]
+pub fn set_last_thickness(ctx: &egui::Context, bars: Thickness) {
+    ctx.data_mut(|d| d.insert_temp(thickness_id(), bars));
+}
+
+impl Thickness {
+    /// The same bars in another unit: points to pixels, pixels to diagram
+    /// points.
+    pub fn scaled(self, by: f32) -> Self {
+        Thickness {
+            left: self.left * by,
+            right: self.right * by,
+            top: self.top * by,
+            bottom: self.bottom * by,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

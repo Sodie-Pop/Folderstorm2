@@ -1150,6 +1150,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         if menu::item(ui, p, "map", aurora_i18n::tr!("owned-land-title")) {
             *action = BarAction::OwnedLand;
         }
+        crate::folderstorm::workspaces::menu::show(ui, p); // Folderstorm: the Layouts submenu
         menu::submenu(ui, p, "dots-filled", aurora_i18n::tr!("world-show-more"), true, |ui| {
             flip_window(
                 ui,

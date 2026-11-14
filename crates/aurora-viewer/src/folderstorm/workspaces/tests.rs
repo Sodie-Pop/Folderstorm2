@@ -10,6 +10,8 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod viewer;
+
 const INVENTORY: &str = "inventory";
 const PEOPLE: &str = "people";
 const MAP: &str = "worldmap";
@@ -28,6 +30,19 @@ struct Viewer {
     time: f64,
     /// Whether `apply::frame` asked for the settings to be saved.
     saved: bool,
+    /// A pretend viewer window: it runs what the layouts ask, and the
+    /// interface has its size. None: no window to drive.
+    window: Option<super::window::Pretend>,
+    /// The monitors the app publishes with it, each (x, y, width, height).
+    monitors: Vec<[i32; 4]>,
+    /// `apply::frame` asked for Preferences.
+    preferences: bool,
+    /// World › Layouts is drawn open, at the top left.
+    menu: bool,
+    /// What the pointer does in the next frame.
+    events: Vec<egui::Event>,
+    /// The texts of the last frame and where they were.
+    texts: Vec<(String, Rect)>,
 }
 
 impl Viewer {
@@ -42,6 +57,12 @@ impl Viewer {
             open: BTreeSet::from([INVENTORY, PEOPLE, MAP, MINIMAP, PREFERENCES]),
             time: 0.0,
             saved: false,
+            window: None,
+            monitors: Vec::new(),
+            preferences: false,
+            menu: false,
+            events: Vec::new(),
+            texts: Vec::new(),
         }
     }
 
@@ -52,6 +73,15 @@ impl Viewer {
         next.store = serde_json::from_str(&serde_json::to_string(&self.store).expect("saved")).expect("read");
         next.world = self.world.clone();
         next.open = self.open.clone();
+        // the window where it was, as Aurora reopens it: with its border,
+        // free to be resized
+        next.window = self.window.as_ref().map(|window| {
+            let (x, y) = window.seen.outer.unwrap_or_default();
+            let mut fresh = super::window::Pretend::new(x, y, window.seen.inner.0, window.seen.inner.1);
+            fresh.seen.outer = window.seen.outer;
+            fresh
+        });
+        next.monitors = self.monitors.clone();
         next
     }
 
@@ -66,14 +96,40 @@ impl Viewer {
     /// the windows that are open.
     fn frame(&mut self) {
         let ctx = self.ctx.clone();
-        self.saved |= apply::frame(&ctx, &mut self.live());
+        // as the app does before the layouts' call: the desktop published,
+        // the window described
+        if let Some(window) = &self.window {
+            self.size = vec2(window.seen.inner.0 as f32, window.seen.inner.1 as f32);
+            crate::folderstorm::diagram::set_desktop(
+                &ctx,
+                crate::folderstorm::diagram::Desktop {
+                    window: window.seen.inner,
+                    position: window.seen.outer,
+                    monitors: self
+                        .monitors
+                        .iter()
+                        .map(|rect| crate::folderstorm::diagram::Monitor { rect: *rect, scale: 1.0 })
+                        .collect(),
+                },
+            );
+        }
+        let seen = self.window.as_ref().map(|window| window.seen);
+        let outcome = apply::frame(&ctx, &mut self.live(), seen);
+        self.saved |= outcome.save;
+        self.preferences |= outcome.preferences;
+        if let Some(window) = &mut self.window {
+            window.send(&outcome.commands);
+            window.frame();
+        }
         self.time += 1.0 / 60.0;
         let screen = Rect::from_min_size(Pos2::ZERO, self.size);
         let open = self.open.clone();
+        let menu = self.menu;
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
                 time: Some(self.time),
+                events: std::mem::take(&mut self.events),
                 ..Default::default()
             },
             |ui| {
@@ -81,6 +137,14 @@ impl Viewer {
                 let p = crate::theme::Theme::default().palette();
                 crate::ui::layout::set_work_area(ctx, screen);
                 crate::ui::layout::set_move_area(ctx, screen);
+                // as the interface's pass does: the card, and the menu when open
+                super::notice::show(ctx, &p);
+                if menu {
+                    egui::Area::new(egui::Id::unique("test-world-menu"))
+                        .order(egui::Order::Foreground)
+                        .fixed_pos(pos2(4.0, 300.0))
+                        .show(ctx, |ui| super::menu::body(ui, &p));
+                }
                 for (id, at, size) in [
                     (INVENTORY, pos2(900.0, 56.0), vec2(360.0, 420.0)),
                     (PEOPLE, pos2(20.0, 60.0), vec2(300.0, 400.0)),
@@ -110,6 +174,47 @@ impl Viewer {
             },
         );
         output.textures_delta.clear();
+        fn collect(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
+                egui::Shape::Text(t) => out.push((t.galley.text().to_owned(), t.galley.rect.translate(t.pos.to_vec2()))),
+                _ => {}
+            }
+        }
+        self.texts.clear();
+        for clipped in &output.shapes {
+            collect(&clipped.shape, &mut self.texts);
+        }
+    }
+
+    fn shows(&self, text: &str) -> bool {
+        self.texts.iter().any(|(shown, _)| shown == text)
+    }
+
+    /// Clicks the text `label` of the card or of the menu.
+    fn click(&mut self, label: &str) {
+        let at = self
+            .texts
+            .iter()
+            .find(|(shown, _)| shown == label)
+            .unwrap_or_else(|| panic!("“{label}” is shown"))
+            .1
+            .center();
+        let button = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        for events in [
+            vec![egui::Event::PointerMoved(at)],
+            vec![button(true)],
+            vec![button(false)],
+            Vec::new(),
+        ] {
+            self.events = events;
+            self.frame();
+        }
     }
 
     fn frames(&mut self, count: usize) {
@@ -567,6 +672,7 @@ fn a_part_a_layout_does_not_have_is_left_alone() {
         Parts {
             world: true,
             windows: false,
+            ..Default::default()
         },
     )
     .expect("saved");
@@ -575,6 +681,7 @@ fn a_part_a_layout_does_not_have_is_left_alone() {
         Parts {
             world: false,
             windows: true,
+            ..Default::default()
         },
     )
     .expect("saved");
@@ -583,7 +690,8 @@ fn a_part_a_layout_does_not_have_is_left_alone() {
             "Nothing",
             Parts {
                 world: false,
-                windows: false
+                windows: false,
+                ..Default::default()
             }
         ),
         Err(StoreError::Invalid)
@@ -681,7 +789,8 @@ fn an_interface_too_small_to_hold_windows_is_not_captured() {
             "World",
             Parts {
                 world: true,
-                windows: false
+                windows: false,
+                ..Default::default()
             }
         )
         .is_ok()

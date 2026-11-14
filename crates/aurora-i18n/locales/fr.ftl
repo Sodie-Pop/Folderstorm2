@@ -1502,9 +1502,9 @@ folderstorm-viewport-set-aside = Ces marges laissent au monde moins d'un quart d
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
 fs-layouts-tab = Dispositions
 fs-layouts-group = Dispositions enregistrées
-fs-layouts-intro = Une disposition retient où vont les choses : la zone du monde avec les barres, et la position et la taille de vos fenêtres. Elle n'ouvre ni ne ferme jamais une fenêtre, et ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici.
+fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. Elle n'ouvre ni ne ferme jamais une fenêtre, et ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
 fs-layouts-list = Dispositions
-fs-layouts-list-help = Cliquez sur une disposition pour la sélectionner, puis sur Appliquer ; un double clic l'applique tout de suite. Appliquer remet le monde, les barres et les fenêtres là où la disposition les a. Les fenêtres déplacées ensuite ne sont enregistrées que si vous choisissez Mettre à jour.
+fs-layouts-list-help = Cliquez sur une disposition pour la sélectionner, puis sur Appliquer ; un double clic l'applique tout de suite. Appliquer remet la fenêtre du viewer, le monde, les barres et les fenêtres là où la disposition les a. Ce que vous déplacez ensuite n'est enregistré que si vous choisissez Mettre à jour.
 fs-layouts-empty = Aucune disposition enregistrée. Placez le monde et vos fenêtres comme vous les aimez, puis enregistrez l'arrangement ci-dessous.
 fs-layouts-unnamed = (sans nom)
 fs-layouts-active = En service
@@ -1550,7 +1550,7 @@ fs-layouts-waiting = { $count ->
 fs-layouts-previous-done = Retour à l'arrangement d'avant.
 fs-layouts-save-group = Enregistrer l'arrangement actuel
 fs-layouts-save-new = Enregistrer comme nouvelle disposition
-fs-layouts-save-new-help = Enregistre sous un nouveau nom où se trouvent les choses maintenant. Décochez une partie pour la laisser de côté : une disposition sans positions de fenêtres ne change que le monde et les barres, et inversement.
+fs-layouts-save-new-help = Enregistre sous un nouveau nom où se trouvent les choses maintenant. Décochez une partie pour la laisser de côté : une disposition sans la fenêtre du viewer la laisse où elle est, une disposition sans positions de fenêtres ne change que le reste. Verrouiller la taille de la fenêtre empêche de redimensionner la fenêtre du viewer à la main tant que la disposition est utilisée.
 fs-layouts-name-hint = Nom, par exemple 2 écrans
 fs-layouts-save = Enregistrer
 fs-layouts-error-empty = Donnez un nom à la disposition.
@@ -1562,11 +1562,50 @@ fs-layouts-error-parts = Choisissez au moins une partie à enregistrer.
 fs-layouts-error-invalid = L'arrangement actuel n'a pas pu être lu. Réessayez dans un instant.
 fs-layouts-arrangement = Arrangement
 fs-layouts-previous = Arrangement précédent
-fs-layouts-previous-help = Revient au monde, aux barres et aux positions des fenêtres en place avant la dernière disposition appliquée, ou avant « Réinitialiser les barres et le monde ». Un second appui y retourne. Retenu jusqu'à la fermeture du viewer.
+fs-layouts-previous-help = Revient à la fenêtre du viewer, au monde, aux barres et aux positions des fenêtres en place avant la dernière disposition appliquée, ou avant Réinitialiser les barres et le monde. Un second appui y retourne. Mémorisé jusqu'à la fermeture du viewer.
 fs-layouts-previous-button = Revenir
 fs-layouts-reset = Réinitialiser les barres et le monde
 fs-layouts-reset-help = Désactive la zone du monde et remet les barres dans le monde, comme au premier démarrage. Les fenêtres restent où elles sont, et aucune disposition n'est modifiée ni supprimée.
 fs-layouts-reset-button = Réinitialiser
+fs-layouts-menu = Dispositions
+fs-layouts-menu-open = Dispositions…
+fs-layouts-part-window = Fenêtre du viewer
+fs-layouts-lock = Verrouiller la taille de la fenêtre
+fs-layouts-locked = Verrouillée
+fs-layouts-holds-window = fenêtre du viewer { $width } × { $height }
+fs-layouts-holds-window-maximized = fenêtre du viewer agrandie
+fs-layouts-holds-window-fullscreen = plein écran sur l'écran { $n }
+fs-layouts-holds-window-borderless = { $count ->
+    [one] sans bordure sur { $count } écran
+   *[other] sans bordure sur { $count } écrans
+    }
+fs-layouts-holds-locked = verrouillée
+fs-layouts-mode-normal = Normale
+fs-layouts-mode-fullscreen = Plein écran
+fs-layouts-mode-borderless = Sans bordure sur des écrans
+fs-layouts-mode-pick-fullscreen = Cliquez sur l'écran à remplir.
+fs-layouts-mode-pick-borderless = Cliquez sur les écrans à couvrir. La fenêtre perd sa bordure et sa barre de titre et les recouvre exactement.
+fs-layouts-mode-no-monitors = Cette disposition a été enregistrée sans liste d'écrans : seule une fenêtre normale est possible.
+fs-layouts-applied-missing = { $count ->
+    [one] { $count } écran de cette disposition est absent.
+   *[other] { $count } écrans de cette disposition sont absents.
+    }
+fs-layouts-applied-left = La fenêtre du viewer est restée où elle est.
+fs-layouts-applied-unlocked = La fenêtre n'est pas verrouillée.
+fs-layouts-applied-no-window = La fenêtre du viewer a été laissée telle quelle.
+fs-layouts-unlock = Déverrouiller la fenêtre du viewer
+fs-layouts-unlock-help = Rend à la fenêtre du viewer sa bordure et son redimensionnement quand une disposition l'a verrouillée ou mise sans bordure. Elle garde sa place et sa taille. Un verrou est aussi levé quand un écran de la disposition est débranché, en plein écran, et par toute disposition sans verrou.
+fs-layouts-unlock-button = Déverrouiller
+fs-layouts-monitors = Quand les écrans changent
+fs-layouts-monitors-help = Quand un écran est branché ou débranché, le viewer peut proposer la disposition enregistrée sur exactement ces écrans, l'appliquer sans demander, ou ne rien faire. Il attend d'abord deux secondes que le système se stabilise.
+fs-layouts-monitors-ask = Demander
+fs-layouts-monitors-apply = Appliquer la disposition correspondante
+fs-layouts-monitors-nothing = Ne rien faire
+fs-layouts-monitors-offer = Vos écrans ont changé. Utiliser la disposition « { $name } » ?
+fs-layouts-monitors-offer-unlocked = Vos écrans ont changé et la fenêtre du viewer a été déverrouillée. Utiliser la disposition « { $name } » ?
+fs-layouts-monitors-applied = Vos écrans ont changé : la disposition « { $name } » a été appliquée.
+fs-layouts-monitors-unlocked = Vos écrans ont changé : la fenêtre du viewer a été déverrouillée.
+fs-layouts-monitors-later = Pas maintenant
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message

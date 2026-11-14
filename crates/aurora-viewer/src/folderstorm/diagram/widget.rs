@@ -27,6 +27,9 @@ struct Drag {
     cancelled: bool,
 }
 
+/// A bar is drawn at least this thick, in diagram points.
+const MIN_BAR: f32 = 2.0;
+
 /// Room between the diagram's border and what it draws, in points.
 pub(super) const PAD: f32 = 10.0;
 
@@ -250,15 +253,28 @@ fn paint(
         _ => (p.teal.gamma_multiply(0.28), p.teal),
     };
     painter.rect_filled(world_d, none, fill);
-    // the bars: along the top and bottom of the area they follow
-    let bars = if s.bars_in_viewport { world_d } else { window_d };
-    let strip = 3.0_f32.min(bars.height() / 6.0);
-    for y in [bars.top(), bars.bottom() - strip] {
-        painter.rect_filled(
-            Rect::from_min_size(egui::pos2(bars.left(), y), vec2(bars.width(), strip)),
-            none,
-            p.violet.gamma_multiply(0.7),
-        );
+    // the bars, where the settings lay them out: inside the world, over
+    // the window, or around the world (each side in the margin when it has
+    // room); as thick as the viewer last measured them, to scale
+    let thick = crate::folderstorm::viewport::bars::last_thickness(ui.ctx())
+        .filter(|bars| bars.top + bars.bottom + bars.left + bars.right > 0.0)
+        .unwrap_or(super::NOMINAL_BARS)
+        .scaled(ui.ctx().pixels_per_point());
+    let world_px = match world {
+        World::Custom(r) => r,
+        _ => window,
+    };
+    let place = crate::folderstorm::viewport::bars::BarsPlace::of(s);
+    for (side, strip) in super::bars_strips(window, world_px, place, thick) {
+        // never thinner than can be seen: thickened towards the inside
+        let d = mapping.rect_to_diagram(strip);
+        let d = match side {
+            Edge::Top => Rect::from_min_max(d.min, egui::pos2(d.right(), d.bottom().max(d.top() + MIN_BAR))),
+            Edge::Bottom => Rect::from_min_max(egui::pos2(d.left(), d.top().min(d.bottom() - MIN_BAR)), d.max),
+            Edge::Left => Rect::from_min_max(d.min, egui::pos2(d.right().max(d.left() + MIN_BAR), d.bottom())),
+            Edge::Right => Rect::from_min_max(egui::pos2(d.left().min(d.right() - MIN_BAR), d.top()), d.max),
+        };
+        painter.rect_filled(d, none, p.violet.gamma_multiply(0.7));
     }
     if matches!(world, World::Custom(_)) {
         painter.rect_stroke(world_d, none, Stroke::new(1.5, edge_ink), StrokeKind::Inside);
@@ -368,4 +384,66 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut ViewportSettings, desktop: &D
         ui.label(egui::RichText::new(tr!("folderstorm-viewport-set-aside")).size(12.0).color(p.warn));
     }
     changed
+}
+
+/// The height of [`monitors`]' picture, in points.
+const PREVIEW_H: f32 = 96.0;
+
+/// A small picture of monitors (each x, y, width, height in desktop
+/// pixels), numbered, with a window's frame over them: the monitors a
+/// saved layout counts in, and where it puts the viewer window. The
+/// `chosen` ones are lit. With `pick`, a click on a monitor returns its
+/// place in the list.
+pub fn monitors(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    monitors: &[[i32; 4]],
+    window: Option<[i32; 4]>,
+    chosen: &[usize],
+    pick: bool,
+) -> Option<usize> {
+    let rect_of = |[x, y, w, h]: [i32; 4]| Rect::from_min_size(egui::pos2(x as f32, y as f32), vec2(w.max(0) as f32, h.max(0) as f32));
+    let rects: Vec<Rect> = monitors.iter().map(|m| rect_of(*m)).collect();
+    let bounds = rects
+        .iter()
+        .copied()
+        .chain(window.map(rect_of))
+        .filter(|r| r.is_positive())
+        .reduce(|all, r| all.union(r))?;
+    let width = (PREVIEW_H * bounds.width() / bounds.height().max(1.0)).clamp(120.0, ui.available_width().max(120.0));
+    let sense = if pick { Sense::click() } else { Sense::hover() };
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, PREVIEW_H), sense);
+    let mapping = Mapping::fit(bounds, rect, 6.0);
+    let none = egui::CornerRadius::ZERO;
+    ui.painter().rect_filled(rect, ui.visuals().window_corner_radius, p.field);
+    let painter = ui.painter().with_clip_rect(rect.shrink(1.0));
+    let bold = egui::FontId::new(12.0, crate::ui::fonts::semibold(ui.ctx()));
+    let hovered = resp
+        .hover_pos()
+        .and_then(|at| rects.iter().position(|r| r.contains(mapping.to_window(at))));
+    for (n, r) in rects.iter().enumerate() {
+        let d = mapping.rect_to_diagram(*r);
+        let lit = chosen.contains(&n);
+        let fill = if lit { p.violet.gamma_multiply(0.55) } else { p.raised };
+        painter.rect_filled(d, none, fill);
+        let edge = if pick && hovered == Some(n) { p.violet_light } else { p.muted_dim };
+        painter.rect_stroke(d, none, Stroke::new(1.0, edge), StrokeKind::Inside);
+        if d.width() >= 16.0 && d.height() >= 16.0 {
+            let ink = if lit { p.ink } else { p.muted };
+            painter.text(
+                d.left_top() + vec2(5.0, 3.0),
+                egui::Align2::LEFT_TOP,
+                (n + 1).to_string(),
+                bold.clone(),
+                ink,
+            );
+        }
+    }
+    if let Some(window) = window.map(rect_of).filter(|r| r.is_positive()) {
+        painter.rect_stroke(mapping.rect_to_diagram(window), none, Stroke::new(1.5, p.teal), StrokeKind::Inside);
+    }
+    if pick && hovered.is_some() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    resp.clicked().then_some(hovered).flatten()
 }

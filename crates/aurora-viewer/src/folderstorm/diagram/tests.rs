@@ -478,3 +478,173 @@ fn the_diagram_drags_an_edge_and_puts_the_world_on_a_monitor() {
     frame(&mut s, vec![button(at(3838.0, 540.0), false)]);
     assert_eq!(s.right, 0);
 }
+
+#[test]
+fn the_bars_are_drawn_where_the_settings_lay_them_out() {
+    let window = Rect::from_min_size(Pos2::ZERO, vec2(3840.0, 1080.0));
+    // the world on the right monitor, a little under the window's top
+    let world = Rect::from_min_max(pos2(1920.0, 30.0), pos2(3840.0, 1080.0));
+    let bars = Thickness {
+        left: 60.0,
+        right: 0.0,
+        top: 80.0,
+        bottom: 64.0,
+    };
+    let strips = |place| bars_strips(window, world, place, bars);
+    // inside the world: along its own edges
+    assert_eq!(
+        strips(BarsPlace::Inside),
+        [
+            (Edge::Top, Rect::from_min_max(pos2(1920.0, 30.0), pos2(3840.0, 110.0))),
+            (Edge::Bottom, Rect::from_min_max(pos2(1920.0, 1016.0), pos2(3840.0, 1080.0))),
+            (Edge::Left, Rect::from_min_max(pos2(1920.0, 110.0), pos2(1980.0, 1016.0))),
+        ]
+    );
+    // over the whole window
+    assert_eq!(
+        strips(BarsPlace::Window),
+        [
+            (Edge::Top, Rect::from_min_max(pos2(0.0, 0.0), pos2(3840.0, 80.0))),
+            (Edge::Bottom, Rect::from_min_max(pos2(0.0, 1016.0), pos2(3840.0, 1080.0))),
+            (Edge::Left, Rect::from_min_max(pos2(0.0, 80.0), pos2(60.0, 1016.0))),
+        ]
+    );
+    // around: the left margin has room for the side bar, which goes out of
+    // the world; the top margin (30 pixels) has none for the top bars, and
+    // there is no bottom margin: those two stay inside
+    assert_eq!(
+        strips(BarsPlace::Around),
+        [
+            (Edge::Top, Rect::from_min_max(pos2(1860.0, 30.0), pos2(3840.0, 110.0))),
+            (Edge::Bottom, Rect::from_min_max(pos2(1860.0, 1016.0), pos2(3840.0, 1080.0))),
+            (Edge::Left, Rect::from_min_max(pos2(1860.0, 110.0), pos2(1920.0, 1016.0))),
+        ]
+    );
+    // margins all round: every bar in its margin, none over the world
+    let middle = Rect::from_min_max(pos2(960.0, 135.0), pos2(2880.0, 945.0));
+    for (_, strip) in bars_strips(window, middle, BarsPlace::Around, bars) {
+        assert!(!strip.intersects(middle.shrink(0.5)), "{strip:?}");
+    }
+    // a viewer without bars draws none
+    assert!(bars_strips(window, world, BarsPlace::Around, Thickness::default()).is_empty());
+}
+
+/// The diagram with the bars around the world, drawn with the software
+/// painter: the side bar in the left margin, the top bars in the margin
+/// above, the bottom ones inside (no margin under the world).
+/// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps `diagram-bars-<place>.png`
+/// for the three places.
+#[test]
+fn the_diagram_draws_the_bars_in_the_margins_that_have_room() {
+    use crate::folderstorm::viewport::bars::{self, BarsPlace, Thickness};
+    let theme = crate::theme::Theme::default();
+    let p = theme.skin_palette();
+    let (width, height) = (900u32, 360u32);
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(width as f32, height as f32));
+    let desktop = two();
+    for (place, name) in [
+        (BarsPlace::Inside, "inside"),
+        (BarsPlace::Around, "around"),
+        (BarsPlace::Window, "window"),
+    ] {
+        let ctx = egui::Context::default();
+        theme.apply(&ctx, 1.0);
+        bars::set_last_thickness(
+            &ctx,
+            Thickness {
+                left: 120.0,
+                right: 0.0,
+                top: 90.0,
+                bottom: 110.0,
+            },
+        );
+        let mut s = ViewportSettings {
+            enabled: true,
+            left: 1920,
+            top: 100,
+            ..Default::default()
+        };
+        place.set(&mut s);
+        let mut pixels = vec![0u32; (width * height) as usize];
+        let mut painter = crate::crash::software::Painter::default();
+        let mut strips = Vec::new();
+        let mut world = None;
+        for frame in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    time: Some(f64::from(frame) / 60.0),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::Frame::new().inner_margin(10.0).show(ui, |ui| {
+                        widget::show(ui, &p, &mut s, &desktop);
+                    });
+                },
+            );
+            strips.clear();
+            fn collect(shape: &egui::Shape, out: &mut Vec<(egui::Color32, Rect)>) {
+                match shape {
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
+                    egui::Shape::Rect(r) => out.push((r.fill, r.rect)),
+                    _ => {}
+                }
+            }
+            let mut rects = Vec::new();
+            for clipped in &output.shapes {
+                collect(&clipped.shape, &mut rects);
+            }
+            for (fill, rect) in rects {
+                if fill == p.violet.gamma_multiply(0.7) {
+                    strips.push(rect);
+                } else if fill == p.teal.gamma_multiply(0.28) {
+                    world = Some(rect);
+                }
+            }
+            let primitives = ctx.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
+            pixels.fill(0);
+            painter.paint(
+                &mut pixels,
+                [width as usize, height as usize],
+                &primitives,
+                &output.textures_delta,
+                output.pixels_per_point,
+                p.panel,
+            );
+            output.textures_delta.clear();
+        }
+        if let Some(dir) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR") {
+            let rgba: Vec<_> = pixels
+                .iter()
+                .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+                .collect();
+            let path = std::path::Path::new(&dir).join(format!("diagram-bars-{name}.png"));
+            image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+        }
+        let world = world.expect("the world is drawn");
+        assert_eq!(strips.len(), 3, "{name}: top, bottom and left bars");
+        let outside = |strip: &Rect| !strip.intersects(world.shrink(0.5));
+        match place {
+            // all of them over the world
+            BarsPlace::Inside => assert!(strips.iter().all(|strip| world.expand(0.5).contains_rect(*strip)), "{strips:?}"),
+            // the left and top ones in their margins, the bottom one inside
+            BarsPlace::Around => {
+                assert_eq!(
+                    strips.iter().filter(|strip| outside(strip)).count(),
+                    2,
+                    "{strips:?} around {world:?}"
+                );
+                assert!(
+                    strips.iter().any(|strip| strip.right() <= world.left() + 0.5),
+                    "the side bar left of the world"
+                );
+                assert!(
+                    strips.iter().any(|strip| strip.bottom() <= world.top() + 0.5),
+                    "the top bars above the world"
+                );
+            }
+            // along the window's own edges: the left one far from the world
+            BarsPlace::Window => assert!(strips.iter().any(|strip| strip.right() < world.left() - 20.0), "{strips:?}"),
+        }
+    }
+}

@@ -81,12 +81,122 @@ fn one() -> f32 {
     1.0
 }
 
+/// The *Viewer window* part of a layout, in desktop pixels
+/// (folderstorm/plans/workspaces.md, checkpoint 4).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum WindowFrame {
+    /// A window with its border. `x`, `y`: its outer corner as the system
+    /// gives it (absent where it does not: Wayland); `width`, `height`: its
+    /// inside. Maximized, they are the size and place it goes back to.
+    Normal {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        x: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        y: Option<i32>,
+        width: u32,
+        height: u32,
+        #[serde(default)]
+        maximized: bool,
+        /// *Lock the window size*: the window cannot be resized by hand.
+        #[serde(default)]
+        locked: bool,
+    },
+    /// Aurora's full screen, on the monitor at this place of the layout's
+    /// `monitors` (or where the window is, when the layout has none).
+    Fullscreen {
+        #[serde(default)]
+        monitor: u8,
+    },
+    /// No border, exactly over the monitors at these places of the
+    /// layout's `monitors`. `locked`: not resizable either.
+    Borderless {
+        monitors: Vec<u8>,
+        #[serde(default)]
+        locked: bool,
+    },
+}
+
+impl WindowFrame {
+    /// Whether the layout asks for the window to be locked.
+    pub fn locked(&self) -> bool {
+        match self {
+            WindowFrame::Normal { locked, .. } | WindowFrame::Borderless { locked, .. } => *locked,
+            WindowFrame::Fullscreen { .. } => false,
+        }
+    }
+
+    /// The same frame with its lock box as `on` (full screen has none).
+    pub fn with_lock(mut self, on: bool) -> Self {
+        if let WindowFrame::Normal { locked, .. } | WindowFrame::Borderless { locked, .. } = &mut self {
+            *locked = on;
+        }
+        self
+    }
+
+    /// Whether the frame holds the window while it is in force: locked, or
+    /// without a border.
+    pub fn holds(&self) -> bool {
+        self.locked() || matches!(self, WindowFrame::Borderless { .. })
+    }
+
+    fn ok(&self, monitors: usize) -> bool {
+        let far = MAX_DISTANCE as i64;
+        match self {
+            WindowFrame::Normal { x, y, width, height, .. } => {
+                x.zip(*y)
+                    .is_none_or(|(x, y)| i64::from(x).abs() <= far && i64::from(y).abs() <= far)
+                    && (1..=far).contains(&i64::from(*width))
+                    && (1..=far).contains(&i64::from(*height))
+            }
+            // (a layout saved where the system lists no monitor: the
+            // monitor the window is on)
+            WindowFrame::Fullscreen { monitor } => usize::from(*monitor) < monitors.max(1),
+            WindowFrame::Borderless { monitors: chosen, .. } => {
+                !chosen.is_empty()
+                    && chosen.iter().all(|n| usize::from(*n) < monitors)
+                    && chosen.iter().collect::<BTreeSet<_>>().len() == chosen.len()
+            }
+        }
+    }
+}
+
+/// What to do once the monitor setup has changed (section 8.5).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MonitorPolicy {
+    /// Offer the layout saved on the new setup.
+    #[default]
+    Ask,
+    /// Apply it without asking.
+    Apply,
+    Nothing,
+}
+
+impl MonitorPolicy {
+    /// A word this version does not know reads as the default.
+    fn read(word: &str) -> Self {
+        match word {
+            "apply" => Self::Apply,
+            "nothing" => Self::Nothing,
+            _ => Self::Ask,
+        }
+    }
+
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// A named layout: where things go. Each part is optional; an absent part
 /// is left alone when the layout is applied.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Layout {
     pub schema: u32,
     pub name: String,
+    /// The viewer window: where it is, how large, whether it is locked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<WindowFrame>,
     /// The world viewport and where the bars go.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world: Option<ViewportSettings>,
@@ -214,7 +324,11 @@ pub fn name_error(name: &str) -> Option<NameError> {
 /// Two names are the same layout's: equal ignoring case and the spaces
 /// around them.
 pub fn same_name(a: &str, b: &str) -> bool {
-    tidy(a).to_lowercase() == tidy(b).to_lowercase()
+    // (asked every frame while a layout holds the window: no allocation)
+    tidy(a)
+        .chars()
+        .flat_map(char::to_lowercase)
+        .eq(tidy(b).chars().flat_map(char::to_lowercase))
 }
 
 fn finite(values: &[f32]) -> bool {
@@ -273,11 +387,18 @@ impl Layout {
         Layout {
             schema: SCHEMA,
             name: tidy(name).to_owned(),
+            window: None,
             world,
             windows,
             monitors,
             other: BTreeMap::new(),
         }
+    }
+
+    /// The same layout with a *Viewer window* part.
+    pub fn with_window(mut self, window: Option<WindowFrame>) -> Self {
+        self.window = window;
+        self
     }
 
     /// Whether every value is within the limits. A layout that fails is
@@ -291,7 +412,8 @@ impl Layout {
             && self.world.as_ref().is_none_or(world_ok)
             && self.windows.as_ref().is_none_or(Placements::ok)
             && self.monitors.len() <= MAX_MONITORS
-            && self.monitors.iter().all(Monitor::ok);
+            && self.monitors.iter().all(Monitor::ok)
+            && self.window.as_ref().is_none_or(|window| window.ok(self.monitors.len()));
         if ok { Ok(()) } else { Err(Unusable::Invalid) }
     }
 }
@@ -321,6 +443,13 @@ pub struct Store {
     /// Windows a layout placed while they were closed and that have not
     /// been shown since: their place is asked again at the next start.
     pub pending: BTreeSet<String>,
+    /// The active layout's lock or borderless mode is in force
+    /// (`super::viewer`): what a restart puts back.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub window_held: bool,
+    /// What to do when the monitors change.
+    #[serde(skip_serializing_if = "MonitorPolicy::is_default")]
+    pub on_monitor_change: MonitorPolicy,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -331,6 +460,8 @@ struct Raw {
     active_layout: Option<String>,
     modified: bool,
     pending: BTreeSet<String>,
+    window_held: bool,
+    on_monitor_change: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -371,12 +502,19 @@ impl From<Raw> for Store {
                 .filter(|id| super::windows::find(id).is_some())
                 .take(MAX_WINDOWS)
                 .collect(),
+            window_held: raw.window_held,
+            on_monitor_change: raw.on_monitor_change.as_str().map(MonitorPolicy::read).unwrap_or_default(),
         };
         if store.active().is_none() {
             store.active_layout = None;
             store.modified = false;
             store.pending.clear();
         }
+        // nothing holds the window without an active layout that asks for it
+        store.window_held &= store
+            .active()
+            .and_then(|layout| layout.window.as_ref())
+            .is_some_and(WindowFrame::holds);
         store
     }
 }
@@ -439,30 +577,53 @@ impl Store {
         Ok(self.layouts.len() - 1)
     }
 
-    /// Puts `world` and `windows` in the layout at `index` for the parts it
-    /// has (a part it does not have stays absent), with the monitors of now,
-    /// and makes it the active one. Its name, its place in the list and
-    /// what this version does not know of it are kept.
+    /// Puts `world`, `windows` and `window` in the layout at `index` for
+    /// the parts it has (a part it does not have stays absent), with the
+    /// monitors of now, and makes it the active one. Its name, its place in
+    /// the list and what this version does not know of it are kept.
     pub fn update(
         &mut self,
         index: usize,
         world: ViewportSettings,
         windows: Option<Placements>,
+        window: Option<WindowFrame>,
         monitors: Vec<Monitor>,
     ) -> Result<(), StoreError> {
         let old = self.layout(index).ok_or(StoreError::Missing)?;
+        // a viewer window that cannot be read now keeps the saved one,
+        // with the monitors it counts in
+        let unread = old.window.is_some() && window.is_none();
         let new = Layout {
             schema: old.schema,
             name: old.name.clone(),
+            window: old.window.as_ref().map(|saved| window.unwrap_or_else(|| saved.clone())),
             world: old.world.as_ref().map(|_| world),
             // a windows part that cannot be read now keeps the saved one
             windows: old.windows.as_ref().map(|saved| windows.unwrap_or_else(|| saved.clone())),
-            monitors,
+            monitors: if unread { old.monitors.clone() } else { monitors },
             other: old.other.clone(),
         };
         new.check().map_err(|_| StoreError::Invalid)?;
         self.set_active(Some(new.name.clone()));
         self.layouts[index] = Record::Layout(new);
+        Ok(())
+    }
+
+    /// Puts another *Viewer window* in the layout at `index` (the tab's
+    /// editor). The layout in use is then modified: its window is not the
+    /// viewer's until it is applied.
+    pub fn set_window(&mut self, index: usize, window: WindowFrame) -> Result<(), StoreError> {
+        let active = self.is_active(index);
+        let Some(Record::Layout(layout)) = self.layouts.get_mut(index) else {
+            return Err(StoreError::Missing);
+        };
+        if !window.ok(layout.monitors.len()) {
+            return Err(StoreError::Invalid);
+        }
+        if layout.window.as_ref() != Some(&window) {
+            layout.window = Some(window);
+            self.modified |= active;
+        }
         Ok(())
     }
 
@@ -508,11 +669,13 @@ impl Store {
     }
 
     /// Marks `name` as the layout in use, as just applied: not modified,
-    /// no window waiting from the one before.
+    /// no window waiting from the one before, the viewer window not held
+    /// (the caller says when it is).
     pub fn set_active(&mut self, name: Option<String>) {
         self.active_layout = name;
         self.modified = false;
         self.pending.clear();
+        self.window_held = false;
     }
 }
 
@@ -668,11 +831,11 @@ mod tests {
     #[test]
     fn unknown_fields_of_a_layout_are_kept_and_unknown_windows_too() {
         let mut value = serde_json::to_value(wide()).expect("saved");
-        value["window"] = json!({ "mode": "borderless", "monitors": [0, 1] });
+        value["background"] = json!({ "image": "margins.png", "dim": 0.5 });
         value["windows"]["windows"]["a_window_of_later"] = json!({ "x": 1.0, "y": 2.0, "width": 300.0, "height": 200.0 });
         let store = read(json!({ "layouts": [value.clone()], "active_layout": "Wide" }));
         let layout = store.layout(0).expect("usable");
-        assert_eq!(layout.other["window"]["mode"], "borderless");
+        assert_eq!(layout.other["background"]["dim"], 0.5);
         assert!(layout.windows.as_ref().expect("windows").windows.contains_key("a_window_of_later"));
         // written back with them
         let mut expected = value;
@@ -865,7 +1028,9 @@ mod tests {
             windows: BTreeMap::from([("people".to_owned(), place(1.0, 2.0, 300.0, 400.0))]),
         };
         store.modified = true;
-        store.update(0, world.clone(), Some(windows.clone()), Vec::new()).expect("updated");
+        store
+            .update(0, world.clone(), Some(windows.clone()), None, Vec::new())
+            .expect("updated");
         let updated = store.layout(0).expect("still there");
         assert_eq!(updated.name, "Wide");
         assert_eq!(updated.world.as_ref(), Some(&world));
@@ -874,15 +1039,15 @@ mod tests {
         assert_eq!(updated.other["window"]["locked"], true);
         assert_eq!((store.active_layout.as_deref(), store.modified), (Some("Wide"), false));
         // a layout without a windows part does not gain one
-        store.update(1, world.clone(), Some(windows), Vec::new()).expect("updated");
+        store.update(1, world.clone(), Some(windows), None, Vec::new()).expect("updated");
         let viewport = store.layout(1).expect("still there");
         assert_eq!((viewport.world.as_ref(), viewport.windows.as_ref()), (Some(&world), None));
         // windows that cannot be read now leave the saved ones
         let saved = store.layout(0).and_then(|l| l.windows.clone());
-        store.update(0, world, None, Vec::new()).expect("updated");
+        store.update(0, world, None, None, Vec::new()).expect("updated");
         assert_eq!(store.layout(0).and_then(|l| l.windows.clone()), saved);
         assert_eq!(
-            store.update(7, ViewportSettings::default(), None, Vec::new()),
+            store.update(7, ViewportSettings::default(), None, None, Vec::new()),
             Err(StoreError::Missing)
         );
     }
@@ -928,10 +1093,214 @@ mod tests {
         assert_eq!(store.name_error("later", None), Some(NameError::Taken));
         assert_eq!(store.rename(0, "Other"), Err(StoreError::Missing));
         assert_eq!(
-            store.update(0, ViewportSettings::default(), None, Vec::new()),
+            store.update(0, ViewportSettings::default(), None, None, Vec::new()),
             Err(StoreError::Missing)
         );
         assert!(store.remove(0));
         assert_eq!(store.name_error("later", None), None);
+    }
+
+    fn locked_window() -> WindowFrame {
+        WindowFrame::Normal {
+            x: Some(-8),
+            y: Some(0),
+            width: 3840,
+            height: 1040,
+            maximized: false,
+            locked: true,
+        }
+    }
+
+    #[test]
+    fn the_viewer_window_is_saved_in_its_three_modes() {
+        let frames = [
+            (
+                locked_window(),
+                json!({ "mode": "normal", "x": -8, "y": 0, "width": 3840, "height": 1040, "maximized": false, "locked": true }),
+            ),
+            (
+                WindowFrame::Fullscreen { monitor: 1 },
+                json!({ "mode": "fullscreen", "monitor": 1 }),
+            ),
+            (
+                WindowFrame::Borderless {
+                    monitors: vec![0, 1],
+                    locked: true,
+                },
+                json!({ "mode": "borderless", "monitors": [0, 1], "locked": true }),
+            ),
+            // where the system does not tell the window's place
+            (
+                WindowFrame::Normal {
+                    x: None,
+                    y: None,
+                    width: 1600,
+                    height: 900,
+                    maximized: true,
+                    locked: false,
+                },
+                json!({ "mode": "normal", "width": 1600, "height": 900, "maximized": true, "locked": false }),
+            ),
+        ];
+        for (frame, expected) in frames {
+            let layout = wide().with_window(Some(frame.clone()));
+            assert_eq!(layout.check(), Ok(()), "{frame:?}");
+            let value = serde_json::to_value(&layout).expect("saved");
+            assert_eq!(value["window"], expected);
+            let back = read(json!({ "layouts": [value] }));
+            assert_eq!(back.layout(0).and_then(|layout| layout.window.clone()), Some(frame));
+        }
+    }
+
+    #[test]
+    fn a_layout_from_before_the_viewer_window_reads_and_writes_as_it_was() {
+        // what checkpoint 3 wrote: no `window`, no `window_held`, no policy
+        let value = serde_json::to_value(store_of(vec![wide()])).expect("saved");
+        let text = value.to_string();
+        assert!(!text.contains("window_held") && !text.contains("on_monitor_change") && !text.contains("\"window\""));
+        let store = read(value.clone());
+        assert_eq!(store.layout(0).and_then(|layout| layout.window.clone()), None);
+        assert!(!store.window_held);
+        assert_eq!(store.on_monitor_change, MonitorPolicy::Ask);
+        assert_eq!(serde_json::to_value(&store).expect("saved"), value);
+    }
+
+    #[test]
+    fn a_viewer_window_out_of_its_limits_makes_the_layout_unusable() {
+        let two = wide().monitors.len();
+        assert_eq!(two, 2);
+        let bad = [
+            WindowFrame::Normal {
+                x: Some(0),
+                y: Some(0),
+                width: 0,
+                height: 1040,
+                maximized: false,
+                locked: false,
+            },
+            WindowFrame::Normal {
+                x: Some(40_000),
+                y: Some(0),
+                width: 1280,
+                height: 720,
+                maximized: false,
+                locked: false,
+            },
+            WindowFrame::Normal {
+                x: Some(0),
+                y: Some(0),
+                width: 1280,
+                height: 40_000,
+                maximized: false,
+                locked: false,
+            },
+            WindowFrame::Fullscreen { monitor: 2 },
+            WindowFrame::Borderless {
+                monitors: Vec::new(),
+                locked: false,
+            },
+            WindowFrame::Borderless {
+                monitors: vec![0, 2],
+                locked: false,
+            },
+            WindowFrame::Borderless {
+                monitors: vec![1, 1],
+                locked: false,
+            },
+        ];
+        for frame in bad {
+            let layout = wide().with_window(Some(frame.clone()));
+            assert_eq!(layout.check(), Err(Unusable::Invalid), "{frame:?}");
+            // read from a file: kept as it is, never usable
+            let value = serde_json::to_value(&layout).expect("saved");
+            let store = read(json!({ "layouts": [value.clone()], "active_layout": "Wide", "window_held": true }));
+            assert_eq!(store.layout(0), None);
+            assert!(!store.window_held);
+            assert_eq!(serde_json::to_value(&store).expect("saved")["layouts"][0], value);
+        }
+        // a mode of a later version: the entry is kept, not guessed at
+        let mut value = serde_json::to_value(wide()).expect("saved");
+        value["window"] = json!({ "mode": "tiled", "column": 2 });
+        let store = read(json!({ "layouts": [value.clone()] }));
+        assert!(matches!(&store.layouts[0], Record::Kept(kept) if kept.why == Unusable::Invalid));
+        assert_eq!(serde_json::to_value(&store).expect("saved")["layouts"][0], value);
+        // full screen without a monitor list (Wayland) is the monitor the window is on
+        let nowhere = Layout::new("Full", None, None, Vec::new()).with_window(Some(WindowFrame::Fullscreen { monitor: 0 }));
+        assert_eq!(nowhere.check(), Ok(()));
+    }
+
+    #[test]
+    fn the_hold_and_the_monitors_choice_survive_a_restart() {
+        let mut store = store_of(vec![wide().with_window(Some(locked_window()))]);
+        store.window_held = true;
+        store.on_monitor_change = MonitorPolicy::Apply;
+        let value = serde_json::to_value(&store).expect("saved");
+        assert_eq!(value["window_held"], true);
+        assert_eq!(value["on_monitor_change"], "apply");
+        assert_eq!(read(value.clone()), store);
+        // nothing holds the window without a layout in use that asks for it
+        let mut loose = value.clone();
+        loose["active_layout"] = json!(null);
+        assert!(!read(loose).window_held);
+        let mut unlocked = value.clone();
+        unlocked["layouts"][0]["window"]["locked"] = json!(false);
+        assert!(!read(unlocked).window_held);
+        // a word of a later version reads as the default, and so does nonsense
+        for word in [json!("mirror"), json!(7), json!(null)] {
+            let mut later = value.clone();
+            later["on_monitor_change"] = word;
+            assert_eq!(read(later).on_monitor_change, MonitorPolicy::Ask);
+        }
+        let mut nothing = value;
+        nothing["on_monitor_change"] = json!("nothing");
+        assert_eq!(read(nothing).on_monitor_change, MonitorPolicy::Nothing);
+        // applying another layout lets the window go until it says otherwise
+        store.set_active(Some("Wide".into()));
+        assert!(!store.window_held);
+    }
+
+    #[test]
+    fn update_and_the_editor_keep_the_viewer_window_within_its_part() {
+        let mut store = store_of(vec![
+            wide().with_window(Some(locked_window())),
+            Layout::new("No window", Some(ViewportSettings::default()), None, Vec::new()),
+        ]);
+        let one = vec![wide().monitors[0]];
+        let moved = WindowFrame::Normal {
+            x: Some(100),
+            y: Some(50),
+            width: 1600,
+            height: 900,
+            maximized: false,
+            locked: true,
+        };
+        store
+            .update(0, ViewportSettings::default(), None, Some(moved.clone()), one.clone())
+            .expect("updated");
+        assert_eq!(store.layout(0).and_then(|l| l.window.clone()), Some(moved.clone()));
+        assert_eq!(store.layout(0).map(|l| l.monitors.len()), Some(1));
+        // a window that cannot be read now: the saved one stays, with its monitors
+        store
+            .update(0, ViewportSettings::default(), None, None, wide().monitors)
+            .expect("updated");
+        assert_eq!(store.layout(0).and_then(|l| l.window.clone()), Some(moved));
+        assert_eq!(store.layout(0).map(|l| l.monitors.len()), Some(1));
+        // a layout without the part does not gain it
+        store
+            .update(1, ViewportSettings::default(), None, Some(locked_window()), one)
+            .expect("updated");
+        assert_eq!(store.layout(1).and_then(|l| l.window.clone()), None);
+        // the editor: the layout in use is then modified
+        store.set_active(Some("Wide".into()));
+        assert_eq!(store.set_window(0, WindowFrame::Fullscreen { monitor: 0 }), Ok(()));
+        assert!(store.modified);
+        assert_eq!(
+            store.set_window(0, WindowFrame::Fullscreen { monitor: 1 }),
+            Err(StoreError::Invalid)
+        );
+        assert_eq!(store.set_window(9, locked_window()), Err(StoreError::Missing));
+        store.modified = false;
+        assert_eq!(store.set_window(0, WindowFrame::Fullscreen { monitor: 0 }), Ok(()));
+        assert!(!store.modified, "the same window is no change");
     }
 }
