@@ -221,10 +221,17 @@ plan left open:
   `notecard-save-unconfirmed`, "saved but could not read it back"…) answers
   `timeout` (receipt `unconfirmed`, `source_saved: null`); any other error
   answers `failed` (`source_saved: false`).
-- **The script's inventory item** gets its new asset from the app one frame
-  later (`mcp_bridge::content_updates`, then `FetchItems`), since the
-  viewer's `script_saved` only updates the items of its own editors. A
-  notecard's item goes through the viewer's own `inventory_content_saved`.
+- **The script's inventory item** gets its new asset from the upload's
+  `new_asset` (`Content::hold`, through `mcp_bridge::content_hold` once per
+  frame before the calls), since the viewer's `script_saved` only updates
+  the items of its own editors. No item read follows, as in the Legacy
+  Viewer (LLBufferedAssetUploadInfo::finishUpload): on the grid that read
+  could come back with the old asset, and a script's source is read by its
+  item's asset, so `inventory_content_get` gave the old text and the old
+  snapshot after each save. The new asset stays held while the item shows
+  an asset a save replaced (a stale record); it ends when the item goes or
+  is saved elsewhere. A notecard's item goes through the viewer's own
+  `inventory_content_saved` (a read back checked against `new_asset`).
 - **Reads in the demo**: the demo's `PreviewInventoryItem` answers the
   editors directly, so the app hands the demo notecard to the bridge itself
   (`mcp_bridge::content_demo_notecard`); scripts go through `LoadScript` and
