@@ -23,6 +23,10 @@
 //! `viewer_session` that the sidecar pins: a call pinned to another login is
 //! refused with `session_changed` (folderstorm/plans/mcp-receipts.md,
 //! section 2).
+//!
+//! Every change the desk takes gets a receipt (section 4): the desk keeps
+//! them for the login, Preferences shows them in Recent activity, and
+//! `assistant_operation_status` reads them back.
 
 pub mod ask;
 pub mod camera;
@@ -40,6 +44,7 @@ pub mod journal;
 pub mod landmark;
 pub mod login;
 pub mod picture;
+pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
 pub mod setup;
 pub mod studio;
 #[cfg(test)]
@@ -51,6 +56,8 @@ mod world_tests;
 
 use crate::world::World;
 pub use desk::Desk;
+use folderstorm_mcp_bridge::protocol::assistant as plans_tool;
+use folderstorm_mcp_bridge::receipts::Receipt;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
 use folderstorm_mcp_bridge::{Bridge, ErrorCode, LocalAssistant, Preset, ToolError};
 use std::collections::{HashMap, HashSet};
@@ -138,6 +145,20 @@ pub struct Status {
     pub port: Option<u16>,
     pub failure: Option<String>,
     pub activity: Vec<Activity>,
+    /// Folderstorm: this login's receipts, oldest first.
+    pub receipts: Vec<ReceiptLine>,
+}
+
+/// Folderstorm: a receipt as Recent activity shows it.
+#[derive(Debug, Clone)]
+pub struct ReceiptLine {
+    pub operation_id: String,
+    pub tool: String,
+    pub summary: String,
+    pub state: folderstorm_mcp_bridge::receipts::State,
+    pub client: Option<String>,
+    /// When the call arrived on the frame thread.
+    pub asked: std::time::SystemTime,
 }
 
 pub fn status() -> Status {
@@ -145,6 +166,19 @@ pub fn status() -> Status {
         port: rt.running.as_ref().map(|r| r.bridge.port()),
         failure: rt.failure.clone(),
         activity: rt.running.as_ref().map(|r| r.bridge.activity()).unwrap_or_default(),
+        receipts: rt.desk.ledger().with(|store| {
+            store
+                .all()
+                .map(|r| ReceiptLine {
+                    operation_id: r.operation_id.clone(),
+                    tool: r.tool.clone(),
+                    summary: r.summary.clone(),
+                    state: r.state,
+                    client: r.client.clone(),
+                    asked: r.asked,
+                })
+                .collect()
+        }),
     })
 }
 
@@ -178,10 +212,17 @@ fn identity(view: &View) -> folderstorm_mcp_bridge::server::Identity {
     }
 }
 
-/// `AURORA_DEMO_MCP=ask` (or `camera`): the session asks before every
-/// change, and the demo makes requests of its own so that the dialog shows.
+/// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`): the session asks before
+/// every change, and the demo makes requests of its own so that the dialog
+/// shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan")
+}
+
+/// `AURORA_DEMO_MCP=plan`: the demo previews a 3-entry move and executes
+/// it, so that the dialog lists a plan's rows.
+fn demo_plan() -> bool {
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "plan")
 }
 
 /// `AURORA_DEMO_MCP=camera`: the demo's requests frame the avatar and take
@@ -369,6 +410,20 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                         serde_json::json!({"source": "world", "width": 512, "height": 512, "save": true}),
                     ),
                 ]
+            } else if demo_plan() {
+                // Folderstorm: a plan, previewed now (a read answers at once)
+                let ids: Vec<String> = [8100u128, 8102, 8103].iter().map(|n| Uuid::from_u128(*n).to_string()).collect();
+                let (call, answer) = Pending::detached(
+                    plans_tool::PREVIEW_MOVE,
+                    serde_json::json!({"ids": ids, "folder_id": Uuid::from_u128(8001).to_string()}),
+                    false,
+                    Some("Demo assistant"),
+                );
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                let plan = answer.try_recv().ok().and_then(Result::ok);
+                log::info!("local assistant demo: plan previewed: {plan:?}");
+                let plan_id = plan.as_ref().and_then(|p| p["plan_id"].as_str()).unwrap_or_default().to_owned();
+                vec![(plans_tool::EXECUTE_PLAN, serde_json::json!({"plan_id": plan_id}))]
             } else {
                 vec![("inventory_create_folder", serde_json::json!({"name": "Sorted by the assistant"}))]
             };
@@ -398,6 +453,16 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
 /// what it asks. None when nothing is asked.
 pub fn open_question() -> Option<desk::Question> {
     with(|rt| rt.desk.question(Instant::now()))
+}
+
+/// Folderstorm: Preferences' Stop: the operation is cancelled if it was not
+/// sent yet (folderstorm/plans/mcp-receipts.md, section 5).
+pub fn cancel(operation_id: &str) {
+    with(|rt| {
+        if let Err(e) = rt.desk.cancel(operation_id, true) {
+            log::info!("local assistant: nothing to stop: {e}");
+        }
+    });
 }
 
 /// Folderstorm: whether `item` was just created by the local assistant
@@ -507,11 +572,13 @@ fn log_demo_answer(tool: &str, result: &Result<serde_json::Value, ToolError>) {
 /// A camera move was made: its call answers once the camera stops. Bound,
 /// as the calls below, to the login it was decided under (`replan`).
 pub fn wait_move(call: Pending, reply: serde_json::Value) {
+    call.receipt(Receipt::mark_sent); // Folderstorm: receipts
     with(|rt| rt.studio.wait_move(call, reply, rt.desk.login(), Instant::now()));
 }
 
 /// A picture to take once the camera stops.
 pub fn queue_photo(call: Pending, request: picture::Request) {
+    call.receipt(Receipt::mark_sent);
     with(|rt| rt.studio.queue_photo(call, request, rt.desk.login(), Instant::now()));
 }
 
@@ -539,6 +606,7 @@ pub fn photo_drawn(size: (u32, u32), pixels: Vec<u8>, folder: std::path::PathBuf
 
 /// A thumbnail of the assistant started through the gallery's snapshot.
 pub fn thumbnail_started(call: Pending, reply: serde_json::Value) {
+    call.receipt(Receipt::mark_sent);
     with(|rt| rt.studio.thumbnail_started(call, reply, rt.desk.login(), Instant::now()));
 }
 

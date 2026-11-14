@@ -19,24 +19,9 @@
 use super::*;
 use crate::ui::widgets::{Floater, flat_button, primary_button_sized, radio_value, search_field};
 
-/// The most objects one review takes (Folderstorm's limit).
-pub(super) const MAX: usize = 50;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) enum Kind {
-    Rename,
-    Move,
-}
-
-/// One object of a plan: its name before, and after (the new name, or the
-/// destination's path), or why it is left out.
-#[derive(Clone, Debug, PartialEq)]
-pub(super) struct Row {
-    pub(super) id: Uuid,
-    pub(super) before: String,
-    pub(super) after: String,
-    pub(super) skip: Option<String>,
-}
+// Folderstorm: the planner lives in `folderstorm/bulk_plan.rs`, shared
+// with the local assistant's batch plans (mcp-receipts.md, section 6)
+pub(super) use crate::folderstorm::bulk_plan::{Kind, MAX, Row, mutation, plan_move, plan_rename};
 
 /// The request a preview was made for: Execute needs the same.
 #[derive(Clone, Debug, PartialEq)]
@@ -82,97 +67,6 @@ impl BulkReview {
     /// The preview still matches what the window asks for.
     fn current(&self) -> Option<&Vec<Row>> {
         self.preview.as_ref().filter(|(r, _)| *r == self.request()).map(|(_, rows)| rows)
-    }
-}
-
-/// A rename pattern applied to one object: `{n}` first (so a name holding
-/// "{n}" stays as it is), then `{name}`.
-pub(super) fn apply_pattern(pattern: &str, number: usize, name: &str) -> String {
-    pattern.replace("{n}", &number.to_string()).replace("{name}", name)
-}
-
-pub(super) fn plan_rename(inv: &Inventory, ids: &[Uuid], pattern: &str) -> Vec<Row> {
-    ids.iter()
-        .enumerate()
-        .map(|(i, &id)| {
-            let before = rules::name(inv, id);
-            let mut row = Row {
-                id,
-                before: before.clone(),
-                after: String::new(),
-                skip: None,
-            };
-            let exists = inv.items.contains_key(&id) || inv.folders.contains_key(&id);
-            row.skip = if !exists {
-                Some(aurora_i18n::tr!("common-item-not-found").into())
-            } else if !rules::renameable(inv, id) {
-                Some(aurora_i18n::tr!("inventory-bulk-review-skip-rename").into())
-            } else {
-                match rules::clean_name(&apply_pattern(pattern, i + 1, &before)) {
-                    Err(reason) => Some(reason),
-                    Ok(name) if name == before => Some(aurora_i18n::tr!("inventory-bulk-review-skip-unchanged").into()),
-                    Ok(name) => match rules::patch(inv, id, aurora_llsd::llsd_map! { "name" => name.clone() }) {
-                        Ok(_) => {
-                            row.after = name;
-                            None
-                        }
-                        Err(reason) => Some(reason),
-                    },
-                }
-            };
-            row
-        })
-        .collect()
-}
-
-pub(super) fn plan_move(inv: &Inventory, ids: &[Uuid], to: Uuid, protected: &HashSet<Uuid>, worn: &HashSet<Uuid>) -> Vec<Row> {
-    let path = inventory_path(inv, to);
-    ids.iter()
-        .map(|&id| {
-            let skip = match rules::move_selection(inv, &[id], to, protected, worn) {
-                Err(reason) => Some(reason),
-                Ok(change) if change.operations.is_empty() => Some(aurora_i18n::tr!("inventory-bulk-review-skip-there").into()),
-                Ok(_) => None,
-            };
-            Row {
-                id,
-                before: rules::name(inv, id),
-                after: if skip.is_none() { path.clone() } else { String::new() },
-                skip,
-            }
-        })
-        .collect()
-}
-
-/// The change for the eligible rows of a plan: one mutation.
-pub(super) fn mutation(
-    inv: &Inventory,
-    kind: Kind,
-    rows: &[Row],
-    to: Option<Uuid>,
-    protected: &HashSet<Uuid>,
-    worn: &HashSet<Uuid>,
-) -> Result<Mutation, String> {
-    let eligible: Vec<&Row> = rows.iter().filter(|r| r.skip.is_none()).collect();
-    match kind {
-        Kind::Rename => {
-            let mut all = Mutation::default();
-            for row in eligible {
-                let change = rules::patch(inv, row.id, aurora_llsd::llsd_map! { "name" => row.after.clone() })?;
-                all.operations.extend(change.operations);
-                for folder in change.refresh {
-                    if !all.refresh.contains(&folder) {
-                        all.refresh.push(folder);
-                    }
-                }
-            }
-            Ok(all)
-        }
-        Kind::Move => {
-            let to = to.ok_or_else(|| aurora_i18n::tr!("inventory-bulk-review-choose").to_owned())?;
-            let ids: Vec<Uuid> = eligible.iter().map(|r| r.id).collect();
-            rules::move_selection(inv, &ids, to, protected, worn)
-        }
     }
 }
 
@@ -391,6 +285,7 @@ pub fn demo(st: &mut InventoryUi, inv: &Inventory) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::folderstorm::bulk_plan::apply_pattern;
     use crate::world::inventory::Folder;
     use aurora_net::inventory::{InvFolder, operations::Operation};
 

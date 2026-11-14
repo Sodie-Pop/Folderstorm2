@@ -24,6 +24,9 @@ pub mod inventory;
 // Folderstorm: phase 3, part 3 (world observation), its own catalogue
 pub mod world;
 
+// Folderstorm: receipts, plans and operations (mcp-receipts.md)
+pub mod assistant;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -123,6 +126,16 @@ pub enum ErrorCode {
     /// which one to use (`viewer_select`, `--profile`): nothing was sent.
     /// Made by the sidecar only; no viewer sends it.
     TargetRequired,
+    /// Folderstorm: a `client_request_id` already used with other
+    /// arguments, or retired: nothing was run (receipts).
+    Conflict,
+    /// Folderstorm: the world changed since the plan or the dialog (a
+    /// plan's rows no longer match): nothing was sent (plans).
+    Stale,
+    /// Folderstorm: stopped by the assistant (`assistant_operation_cancel`)
+    /// or the user (Stop in Preferences), or its time ran out, before it
+    /// was sent (operations).
+    Cancelled,
 }
 
 impl ErrorCode {
@@ -134,7 +147,12 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::TargetRequired => 409,
+            ErrorCode::NotReady
+            | ErrorCode::SessionChanged
+            | ErrorCode::TargetRequired
+            | ErrorCode::Conflict
+            | ErrorCode::Stale
+            | ErrorCode::Cancelled => 409,
             ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
@@ -154,6 +172,10 @@ impl ErrorCode {
             ErrorCode::Unsupported => Some((binding::LOGIN_BINDING, ErrorCode::UnknownTool)),
             // (the sidecar's own: never on the wire from a viewer)
             ErrorCode::TargetRequired => Some((binding::SESSIONS, ErrorCode::NotReady)),
+            // Folderstorm: receipts (mcp-receipts.md, section 3)
+            ErrorCode::Conflict => Some((binding::RECEIPTS, ErrorCode::InvalidArguments)),
+            ErrorCode::Stale => Some((binding::PLANS, ErrorCode::NotAllowed)),
+            ErrorCode::Cancelled => Some((binding::OPERATIONS, ErrorCode::PermissionDenied)),
             _ => None,
         }
     }
@@ -177,6 +199,11 @@ pub struct ToolError {
     /// logged out), which the sidecar pins next.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_session: Option<String>,
+    /// Folderstorm: the operation of a change the viewer took (its
+    /// receipt, `assistant_operation_status`), also in the listener's own
+    /// timeout. Kept for every sidecar: an older one ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
 }
 
 impl ToolError {
@@ -185,6 +212,7 @@ impl ToolError {
             code,
             message: message.into(),
             viewer_session: None,
+            operation_id: None,
         }
     }
 
@@ -204,7 +232,11 @@ impl std::fmt::Display for ToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = serde_json::to_value(self.code).ok();
         let code = code.as_ref().and_then(Value::as_str).unwrap_or("error");
-        write!(f, "{code}: {}", self.message)
+        write!(f, "{code}: {}", self.message)?;
+        match &self.operation_id {
+            Some(operation) => write!(f, " (operation_id {operation})"),
+            None => Ok(()),
+        }
     }
 }
 
@@ -245,7 +277,22 @@ impl ToolSpec {
     /// whatever login is current: it is how the assistant looks again after
     /// `session_changed`.
     pub fn bound(&self) -> bool {
-        self.class.is_some()
+        // Folderstorm: the receipts' and operations' tools need no class
+        // but belong to one login (mcp-receipts.md, section 2)
+        self.class.is_some() || assistant::bound_group(self.group)
+    }
+
+    /// Folderstorm: its JSON Schema as the sidecar lists it: a change also
+    /// takes an optional `client_request_id` (receipts), which the viewer
+    /// takes out before the tool reads its arguments.
+    pub fn input_schema(&self) -> Value {
+        let mut schema = (self.schema)();
+        if self.changes()
+            && let Some(properties) = schema["properties"].as_object_mut()
+        {
+            properties.insert(crate::receipts::CLIENT_REQUEST_ID.to_owned(), assistant::client_request_id_schema());
+        }
+        schema
     }
 }
 
@@ -764,7 +811,11 @@ pub fn tool(name: &str) -> Option<&'static ToolSpec> {
 
 /// Every tool: [`TOOLS`], then the groups phase 3 adds.
 pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
-    TOOLS.iter().chain(inventory::INVENTORY_TOOLS).chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
+    TOOLS
+        .iter()
+        .chain(inventory::INVENTORY_TOOLS)
+        .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
+        .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
 }
 
 #[cfg(test)]

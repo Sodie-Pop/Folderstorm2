@@ -10,6 +10,7 @@
 //! - [`protocol`]: the tool catalogue and the wire types;
 //! - [`binding`]: the login binding (`viewer_session`) and the capability
 //!   versions both sides advertise;
+//! - [`receipts`]: the record of each change an assistant asked for;
 //! - [`server`]: the 127.0.0.1 listener;
 //! - [`controller`]: the session host's MCP controller, a separate
 //!   authority with its own listener, token and classes;
@@ -22,6 +23,7 @@ pub mod discovery;
 mod http;
 pub mod policy;
 pub mod protocol;
+pub mod receipts;
 pub mod server;
 pub mod token;
 

@@ -38,8 +38,17 @@ pub const WORLD: &str = "world";
 /// `viewer_status`.
 pub const SESSIONS: &str = "sessions";
 
-/// What this build implements. Later groups add theirs: `receipts`,
-/// `plans`, `operations`…
+/// Receipts (mcp-receipts.md, section 4): `operation_id`,
+/// `client_request_id`, `assistant_operation_status`, the `conflict` code.
+pub const RECEIPTS: &str = "receipts";
+/// Batch plans (mcp-receipts.md, section 6): the previews,
+/// `inventory_execute_plan`, the `stale` code.
+pub const PLANS: &str = "plans";
+/// Guarded operations (mcp-receipts.md, section 5): early answers,
+/// `assistant_operation_cancel`, the `cancelled` code.
+pub const OPERATIONS: &str = "operations";
+
+/// What this build implements. Later groups add theirs.
 pub const CAPABILITIES: &[(&str, u32)] = &[
     (INVENTORY, 1),
     (CAMERA, 1),
@@ -47,6 +56,9 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (WORLD, 1),
     (LOGIN_BINDING, 1),
     (SESSIONS, 1),
+    (RECEIPTS, 1),   // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
+    (PLANS, 1),      // Folderstorm: batch plans (checkpoint 4)
+    (OPERATIONS, 1), // Folderstorm: guarded operations (checkpoint 5)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -132,6 +144,24 @@ pub fn unsupported(spec: &ToolSpec) -> ToolError {
     )
 }
 
+/// Folderstorm: whether a viewer implementing `viewer` can take these
+/// arguments of a tool it has: a `client_request_id` needs `receipts` (an
+/// older viewer would refuse it as an unknown argument, and dropping it
+/// would make a retry unsafe without a word).
+pub fn check_arguments(viewer: &Capabilities, spec: &ToolSpec, arguments: &serde_json::Value) -> Result<(), ToolError> {
+    if arguments.get(crate::receipts::CLIENT_REQUEST_ID).is_some() && !viewer.contains_key(RECEIPTS) {
+        let product = folderstorm_brand::PRODUCT;
+        return Err(ToolError::new(
+            ErrorCode::Unsupported,
+            format!(
+                "the running {product} is older than this assistant connector: `{}` cannot take a `client_request_id` (tool group `{RECEIPTS}`). Update {product}, or call it without one; nothing was sent",
+                spec.name
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// The `viewer_session` of each login generation, for one bridge.
 #[derive(Debug, Default)]
 pub(crate) struct Binding {
@@ -208,7 +238,10 @@ mod tests {
         );
         assert!(!protocol::all().all(|t| supports(&assumed(), t)), "not the later groups");
         assert!(missing(&mine).is_empty());
-        assert_eq!(missing(&assumed()), vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, SESSIONS]);
+        assert_eq!(
+            missing(&assumed()),
+            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, SESSIONS, RECEIPTS, PLANS, OPERATIONS]
+        );
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();
         newer.insert("inventory".to_owned(), 2);
@@ -304,6 +337,6 @@ mod tests {
         assert_eq!(wire, json!({"tool": "worn_items", "arguments": {}}));
         // a newer viewer's error with a code this build does not know
         // fails to parse: the client keeps its message (client.rs)
-        assert!(serde_json::from_value::<ToolError>(json!({"code": "stale", "message": "m"})).is_err());
+        assert!(serde_json::from_value::<ToolError>(json!({"code": "some_later_code", "message": "m"})).is_err());
     }
 }

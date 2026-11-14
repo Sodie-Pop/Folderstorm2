@@ -818,3 +818,12 @@ mod recheck;
 
 /// Calls bound to one login (`viewer_session`) and capability versions.
 mod binding;
+
+/// Receipts and client request ids.
+mod receipts;
+
+/// Batch plans: preview, then execute.
+mod plans;
+
+/// Guarded operations: early answers, cancel, bounds.
+mod operations;
