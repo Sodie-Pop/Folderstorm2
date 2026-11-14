@@ -324,6 +324,7 @@ mod tests {
                         width: 900.0,
                         height: 700.0,
                         minimized: false,
+                        open: false,
                     },
                 ),
                 (
@@ -334,6 +335,7 @@ mod tests {
                         width: 10.0,
                         height: 10.0,
                         minimized: false,
+                        open: false,
                     },
                 ),
             ]),

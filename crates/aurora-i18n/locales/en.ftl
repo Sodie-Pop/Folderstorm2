@@ -1540,6 +1540,14 @@ fs-layouts-applied-unknown = { $count ->
     [one] { $count } window of this layout is not known to this version and was left alone.
    *[other] { $count } windows of this layout are not known to this version and were left alone.
     }
+fs-layouts-applied-opened = { $count ->
+    [one] { $count } window that was open in this layout was opened.
+   *[other] { $count } windows that were open in this layout were opened.
+    }
+fs-layouts-applied-blocked = { $count ->
+    [one] { $count } window of this layout cannot be opened right now and was left closed.
+   *[other] { $count } windows of this layout cannot be opened right now and were left closed.
+    }
 fs-layouts-waiting = { $count ->
     [one] { $count } closed window will take its place when you open it.
    *[other] { $count } closed windows will take their places when you open them.

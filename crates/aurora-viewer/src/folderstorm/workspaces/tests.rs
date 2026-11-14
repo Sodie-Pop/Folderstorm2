@@ -28,6 +28,8 @@ struct Viewer {
     world: ViewportSettings,
     size: Vec2,
     open: BTreeSet<&'static str>,
+    /// Windows the viewer cannot open now (as RLVa's @showinv has it).
+    blocked: BTreeSet<&'static str>,
     time: f64,
     /// Whether `apply::frame` asked for the settings to be saved.
     saved: bool,
@@ -48,6 +50,23 @@ struct Viewer {
     texts: Vec<(String, Rect)>,
 }
 
+/// The viewer's windows as the app has them: open or not, opened by a
+/// flag.
+struct Windows<'a> {
+    open: &'a mut BTreeSet<&'static str>,
+    blocked: &'a BTreeSet<&'static str>,
+}
+
+impl apply::Shell for Windows<'_> {
+    fn is_open(&self, window: &windows::Window) -> bool {
+        self.open.contains(window.id)
+    }
+
+    fn open(&mut self, _: &egui::Context, window: &windows::Window) -> bool {
+        !self.blocked.contains(window.id) && self.open.insert(window.id)
+    }
+}
+
 impl Viewer {
     fn new(width: f32, height: f32) -> Self {
         let ctx = egui::Context::default();
@@ -58,6 +77,7 @@ impl Viewer {
             world: ViewportSettings::default(),
             size: vec2(width, height),
             open: BTreeSet::from([INVENTORY, PEOPLE, MAP, MINIMAP, PREFERENCES]),
+            blocked: BTreeSet::new(),
             time: 0.0,
             saved: false,
             window: None,
@@ -118,7 +138,15 @@ impl Viewer {
             );
         }
         let seen = self.window.as_ref().map(|window| window.seen);
-        let outcome = apply::frame(&ctx, &mut self.live(), seen);
+        let mut shell = Windows {
+            open: &mut self.open,
+            blocked: &self.blocked,
+        };
+        let mut live = Live {
+            store: &mut self.store,
+            world: &mut self.world,
+        };
+        let outcome = apply::frame(&ctx, &mut live, seen, &mut shell);
         self.saved |= outcome.save;
         self.preferences |= outcome.preferences;
         if let Some(window) = &mut self.window {
@@ -389,6 +417,7 @@ fn the_mini_map_takes_the_place_a_layout_gives_it() {
             width: 260.0,
             height: 240.0,
             minimized: false,
+            open: false,
         },
     );
     v.store

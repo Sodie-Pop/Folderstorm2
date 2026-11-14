@@ -918,7 +918,12 @@ mod tests {
                     },
                 );
             }
-            let outcome = apply::frame(&ctx, &mut Live::of(&mut self.s), self.viewer.as_ref().map(|viewer| viewer.seen));
+            let outcome = apply::frame(
+                &ctx,
+                &mut Live::of(&mut self.s),
+                self.viewer.as_ref().map(|viewer| viewer.seen),
+                &mut apply::NoShell,
+            );
             self.changed |= outcome.save;
             if let Some(viewer) = &mut self.viewer {
                 viewer.send(&outcome.commands);

@@ -4,7 +4,8 @@
 //! A window's place comes from egui's state for its id (position, and size
 //! once shown in this session) and from Aurora's two entries for a floater
 //! (`ui/widgets.rs`): whether it is minimized, and the size it has when
-//! expanded. Nothing is read from the windows' contents or from the world.
+//! expanded. Whether it is open is the app's word (`apply::Shell`). Nothing
+//! is read from the windows' contents or from the world.
 
 use super::monitors;
 use super::store::{Frame, MAX_MARGIN, Monitor, Placement, Placements, WindowFrame};
@@ -12,6 +13,7 @@ use super::window::Seen;
 use super::windows::{self, Kind, Window};
 use crate::folderstorm::viewport::ViewportSettings;
 use egui::{Pos2, Vec2};
+use std::collections::BTreeSet;
 
 /// An interface smaller than this is not one to place windows in: a
 /// minimized viewer window, the first frames before the surface has its
@@ -51,6 +53,27 @@ pub fn room(ctx: &egui::Context) -> Option<Room> {
     })
 }
 
+fn open_id() -> egui::Id {
+    egui::Id::unique("folderstorm_workspaces_open")
+}
+
+/// The allowlisted windows that are open, as the app has them
+/// (`apply::Shell::is_open`): said each frame by `apply::frame`.
+pub(super) fn set_open(ctx: &egui::Context, open: BTreeSet<&'static str>) {
+    let same = ctx.data(|d| d.get_temp::<Open>(open_id())).is_some_and(|said| *said == open);
+    if !same {
+        ctx.data_mut(|d| d.insert_temp::<Open>(open_id(), std::sync::Arc::new(open)));
+    }
+}
+
+type Open = std::sync::Arc<BTreeSet<&'static str>>;
+
+/// Whether the window `id` is open; closed where nothing was said (no
+/// app: a test of the places alone).
+fn is_open(ctx: &egui::Context, id: &str) -> bool {
+    ctx.data(|d| d.get_temp::<Open>(open_id())).is_some_and(|open| open.contains(id))
+}
+
 fn expanded_size(ctx: &egui::Context, id: egui::Id) -> Option<Vec2> {
     ctx.data_mut(|d| d.get_persisted::<Vec2>(id.with(EXPANDED_SIZE)))
 }
@@ -78,6 +101,7 @@ pub fn window(ctx: &egui::Context, window: &Window, origin: Pos2) -> Option<Plac
         width: size.x,
         height: size.y,
         minimized,
+        open: is_open(ctx, window.id),
     };
     place.ok().then_some(place)
 }

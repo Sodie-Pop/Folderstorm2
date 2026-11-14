@@ -533,6 +533,7 @@ fn the_switcher_is_drawn() {
         width,
         height,
         minimized: false,
+        open: false,
     };
     let wide_world = ViewportSettings {
         enabled: true,
@@ -613,7 +614,7 @@ fn the_switcher_is_drawn() {
                         .collect(),
                 },
             );
-            let outcome = apply::frame(&ctx, &mut Live { store, world: &mut world }, Some(window.seen));
+            let outcome = apply::frame(&ctx, &mut Live { store, world: &mut world }, Some(window.seen), &mut apply::NoShell);
             window.send(&outcome.commands);
             window.frame();
             time += 1.0 / 60.0;
