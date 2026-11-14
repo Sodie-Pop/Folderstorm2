@@ -4421,6 +4421,8 @@ impl World {
         if self.receive_hand_contacts(&c, Instant::now()) {
             return;
         }
+        // Folderstorm: the local assistant's script output feed (mcp-task-scripts.md)
+        crate::mcp_bridge::script_feed::capture(&c, self.agent_id);
         if self.script_debug.route(&c, self.agent_id, Instant::now()) || self.anti_spam_chat(&c) {
             return;
         }

@@ -54,7 +54,9 @@ impl App {
 
     /// Folderstorm: the items open in the notecard window (the inventory's
     /// own preview or a document window) or in the script editor: content
-    /// saves leave them to the user (mcp-content.md).
+    /// saves leave them to the user (mcp-content.md). A script editor on a
+    /// script inside an object counts too (its task item id): task script
+    /// saves leave it to the user (mcp-task-scripts.md).
     fn local_assistant_open_documents(&self) -> std::collections::HashSet<Uuid> {
         let inventory = &self.inventory_ui;
         inventory
@@ -62,11 +64,7 @@ impl App {
             .into_iter()
             .chain(inventory.windows.iter().filter_map(|w| w.state.preview))
             .chain(
-                self.script_editors
-                    .documents
-                    .iter()
-                    .filter(|e| e.target.object.is_nil())
-                    .map(|e| e.target.item),
+                self.script_editors.documents.iter().map(|e| e.target.item),
             )
             .collect()
     }
@@ -114,6 +112,138 @@ impl App {
         // Folderstorm: an object's properties and contents (mcp-objects.md)
         for want in mcp_bridge::object_wants() {
             self.local_assistant_object_want(want);
+        }
+        // Folderstorm: scripts inside objects (mcp-task-scripts.md)
+        self.local_assistant_task_script_frame();
+    }
+
+    /// Folderstorm: what the task script tools wait for, asked the way the
+    /// object's script editor asks (`LoadScript`, `LoadScriptExperiences`,
+    /// `GetScriptRunning`), and the scripts they saved put in the Contents
+    /// tab with the upload's asset, the prim listed again.
+    fn local_assistant_task_script_frame(&mut self) {
+        use aurora_net::build::BuildCmd;
+        use aurora_net::scripts::ScriptTarget;
+        for (object, item, asset) in mcp_bridge::task_script_updates() {
+            if let Some(inv) = self.build.contents.objects.get_mut(&object)
+                && let Some(it) = inv.items.iter_mut().find(|it| it.item_id == item)
+            {
+                it.asset_id = asset;
+            }
+            self.build.contents_changed(object);
+        }
+        let (fetches, queries) = mcp_bridge::task_script_wants();
+        for fetch in fetches {
+            let target = ScriptTarget {
+                object: fetch.object,
+                item: fetch.item,
+            };
+            let load = NetCommand::LoadScript {
+                request: fetch.source_request,
+                target,
+                handle: fetch.handle,
+                owner: fetch.owner,
+                asset: fetch.asset,
+            };
+            // the send would drop it with a notice of its own
+            if !self.world.rlva_allows_command(&load, Uuid::nil()) {
+                mcp_bridge::task_script_fetch_failed(fetch.source_request, "an RLV restriction hides it");
+                continue;
+            }
+            self.send(NetCommand::LoadScriptExperiences {
+                request: fetch.experience_request,
+                target,
+                handle: fetch.handle,
+            });
+            self.send(load);
+        }
+        for query in queries {
+            self.send(NetCommand::Build(BuildCmd::GetScriptRunning {
+                handle: query.handle,
+                object_id: query.object,
+                item_id: query.item,
+            }));
+        }
+    }
+
+    /// Folderstorm: a task script change, sent as the object's script
+    /// editor sends it (`SaveScript` to UpdateScriptTask, Mono, the running
+    /// flag asked, the association read with the source; `SetScriptRunning`;
+    /// `ScriptReset`), checked for RLVa just before, then the running state
+    /// asked (mcp-task-scripts.md). Sent once: never again automatically.
+    fn local_assistant_task_script(&mut self, call: Pending, reply: serde_json::Value, send: mcp_bridge::task_scripts::Send) {
+        use aurora_net::build::BuildCmd;
+        use mcp_bridge::task_scripts::Action;
+        let target = aurora_net::scripts::ScriptTarget {
+            object: send.object,
+            item: send.item,
+        };
+        if matches!(send.action, Action::Save { .. }) && mcp_bridge::task_script_saving(send.object, send.item) {
+            return call.answer(Err(ToolError::new(
+                ErrorCode::Busy,
+                "another save of this script is still waiting for the server: try again in a moment",
+            )));
+        }
+        let check = match &send.action {
+            Action::Save { .. } => NetCommand::SaveScript {
+                request: Uuid::nil(),
+                target,
+                handle: send.handle,
+                options: aurora_net::scripts::ScriptOptions {
+                    mono: true,
+                    luau: aurora_net::scripts::Luau::Off,
+                    running: false,
+                    experience: Uuid::nil(),
+                },
+                source: String::new(),
+            },
+            Action::Running(running) => NetCommand::Build(BuildCmd::SetScriptRunning {
+                handle: send.handle,
+                object_id: send.object,
+                item_id: send.item,
+                running: *running,
+            }),
+            Action::Reset => NetCommand::Build(BuildCmd::ScriptReset {
+                handle: send.handle,
+                object_id: send.object,
+                item_id: send.item,
+            }),
+        };
+        if !self.world.rlva_allows_command(&check, Uuid::nil()) {
+            return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this change")));
+        }
+        // watched from before the send: the demo answers inside it
+        let request = mcp_bridge::task_script_sending(call, &send, reply);
+        log::info!("local assistant task script change: {}", send.tool);
+        match send.action {
+            Action::Save {
+                source,
+                running,
+                experience,
+                ..
+            } => {
+                let Some(request) = request else { return };
+                self.send(NetCommand::SaveScript {
+                    request,
+                    target,
+                    handle: send.handle,
+                    options: aurora_net::scripts::ScriptOptions {
+                        mono: true,
+                        luau: aurora_net::scripts::Luau::Off,
+                        running,
+                        experience,
+                    },
+                    source,
+                });
+            }
+            Action::Running(_) | Action::Reset => {
+                self.send(check);
+                self.send(NetCommand::Build(BuildCmd::GetScriptRunning {
+                    handle: send.handle,
+                    object_id: send.object,
+                    item_id: send.item,
+                }));
+            }
         }
     }
 
@@ -256,6 +386,7 @@ impl App {
             Work::Navigate(work) => self.local_assistant_navigate(call, work),
             Work::Content(save) => self.local_assistant_content(call, &planned, save),
             Work::Object(send) => self.local_assistant_object(call, planned.reply, *send), // Folderstorm: mcp-objects.md
+            Work::TaskScript(send) => self.local_assistant_task_script(call, planned.reply, *send), // Folderstorm: mcp-task-scripts.md
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));

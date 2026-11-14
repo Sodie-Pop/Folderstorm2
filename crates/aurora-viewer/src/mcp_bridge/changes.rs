@@ -58,6 +58,9 @@ pub enum Work {
     /// Folderstorm: an object's contents changed or the object taken, as
     /// the Contents tab and Take send it (mcp-objects.md).
     Object(Box<super::objects::Send>),
+    /// Folderstorm: a script inside an object saved, started, stopped or
+    /// reset, as its script editor sends it (mcp-task-scripts.md).
+    TaskScript(Box<super::task_scripts::Send>),
 }
 
 #[derive(Debug, Clone)]
