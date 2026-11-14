@@ -1069,10 +1069,11 @@ pub fn show(
         }
     } else if !nui.toasts.is_empty() && !env.hidden {
         let screen = ctx.content_rect();
+        let bars = crate::folderstorm::viewport::bars_offset(ctx, egui::Align2::RIGHT_TOP).x; // Folderstorm: world viewport
         egui::Area::new(egui::Id::unique("notification_toasts"))
             .fade_in(false)
             .order(egui::Order::Foreground)
-            .anchor(egui::Align2::RIGHT_TOP, Vec2::new(-10.0, anchor.y.min(screen.height()) + 6.0))
+            .anchor(egui::Align2::RIGHT_TOP, Vec2::new(bars - 10.0, anchor.y.min(screen.height()) + 6.0))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 let (ids, behind) = shown_toasts(list, nui, dnd);
