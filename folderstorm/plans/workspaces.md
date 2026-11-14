@@ -1348,7 +1348,7 @@ When upstream adds a toolbar command, the three counts of
 viewer's default bindings unchanged with our actions in the table, older
 settings, a chosen key saved and read, a build without our actions, the
 labels). Frame tests with the pretend viewer,
-`workspaces::tests::switcher` (19): the field's keyboard, Enter, the
+`workspaces::tests::switcher` (18): the field's keyboard, Enter, the
 filter, the arrows, Esc, a click and a double click, the star, *Save new*
 and its refusal, *Update* and its question, *Previous* and *Preferences*,
 the two toolbar commands through `bars::run_command` and their look, each

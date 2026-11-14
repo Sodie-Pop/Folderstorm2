@@ -1533,21 +1533,9 @@ mod tests {
         let mut w = Window::new();
         w.save_as("Wide");
         w.save_as("Single");
-        // the group is the last of the page: scrolled to
-        let over = w.rect_of(tr!("fs-layouts-list")).expect("the page").center();
-        for _ in 0..8 {
-            w.run(vec![
-                egui::Event::PointerMoved(over),
-                egui::Event::MouseWheel {
-                    unit: egui::MouseWheelUnit::Point,
-                    delta: vec2(0.0, -300.0),
-                    phase: egui::TouchPhase::Move,
-                    source: egui::MouseWheelSource::Unknown,
-                    modifiers: egui::Modifiers::NONE,
-                },
-            ]);
-        }
-        // (the wheel's scroll is smoothed over the frames that follow)
+        // the group is the last of the page, under the fold: found by the
+        // window's search, which then shows its two rows alone
+        w.st.query = "switcher".into();
         w.settle();
         assert!(w.shows(tr!("fs-layouts-toggle-first")) && w.shows(tr!("fs-layouts-toggle-second")));
         let all =
