@@ -589,6 +589,13 @@ fn end(r: &mut Receipt, result: &Result<Value, ToolError>) {
                 r.state = State::Unconfirmed;
                 r.server = Some(Server::Queued);
                 set_row_outcomes(r, RowOutcome::Queued);
+            } else if sent && value.get("unconfirmed").and_then(Value::as_bool) == Some(true) {
+                // Folderstorm: sent, and what the server shows cannot confirm
+                // it (an object's contents, mcp-objects.md): a later answer
+                // may still settle it
+                r.state = State::Unconfirmed;
+                r.server = Some(Server::NoAnswer);
+                set_row_outcomes(r, RowOutcome::Unknown);
             } else {
                 r.state = State::Done;
                 if sent {

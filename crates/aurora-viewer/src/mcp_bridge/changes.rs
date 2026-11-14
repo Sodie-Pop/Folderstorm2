@@ -55,6 +55,9 @@ pub enum Work {
     /// Folderstorm: a notecard's text or a script's source saved, through
     /// the editors' uploads (content editing).
     Content(super::content::Save),
+    /// Folderstorm: an object's contents changed or the object taken, as
+    /// the Contents tab and Take send it (mcp-objects.md).
+    Object(Box<super::objects::Send>),
 }
 
 #[derive(Debug, Clone)]

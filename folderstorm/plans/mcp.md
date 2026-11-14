@@ -766,3 +766,13 @@ parity order) are planned and built in [mcp-content.md](mcp-content.md), on
 `claude/mcp-content` (stacked on `claude/mcp-receipts`): a new **Content**
 class (Never in "Read only", Ask in "Ask before changes"), capability
 `content: 1`, and a bridge request body raised to 512 KiB.
+
+## Phase 3, part 5: object inspection and lifecycle
+
+Planned and built in [mcp-objects.md](mcp-objects.md), on
+`claude/mcp-objects` (stacked on the receipts branch): `object_contents_list`,
+`object_contents_put`, `object_contents_reconcile`, `object_contents_rename`,
+`object_contents_remove`, `object_operation_status`, `object_take_copy`,
+`object_take`, `object_rez_identify`; capability `objects: 1`; classes
+`objects` ("My objects' contents") and `take` ("Take my objects"); remove
+and take always ask; every change needs a `client_request_id`.

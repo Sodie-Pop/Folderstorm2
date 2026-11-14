@@ -111,6 +111,10 @@ impl App {
         for fetch in mcp_bridge::wanted_content() {
             self.local_assistant_fetch(fetch);
         }
+        // Folderstorm: an object's properties and contents (mcp-objects.md)
+        for want in mcp_bridge::object_wants() {
+            self.local_assistant_object_want(want);
+        }
     }
 
     /// Folderstorm: fetch a content read's text the way the viewer's editors
@@ -147,6 +151,54 @@ impl App {
                 .unwrap_or_else(|| crate::world::inventory::demo::note_asset(false));
             return mcp_bridge::content_demo_notecard(item.id, item.asset_id, bytes);
         }
+        self.send(command);
+    }
+
+    /// Folderstorm: ask the server what an object tool waits for. The
+    /// properties are the family subset a hover asks for (it selects
+    /// nothing); the offline demo answers its own selection instead.
+    fn local_assistant_object_want(&mut self, want: crate::mcp_bridge::objects::Want) {
+        use crate::mcp_bridge::objects::Want;
+        use aurora_net::build::BuildCmd;
+        match want {
+            Want::Properties { handle, local_id, object } => {
+                if self.demo {
+                    self.send(NetCommand::Build(BuildCmd::Select {
+                        handle,
+                        local_ids: vec![local_id],
+                    }));
+                } else {
+                    self.send(NetCommand::RequestObjectProperties { handle, object });
+                }
+            }
+            Want::Contents { handle, local_id, object } => self.send(NetCommand::Build(BuildCmd::RequestTaskInventory {
+                handle,
+                local_id,
+                object_id: object,
+            })),
+        }
+    }
+
+    /// Folderstorm: an object change, sent as the Contents tab or Take
+    /// sends it, checked for RLVa just before (mcp-objects.md).
+    fn local_assistant_object(&mut self, call: Pending, reply: serde_json::Value, send: crate::mcp_bridge::objects::Send) {
+        use aurora_net::build::BuildCmd;
+        let Some(command) = send.command.clone() else {
+            return mcp_bridge::object_associate(call, reply);
+        };
+        let take = matches!(command, BuildCmd::DeRez { .. });
+        let command = NetCommand::Build(command);
+        if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+            return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this change")));
+        }
+        // watched from before the send: the demo answers inside it
+        mcp_bridge::object_sending(call, &send, reply, &self.world);
+        if take {
+            self.world.ui_sounds.push(crate::ui_sound::UiSound::ObjectRezOut);
+        } else {
+            self.build.contents_changed(send.object);
+        }
+        log::info!("local assistant object change: {}", send.tool);
         self.send(command);
     }
 
@@ -203,6 +255,7 @@ impl App {
             Work::Create(creation) => self.local_assistant_create(call, planned, creation),
             Work::Navigate(work) => self.local_assistant_navigate(call, work),
             Work::Content(save) => self.local_assistant_content(call, &planned, save),
+            Work::Object(send) => self.local_assistant_object(call, planned.reply, *send), // Folderstorm: mcp-objects.md
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));

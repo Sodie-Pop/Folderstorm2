@@ -5585,7 +5585,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5726,6 +5726,27 @@ save of a notecard open in the inventory's preview answers `busy`; the same
 `client_request_id` sent again answers `"duplicate":true`;
 `inventory_content_operation_status` gives `source_saved` and the compile
 errors. Capture the dialog and the Preferences row in English, French and
+Japanese.
+
+`AURORA_DEMO_MCP=objects` (Folderstorm2, folderstorm/plans/mcp-objects.md:
+`src/mcp_bridge/objects.rs`): the same session settings ("Ask before
+changes"); once the plaza's cut box (local id 118, the agent's in the demo)
+and the demo inventory are loaded, the demo lists the box's contents (the
+log reads `local assistant demo: object_contents_list answered 4 items`),
+then asks, as "Demo assistant", to put a copy of the demo script into it:
+the Ask dialog says "Put a copy of the script “…” into the object “…”, not
+running". Allow: the box's Contents tab (Build › Edit, Contents) lists the
+copy, not running, and the log reads `object_contents_put answered {…
+"done":true … "asset_identity_verified":true …}`; the script stays in the
+inventory. Refuse: nothing is added. With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the
+two new rows, "My objects' contents" and "Take my objects". A real client
+can then call `object_contents_rename`, `object_contents_remove` (it asks
+even on Allow), `object_take_copy` and `object_take` (it asks even on
+Allow; the box leaves the world and an object item named after it arrives
+in the folder), each with the snapshot of a fresh `object_contents_list`
+and a `client_request_id`; reusing an old snapshot answers `stale`.
+Capture the dialogs and the two Preferences rows in English, French and
 Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
