@@ -866,7 +866,7 @@ impl SnapshotUi {
         photo: (u32, u32),
     ) -> Vec<Action> {
         let mut out = Vec::new();
-        let screen = ctx.content_rect();
+        let screen = crate::folderstorm::photo_viewport::screen(ctx); // Folderstorm: the world viewport
         let frame = fit(screen, photo.0 as f32 / photo.1.max(1) as f32);
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::unique("photo_full_frame")));
         let mask = p.navy.gamma_multiply(0.62);
@@ -1368,7 +1368,7 @@ fn changed(s: &Settings, before: &Settings, out: &mut Vec<Action>) {
 /// The photo held by "Freeze frame", over the whole world, in its
 /// proportions.
 pub fn frozen(ctx: &egui::Context, p: &Palette, texture: &egui::TextureHandle) {
-    let screen = ctx.content_rect();
+    let screen = crate::folderstorm::photo_viewport::screen(ctx); // Folderstorm: the world viewport
     let size = texture.size_vec2();
     let rect = fit(screen, size.x / size.y.max(1.0));
     let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::unique("photo_frozen")));

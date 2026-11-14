@@ -902,7 +902,7 @@ inventory-move-loading-failed = Some folders could not be loaded.
 inventory-move-confirm = Move
 # Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs)
 fs-mcp-group = Local assistant
-fs-mcp-intro = Lets an assistant running on this computer (Claude Code, Cursor, Codex…) read and organise your inventory and outfits, move the camera and take pictures, through the folderstorm-mcp helper. Other programs running under your account can use this access too.
+fs-mcp-intro = Lets an assistant running on this computer (Claude Code, Cursor, Codex…) read and organise your inventory and outfits, move the camera and take pictures, and move your avatar, through the folderstorm-mcp helper. Other programs running under your account can use this access too.
 fs-mcp-allow = Allow local assistant access
 fs-mcp-allow-hint = Opens a connection on this computer only (127.0.0.1), with a new access key each time. Off by default. The --mcp-api command-line option turns it on for one session.
 fs-mcp-session-only = Use these settings for this session only
@@ -927,6 +927,14 @@ fs-mcp-trash = Trash
 fs-mcp-trash-hint = Move to the Trash and restore from it. Nothing is ever deleted for good.
 fs-mcp-camera = Camera and pictures
 fs-mcp-camera-hint = Move the camera around your avatar and take pictures of what it shows, also as an outfit's or folder's picture (which needs Rename and create folders too). A picture with the viewer's windows always asks first.
+fs-mcp-navigation = Move my avatar
+fs-mcp-navigation-hint = Walk or fly to a point nearby (64 m at most, in the same region), take off and land, and teleport. A teleport always asks first, even on Allow. Any movement key you press stops the assistant's walk.
+fs-mcp-content = Edit notecards and scripts
+fs-mcp-content-hint = Save the text of your notecards and save and compile your scripts (Copy and Modify needed, never in the Library), from a version read just before, keeping embedded items. Reading their text is part of Read. Scripts in objects are never touched, and nothing is run.
+fs-mcp-objects = My objects' contents
+fs-mcp-objects-hint = Read and change what objects you own and may modify hold: put copies of your items into them (a script goes in stopped), rename or remove what they hold, and record which item an uncertain copy made. Removing deletes for good and always asks first. Never attachments, never someone else's objects.
+fs-mcp-take = Take my objects
+fs-mcp-take-hint = Take objects you own and may modify into your inventory, or take a copy of them. Taking one out of the world always asks first.
 fs-mcp-changes-note = Asking opens a dialog in the viewer before each change; without an answer within 60 seconds, the change is refused. Permanent deletion and Empty Trash are never allowed.
 fs-mcp-status = Status
 fs-mcp-status-hint = Whether the connection is open. The access key is never shown.
@@ -940,6 +948,22 @@ fs-mcp-activity-entry = { $tool }: { $outcome }, { $ago }
 fs-mcp-outcome-done = done
 fs-mcp-outcome-refused = refused
 fs-mcp-outcome-failed = failed
+fs-mcp-activity-receipt = { $summary } · { $state }, { $ago }
+fs-mcp-activity-program = Asked by “{ $client }” (the name the program gives itself).
+fs-mcp-activity-program-unnamed = Asked by a program that gave no name.
+fs-mcp-activity-stop = Stop
+fs-mcp-activity-stop-hint = Stop this request: what has not been sent yet is not sent. A change already sent cannot be recalled.
+fs-mcp-state-waiting = waiting
+fs-mcp-state-asking = waiting for your answer
+fs-mcp-state-queued = allowed, waiting for its turn
+fs-mcp-state-running = under way
+fs-mcp-state-done = done
+fs-mcp-state-failed = refused by the server
+fs-mcp-state-refused = refused
+fs-mcp-state-cancelled = cancelled
+fs-mcp-state-stopped = stopped part way
+fs-mcp-state-stale = not sent: the inventory changed
+fs-mcp-state-unconfirmed = not confirmed yet
 fs-mcp-ago-seconds = { $count ->
     [one] { $count } second ago
    *[other] { $count } seconds ago
@@ -983,8 +1007,47 @@ fs-mcp-ask-create-landmark = Create a landmark of where you stand in “{ $folde
 fs-mcp-ask-favorite-add = Add { $what } to Favorites
 fs-mcp-ask-favorite-remove = Remove { $what } from Favorites
 fs-mcp-ask-batch-rename = Rename { $count } entries, “{ $old }” to “{ $new }” first
+fs-mcp-ask-plan-rename = Rename { $count ->
+    [one] one entry
+   *[other] { $count } entries
+}:
+fs-mcp-ask-plan-move = Move { $count ->
+    [one] one entry
+   *[other] { $count } entries
+} to “{ $folder }”:
+fs-mcp-ask-plan-row-rename = “{ $before }” → “{ $after }”
+fs-mcp-ask-plan-row-move = “{ $name }”
+fs-mcp-ask-plan-more = …and { $count } more
+fs-mcp-ask-plan-skipped = { $count ->
+    [one] One entry is left out (the plan says why).
+   *[other] { $count } entries are left out (the plan says why).
+}
 fs-mcp-ask-picture-set = Set the picture of “{ $name }” to “{ $texture }”
 fs-mcp-ask-picture-clear = Remove the picture of “{ $name }”
+fs-mcp-ask-save-notecard = Save the notecard “{ $name }” ({ $added ->
+    [one] one line
+   *[other] { $added } lines
+} added, { $removed ->
+    [one] one
+   *[other] { $removed }
+} removed)
+fs-mcp-ask-save-script = Save and compile the script “{ $name }” ({ $added ->
+    [one] one line
+   *[other] { $added } lines
+} added, { $removed ->
+    [one] one
+   *[other] { $removed }
+} removed)
+fs-mcp-demo-content-folder = Assistant content tests
+fs-mcp-demo-content-notes = Assistant notes
+fs-mcp-demo-content-notes-items = Notes with items
+fs-mcp-demo-content-notes-no-modify = Notes (no modify)
+fs-mcp-demo-content-notes-no-copy = Notes (no copy)
+fs-mcp-demo-content-script = Greeter script
+fs-mcp-demo-content-script-no-modify = Greeter script (no modify)
+fs-mcp-demo-content-script-broken = Script that will not compile
+fs-mcp-demo-content-notes-text = Meeting at the plaza on Saturday. Bring the blue lanterns.
+fs-mcp-demo-content-added-line = Added by the assistant: the lanterns are in the Objects folder.
 fs-mcp-picture-texture = a texture of your inventory
 fs-mcp-new-notecard = notecard
 fs-mcp-new-script = script
@@ -1020,7 +1083,22 @@ fs-mcp-ask-snapshot-huds = Take a picture of what the camera shows, with your HU
 fs-mcp-ask-snapshot-interface = Take a picture of the whole window with the viewer's windows: what you have open, chat included, will be in it
 fs-mcp-ask-snapshot-saved = It is also saved in your photo folder.
 fs-mcp-ask-thumbnail = Set the picture of “{ $name }” from what the camera shows
+fs-mcp-ask-nav-walk = Walk to { $place }, { $distance } m away
+fs-mcp-ask-nav-fly = Fly to { $place }, { $distance } m away
+fs-mcp-ask-nav-takeoff = Take off (start flying)
+fs-mcp-ask-nav-land = Land (stop flying)
+fs-mcp-ask-nav-teleport = Teleport to { $place }
+fs-mcp-nav-place = ({ $x }, { $y }, { $z }) in “{ $region }”
+fs-mcp-nav-place-global = the global position ({ $x }, { $y }, { $z })
 fs-mcp-thumbnail-stopped = The local assistant's snapshot was stopped: its permission or the login changed before it was saved.
+fs-mcp-ask-object-put = Put a copy of “{ $item }” into the object “{ $object }”
+fs-mcp-ask-object-put-script = Put a copy of the script “{ $item }” into the object “{ $object }”, not running
+fs-mcp-ask-object-rename = Rename “{ $old }” to “{ $new }” in the object “{ $object }”
+fs-mcp-ask-object-remove = Delete “{ $item }” from the object “{ $object }” for good (it does not go to the Trash)
+fs-mcp-ask-object-reconcile = Record “{ $item }” in the object “{ $object }” as the copy sent earlier (not verified)
+fs-mcp-ask-object-take = Take the object “{ $object }” into “{ $folder }” (it leaves the world)
+fs-mcp-ask-object-take-copy = Take a copy of the object “{ $object }” into “{ $folder }”
+fs-mcp-ask-object-rez-identify = Record the object “{ $object }” as the one rezzed earlier (not verified)
 inventory-folder-jump-menu = Go to folder…
 inventory-folder-jump-menu-tip = Find a folder by its name or its parent's name and open it (Ctrl+J).
 inventory-folder-jump-title = Go to inventory folder
@@ -1407,6 +1485,8 @@ folderstorm-viewport-bars-help = Where the top, bottom and side bars go. Inside 
 folderstorm-viewport-bars-inside = Inside the world
 folderstorm-viewport-bars-around = Around the world
 folderstorm-viewport-bars-window = Over the whole window
+folderstorm-viewport-photo = Photo mode uses the whole window
+folderstorm-viewport-photo-help = Off, photo mode stays in the viewport: its frame and controls, its clicks and wheel, and its photos (the "Window" size included) follow the world's rectangle. On, photo mode fills the whole window, as without a viewport.
 folderstorm-viewport-diagram = Window and monitors
 folderstorm-viewport-diagram-help = Drag an edge of the world to move that margin: it snaps to the monitors' borders and the window's sides, and stops before the world gets under a quarter of the window. Escape during a drag puts the margin back. Click a monitor to select it; a double click puts the world on it.
 folderstorm-viewport-put-world = Put the world on this monitor
@@ -4836,6 +4916,49 @@ folderstorm-chat-attention-call = Call
 folderstorm-chat-attention-other = Question
 folderstorm-chat-demo-nearby = Demo line { $n } in the nearby chat
 folderstorm-chat-demo-im = Demo instant message { $n }
+folderstorm-chat-typing = { $name } is typing…
+folderstorm-chat-volume-whisper = Whisper
+folderstorm-chat-volume-say = Say
+folderstorm-chat-volume-shout = Shout
+folderstorm-chat-volume-help = Nearby chat: { $volume }. Click for the next one. Ctrl+Enter shouts and Shift+Enter whispers one line, whatever is chosen. The character's viewer applies its own rules (restrictions included).
+folderstorm-chat-grid-link-help = { $link } — only the character's own window follows this link. Click to switch to the character.
+folderstorm-chat-link-question = Open this address in your browser?
+folderstorm-chat-link-open = Open in browser
+folderstorm-contacts-new-im-help = New IM as { $name }: one of its groups or friends
+folderstorm-contacts-friends-help = { $name }'s friends
+folderstorm-contacts-friends-of = { $name }'s friends
+folderstorm-contacts-new-im-as = New IM as { $name }
+folderstorm-contacts-search-friends = Search friends
+folderstorm-contacts-search-everyone = Search groups and friends
+folderstorm-contacts-waiting = Waiting for { $name }'s viewer to tell its friends and groups…
+folderstorm-contacts-none = { $name } has no friends or groups to list yet.
+folderstorm-contacts-no-match = Nobody by that name.
+folderstorm-contacts-groups = { $count ->
+    [one] Group
+   *[other] Groups ({ $count })
+}
+folderstorm-contacts-friends = { $count ->
+    [one] Friend
+   *[other] Friends ({ $count })
+}
+folderstorm-contacts-online = Online ({ $count })
+folderstorm-contacts-offline = Offline ({ $count })
+folderstorm-contacts-more = { $count ->
+    [one] One more is only in { $name }'s own lists.
+   *[other] { $count } more are only in { $name }'s own lists.
+}
+folderstorm-contacts-group = Group
+folderstorm-contacts-im = Open an instant message in the character's viewer. Nothing is sent until you type a line.
+folderstorm-contacts-group-chat = Open this group's chat in the character's viewer. Nothing is said until you type a line.
+folderstorm-contacts-profile = Open the profile in the character's viewer, and switch to it
+folderstorm-contacts-opening = Waiting for the character's viewer…
+folderstorm-contacts-dismiss = Dismiss
+folderstorm-contacts-not-opened = { $name } did not open { $who }: { $why }.
+folderstorm-contacts-refused-restricted = a restriction forbids it
+folderstorm-contacts-refused-not-a-group = it is not one of the character's groups
+folderstorm-contacts-refused-unknown = nobody to open
+folderstorm-contacts-no-answer = the character's viewer did not answer
+folderstorm-contacts-not-sent = the character's viewer is not reading
 folderstorm-quick-switch-help = Switch to { $name }.
 folderstorm-quick-show-help = { $name } is the active character: bring its window forward.
 folderstorm-quick-login-help = { $name } waits at its login screen: bring its window forward to log in there.
@@ -5168,6 +5291,49 @@ folderstorm-settings-updates-line = New versions and their channel: the "{ $page
 folderstorm-settings-crash-line = Crash reports: the "{ $page }" page.
 folderstorm-settings-bug-line = To report a bug: "{ $item }", in the viewer's Help menu or on its login screen.
 folderstorm-settings-updates-note = The host and its characters are one program: what the viewer chooses applies to the host too.
+
+## Folderstorm: the session host's MCP controller (folderstorm/plans/mcp-routing.md)
+folderstorm-chat-attention-assistant = Local assistant
+folderstorm-settings-controller = MCP controller
+folderstorm-settings-controller-intro = What an assistant may ask of the host itself: list the characters, bring one forward, change how it waits, its monitor, its login window, restart, log out, stop managing. Separate from each character's local assistant.
+folderstorm-controller-access = Host access
+folderstorm-controller-enable = Enable controller MCP
+folderstorm-controller-enable-help = A local program (an assistant through folderstorm-mcp) may reach the host itself on this computer only, with a key only your account can read. Turning it on never turns on a character's local assistant and never logs anyone in.
+folderstorm-controller-metadata = Allow profile and monitor metadata
+folderstorm-controller-metadata-help = The list then also gives each character's name, alias and colour, and what its monitor shows. Off: only the profile names, their states and which one is active.
+folderstorm-controller-off = Off: nothing listens.
+folderstorm-controller-listening = On: listening on 127.0.0.1:{ $port } for this computer only.
+folderstorm-controller-starting = Starting…
+folderstorm-controller-failed = It could not start ({ $reason }). Turn it off and on to try again.
+folderstorm-controller-separate = Each character's own local assistant (its viewer's Preferences › Privacy › Local assistant) stays as it is: this grants nothing in a viewer, and a viewer's access grants nothing here. Nobody is ever logged in from here.
+folderstorm-controller-actions = What it may do
+folderstorm-controller-actions-intro = Ask: this host asks you each time, in a window of its own. Allow: done without asking. Never: refused.
+folderstorm-controller-class-activate = Activate characters
+folderstorm-controller-class-background = Change background mode
+folderstorm-controller-class-monitors = Manage monitor previews
+folderstorm-controller-class-login = Open login windows
+folderstorm-controller-class-restart = Restart characters
+folderstorm-controller-class-logout = Log out characters
+folderstorm-controller-class-stop = Stop managing characters
+folderstorm-controller-ask = Ask
+folderstorm-controller-allow = Allow
+folderstorm-controller-never = Never
+folderstorm-controller-characters = Characters
+folderstorm-controller-characters-intro = Only the characters ticked here are listed and can be acted on; the others do not exist for an assistant.
+folderstorm-controller-allow-character = { $number }: { $name } — allow controller access
+folderstorm-controller-ask-title = MCP controller request
+folderstorm-controller-ask-activate = Bring “{ $name }” (character { $number }) forward
+folderstorm-controller-ask-warm = Let “{ $name }” (character { $number }) wait behind (Warm)
+folderstorm-controller-ask-economy = Minimise “{ $name }” (character { $number }) while it waits (Economy)
+folderstorm-controller-ask-monitor-open = Open the monitor of “{ $name }” (character { $number })
+folderstorm-controller-ask-monitor-close = Close the monitor of “{ $name }” (character { $number })
+folderstorm-controller-ask-cycling-open = Open the cycling monitor
+folderstorm-controller-ask-cycling-close = Close the cycling monitor
+folderstorm-controller-ask-login = Open the login window of “{ $name }” (character { $number }); you log in there yourself
+folderstorm-controller-ask-restart = Restart “{ $name }” (character { $number }): log out, close, and start again at its login window
+folderstorm-controller-ask-logout = Log “{ $name }” (character { $number }) out and close its viewer
+folderstorm-controller-ask-stop = Stop managing “{ $name }” (character { $number }): its viewer goes on by itself
+folderstorm-controller-ask-note = Closing this window refuses. You can change what is asked in the host's settings › MCP controller.
 busy-pause-window-title = { $title } — Paused
 video-memory-full-notice = Video memory is full and the world cannot be drawn. Close programs that use the graphics card: it comes back on its own.
 video-memory-full-window-title = { $title } — Video memory full

@@ -163,8 +163,9 @@ pub(super) fn cards(
     let mut names: Vec<(egui::Rect, &ChatLine)> = Vec::new();
     let mut shift = egui::Vec2::ZERO;
     let lift = -(ctx.content_rect().bottom() - bottom) - 6.0;
+    let bars = crate::folderstorm::viewport::bars_offset(ctx, egui::Align2::LEFT_BOTTOM).x; // Folderstorm: world viewport
     egui::Area::new(egui::Id::unique("chat_toasts"))
-        .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(8.0, lift))
+        .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(bars + 8.0, lift))
         .interactable(false)
         .order(egui::Order::Background)
         .show(ctx, |ui| {

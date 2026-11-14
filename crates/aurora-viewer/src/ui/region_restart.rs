@@ -348,7 +348,7 @@ pub fn show(ctx: &egui::Context, p: &Palette, st: &mut RestartUi, v: &View<'_>) 
         st.expanded_in_dnd = false;
     }
     let pill = a.live() && (a.minimized || (v.pill_only && !st.expanded_in_dnd));
-    let screen = ctx.content_rect();
+    let screen = crate::folderstorm::viewport::dialog_area(ctx); // Folderstorm: world viewport
     let width = WIDTH.min(screen.width() - 16.0);
     let top = screen.top() + screen.height() * TOP;
     // dropped in, trembling, fading out
