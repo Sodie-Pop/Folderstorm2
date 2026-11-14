@@ -199,6 +199,14 @@ the first time they are shown; one moved by hand or restored from the saved
 layout stays where it was. The notification toasts,
 the chat lines, the media bar and the banners under the top bar follow the
 bars: inside the world, or over the whole window with `bars-window`.
+The build tools stay in the world too: with
+`AURORA_DEMO_VIEWPORT=right-half AURORA_WINDOW_SIZE=3840,1080` and
+`AURORA_DEMO_BUILD=move,object:151` (or `rotate,…`, `stretch,…`), the
+selection outline and the arrows, rings or stretch boxes sit on the object,
+the coordinates readout is at the top of the world, and a handle dragged by
+the script (or by hand) moves the object along its axis under the cursor.
+Add `AURORA_DEMO_BUILD_EDGE=left` to see the camera pan when the dragged
+handle reaches the world's left edge, not the window's.
 
 **Photo mode in the world viewport (Folderstorm2).** `right-half` and
 `left-half` keep the right or the left half of the window for the world, as on

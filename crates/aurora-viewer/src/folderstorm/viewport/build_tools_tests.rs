@@ -220,12 +220,16 @@ fn handles_are_grabbed_and_dragged_in_the_world_rect() {
         );
         // the same place in the window, but not in the world, grabs nothing
         assert_eq!(drag(&world, EditMode::Stretch, start, to), None);
-        // the move arrows, from the middle of the cube, dragged sideways
-        let to = (mid.0 + 120.0, mid.1 + 40.0);
-        if let Some(expected) = drag(&alone, EditMode::Move, mid, to) {
-            let got = drag(&world, EditMode::Move, shift(mid), shift(to)).expect("grabbed in the world rect");
-            assert!(got.0.abs_diff_eq(expected.0, 1e-4), "{got:?} {expected:?}");
-        }
+        // a move arrow (found along the cube's x axis), dragged sideways
+        let (grab, expected) = (1..40)
+            .filter_map(|i| alone.project_px(centre + Vec3::X * (0.1 * i as f32)))
+            .find_map(|at| {
+                let moved = drag(&alone, EditMode::Move, at, (at.0 + 80.0, at.1 + 30.0))?;
+                (!moved.0.abs_diff_eq(centre, 1e-3)).then_some((at, moved))
+            })
+            .expect("an arrow in a view of the rect's size");
+        let got = drag(&world, EditMode::Move, shift(grab), shift((grab.0 + 80.0, grab.1 + 30.0))).expect("grabbed in the world rect");
+        assert!(got.0.abs_diff_eq(expected.0, 1e-4), "{got:?} {expected:?}");
     }
 }
 
@@ -233,7 +237,7 @@ fn handles_are_grabbed_and_dragged_in_the_world_rect() {
 fn the_overlay_is_cut_at_the_world_edges() {
     let ctx = egui::Context::default();
     let mut clip = None;
-    let _ = ctx.run_ui(
+    let output = ctx.run_ui(
         egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(3840.0, 1080.0))),
             ..Default::default()
@@ -244,6 +248,7 @@ fn the_overlay_is_cut_at_the_world_edges() {
             clip = Some(crate::folderstorm::viewport::build_tools::clip(ui.ctx(), painter).clip_rect());
         },
     );
+    crate::ui::login::test_output(output);
     let clip = clip.unwrap();
     assert_eq!(clip, egui::Rect::from_min_size(egui::pos2(1920.0, 0.0), egui::vec2(1920.0, 1080.0)));
 }
