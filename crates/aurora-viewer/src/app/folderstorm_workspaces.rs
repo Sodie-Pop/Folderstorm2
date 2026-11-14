@@ -324,6 +324,12 @@ impl App {
     /// at frame 240 as the workspace "Folders" (*Remember Inventory
     /// folders*), closes them at frame 300 and applies "Folders" at frame
     /// 420: they come back at their places.
+    ///
+    /// `AURORA_DEMO_STRIP=1` (row 1.6) seeds the same as
+    /// `AURORA_DEMO_WORKSPACES=1` with the favorites strip on, the switcher
+    /// closed; `=row` also shows the favourites' row under the top bar
+    /// (the strip at its right end); `=many` adds favorite layouts until
+    /// some go to *More…*.
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
@@ -335,16 +341,21 @@ impl App {
             std::env::var("AURORA_DEMO_LAYOUTS"),
             std::env::var("AURORA_DEMO_SWITCHER"),
             std::env::var("AURORA_DEMO_WORKSPACES"),
+            std::env::var("AURORA_DEMO_STRIP"),
         ) {
-            (Ok(mode), _, _) => mode,
-            (_, Ok(switcher), _) if switcher == "toggle" => "switcher-toggle".to_owned(),
-            (_, Ok(_), _) => "switcher".to_owned(),
-            (_, _, Ok(workspaces)) if workspaces == "apply" => "switcher-workspaces-apply".to_owned(),
-            (_, _, Ok(workspaces)) if workspaces == "folders" => "switcher-workspaces-folders".to_owned(),
-            (_, _, Ok(_)) => "switcher-workspaces".to_owned(),
+            (Ok(mode), _, _, _) => mode,
+            (_, Ok(switcher), _, _) if switcher == "toggle" => "switcher-toggle".to_owned(),
+            (_, Ok(_), _, _) => "switcher".to_owned(),
+            (_, _, Ok(workspaces), _) if workspaces == "apply" => "switcher-workspaces-apply".to_owned(),
+            (_, _, Ok(workspaces), _) if workspaces == "folders" => "switcher-workspaces-folders".to_owned(),
+            (_, _, Ok(_), _) => "switcher-workspaces".to_owned(),
+            (_, _, _, Ok(strip)) if strip == "row" => "switcher-workspaces-strip-row".to_owned(),
+            (_, _, _, Ok(strip)) if strip == "many" => "switcher-workspaces-strip-many".to_owned(),
+            (_, _, _, Ok(_)) => "switcher-workspaces-strip".to_owned(),
             _ => return,
         };
         let workspaces = mode.starts_with("switcher-workspaces");
+        let strip = mode.starts_with("switcher-workspaces-strip");
         let switcher = mode.starts_with("switcher");
         // the modes that flip the viewer window between the two layouts
         let flips = matches!(mode.as_str(), "toggle" | "switcher-toggle");
@@ -461,7 +472,24 @@ impl App {
                     }
                     store.active_workspace = None;
                 }
-                crate::folderstorm::workspaces::switcher::open(&ctx);
+                if strip {
+                    store.strip = true;
+                    if mode.ends_with("-many") {
+                        for name in ["Photos", "Building at the sandbox", "Streaming", "Events", "Shopping"] {
+                            let world = Some(viewport::ViewportSettings::default());
+                            if let Err(error) = store.add(Layout::new(name, world, None, Vec::new())) {
+                                log::warn!("AURORA_DEMO_STRIP: layout not seeded: {error:?}");
+                            }
+                            store.set_favorite(name, true);
+                        }
+                    }
+                    if mode.ends_with("-row") {
+                        self.settings.favorites_access = crate::settings::FavoritesAccess::Row;
+                        self.settings.favorites_row_folded = false;
+                    }
+                } else {
+                    crate::folderstorm::workspaces::switcher::open(&ctx);
+                }
             } else {
                 self.panels.settings = true;
                 self.options_ui.open(ui::options::Page::Layout, 3);

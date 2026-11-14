@@ -124,6 +124,17 @@ pub struct Favorite {
     pub kind: pick::Kind,
     pub name: String,
     pub in_use: bool,
+    /// In use, and no longer as saved (the switcher's "modified").
+    pub modified: bool,
+}
+
+/// The layout in use and the workspace in use are no longer as saved
+/// (`super::apply::modified`, `workspace_modified`). Only worked out while
+/// the strip is shown, the one place that tells it from the view.
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+pub struct Modified {
+    pub layout: bool,
+    pub workspace: bool,
 }
 
 impl Favorite {
@@ -145,7 +156,7 @@ impl Favorite {
 }
 
 impl View {
-    fn of(store: &Store, previous: bool) -> Self {
+    fn of(store: &Store, previous: bool, modified: Modified) -> Self {
         let lines = pick::entries(store);
         let favorites = lines.iter().any(|line| line.favorite);
         let of = |kind: pick::Kind| -> Vec<(String, bool)> {
@@ -173,6 +184,11 @@ impl View {
                         kind: line.kind,
                         name: line.name(store)?.to_owned(),
                         in_use: line.in_use(store),
+                        modified: line.in_use(store)
+                            && match line.kind {
+                                pick::Kind::Layout => modified.layout,
+                                pick::Kind::Workspace => modified.workspace,
+                            },
                     })
                 })
                 .collect(),
@@ -183,7 +199,7 @@ impl View {
 /// A number that changes when the view would: the names in their order,
 /// the layout in use, the hold, *Previous*. Made each frame without
 /// allocating; the view itself only when it differs.
-pub(super) fn stamp(store: &Store, previous: bool) -> u64 {
+pub(super) fn stamp(store: &Store, previous: bool, modified: Modified) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for record in &store.layouts {
         record.layout().map(|layout| layout.name.as_str()).hash(&mut hasher);
@@ -203,7 +219,7 @@ pub(super) fn stamp(store: &Store, previous: bool) -> u64 {
     }
     // the strip: shown or not, and the favorites of both kinds in their
     // one order
-    store.strip.hash(&mut hasher);
+    (store.strip, modified).hash(&mut hasher);
     for favorite in &store.favorites {
         (favorite.layout(), favorite.workspace()).hash(&mut hasher);
     }
@@ -215,8 +231,8 @@ fn view_id() -> egui::Id {
     egui::Id::unique("folderstorm_workspaces_menu")
 }
 
-pub(super) fn publish(ctx: &egui::Context, store: &Store, previous: bool) {
-    ctx.data_mut(|d| d.insert_temp(view_id(), Arc::new(View::of(store, previous))));
+pub(super) fn publish(ctx: &egui::Context, store: &Store, previous: bool, modified: Modified) {
+    ctx.data_mut(|d| d.insert_temp(view_id(), Arc::new(View::of(store, previous, modified))));
 }
 
 pub(super) fn view(ctx: &egui::Context) -> Arc<View> {

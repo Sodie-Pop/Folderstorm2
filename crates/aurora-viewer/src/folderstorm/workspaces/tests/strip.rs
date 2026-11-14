@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::folderstorm::workspaces::menu::{self, Request};
-use crate::folderstorm::workspaces::strip::{self, DIVIDER, ISLAND, NAME_CHARS, SHARE, fits};
+use crate::folderstorm::workspaces::strip::{self, DIVIDER, NAME_CHARS, SHARE, fits};
 use crate::ui::bars::favorites;
 use crate::ui::bars::islands::{self, GAP, MARGIN, PAD, SLOT};
 use aurora_i18n::tr;
@@ -179,6 +179,28 @@ fn a_click_on_a_pill_applies_it_and_it_is_the_one_in_use() {
 }
 
 #[test]
+fn the_one_in_use_says_when_it_is_no_longer_as_saved() {
+    let mut v = with_strip();
+    let modified = |v: &Viewer| -> Vec<String> {
+        let view = v.strip_view();
+        view.favorites.iter().filter(|f| f.modified).map(|f| f.name.clone()).collect()
+    };
+    assert!(modified(&v).is_empty());
+    // the world of "Single" changed: the layout in use is modified
+    v.world.enabled = true;
+    v.frames(3);
+    assert_eq!(modified(&v), ["Single"]);
+    // a window of "Sorting" closed: the workspace as well
+    assert!(v.open.remove(MAP));
+    v.frames(3);
+    assert_eq!(modified(&v), ["Sorting", "Single"]);
+    // (worked out only while the strip is shown)
+    v.store.strip = false;
+    v.frames(3);
+    assert!(modified(&v).is_empty());
+}
+
+#[test]
 fn what_does_not_fit_is_in_more() {
     let mut v = with_strip();
     v.bars = Some(Bars {
@@ -256,7 +278,10 @@ fn on_the_favourites_row_the_landmarks_stop_before_the_strip() {
     assert_eq!(islands::favorites_row_bottom(&v.ctx), Some(row.bottom()));
     let lefts = v.lefts(&["Wide", "Sorting", "Single"]);
     assert!(lefts[0] < lefts[1] && lefts[1] < lefts[2], "{lefts:?}");
-    assert!(v.text_rect("Single").right() < row.right() - SLOT, "before the button that folds the row");
+    assert!(
+        v.text_rect("Single").right() < row.right() - SLOT,
+        "before the button that folds the row"
+    );
     assert!(lefts[0] > row.center().x, "in the right half: at most {SHARE} of the row");
     // every landmark drawn, and the row's own "n more", ends before our divider
     let ours = lefts[0] - 6.0 - 14.0 - 5.0;
@@ -319,4 +344,99 @@ fn the_menu_and_the_switcher_show_and_hide_the_strip() {
     assert!(!v.store.strip);
     v.ask(Request::Strip(true));
     assert!(v.store.strip && v.island().is_some());
+}
+
+/// The strip drawn with the software painter, under a pretend place
+/// island: its own island, on the favourites' row, folded beside the
+/// tab, and narrow with *More…* open. `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>`
+/// keeps the pictures as `<folder>/strip-island.png`, `strip-row.png`,
+/// `strip-folded.png` and `strip-more.png`.
+#[test]
+fn the_strip_is_drawn() {
+    use crate::folderstorm::workspaces::workspace::Workspace;
+    let mut v = Viewer::new(1280.0, 420.0);
+    v.painted();
+    v.open.clear();
+    for name in ["2 monitors", "1 monitor", "Photos", "Building at the sandbox"] {
+        v.store
+            .add(Layout::new(name, Some(Default::default()), None, Vec::new()))
+            .expect("added");
+    }
+    let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
+    v.store
+        .add_workspace(Workspace::new("Sorting", Some("1 monitor"), ids(&[INVENTORY, PEOPLE])))
+        .expect("added");
+    v.store
+        .add_workspace(Workspace::new("Exploring", None, ids(&[MINIMAP, MAP])))
+        .expect("added");
+    assert!(v.store.set_favorite("2 monitors", true));
+    assert!(v.store.set_favorite_workspace("Sorting", true));
+    assert!(v.store.set_favorite("1 monitor", true));
+    assert!(v.store.set_favorite_workspace("Exploring", true));
+    assert!(v.store.set_favorite("Photos", true));
+    assert!(v.store.set_favorite("Building at the sandbox", true));
+    v.store.set_active(Some("1 monitor".to_owned()));
+    v.store.active_workspace = Some("Sorting".to_owned());
+    v.store.strip = true;
+    let wide = Rect::from_min_size(pos2(8.0, 8.0), vec2(1264.0, 36.0));
+    v.bars = Some(Bars {
+        under: wide,
+        landmarks: None,
+    });
+    v.frames(6);
+    let island = v.island().expect("drawn");
+    for name in [
+        "2 monitors",
+        "Sorting",
+        "1 monitor",
+        "Exploring",
+        "Photos",
+        &strip::short("Building at the sandbox"),
+    ] {
+        assert!(v.shows(name), "“{name}” is drawn");
+        assert!(island.contains_rect(v.text_rect(name)), "“{name}” is on the island");
+    }
+    for icon in [
+        menu::ICON_LAYOUT,
+        menu::ICON_WORKSPACE,
+        menu::ICON_OPEN,
+        menu::ICON_PREVIOUS,
+        menu::ICON_STRIP,
+        "dots-filled",
+        "chevrons-right",
+        "eye-off",
+    ] {
+        assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
+    }
+    v.picture("strip-island");
+    v.bars = Some(Bars {
+        under: wide,
+        landmarks: Some(landmarks(12, false)),
+    });
+    v.frames(4);
+    assert!(v.island().is_none() && v.shows("Landmark 0") && v.shows("Sorting"));
+    v.picture("strip-row");
+    v.bars = Some(Bars {
+        under: wide,
+        landmarks: Some(landmarks(12, true)),
+    });
+    v.frames(4);
+    assert!(v.island().is_some() && !v.shows("Landmark 0"));
+    v.picture("strip-folded");
+    v.bars = Some(Bars {
+        under: Rect::from_min_size(pos2(8.0, 8.0), vec2(460.0, 36.0)),
+        landmarks: None,
+    });
+    v.frames(4);
+    let left = v.store.favorites.len()
+        - ["2 monitors", "Sorting", "1 monitor", "Exploring", "Photos"]
+            .iter()
+            .filter(|name| v.shows(name))
+            .count();
+    let more = tr!("fs-strip-more", n = left as i64).to_string();
+    assert!(left > 0 && v.shows(&more), "{:?}", v.texts);
+    v.click(&more);
+    v.frames(2);
+    assert!(v.shows(tr!("fs-strip-hide")));
+    v.picture("strip-more");
 }

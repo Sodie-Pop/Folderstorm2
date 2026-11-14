@@ -42,7 +42,7 @@ pub(super) const SHARE: f32 = 0.5;
 /// The room of the divider between the landmarks and the strip.
 pub(super) const DIVIDER: f32 = 9.0;
 
-const ICON_MORE: &str = "dots";
+const ICON_MORE: &str = "dots-filled";
 const ICON_OVERFLOW: &str = "chevrons-right";
 const ICON_HIDE: &str = "eye-off";
 
@@ -173,11 +173,15 @@ fn pills(ui: &mut egui::Ui, p: &Palette, icons: &Icons, view: &View, measured: &
             PILL_ICON,
             if favorite.in_use { p.ink } else { p.muted },
         );
-        let name = ui.painter().layout_no_wrap(short(&favorite.name), FontId::proportional(TEXT), p.ink);
+        let name = ui
+            .painter()
+            .layout_no_wrap(short(&favorite.name), FontId::proportional(TEXT), p.ink);
         crate::ui::widgets::paint_ink_left(ui.painter(), name, pos2(pill.left() + 6.0 + PILL_ICON + 5.0, cy), p.ink);
         let response = response.on_hover_ui(|ui| {
             ui.label(egui::RichText::new(&favorite.name).size(TEXT).strong().color(p.ink));
-            let state = if favorite.in_use {
+            let state = if favorite.modified {
+                format!("{} · {}", kind_of(favorite), tr!("fs-layouts-modified"))
+            } else if favorite.in_use {
                 format!("{} · {}", kind_of(favorite), tr!("fs-layouts-active"))
             } else {
                 kind_of(favorite).to_owned()
@@ -201,11 +205,9 @@ fn pills(ui: &mut egui::Ui, p: &Palette, icons: &Icons, view: &View, measured: &
     } else {
         let icon = pos2(more.left() + 6.0 + ICON / 2.0, cy);
         paint_icon(ui, icons, ICON_OVERFLOW, icon, ICON, ink);
-        let text = ui.painter().layout_no_wrap(
-            tr!("fs-strip-more", n = left as i64).to_string(),
-            FontId::proportional(TEXT),
-            ink,
-        );
+        let text = ui
+            .painter()
+            .layout_no_wrap(tr!("fs-strip-more", n = left as i64).to_string(), FontId::proportional(TEXT), ink);
         crate::ui::widgets::paint_ink_left(ui.painter(), text, pos2(icon.x + ICON / 2.0 + 6.0, cy), ink);
     }
     crate::ui::menu::dropdown_placed(

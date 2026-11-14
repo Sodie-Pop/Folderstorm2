@@ -983,9 +983,17 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     if let Some(room) = capture::room(ctx) {
         outcome.save |= windows_frame(ctx, live, &mut s, &room, shell);
     }
-    let stamp = menu::stamp(live.store, s.previous.is_some());
+    let modified = if live.store.strip {
+        menu::Modified {
+            layout: modified(live.store, live.world),
+            workspace: workspace_modified(live.store, &capture::open(ctx)),
+        }
+    } else {
+        menu::Modified::default()
+    };
+    let stamp = menu::stamp(live.store, s.previous.is_some(), modified);
     if stamp != std::mem::replace(&mut s.menu, stamp) {
-        menu::publish(ctx, live.store, s.previous.is_some());
+        menu::publish(ctx, live.store, s.previous.is_some(), modified);
     }
     session(ctx, |slot| *slot = s);
     // the switcher draws a copy of the store, kept up while it is open
