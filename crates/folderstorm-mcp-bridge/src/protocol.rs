@@ -33,6 +33,9 @@ pub mod navigation;
 // Folderstorm: content editing (mcp-content.md)
 pub mod content;
 
+// Folderstorm: object inspection and lifecycle (mcp-objects.md)
+pub mod objects;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -305,6 +308,13 @@ impl ToolSpec {
                 None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
             }
         }
+        // Folderstorm: the object tools' changes need their id (mcp-objects.md)
+        if objects::needs_client_request_id(self.name) {
+            match schema["required"].as_array_mut() {
+                Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
+                None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
+            }
+        }
         schema
     }
 
@@ -323,6 +333,8 @@ pub fn always_asks(tool: &str, arguments: &Value) -> bool {
     (tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true))
         // Folderstorm: a teleport never happens without the user seeing where
         || navigation::always_asks(tool)
+        // Folderstorm: removing from an object, taking an object (mcp-objects.md)
+        || objects::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -840,6 +852,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
         .chain(navigation::NAVIGATION_TOOLS) // Folderstorm: navigation
         .chain(content::CONTENT_TOOLS) // Folderstorm: content editing
+        .chain(objects::OBJECT_TOOLS) // Folderstorm: object inspection and lifecycle
 }
 
 #[cfg(test)]

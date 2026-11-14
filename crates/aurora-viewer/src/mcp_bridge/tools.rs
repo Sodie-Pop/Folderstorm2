@@ -62,6 +62,8 @@ pub struct Ctx<'a> {
     /// Folderstorm: RLVa's restrictions on notecards and scripts, and the
     /// editors open now (content editing).
     pub content: super::content::Limits,
+    /// Folderstorm: the world the object tools read (mcp-objects.md).
+    pub objects: super::objects::Scene<'a>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

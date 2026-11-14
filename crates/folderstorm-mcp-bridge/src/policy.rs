@@ -28,10 +28,17 @@ pub enum Class {
     /// Folderstorm: save a notecard's text, save and compile a script of
     /// the agent's own inventory (folderstorm/plans/mcp-content.md).
     Content,
+    /// Folderstorm: put copies of items into objects the agent owns and may
+    /// modify, rename or remove what they hold (removing always asks), and
+    /// record an uncertain copy or rez (folderstorm/plans/mcp-objects.md).
+    Objects,
+    /// Folderstorm: take such objects, or copies of them, into the
+    /// inventory (taking one out of the world always asks).
+    Take,
 }
 
 impl Class {
-    pub const ALL: [Class; 8] = [
+    pub const ALL: [Class; 10] = [
         Class::Read,
         Class::Edit,
         Class::Move,
@@ -40,6 +47,8 @@ impl Class {
         Class::Camera,
         Class::Navigation,
         Class::Content,
+        Class::Objects, // Folderstorm: mcp-objects.md
+        Class::Take,
     ];
 
     /// Whether the class can ask the user before each call (every class
@@ -62,7 +71,9 @@ pub enum Level {
 /// of the field (Read: Allow, the others: Never); a Camera level missing
 /// from settings saved before phase 3 follows "Ask before changes" when the
 /// other changes all ask ([`Saved`]), and so does a Navigation (or Content)
-/// level missing from settings saved before it existed.
+/// level missing from settings saved before it existed; so do the Objects
+/// and Take levels missing from settings saved before them, the camera,
+/// navigation and content included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "Saved")]
 pub struct Permissions {
@@ -76,10 +87,14 @@ pub struct Permissions {
     pub navigation: Level,
     /// Folderstorm: content editing (mcp-content.md).
     pub content: Level,
+    /// Folderstorm: object contents (mcp-objects.md).
+    pub objects: Level,
+    /// Folderstorm: taking objects (mcp-objects.md).
+    pub take: Level,
 }
 
 /// [`Permissions`] as saved: Camera came with phase 3, Navigation and
-/// Content after.
+/// Content after, Objects and Take later.
 #[derive(Deserialize)]
 #[serde(default)]
 struct Saved {
@@ -92,6 +107,8 @@ struct Saved {
     camera: Option<Level>,
     navigation: Option<Level>,
     content: Option<Level>,
+    objects: Option<Level>,
+    take: Option<Level>,
 }
 
 impl Default for Saved {
@@ -106,6 +123,8 @@ impl Default for Saved {
             camera: None,
             navigation: None,
             content: None,
+            objects: None,
+            take: None,
         }
     }
 }
@@ -125,6 +144,9 @@ impl From<Saved> for Permissions {
         // navigation included
         let asked = asked && camera == Level::Ask && navigation == Level::Ask;
         let content = s.content.unwrap_or(if asked { Level::Ask } else { Level::Never });
+        // Folderstorm: the same for the object tools, the camera,
+        // navigation and content included
+        let later = if asked && content == Level::Ask { Level::Ask } else { Level::Never };
         Permissions {
             read: s.read,
             edit: s.edit,
@@ -134,6 +156,8 @@ impl From<Saved> for Permissions {
             camera,
             navigation,
             content,
+            objects: s.objects.unwrap_or(later),
+            take: s.take.unwrap_or(later),
         }
     }
 }
@@ -156,6 +180,8 @@ impl Permissions {
             Class::Camera => self.camera,
             Class::Navigation => self.navigation,
             Class::Content => self.content,
+            Class::Objects => self.objects,
+            Class::Take => self.take,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -180,6 +206,8 @@ impl Permissions {
             Class::Camera => self.camera = level,
             Class::Navigation => self.navigation = level,
             Class::Content => self.content = level,
+            Class::Objects => self.objects = level,
+            Class::Take => self.take = level,
         }
     }
 
@@ -261,6 +289,8 @@ impl Preset {
             camera: changes,
             navigation: changes,
             content: changes,
+            objects: changes,
+            take: changes,
         }
     }
 }
@@ -292,6 +322,8 @@ mod tests {
             Class::Camera,
             Class::Navigation,
             Class::Content,
+            Class::Objects,
+            Class::Take,
         ] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
@@ -325,6 +357,35 @@ mod tests {
         assert_eq!(kept.level(Class::Camera), Level::Never);
         let json = serde_json::to_string(&kept).expect("serialized");
         assert!(json.contains(r#""camera":"never""#), "{json}");
+    }
+
+    /// Folderstorm: object inspection and lifecycle (mcp-objects.md).
+    #[test]
+    fn objects_and_take_ask_in_ask_before_changes_and_keep_older_presets() {
+        for class in [Class::Objects, Class::Take] {
+            assert_eq!(Preset::AskBeforeChanges.permissions().level(class), Level::Ask);
+            assert_eq!(Preset::ReadOnly.permissions().level(class), Level::Never);
+            assert!(class.can_ask());
+        }
+        // "Ask before changes" saved before them, with or without the camera
+        let asked: Permissions =
+            serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask"}"#).expect("parsed");
+        assert_eq!(asked.level(Class::Objects), Level::Ask);
+        assert_eq!(asked.level(Class::Take), Level::Ask);
+        assert_eq!(asked.preset(), Preset::AskBeforeChanges);
+        let older: Permissions = serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#).expect("parsed");
+        assert_eq!(older.preset(), Preset::AskBeforeChanges);
+        // the camera allowed: the object tools are not
+        let custom: Permissions =
+            serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"allow"}"#).expect("parsed");
+        assert_eq!(custom.level(Class::Objects), Level::Never);
+        assert_eq!(custom.level(Class::Take), Level::Never);
+        // saved levels are kept and written back
+        let kept: Permissions = serde_json::from_str(r#"{"objects":"allow","take":"ask"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Objects), Level::Allow);
+        assert_eq!(kept.level(Class::Take), Level::Ask);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""objects":"allow""#) && json.contains(r#""take":"ask""#), "{json}");
     }
 
     #[test]
