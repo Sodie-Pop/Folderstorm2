@@ -198,3 +198,32 @@ real socket.
 
 Not testable here: real animation blending and timing on a grid, the grid's
 relay of gesture sounds and chat, the dialog's look.
+
+## As built
+
+Branch `claude/mcp-gestures`, on `claude/mcp-building`.
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/protocol/gestures.rs`, `protocol/posing.rs` (new) | the 14 tools, bounds, `valid_name`, required ids (play, save), `always_asks` (save) |
+| `policy.rs`, `binding.rs` | `Class::Gestures` (`gestures`), `Class::Pose` (`pose`), presets and migration; capabilities `gestures: 1`, `posing: 1` |
+| `protocol.rs`, `protocol/inventory.rs` | `pub mod`, `all()`, `ToolSpec::needs_client_request_id`, `always_asks`; the catalogue count |
+| sidecar `jsonrpc.rs` | `GESTURES_HINT` |
+| viewer `mcp_bridge/gestures.rs`, `posing.rs` (new) | checks, revisions, plans, playback, session, presets and save workers, the demo |
+| `mcp_bridge/desk.rs`, `changes.rs`, `tools.rs`, `mcp_bridge.rs` | `Work::Gesture`, `Work::Pose`, `Ctx::avatar`; the reads, plans, ask rule, `tick_avatar`, clear, close; `gesture_loads`, `gesture_stops`, `gesture_started`, `gesture_stopped`, `pose_layer`, `pose_run`; replan; the demo |
+| `app/local_assistant.rs` | the View's avatar part, the play and stop, `local_assistant_pose` |
+| `app/gestures/folderstorm.rs` (new) | `assistant_gesture_load`, `_failures`, `_play`, `_stop` |
+| `gestures/folderstorm.rs` (new) | `Manager::stop_owned` |
+| `ik_edit/poser/document/folderstorm.rs` (new) | `hand_preset`, `inspect`, `apply_file`, `file_bytes` |
+| Preferences page, catalogues | two rows, nine Ask sentences and four lines, en/fr/ja |
+
+Upstream files touched, each by one `// Folderstorm:` line: `app.rs` (the
+pose hook after the poser's layers), `app/gestures.rs` and `gestures.rs`
+(`mod folderstorm;`), `ik_edit/poser.rs` (`pub(crate) use
+document::folderstorm as assistant;`), `ik_edit/poser/document.rs`
+(`pub(crate) mod folderstorm;`).
+
+Differences from the design above: none of substance. The hand presets'
+angles are read from the poser's own `presets.json` and set as its Hands
+control sets them (a few lines in the new module, since that control needs
+the poser window's state).
