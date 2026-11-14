@@ -577,3 +577,59 @@ fn an_early_answer_only_for_a_sidecar_that_declares_operations() {
     bridge.stop();
     assert_eq!(viewer.join().expect("viewer"), vec![true, false, false]);
 }
+
+/// Folderstorm: navigation (phase 3, part 4): a teleport asks even on
+/// Allow and answers early for a sidecar that declares `operations`; Never
+/// refuses it before the viewer; `navigation_stop` needs no class.
+#[test]
+fn a_teleport_asks_even_on_allow_and_stop_needs_no_class() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let mut p = Preset::ReadOnly.permissions();
+    p.set(Class::Navigation, Level::Allow);
+    bridge.set_permissions(p);
+    let viewer = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            let call = calls.recv().expect("a call");
+            seen.push((call.tool.clone(), call.ask, call.early, call.operation_id.is_some()));
+            call.answer(Ok(json!({})));
+        }
+        (seen, calls)
+    });
+    let at = json!({"global_position": [256100.0, 256100.0, 30.0], "client_request_id": "tp-1"});
+    client
+        .call("navigation_move_to", json!({"position": [1.0, 2.0, 3.0]}))
+        .expect("taken");
+    client.call("navigation_teleport", at.clone()).expect("taken");
+    client.call("navigation_stop", json!({"operation_id": "op-x"})).expect("taken");
+    let (seen, calls) = viewer.join().expect("viewer");
+    let features = seen
+        .iter()
+        .map(|(tool, ask, early, op)| (tool.as_str(), *ask, *early, *op))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        features,
+        vec![
+            // the client declares this build's capabilities, `operations` included
+            ("navigation_move_to", false, true, true),
+            ("navigation_teleport", true, true, true),
+            ("navigation_stop", false, false, false),
+        ]
+    );
+    // Never refuses the change, never the stop
+    p.set(Class::Navigation, Level::Never);
+    p.set(Class::Read, Level::Never);
+    bridge.set_permissions(p);
+    assert_eq!(
+        code(client.call("navigation_teleport", at).expect_err("refused")),
+        ErrorCode::PermissionDenied
+    );
+    assert!(calls.try_recv().is_err(), "refused before the viewer");
+    let viewer = std::thread::spawn(move || {
+        let call = calls.recv().expect("a call");
+        call.answer(Ok(json!({"stopped": true})));
+    });
+    client.call("navigation_stop", json!({"operation_id": "op-x"})).expect("passes");
+    viewer.join().expect("viewer");
+}

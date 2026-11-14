@@ -595,3 +595,166 @@ built" sections in mcp-receipts.md). New tools: `assistant_operation_status`,
 `inventory_preview_batch_move`, `inventory_execute_plan`; every change takes
 an optional `client_request_id` and answers with its `operation_id` and
 `state`. Capabilities `receipts: 1`, `plans: 1`, `operations: 1`.
+
+## Phase 3, part 4: navigation
+
+Step 4 of the MCP parity order (second half): the five `navigation_*` tools
+of Folderstorm (C++) (`tools/fs-mcp/internal/mcptools/navigation.go`,
+`doc/plans/mcp-navigation.md`), with the C++ names. Built on the receipts,
+login binding and guarded operations of [mcp-receipts.md](mcp-receipts.md)
+(branch `claude/mcp-navigation`, stacked on `claude/mcp-receipts`, PR #47,
+not merged yet). Their catalogue is its own file (`protocol/navigation.rs`);
+the viewer side is `mcp_bridge/navigation.rs` (rules, the navigator that
+follows an assistant's move or teleport) and `app/local_assistant.rs`
+(starts them through the viewer's own paths). Capability `navigation: 1`.
+
+| Tool | Class | Arguments | Returns | Refused when |
+|---|---|---|---|---|
+| `navigation_status` | read | none | `location` (as `world_location`), `teleporting`, `native_movement` (a walk or follow of the viewer's own runs), `active` (the assistant's move or teleport under way), `last` (how the last one ended: `outcome`, `reason`, distance left), `teleport_wait_seconds` | Read on Never |
+| `navigation_move_to` | navigation | `position` (region metres, this region) or `global_position`; `mode` `walk` (default) or `fly`; `stop_distance` 0.25–4 m (1); `timeout_seconds` 1–30 (30) | early: `operation_id`, `state`; at its end: `arrived`, `position`, `distance_left` | not in the world, teleporting; outside this region; more than 64 m away (flat for a walk, 3D for a flight); sitting; a walk while flying; a flight where taking off is refused (`autopilot::can_takeoff`: RLVa `@fly`, no-fly land); RLVa `@tplocal` / `@sittp` / `@unsit` as the double click on the ground applies them (`rlva_can_teleport_global`); a walk or follow of the viewer's own under way (`busy`, never interrupted); another assistant move live (`busy`) |
+| `navigation_flying_set` | navigation | `flying` (true: take off, false: land) | `flying`, `changed` | taking off where `can_takeoff` says no; sitting; any walk under way (`busy`) |
+| `navigation_teleport` | navigation, **always asks** | `global_position` [x, y, z] (z 0–4096); `client_request_id` **required** | early: `operation_id`, `state`; at its end: `arrived`, `at_target`, the region and position reached, `distance_from_target` | not in the world; a teleport under way (the viewer's or the assistant's), one live already, or less than 15 s since the last one (`busy`); RLVa `@tploc` / `@tplocal` / `@sittp` / `@unsit` (`rlva_allows_command` on the same `TeleportTo`) |
+| `navigation_stop` | none (bound) | `operation_id` | `stopped`, `state` (a move); `cancel_requested` (a teleport already submitted) | an operation of another login or not a navigation one (`not_found`) |
+
+### Decisions
+
+- **One new permission class, `navigation` ("Move my avatar").** Ask in
+  "Ask before changes", Never in "Read only"; settings saved before it
+  follow "Ask before changes" when every other change asks (as the camera
+  did). Folderstorm (C++) had two classes (move, teleport) behind its opt-in
+  World read; here one class, and **a teleport always asks**, even on Allow
+  (`protocol::always_asks`, as a picture with the interface), so that a
+  teleport never happens without the user seeing where it goes. Never
+  still refuses it.
+- **Status is Read** (as the world observations); **stop needs no class**,
+  like `assistant_operation_cancel`: it only stops the assistant's own
+  operation, so it works after the permissions were lowered. It is bound
+  to the login.
+- **Early answers.** `navigation_move_to` and `navigation_teleport` answer
+  as soon as the desk took them (`asking` or `queued`), for a sidecar that
+  declares `operations`; the assistant polls `navigation_status` or
+  `assistant_operation_status`. An older sidecar waits for the end (the
+  tools' waits: 35 s and 65 s).
+- **Teleport: one submission, never re-sent.** `client_request_id` is
+  required (decision 3 of mcp-receipts.md): a retry with the same id answers
+  the first receipt. Once submitted, nothing sends it again: no automatic
+  retry after a failure, a timeout or a login change. At most one teleport
+  in flight, 15 s at least between two submissions, and none while the
+  viewer teleports. A submitted teleport is **not reliably cancellable**:
+  `navigation_stop` asks the viewer to cancel it as the teleport screen's
+  Cancel does (only when the screen would offer it, and only for the
+  assistant's own teleport) and answers `cancel_requested`; the teleport
+  may still complete, and its end says which.
+- **Where the code goes.** The walk is the viewer's own autopilot
+  (`autopilot::AutoPilot`, as the double click on the ground and Go to
+  start it: `walk_to`, `travel_to_avatar`), so its obstacle handling, its
+  no-progress stop, the movelock handover and the flight thrust are the
+  viewer's. A flight is the autopilot's hover-at-a-point mode (Go to's
+  flight target). Take off and land are `toggle_fly` (LLAgent::setFlying's
+  rules). A teleport is `request_user_teleport` with `TeleportTo`, like the
+  double-click teleport (the maturity wait, RLVa at the send, the progress
+  screen).
+
+### A move, from start to end
+
+The navigator (`mcp_bridge/navigation.rs`, held by the desk) keeps the
+assistant's move under way: its operation, the autopilot it started
+(identified by the autopilot's start instant, so that it never stops a newer
+walk or follow of the user's), the target, the stop distance, the deadline
+and the login. Once per frame, just before the autopilot runs
+(`App::local_assistant_navigation`, one hook in `app.rs`), the app gives it
+what the frame shows (the autopilot, the avatar, the input, the teleport)
+and runs what it asks: stop that autopilot, or cancel that teleport.
+
+| What happens | The move | Reason in `last` |
+|---|---|---|
+| The autopilot reaches the target | `done` | `arrived` |
+| A movement key, the joystick, Stop, mouse steering | stopped (the viewer's own rule stops the autopilot) | `user_input` |
+| Another walk or follow of the user's replaces it | stopped, the other one goes on | `replaced` |
+| Its `timeout_seconds` | stopped | `timeout` |
+| `navigation_stop`, `assistant_operation_cancel`, Preferences' Stop | stopped | `assistant_stop` / `user_stop` |
+| The class set to Never, access turned off | stopped | `permissions_changed` / `access_off` |
+| Logout, another login or character | stopped | `login_changed` |
+| A teleport, a region change | stopped | `teleported` / `region_changed` |
+| The avatar sits, takes off or lands | stopped | `sat_down` / `flight_changed` |
+| The autopilot gives up (no nearer for too long), or Escape | stopped | `stopped_short` |
+
+A stopped move answers `cancelled` with its reason (receipt `stopped`: it was
+sent). Nothing restarts a stopped move. While a move or a teleport waits for
+the dialog or its turn, the receipts' rules apply as to any change (another
+login, Never, access off, cancel). Under RLVa `@showloc`, positions,
+targets and distances are left out of `navigation_status`, as
+`world_location` leaves them out.
+
+### A teleport, from start to end
+
+Submitted (`running`): the viewer teleports (`World::teleporting`). Then:
+arrived (`done`, with `at_target` when it landed within 5 m of the target:
+a landing point or a telehub can put it elsewhere); failed (`failed`, the
+simulator's reason); cancelled by the stop (`stopped`); no end in 60 s
+(`unconfirmed`: it may still complete). A login change ends it as
+`login_changed`.
+
+### Ask texts
+
+"Walk to (x, y, z) in “Region”, 12 m away", "Fly to …", "Take off (start
+flying)", "Land (stop flying)", "Teleport to (x, y, z) in “Region”" (the
+region's name when the viewer knows it, else the global coordinates).
+
+### Upstream hooks
+
+`autopilot.rs`: `AutoPilot::with_stop_distance` (the assistant's own stop
+distance; the walk's is otherwise the double click's square root);
+`app.rs`: one call `self.local_assistant_navigation()` just before
+`update_autopilot`; the `fs-mcp-*` block of the catalogues grows;
+`docs/TESTING.md`: `AURORA_DEMO_MCP=navigation`.
+
+### Tests
+
+Pure rules (`mcp_bridge/navigation.rs`): argument bounds, region and
+distance limits, sitting and flying, RLVa (`@tplocal`, `@sittp`, `@unsit`,
+`@tploc`, `@fly`), the teleport's region and position from a global one, the
+rate limit and the one-at-a-time rule, every stop reason of the table, the
+teleport's ends, positions hidden by `@showloc`. Viewer side, on the demo
+plaza: the desk with the navigation class (Ask, Never, teleport always
+asking, `client_request_id` required, early answers, cancel while asking
+and while running, login change and access off while running). End to end
+over a real socket: a walk asked, allowed, polled to `done`; a teleport
+retried with the same `client_request_id` submitted once.
+
+### Not in this part
+
+Sitting and standing, touching, follow, autopilot to an object or an
+avatar, teleports by region name or landmark, offers and lures (C++ also
+leaves them out), running instead of walking.
+
+### As built
+
+Branch `claude/mcp-navigation`, stacked on `claude/mcp-receipts` (PR #47,
+merged into it up to `737a01e`).
+
+| Where | What |
+|---|---|
+| bridge `policy.rs` | `Class::Navigation` (saved as `navigation`), its migration |
+| bridge `protocol/navigation.rs` (new) | the catalogue, bounds, `always_asks`, `needs_client_request_id` (the schema lists it as required), `answers_early` |
+| bridge `binding.rs`, `protocol.rs`, `protocol/assistant.rs` | `navigation: 1`; the group bound to the login (`navigation_stop`); the teleport in `protocol::always_asks`; early answers |
+| sidecar `jsonrpc.rs` | the instructions' navigation paragraph; `navigation_stop` not read-only |
+| viewer `mcp_bridge/navigation.rs` (new) | the rules (`plan`), `teleport_target`, `manual_input`, `Navigator` (move and teleport under way, `Reason`, `Last`, lanes and the rate limit), `status` |
+| viewer `desk.rs` | the navigator (kept across access off, its stops still run); the lanes after the receipt (so that a retried `client_request_id` answers its receipt, never `busy`); `client_request_id` required for a teleport; `always_asks` also for calls made in the process; `navigation_status` and `navigation_stop`; `Desk::navigate` (the class on Never stops a running move) |
+| viewer `changes.rs`, `tools.rs`, `mcp_bridge.rs` | `Work::Navigate`, `Ctx::nav`, `View::navigation`, `navigation_frame`, the `TeleportFailed` reason, the demo |
+| viewer `app/local_assistant.rs` | the autopilot started as `walk_to` / `travel_to_avatar` start theirs, `toggle_fly`, `request_user_teleport`; the per-frame hook that stops only the assistant's own autopilot |
+
+Differences from the design above:
+
+- `navigation_stop` is `assistant_operation_cancel` restricted to the
+  navigation tools; in return `assistant_operation_cancel` and Preferences'
+  Stop now also stop a move under way (`stopped`) and ask a submitted
+  teleport to cancel (`cancel_requested`).
+- A move already within its stop distance answers at once (`arrived`,
+  `moved: false`), without a dialog.
+- A move's answer is `cancelled` with `stopped: <reason>` for every stop,
+  so its receipt reads `stopped`; a teleport refused by the simulator is
+  `failed` with its reason, one with no end in 60 s `timeout`
+  (`unconfirmed`).
+- Take-off and landing answer at once (the flight flag is the viewer's).
+- Not built: running (the autopilot walks), a separate teleport class.
