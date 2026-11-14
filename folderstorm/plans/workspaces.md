@@ -1479,6 +1479,160 @@ settings). **Not checked here** (no graphics device): the viewer itself.
   `@showinv` blocks Inventory; a deleted folder skips with a note; another
   account skips the folders.
 
+#### Checkpoint 6 in detail (2026-11-14)
+
+Written before the build, from `claude/workspaces-fixes` at `cc9961c`
+(PR #57, not merged: this checkpoint is stacked on it). What differs from
+the sketches of sections 7 to 10 is said here; "As built" below is filled
+in when the checkpoint is done.
+
+**Scope: two parts.** The checkpoint is large, so it is built in two parts,
+each working on its own.
+
+- **Part 1 (this branch):** the workspace record and its list; applying a
+  workspace (its layout if it names one, then its windows opened and the
+  others closed); *Previous*; the restore report; workspaces in the
+  switcher (now *Layouts & workspaces*), in World › Layouts, in the
+  favorites and in Preferences; the demo.
+- **Part 2 (left):** Inventory **folder windows** with *Remember Inventory
+  folders* (per account, at most 16, a deleted folder or another account
+  skipped with a note), and its one upstream hook
+  (`ui/inventory.rs`, `open_folder_window` returning the window's id).
+  Until then a workspace leaves folder windows alone.
+
+**1. Store.** Two fields beside `layouts`, both left out while empty, and a
+second kind of favorite:
+
+```json
+"workspaces": [
+  { "schema": 1, "name": "Sorting", "layout": "1 monitor",
+    "open": ["inventory", "inventory_6b1f2c4e-…", "people"] }
+],
+"active_workspace": "Sorting",
+"favorites": [ { "layout": "2 monitors" }, { "workspace": "Sorting" } ]
+```
+
+- `open`: the ids of the allowlisted windows the workspace has open
+  (section 7.3). The additional Inventory window is one of them (its fixed
+  id), not a field of its own. An id this version does not know is kept and
+  ignored; at most 64.
+- `layout`: the layout applied with the workspace, by name; absent: the
+  layout in use stays. Renaming the layout renames it here; deleting the
+  layout takes it out (the workspace then keeps the current layout).
+- As for layouts: each entry is read on its own; one of a newer schema or
+  that breaks a limit is kept as read, listed as such, never applied; what
+  this version does not know of an entry is kept; at most 32; names 1 to 40
+  characters, unique among workspaces ignoring case. **A workspace and a
+  layout may have the same name**: every list and request says which it
+  means.
+- `active_workspace`: the workspace last applied, saved or updated. It
+  stays when a layout is applied on its own (any workspace works on any
+  layout).
+- A build from before checkpoint 6 keeps a `{ "workspace": … }` favorite as
+  read (checkpoint 5's rule) but **drops `workspaces` and
+  `active_workspace` when it saves the settings**: going back to an older
+  build loses the workspaces.
+
+**2. Which windows a workspace switches.** Every window of the allowlist
+**but Conversations**: as in Folderstorm (C++) ("loading a workspace leaves
+its open/closed state and selected conversations unchanged"), a workspace
+neither opens nor closes it, and does not record it. A layout still places
+it, and opens it when it was saved open and no workspace is applied with
+it.
+
+**3. Apply.** One request, in the steps of section 8.2:
+
+1. the workspace's layout, when it names one that can be used, exactly as
+   a layout is applied (viewer window, world and bars, window places). A
+   layout that cannot be used (a newer or damaged entry) is skipped and
+   said;
+2. in the frame where the layout's windows are placed (at once without a
+   layout): each window of the workspace's list that is closed is opened
+   the app's way (`apply::Shell::open`, as a layout does: RLVa and the
+   settings may refuse, counted), and each other allowlisted window that is
+   open is **closed** (`Shell::close`, new: the `Panels` flag,
+   `InventoryUi::close_additional_window`, both flags of the Controls
+   window). **The workspace's list wins over the layout's `"open"` marks**:
+   a window the layout was saved with open and that the workspace does not
+   list is not opened;
+3. the workspace becomes the one in use; the report says what was done:
+   "Workspace “Sorting” applied. 2 windows opened, 3 closed. 1 window
+   cannot be opened right now…", after the layout's own sentence.
+
+A window opened this way and placed by no layout opens where Aurora last
+had it. Nothing a window contains is touched.
+
+**4. Previous.** After a workspace, *Previous arrangement* also puts the
+windows back open or closed as they were (and the workspace in use then);
+pressing it again comes back. After a layout alone it closes nothing, as
+before.
+
+**5. Modified.** A workspace in use is "modified" when the windows open
+now are not its list (Conversations and unknown ids aside). Worked out when
+drawn, from the open windows; nothing is stored.
+
+**6. Save and Update.** *Save new* in the switcher and in Preferences asks
+what to save: a **layout** (as before) or a **workspace**: its name, and
+*Use the layout in use* (ticked: the workspace names the active layout;
+greyed without one). It records the windows open now. *Update* on a
+workspace replaces its list with the windows open now (its layout choice
+is kept), after the question.
+
+**7. The switcher** is titled *Layouts & workspaces*. Its list: Favorites
+(both kinds, in their order), then the other Workspaces, then the other
+Layouts; a workspace's line has its own icon in place of the lock. Enter
+applies the selected entry. The side shows, for a workspace: the picture
+of its layout when it names one, the layout's name (or "keeps the layout
+in use"), and the windows it opens by name. *Update* offers the layout in
+use and the workspace in use, each with its name.
+
+**8. Menu, toolbar, keyboard.** World › Layouts lists the favorites of
+both kinds (every usable layout and workspace when there is no favorite),
+workspaces after a separator; *Layouts & workspaces…* opens the switcher.
+The toolbar command `workspaces` and its key are relabelled *Layouts &
+workspaces*. The toggle and the favorites' round of the keyboard stay
+**layouts only** (their names say so).
+
+**9. Preferences › Layout › Layouts & workspaces** (the tab renamed) gains
+a group *Workspaces*: the list (in use, modified, star), Apply, Update,
+Rename, Delete, Move up / down, the star; for the selected one, *Layout*
+(Keep the layout in use, or a name) and a box per window it opens.
+*Save as a new workspace* with its name and the layout box.
+
+**10. Demo.** `AURORA_DEMO_WORKSPACES=1` seeds the two layouts of
+`AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the
+additional Inventory window, People) and "Exploring" (mini-map, world map,
+Places), both favorites, and opens the switcher; `=apply` also applies
+"Sorting" at frame 180 and "Exploring" at frame 360.
+
+**11. Upstream hooks.** None new in part 1: the windows are opened and
+closed from `app/folderstorm_workspaces.rs` (ours), the switcher and the
+menu are drawn from checkpoint 4 and 5's calls. Locale keys in our
+section, and `docs/TESTING.md`.
+
+**12. Tests.** Pure: the store's workspaces (round trip, absent fields,
+newer and damaged entries kept, unknown ids kept, limits, names, rename and
+delete of a layout followed, the favorite of a workspace, a checkpoint 5
+file read and written as it was); `pick` with both kinds (order, filter,
+first choice). Frame tests with the pretend viewer: a workspace opens and
+closes; Conversations left alone; a blocked window counted; with a layout
+(places and the list winning over `"open"`); without one (the layout in
+use stays); Previous; modified; save, update; the switcher (sections,
+Enter, star, Save new as a workspace, Update); the menu; the tab's group.
+The app's `Shell::close` for every allowlisted window. Pictures with the
+software painter.
+
+**Decisions to confirm (the human).** Each took the option closest to
+Folderstorm (C++):
+
+1. Conversations is never opened or closed by a workspace (point 2).
+2. A workspace applied with a layout: its list wins over the layout's
+   `"open"` marks (point 3).
+3. The toggle and the next / previous favorite keys stay layouts only
+   (point 8); Folderstorm (C++)'s favorites round went through both.
+4. A workspace and a layout may share a name (point 1).
+5. Folder windows wait for part 2.
+
 ## 14. Later (outline only)
 
 - **1.6 Favorites strip.** Favorite layouts and workspaces after a divider on
