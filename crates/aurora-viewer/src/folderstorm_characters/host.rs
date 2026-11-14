@@ -55,8 +55,8 @@
 mod chat_ui;
 mod chips;
 mod comfort;
-mod controller; // (session routing: the MCP controller)
 mod contacts_ui;
+mod controller; // (session routing: the MCP controller)
 mod faces;
 mod hotkeys;
 mod monitors;
