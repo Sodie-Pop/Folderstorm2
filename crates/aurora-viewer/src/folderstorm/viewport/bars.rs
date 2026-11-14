@@ -181,19 +181,16 @@ fn sides_id() -> egui::Id {
 /// around the world (the side toolbars are then laid out with the others).
 pub fn set_sides(ctx: &egui::Context, around: Option<(Rect, Rect)>) {
     let frame = ctx.cumulative_frame_nr();
-    ctx.data_mut(|d| match around {
-        Some((world, area)) => d.insert_temp(sides_id(), Sides { frame, world, area }),
-        None => {
-            d.remove_temp::<Sides>(sides_id());
-        }
-    });
+    let sides = around.map(|(world, area)| Sides { frame, world, area });
+    ctx.data_mut(|d| d.insert_temp::<Option<Sides>>(sides_id(), sides));
 }
 
 /// What [`set_sides`] said this frame or the last one (the hidden
 /// interface's edges are read before the bars are laid out).
 fn sides_set(ctx: &egui::Context) -> Option<Sides> {
     let now = ctx.cumulative_frame_nr();
-    ctx.data(|d| d.get_temp::<Sides>(sides_id()))
+    ctx.data(|d| d.get_temp::<Option<Sides>>(sides_id()))
+        .flatten()
         .filter(|sides| sides.frame.saturating_add(1) >= now)
 }
 
