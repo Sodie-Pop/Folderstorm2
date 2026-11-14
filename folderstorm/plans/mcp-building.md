@@ -211,3 +211,29 @@ the server's handling of next owner rights, the dialog's look.
 - PBR overrides (Folderstorm (C++) left them to native Build too).
 - Resizing a linkset (its children's transforms reviewed together).
 - Next owner rights of objects (the slam flag question above).
+
+## As built
+
+Branch `claude/mcp-building`, on `claude/mcp-script-testing`.
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/protocol/building.rs` (new) | the eight tools, bounds, `is_change`, `needs_client_request_id`, `always_asks` (next owner) |
+| `policy.rs` | `Class::Build` (`build`), presets and migration |
+| `binding.rs`, `protocol.rs`, `protocol/inventory.rs` | `building: 1`; `pub mod`, `all()`, the required id, always asks; the catalogue count, and the inventory group's "no next owner tool" check now pointing at this group |
+| sidecar `jsonrpc.rs` | `BUILDING_HINT`; the inventory test's "next owner absent" check inverted |
+| viewer `mcp_bridge/building.rs` (new) | revisions, the reads, plans, watches, rez candidates, item revisions, the demo |
+| `mcp_bridge/objects.rs` | `prim_or_ask` (a root whose owner is asked once), `track_rez` used, building receipts in `object_operation_status` |
+| `mcp_bridge/desk.rs`, `changes.rs`, `mcp_bridge.rs` | `Work::Build`; the reads, plan, required id; tick, clear, close; `building_plan`, `build_sending`; replan; the demo |
+| `app/local_assistant.rs` | `local_assistant_build`: RLVa at the send, the build tools' messages, the create sound |
+| Preferences page, catalogues | the Build row; ten Ask sentences and labels, en/fr/ja |
+
+Differences from the design above:
+
+- A face's colour is compared within 1.5/255, glow the same, repeats and
+  offsets within 0.001, rotation within 0.002 rad (the entry's
+  quantisation).
+- The ModifyMaterialParams post carries a tag far above the build tool's
+  (1 << 62 and up), so that its reply is never taken for the Build window's.
+- In the demo, a surface change is not echoed by the demo region (it
+  answers no ObjectImage), so the demo leaves it out; the tests cover it.
