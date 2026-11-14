@@ -63,6 +63,7 @@ fn pressure(pixel: f32, extent: f32) -> f32 {
 /// drives continued travel. Otherwise the grab offset can hide the object
 /// even though the camera pans under the stationary edge cursor.
 pub fn drag_cursor(cam: &Cam, cursor: (f32, f32), start: (f32, f32), grab_offset: (f32, f32)) -> (f32, f32) {
+    let grab_offset = (grab_offset.0 + cam.origin.x, grab_offset.1 + cam.origin.y); // Folderstorm: world viewport
     // A handle already inside the margin must not jump on the first move.
     (
         cursor.0.clamp(
@@ -89,6 +90,12 @@ impl EdgePan {
             return Vec3::ZERO;
         }
         let Some((x, y)) = cam.project_px(point) else { return Vec3::ZERO };
+        // Folderstorm: the edges of a custom world viewport
+        let (cursor, x, y) = (
+            (cursor.0 - cam.origin.x, cursor.1 - cam.origin.y),
+            x - cam.origin.x,
+            y - cam.origin.y,
+        );
         let strongest = |a: f32, b: f32| if a.abs() > b.abs() { a } else { b };
         let target = Vec2::new(
             strongest(pressure(cursor.0, cam.width), pressure(x, cam.width)),
