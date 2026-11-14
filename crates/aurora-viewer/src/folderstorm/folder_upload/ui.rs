@@ -21,14 +21,17 @@ pub struct Context {
 }
 
 fn key() -> egui::Id {
-    egui::Id::new("folderstorm_folder_upload_context")
+    egui::Id::unique("folderstorm_folder_upload_context")
 }
 
 /// Shows the block while a folder upload is in the uploader, hides it after.
 pub fn publish(ctx: &egui::Context, context: Option<Context>) {
-    ctx.data_mut(|data| match context {
-        Some(context) => data.insert_temp(key(), Arc::new(context)),
-        None => data.remove::<Arc<Context>>(key()),
+    ctx.data_mut(|data| {
+        if let Some(context) = context {
+            data.insert_temp(key(), Arc::new(context));
+        } else {
+            data.remove::<Arc<Context>>(key());
+        }
     });
 }
 
@@ -73,7 +76,6 @@ fn kind_label(kind: Kind, count: usize) -> String {
         Kind::Material => aurora_i18n::tr!("fs-folder-upload-materials", count = count),
         Kind::Mesh => aurora_i18n::tr!("fs-folder-upload-meshes", count = count),
     }
-    .into()
 }
 
 /// The block's lines and whether each one is a warning, for the dialog and
@@ -85,12 +87,11 @@ pub fn lines(context: &Context, preview: &Preview, destination_path: &str) -> Ve
                 "fs-folder-upload-from",
                 folder = context.folder.as_str(),
                 destination = destination_path
-            )
-            .into(),
+            ),
             Tone::Strong,
         ),
         (
-            aurora_i18n::tr!("fs-folder-upload-files", files = preview.files, folders = preview.new_folders).into(),
+            aurora_i18n::tr!("fs-folder-upload-files", files = preview.files, folders = preview.new_folders),
             Tone::Normal,
         ),
     ];
@@ -104,23 +105,19 @@ pub fn lines(context: &Context, preview: &Preview, destination_path: &str) -> Ve
             aurora_i18n::tr!(
                 "fs-folder-upload-skipped",
                 count = skipped.files.len(),
-                names = list(&skipped.files).as_str()
-            )
-            .into(),
+                names = list(&skipped.files)
+            ),
             Tone::Warn,
         ));
     }
     if skipped.empty_folders > 0 {
         lines.push((
-            aurora_i18n::tr!("fs-folder-upload-empty", count = skipped.empty_folders).into(),
+            aurora_i18n::tr!("fs-folder-upload-empty", count = skipped.empty_folders),
             Tone::Normal,
         ));
     }
     if skipped.links > 0 {
-        lines.push((
-            aurora_i18n::tr!("fs-folder-upload-links", count = skipped.links).into(),
-            Tone::Normal,
-        ));
+        lines.push((aurora_i18n::tr!("fs-folder-upload-links", count = skipped.links), Tone::Normal));
     }
     if skipped.truncated {
         lines.push((aurora_i18n::tr!("fs-folder-upload-truncated").into(), Tone::Warn));
@@ -130,31 +127,27 @@ pub fn lines(context: &Context, preview: &Preview, destination_path: &str) -> Ve
             aurora_i18n::tr!(
                 "fs-folder-upload-existing",
                 destination = destination_path,
-                names = list(&preview.existing_names).as_str()
-            )
-            .into(),
+                names = list(&preview.existing_names)
+            ),
             Tone::Warn,
         ));
     }
     if !preview.shared_names.is_empty() {
         lines.push((
-            aurora_i18n::tr!("fs-folder-upload-shared", names = list(&preview.shared_names).as_str()).into(),
+            aurora_i18n::tr!("fs-folder-upload-shared", names = list(&preview.shared_names)),
             Tone::Normal,
         ));
     }
     if preview.errors > 0 {
-        lines.push((
-            aurora_i18n::tr!("fs-folder-upload-errors", count = preview.errors).into(),
-            Tone::Danger,
-        ));
+        lines.push((aurora_i18n::tr!("fs-folder-upload-errors", count = preview.errors), Tone::Danger));
     }
     match (preview.cost, preview.balance, preview.balance_after()) {
         (Some(cost), Some(balance), _) if !preview.affordable() => lines.push((
-            aurora_i18n::tr!("fs-folder-upload-short", cost = cost, balance = balance).into(),
+            aurora_i18n::tr!("fs-folder-upload-short", cost = cost, balance = balance),
             Tone::Danger,
         )),
         (Some(cost), Some(balance), Some(after)) if cost > 0 => lines.push((
-            aurora_i18n::tr!("fs-folder-upload-balance", balance = balance, after = after).into(),
+            aurora_i18n::tr!("fs-folder-upload-balance", balance = balance, after = after),
             Tone::Normal,
         )),
         _ => {}
@@ -202,12 +195,11 @@ pub fn receipt_text(folder: &str, receipt: &Receipt) -> String {
         failed = receipt.failed.len(),
         cancelled = receipt.cancelled.len(),
         spent = receipt.spent
-    )
-    .into();
+    );
     if !receipt.failed.is_empty() {
         let names: Vec<String> = receipt.failed.iter().map(|(name, _)| name.clone()).collect();
         text.push(' ');
-        text.push_str(&aurora_i18n::tr!("fs-folder-upload-receipt-failed", names = list(&names).as_str()));
+        text.push_str(&aurora_i18n::tr!("fs-folder-upload-receipt-failed", names = list(&names)));
     }
     text
 }

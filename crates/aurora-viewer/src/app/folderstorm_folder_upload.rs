@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::folderstorm::folder_upload::{self as upload, Effect, Refusal, Source, demo, plan};
+use uuid::Uuid;
 
 impl App {
     /// Inventory › + › Upload a folder here…

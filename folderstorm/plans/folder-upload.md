@@ -56,8 +56,9 @@ choice stays in their settings afterwards.
 
 ## What we build
 
-1. **Inventory entry point** — *Upload a folder here…* in the Inventory's
-   **+** (New) menu of a folder, as Folderstorm (C++) does. It picks a disk
+1. **Inventory entry point** — *Upload a folder here…* in the Inventory
+   window's **+** menu (into the selected folder, as Folderstorm (C++)'s
+   `menu_inventory_add.xml`) and in a folder's right-click **New** group. It picks a disk
    folder, then opens the uploader on its **Folder preview** tab with the
    batch routed as a mirror of the disk folder into that inventory folder
    (*Use default folders* off, *mirror*, destination = the folder,
@@ -96,7 +97,8 @@ choice stays in their settings afterwards.
 - `app/imports.rs`: one call per frame in `show_imports`.
 - `app/inventory.rs`: one match arm for the new inventory action.
 - `ui/inventory.rs`: one `InvAction` variant.
-- `ui/inventory/context_catalog.rs`: one menu entry in the **+** group.
+- `ui/inventory/context_catalog.rs`: one entry in the right-click **New**
+  group; `ui/inventory/context.rs`: one entry in the window's **+** menu.
 - `imports/files.rs`: `add_folder_path`, a public door to the existing
   private loader for a folder chosen elsewhere (the dialog and the MCP path).
 - `imports/ui.rs`: one call in the confirmation dialog.

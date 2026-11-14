@@ -281,6 +281,17 @@ pub(super) fn new_menu(
             }
         },
     );
+    // Folderstorm: Upload a folder here… (folderstorm/folder_upload)
+    let upload = InvAction::FolderstormUploadFolder(id);
+    entry(
+        ui,
+        p,
+        "file-upload-filled",
+        aurora_i18n::tr!("fs-folder-upload-menu"),
+        enabled,
+        upload,
+        actions,
+    );
     menu::submenu(
         ui,
         p,

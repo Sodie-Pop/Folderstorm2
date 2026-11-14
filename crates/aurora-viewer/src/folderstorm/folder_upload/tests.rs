@@ -110,10 +110,12 @@ fn the_demo_folder_shows_every_case_of_the_preview() {
 #[test]
 fn routing_is_a_mirror_into_the_folder_and_goes_back_unless_the_user_changed_it() {
     let destination = Uuid::new_v4();
-    let mut prefs = crate::imports::Preferences::default();
-    prefs.use_default_folders = true;
-    prefs.include_source_folder = false;
-    prefs.folder_layout = Some(Layout::Type);
+    let mut prefs = crate::imports::Preferences {
+        use_default_folders: true,
+        include_source_folder: false,
+        folder_layout: Some(Layout::Type),
+        ..Default::default()
+    };
     let saved = Routing::read(&prefs);
     let applied = Routing::mirror_into(destination);
     applied.write(&mut prefs);
@@ -420,10 +422,8 @@ fn confirm_texts(published: Option<Context>) -> Vec<String> {
     theme.apply(&ctx, 1.0);
     let mut world = crate::world::World::new(std::sync::Arc::new(crate::scene::avatar::AvatarLibrary::load()));
     world.balance = Some(1000);
-    let mut imports = crate::imports::Imports {
-        entries: vec![texture("Cover.png", &["Kit"]), texture("Wood.png", &["Kit", "Fabrics"])],
-        ..Default::default()
-    };
+    let mut imports = crate::imports::Imports::default();
+    imports.entries = vec![texture("Cover.png", &["Kit"]), texture("Wood.png", &["Kit", "Fabrics"])];
     imports.demo_started = true;
     imports.confirm = true;
     let mut prefs = crate::imports::Preferences::default();
@@ -463,14 +463,14 @@ fn the_uploader_s_confirmation_shows_the_folder_upload_block_only_for_a_folder_u
     };
     let texts = confirm_texts(Some(context));
     let price = aurora_i18n::tr!("import-confirm-price", cost = 20);
-    assert!(texts.iter().any(|text| *text == price), "the uploader's total stays: {texts:?}");
+    assert!(texts.contains(&price), "the uploader's total stays: {texts:?}");
     let files = aurora_i18n::tr!("fs-folder-upload-files", files = 2, folders = 2);
-    assert!(texts.iter().any(|text| *text == files), "{texts:?}");
+    assert!(texts.contains(&files), "{texts:?}");
     assert!(texts.iter().any(|text| text.contains("Notes/Readme.txt")));
     let balance = aurora_i18n::tr!("fs-folder-upload-balance", balance = 1000, after = 980);
-    assert!(texts.iter().any(|text| *text == balance), "{texts:?}");
+    assert!(texts.contains(&balance), "{texts:?}");
 
     let plain = confirm_texts(None);
-    assert!(plain.iter().any(|text| *text == price));
+    assert!(plain.contains(&price));
     assert!(!plain.iter().any(|text| *text == files || text.contains("Notes/Readme.txt")));
 }
