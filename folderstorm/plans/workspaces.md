@@ -1281,6 +1281,107 @@ action; the favorites' round; the menu's favorites; the card in mouselook.
 The switcher and the tab's new group drawn with the software painter
 (`FOLDERSTORM_TEST_CAPTURE_DIR`).
 
+#### Checkpoint 5 as built (branch `claude/workspaces-cp5`, 2026-11-14)
+
+Built as detailed above, stacked on checkpoint 4 (PR #50). What the build
+added or changed on the way:
+
+- **A click on a line gives the keyboard back to the field**, so the
+  arrows and Enter carry on from the line clicked instead of walking the
+  avatar.
+- **The switcher's key also does nothing with the interface put away**
+  (immersive mode, *Hide the interface*), as in mouselook; and a toggle
+  with nothing chosen opens Preferences only where a window can show.
+- **The star in the Preferences tab is a button of the selected layout**
+  (a star after the two arrows), and a star is drawn on the lines of the
+  favorites: a star to click on each line is the switcher's.
+- **The picture draws the monitors' borders and numbers over the viewer
+  window** too: a window stretched over two monitors hides them otherwise.
+- **The layouts' words are in one place** (`words.rs`): the sentences of a
+  refusal, of what an apply did and of what a layout holds, shared by the
+  tab and the switcher.
+- **The pass's call is one function** (`workspaces::interface`): the card
+  when it can be clicked, then the switcher; the app only says whether the
+  interface is hidden.
+- **Favorites keep the order they were starred in**: there is no control
+  to reorder them yet (unstar and star again puts one last).
+
+**Settings format.** The store may hold `"favorites"` and `"toggle"` as in
+"1. Store" above; both are left out while empty, so a store that uses
+neither is written exactly as checkpoint 4 wrote it, and a file from before
+reads with neither (tests: `favorites_and_the_toggle_survive_a_save_and_a_read`,
+`a_store_without_favorites_is_written_as_before`,
+`favorites_of_unknown_kinds_are_kept_and_stale_ones_dropped`,
+`a_rename_and_a_delete_are_followed_by_the_star_and_the_toggle`).
+`keybinds.map` may hold our actions, as `[{"Folderstorm":"LayoutToggle"},
+[null, null]]`; a settings file from before gains them without a key, and a
+build that does not know them drops those lines only (Aurora's tolerant
+reader; tests in `folderstorm/keys.rs`). Nothing to migrate.
+
+**Upstream hooks** (line numbers at the checkpoint's last commit; all
+marked `// Folderstorm:`), beside checkpoint 4's:
+
+| File | Line | Hook |
+|---|---|---|
+| `crates/aurora-viewer/src/ui/toolbar/catalogue.rs` | 115–117 | the two commands, `workspaces` and `layout_toggle`, at the end of `COMMANDS` |
+| `crates/aurora-viewer/src/ui/bars.rs` | 2467 | `run_command`: one arm for both, `toolbar::run(ctx, cmd)` |
+| `crates/aurora-viewer/src/ui/bars.rs` | 3291–3292 | `toolbar_row`: `let (active, usable, tip) = toolbar::look(…)`, after the tooltip is made |
+| `crates/aurora-viewer/src/ui/toolbar/tests.rs` | 898, 899, 903 | the catalogue's count, `78 + 2` |
+| `crates/aurora-viewer/src/ui/toolbar/tests.rs` | 924–927 | our two commands are skipped by "a ready command changes a window or returns an action": they leave a request (checked in `workspaces/tests/switcher.rs`). Their icons and labels are still checked by this test |
+| `crates/aurora-viewer/src/keybinds.rs` | 483–484 | `Action::Folderstorm(crate::folderstorm::keys::Key)` |
+| `crates/aurora-viewer/src/keybinds.rs` | 677 | `sections()`: `crate::folderstorm::keys::section(),` as the last section |
+| `crates/aurora-viewer/src/keybinds.rs` | 994 | `us_places`: `let defaults = crate::folderstorm::keys::with_unbound(defaults);` |
+| `crates/aurora-viewer/src/app.rs` | 4994 | `on_input`: `Action::Folderstorm(key) => self.folderstorm_key(key),` |
+| `crates/aurora-viewer/src/app.rs` | 16381 | checkpoint 4's call, unchanged but for its comment: it now draws the switcher too |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | | 7 new `fs-layouts-*` keys, and a section of 30 `fs-switcher-*` and `fs-keys-*` keys |
+| `docs/TESTING.md` | | two paragraphs, one table row |
+
+When upstream adds a toolbar command, the three counts of
+`ui/toolbar/tests.rs` conflict: take upstream's number and add 2.
+
+**New files:** `folderstorm/keys.rs`,
+`folderstorm/workspaces/{pick,preview,switcher,toolbar,words}.rs`,
+`folderstorm/workspaces/tests/switcher.rs`.
+
+**Tests.** Pure: `workspaces::store` (+5), `workspaces::pick` (7),
+`workspaces::preview` (7), `folderstorm::keys` (6: no default key, the
+viewer's default bindings unchanged with our actions in the table, older
+settings, a chosen key saved and read, a build without our actions, the
+labels). Frame tests with the pretend viewer,
+`workspaces::tests::switcher` (19): the field's keyboard, Enter, the
+filter, the arrows, Esc, a click and a double click, the star, *Save new*
+and its refusal, *Update* and its question, *Previous* and *Preferences*,
+the two toolbar commands through `bars::run_command` and their look, each
+key's request, the favorites' round, the switcher never captured, the list
+following the store, the card while the interface is hidden. The tab (+2:
+the star, the toggle's two pickers). Drawn with the software painter
+(`FOLDERSTORM_TEST_CAPTURE_DIR`): `switcher.png`, `switcher-missing.png`,
+`switcher-save.png`.
+
+**Not checked here** (no graphics device, no window system in the
+sandbox): the two buttons on a real bar (their dimming, tooltip and lit
+state are checked through the functions the bar calls, not drawn); a key
+bound in Preferences › Shortcuts pressed in the viewer, alone and while
+typing; the switcher over the real interface, and in mouselook; the demo
+scenario. The human's list is in the checkpoint's report.
+
+**Known limits.**
+
+- The switcher lists layouts only, and is called *Layouts*: workspaces
+  join it in checkpoint 6 (the toolbar command is already named
+  `workspaces`, so a saved toolbar stays valid).
+- Favorites cannot be reordered but by starring them again.
+- A plain key (no Ctrl or Alt) chosen for an action does nothing while a
+  text field has the keyboard, the switcher's own field included: Aurora's
+  rule for every shortcut. A chord with Ctrl or Alt works there too.
+- The picture does not know the task bar: a maximized window is drawn over
+  its whole monitor.
+- An entry that cannot be used (newer, damaged) is not in the switcher;
+  Preferences lists it.
+- Row 1.5's C++ list also had snapping and alignment, toolbar button sets
+  and export / import: not ported (section 3).
+- Checkpoint 4's other limits stand, but the card in mouselook.
+
 ### Checkpoint 6: workspaces (row 1.4)
 
 - Open / close allowlisted windows, additional Inventory window, folder
