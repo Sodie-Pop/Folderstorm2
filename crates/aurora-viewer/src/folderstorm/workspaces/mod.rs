@@ -21,6 +21,10 @@
 //! - [`apply`]: applying, *Previous arrangement*, the "modified" mark.
 //! - [`menu`]: World › Layouts. [`notice`]: the card when the monitors
 //!   change.
+//! - [`pick`]: which layout a quick switch means. [`preview`]: the picture
+//!   of a layout before it is applied. [`switcher`]: the window to change
+//!   layout from the keyboard. [`toolbar`]: the two toolbar commands.
+//!   [`words`]: the layouts in words.
 //!
 //! A layout never holds what a window contains: no message, conversation,
 //! Inventory folder or item, filter or selection has a field to go in.
@@ -31,13 +35,30 @@ pub mod fit;
 pub mod menu;
 pub mod monitors;
 pub mod notice;
+pub mod pick;
+pub mod preview;
 pub mod store;
+pub mod switcher;
+pub mod toolbar;
 pub mod viewer;
 pub mod window;
 pub mod windows;
+pub mod words;
 
 #[cfg(test)]
 mod tests;
 
 pub use apply::take_bare;
 pub use store::Store;
+
+/// The layouts' part of the interface's pass: the card shown when the
+/// monitors changed, and the switcher. `hidden`: the interface is put away
+/// or the camera is in mouselook; the card could not be clicked, so it is
+/// not drawn and waits (the switcher is hidden with the other windows).
+pub fn interface(ctx: &egui::Context, p: &crate::theme::Palette, hidden: bool) {
+    apply::set_notice_hidden(ctx, hidden);
+    if !hidden {
+        notice::show(ctx, p);
+    }
+    switcher::show(ctx, p);
+}

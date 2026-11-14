@@ -480,6 +480,8 @@ pub enum Action {
     EnvSunset,
     EnvMidnight,
     EnvShared,
+    /// Folderstorm: the fork's own actions (`crate::folderstorm::keys`).
+    Folderstorm(crate::folderstorm::keys::Key),
 }
 
 impl Action {
@@ -672,6 +674,7 @@ pub fn sections() -> &'static Vec<(&'static str, Vec<(Action, &'static str)>)> {
                     (Action::RenderClouds, aurora_i18n::tr!("keybinds-render-clouds")),
                 ],
             ),
+            crate::folderstorm::keys::section(), // Folderstorm: the fork's own actions
         ]
     })
 }
@@ -988,6 +991,7 @@ impl KeyBindings {
             (Action::EnvMidnight, [kmod(K::KeyX, true, true), None]),
             (Action::EnvShared, [kmod(K::KeyJ, true, true), None]),
         ];
+        let defaults = crate::folderstorm::keys::with_unbound(defaults); // Folderstorm: the fork's actions, without a key
         KeyBindings { map: defaults }
     }
 }

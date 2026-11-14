@@ -4991,6 +4991,7 @@ impl App {
             Action::EnvSunrise | Action::EnvMidday | Action::EnvSunset | Action::EnvMidnight | Action::EnvShared => {
                 self.env_shortcut(action)
             }
+            Action::Folderstorm(key) => self.folderstorm_key(key), // Folderstorm: the fork's own actions
             // held actions are read every frame
             _ => {}
         }
@@ -16380,7 +16381,7 @@ impl App {
         }
         self.busy_pause_notice(&ctx, &p);
         self.folderstorm_characters_notice(&ctx, &p); // Folderstorm: 3D paused behind
-        self.folderstorm_workspaces_notice(&ctx, &p); // Folderstorm: layouts, the monitors changed
+        self.folderstorm_workspaces_notice(&ctx, &p); // Folderstorm: layouts, the monitors' card and the switcher
         self.video_memory_notice(&ctx, &p);
         self.media_pack_card(&ctx, &p);
         match self.screen {

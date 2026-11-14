@@ -32,6 +32,9 @@ const MAX_DISTANCE: f32 = 32_768.0;
 pub(super) const MAX_MARGIN: u32 = 16_384;
 /// At most this many monitors remembered with a layout.
 pub(super) const MAX_MONITORS: usize = 16;
+/// At most this many favorites (the layouts' limit, and as many again for
+/// what a later version adds).
+pub const MAX_FAVORITES: usize = 64;
 /// Pixels per point, and a monitor's scale, are within this range.
 const SCALES: std::ops::RangeInclusive<f32> = 0.25..=16.0;
 
@@ -186,6 +189,62 @@ impl MonitorPolicy {
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
+}
+
+/// An entry of the favorites: what it names, by its kind, so that a later
+/// version's kinds (workspaces) share the list and its order
+/// (folderstorm/plans/workspaces.md, checkpoint 5).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Favorite {
+    /// The layout of this name.
+    Layout(String),
+    /// An entry of a kind this version does not know, kept as it was read
+    /// and never shown.
+    Kept(serde_json::Value),
+}
+
+impl Serialize for Favorite {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Favorite::Layout(name) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("layout", name)?;
+                map.end()
+            }
+            Favorite::Kept(raw) => raw.serialize(serializer),
+        }
+    }
+}
+
+impl Favorite {
+    /// Reads one entry of the file: `{ "layout": "name" }`, or something
+    /// else to keep. None for what is not an entry at all.
+    fn read(raw: serde_json::Value) -> Option<Self> {
+        let entry = raw.as_object()?;
+        match entry.get("layout") {
+            Some(name) if entry.len() == 1 => name
+                .as_str()
+                .filter(|name| name_error(name).is_none())
+                .map(|name| Favorite::Layout(tidy(name).to_owned())),
+            _ => Some(Favorite::Kept(raw)),
+        }
+    }
+
+    /// The layout it names, if it names one.
+    pub fn layout(&self) -> Option<&str> {
+        match self {
+            Favorite::Layout(name) => Some(name),
+            Favorite::Kept(_) => None,
+        }
+    }
+}
+
+/// The two layouts of the toolbar's toggle; a place is None until chosen.
+pub type Toggle = [Option<String>; 2];
+
+fn toggle_unset(toggle: &Toggle) -> bool {
+    toggle.iter().all(Option::is_none)
 }
 
 /// A named layout: where things go. Each part is optional; an absent part
@@ -450,6 +509,13 @@ pub struct Store {
     /// What to do when the monitors change.
     #[serde(skip_serializing_if = "MonitorPolicy::is_default")]
     pub on_monitor_change: MonitorPolicy,
+    /// The favorites, in the user's order: first in the switcher, in World
+    /// › Layouts and in the favorites' round of the keyboard.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub favorites: Vec<Favorite>,
+    /// The two layouts the toolbar's toggle switches between.
+    #[serde(skip_serializing_if = "toggle_unset")]
+    pub toggle: Toggle,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -462,6 +528,8 @@ struct Raw {
     pending: BTreeSet<String>,
     window_held: bool,
     on_monitor_change: serde_json::Value,
+    favorites: serde_json::Value,
+    toggle: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -504,7 +572,29 @@ impl From<Raw> for Store {
                 .collect(),
             window_held: raw.window_held,
             on_monitor_change: raw.on_monitor_change.as_str().map(MonitorPolicy::read).unwrap_or_default(),
+            favorites: Vec::new(),
+            toggle: Toggle::default(),
         };
+        // a favorite, a layout of the toggle: only of an entry of the list
+        // (one this version cannot use keeps its star and its place)
+        if let serde_json::Value::Array(entries) = raw.favorites {
+            for favorite in entries.into_iter().filter_map(Favorite::read).take(MAX_FAVORITES) {
+                let keep = match favorite.layout() {
+                    Some(name) => store.listed(name) && !store.is_favorite(name),
+                    None => true,
+                };
+                if keep {
+                    store.favorites.push(favorite);
+                }
+            }
+        }
+        if let serde_json::Value::Array(places) = raw.toggle {
+            for (place, name) in store.toggle.iter_mut().zip(places) {
+                *place = name.as_str().map(|name| tidy(name).to_owned());
+            }
+            let listed = store.toggle.clone().map(|name| name.filter(|name| store.listed(name)));
+            store.toggle = listed;
+        }
         if store.active().is_none() {
             store.active_layout = None;
             store.modified = false;
@@ -547,6 +637,61 @@ impl Store {
         self.layout(index)
             .zip(self.active_layout.as_deref())
             .is_some_and(|(layout, active)| same_name(&layout.name, active))
+    }
+
+    /// Whether an entry of the list, usable or not, has this name.
+    fn listed(&self, name: &str) -> bool {
+        self.layouts
+            .iter()
+            .any(|record| record.name().is_some_and(|other| same_name(other, name)))
+    }
+
+    /// Whether the layout of this name is a favorite.
+    pub fn is_favorite(&self, name: &str) -> bool {
+        self.favorites
+            .iter()
+            .any(|favorite| favorite.layout().is_some_and(|other| same_name(other, name)))
+    }
+
+    /// Makes the layout of this name a favorite (the last one) or takes its
+    /// star away. True when the favorites changed.
+    pub fn set_favorite(&mut self, name: &str, on: bool) -> bool {
+        if on == self.is_favorite(name) {
+            return false;
+        }
+        if !on {
+            self.favorites
+                .retain(|favorite| !favorite.layout().is_some_and(|other| same_name(other, name)));
+            return true;
+        }
+        let Some((_, layout)) = self.find(name) else { return false };
+        if self.favorites.len() >= MAX_FAVORITES {
+            return false;
+        }
+        self.favorites.push(Favorite::Layout(layout.name.clone()));
+        true
+    }
+
+    /// The favorites that can be used, in their order: where each is in
+    /// the list, and the layout.
+    pub fn favorite_layouts(&self) -> impl Iterator<Item = (usize, &Layout)> {
+        self.favorites
+            .iter()
+            .filter_map(Favorite::layout)
+            .filter_map(|name| self.find(name))
+    }
+
+    /// Chooses the layout at `place` (0 or 1) of the toolbar's toggle, or
+    /// none. True when the choice changed.
+    pub fn set_toggle(&mut self, place: usize, name: Option<&str>) -> bool {
+        let name = name.and_then(|name| self.find(name)).map(|(_, layout)| layout.name.clone());
+        match self.toggle.get_mut(place) {
+            Some(chosen) if *chosen != name => {
+                *chosen = name;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// What is wrong with `name` for a new layout, or for the one at
@@ -636,10 +781,24 @@ impl Store {
             return Err(StoreError::Name(error));
         }
         let active = self.is_active(index);
+        let new = tidy(name).to_owned();
         if let Some(Record::Layout(layout)) = self.layouts.get_mut(index) {
-            layout.name = tidy(name).to_owned();
+            let old = std::mem::replace(&mut layout.name, new.clone());
             if active {
-                self.active_layout = Some(layout.name.clone());
+                self.active_layout = Some(new.clone());
+            }
+            // its star and its place in the toggle follow the name
+            let renamed = self
+                .favorites
+                .iter_mut()
+                .filter_map(|favorite| match favorite {
+                    Favorite::Layout(name) => Some(name),
+                    Favorite::Kept(_) => None,
+                })
+                .chain(self.toggle.iter_mut().flatten())
+                .filter(|name| same_name(name, &old));
+            for name in renamed {
+                name.clone_from(&new);
             }
         }
         Ok(())
@@ -653,7 +812,15 @@ impl Store {
         if self.is_active(index) {
             self.set_active(None);
         }
-        self.layouts.remove(index);
+        let removed = self.layouts.remove(index);
+        // (unless another entry, one that cannot be used, has the same name)
+        if let Some(name) = removed.name().filter(|name| !self.listed(name)) {
+            self.favorites
+                .retain(|favorite| !favorite.layout().is_some_and(|other| same_name(other, name)));
+            for place in &mut self.toggle {
+                place.take_if(|chosen| same_name(chosen, name));
+            }
+        }
         true
     }
 
@@ -1302,5 +1469,111 @@ mod tests {
         store.modified = false;
         assert_eq!(store.set_window(0, WindowFrame::Fullscreen { monitor: 0 }), Ok(()));
         assert!(!store.modified, "the same window is no change");
+    }
+
+    fn single() -> Layout {
+        Layout::new("Single", Some(ViewportSettings::default()), None, Vec::new())
+    }
+
+    #[test]
+    fn favorites_and_the_toggle_survive_a_save_and_a_read() {
+        let mut store = store_of(vec![wide(), single()]);
+        assert!(store.set_favorite("single", true), "by its name, whatever the case");
+        assert!(store.set_favorite("Wide", true));
+        assert!(!store.set_favorite("Wide", true), "already one");
+        assert!(!store.set_favorite("Nowhere", true), "not a layout");
+        assert!(store.set_toggle(0, Some("wide")));
+        assert!(store.set_toggle(1, Some("Single")));
+        assert!(!store.set_toggle(1, Some("Single")));
+        assert!(!store.set_toggle(2, Some("Single")), "two places");
+        let saved = serde_json::to_value(&store).expect("saved");
+        assert_eq!(saved["favorites"], json!([{ "layout": "Single" }, { "layout": "Wide" }]));
+        assert_eq!(saved["toggle"], json!(["Wide", "Single"]));
+        let back = read(saved);
+        assert_eq!(back, store);
+        let order: Vec<_> = back
+            .favorite_layouts()
+            .map(|(index, layout)| (index, layout.name.as_str()))
+            .collect();
+        assert_eq!(order, [(1, "Single"), (0, "Wide")], "in the order they were starred");
+        assert!(store.set_favorite("Single", false));
+        assert!(!store.is_favorite("Single") && store.is_favorite("Wide"));
+        assert!(store.set_toggle(0, None));
+        assert_eq!(store.toggle, [None, Some("Single".to_owned())]);
+    }
+
+    #[test]
+    fn a_store_without_favorites_is_written_as_before() {
+        let store = store_of(vec![wide()]);
+        let saved = serde_json::to_value(&store).expect("saved");
+        let fields: BTreeSet<_> = saved.as_object().expect("an object").keys().map(String::as_str).collect();
+        assert_eq!(fields, BTreeSet::from(["active_layout", "layouts", "modified", "pending"]));
+        // and a file from before reads with neither
+        let old = read(json!({ "layouts": [wide()], "active_layout": "Wide", "window_held": false }));
+        assert!(old.favorites.is_empty());
+        assert_eq!(old.toggle, [None, None]);
+        assert_eq!(serde_json::to_value(&old).expect("saved"), saved);
+    }
+
+    #[test]
+    fn favorites_of_unknown_kinds_are_kept_and_stale_ones_dropped() {
+        let store = read(json!({
+            "layouts": [wide(), single(), { "schema": 7, "name": "Later" }],
+            "favorites": [
+                { "workspace": "Sorting" },
+                { "layout": "Wide" },
+                { "layout": "wide" },
+                { "layout": "Gone" },
+                { "layout": "Later" },
+                { "layout": "Single", "pinned": true },
+                "junk",
+                { "layout": 3 },
+            ],
+            "toggle": ["Gone", "single", "more"],
+        }));
+        assert_eq!(
+            store.favorites,
+            [
+                Favorite::Kept(json!({ "workspace": "Sorting" })),
+                Favorite::Layout("Wide".to_owned()),
+                // one this version cannot use keeps its star for the version that can
+                Favorite::Layout("Later".to_owned()),
+                // a favorite with more than this version knows is kept whole
+                Favorite::Kept(json!({ "layout": "Single", "pinned": true })),
+            ]
+        );
+        let usable: Vec<_> = store.favorite_layouts().map(|(_, layout)| layout.name.as_str()).collect();
+        assert_eq!(usable, ["Wide"]);
+        assert!(!store.is_favorite("Single") && !store.is_favorite("Sorting"));
+        assert_eq!(store.toggle, [None, Some("single".to_owned())]);
+        let saved = serde_json::to_value(&store).expect("saved");
+        assert_eq!(saved["favorites"][0], json!({ "workspace": "Sorting" }));
+        assert_eq!(saved["favorites"][3], json!({ "layout": "Single", "pinned": true }));
+        // not a list at all: nothing, and nothing lost of the rest
+        let odd = read(json!({ "layouts": [wide()], "favorites": "Wide", "toggle": { "a": 1 } }));
+        assert!(odd.favorites.is_empty() && odd.toggle == [None, None] && odd.layouts.len() == 1);
+    }
+
+    #[test]
+    fn the_favorites_are_cut_at_their_limit() {
+        let many: Vec<_> = (0..MAX_FAVORITES + 5).map(|n| json!({ "later": n })).collect();
+        let mut store = read(json!({ "layouts": [wide()], "favorites": many }));
+        assert_eq!(store.favorites.len(), MAX_FAVORITES);
+        assert!(!store.set_favorite("Wide", true), "no room");
+    }
+
+    #[test]
+    fn a_rename_and_a_delete_are_followed_by_the_star_and_the_toggle() {
+        let mut store = store_of(vec![wide(), single()]);
+        store.set_favorite("Wide", true);
+        store.set_favorite("Single", true);
+        store.set_toggle(0, Some("Wide"));
+        store.set_toggle(1, Some("Single"));
+        store.rename(0, "Two monitors").expect("renamed");
+        assert!(store.is_favorite("Two monitors") && !store.is_favorite("Wide"));
+        assert_eq!(store.toggle, [Some("Two monitors".to_owned()), Some("Single".to_owned())]);
+        assert!(store.remove(0));
+        assert_eq!(store.favorites, [Favorite::Layout("Single".to_owned())]);
+        assert_eq!(store.toggle, [None, Some("Single".to_owned())]);
     }
 }

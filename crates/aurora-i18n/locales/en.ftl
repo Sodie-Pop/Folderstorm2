@@ -1603,6 +1603,51 @@ fs-layouts-monitors-offer-unlocked = Your monitors changed and the viewer window
 fs-layouts-monitors-applied = Your monitors changed: the layout “{ $name }” was applied.
 fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlocked.
 fs-layouts-monitors-later = Not now
+fs-layouts-favorite = Favorite
+fs-layouts-quick = Quick switch
+fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts window (World › Layouts › Layouts…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts, and are the ones the shortcuts Next and Previous favorite layout go round.
+fs-layouts-toggle-first = First layout
+fs-layouts-toggle-second = Second layout
+fs-layouts-toggle-help = The two layouts the “Switch layout” toolbar button and its shortcut switch between, for example “2 monitors” and “1 monitor”: the second when the first is in use, the first otherwise.
+fs-layouts-toggle-none = Not chosen
+
+# Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
+fs-switcher-title = Layouts
+fs-switcher-help = Type part of a layout's name: the list keeps the layouts that have it, favorites first. Up and Down choose, Enter applies the chosen layout and closes this window, Esc closes it. A click on a star makes a layout a favorite. The picture shows what the chosen layout would give on the monitors connected now. Update saves the arrangement of now in the layout in use; Save new… keeps it under another name.
+fs-switcher-hint = Type a layout's name, then Enter
+fs-switcher-favorites = Favorites
+fs-switcher-layouts = Other layouts
+fs-switcher-star = Add to the favorites
+fs-switcher-unstar = Remove from the favorites
+fs-switcher-empty = No layout saved yet. Arrange the world and your windows as you like them, then choose Save new….
+fs-switcher-no-match = No layout has this in its name.
+fs-switcher-picture-help = What applying this layout would give on the monitors connected now: the viewer window (outlined), the world (lit) and the windows the layout places. A monitor of the layout that is not connected is dashed.
+fs-switcher-note-missing = { $count ->
+    [one] { $count } monitor of this layout is not connected.
+   *[other] { $count } monitors of this layout are not connected.
+    }
+fs-switcher-note-no-window = The viewer window cannot be moved here: it would be left as it is.
+fs-switcher-note-left = The viewer window would stay where it is.
+fs-switcher-note-unlocked = The window would not be locked.
+fs-switcher-note-set-aside = Its margins would leave the world less than a quarter of the window: the world would fill the window.
+fs-switcher-note-fitted = { $count ->
+    [one] { $count } window would be fitted to the room there is.
+   *[other] { $count } windows would be fitted to the room there is.
+    }
+fs-switcher-update = Update “{ $name }”
+fs-switcher-update-help = Saves the arrangement of now in the layout in use, for the parts it holds. Asks first.
+fs-switcher-save-new = Save new…
+fs-switcher-preferences-help = Rename, delete and reorder the layouts, edit a layout's viewer window, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts.
+fs-switcher-keys = Up and Down choose, Enter applies and closes, Esc closes.
+fs-switcher-command = Layouts
+fs-switcher-toggle-command = Switch layout
+fs-switcher-toggle-to = Switch to the layout “{ $name }”
+fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts (a click opens it).
+fs-keys-section = Layouts
+fs-keys-layout-switcher = Layouts window
+fs-keys-layout-toggle = Switch between the two layouts
+fs-keys-next-favorite = Next favorite layout
+fs-keys-previous-favorite = Previous favorite layout
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message

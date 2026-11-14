@@ -895,12 +895,12 @@ fn toolbar_sanitize_skips_the_retired_howto_command() {
 fn toolbar_catalogue_holds_firestorm_commands_and_runs_the_ready_ones() {
     let skin = Layout::default();
     let all = catalogue(&skin);
-    assert_eq!(all.len(), 78);
-    assert_eq!(COMMANDS.len(), 78);
+    assert_eq!(all.len(), 78 + 2); // Folderstorm: + workspaces, layout_toggle
+    assert_eq!(COMMANDS.len(), 78 + 2); // Folderstorm: the same two
     let mut ids: Vec<_> = COMMANDS.iter().map(|c| c.id).collect();
     ids.sort_unstable();
     ids.dedup();
-    assert_eq!(ids.len(), 78, "each command once");
+    assert_eq!(ids.len(), 78 + 2, "each command once"); // Folderstorm: the same two
     assert!(ready("texture_library"));
     assert!(ready("movelock") && ready("move_lock") && ready("movement") && ready("water_walk"));
     assert_eq!(catalogue::find("move_lock").map(|c| c.id), Some("movelock"));
@@ -919,6 +919,10 @@ fn toolbar_catalogue_holds_firestorm_commands_and_runs_the_ready_ones() {
         }
         // These buttons open their own toolbar popups.
         if matches!(command.id, "speak" | "favorites" | "vr_view") {
+            continue;
+        }
+        // Folderstorm: the layouts' buttons leave a request, checked in folderstorm/workspaces/tests/switcher.rs
+        if crate::folderstorm::workspaces::toolbar::own(command.id) {
             continue;
         }
         let mut panels = Panels::from_settings(&crate::settings::Settings::default());
