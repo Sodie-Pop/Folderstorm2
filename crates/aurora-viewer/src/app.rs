@@ -9977,6 +9977,7 @@ impl App {
         {
             self.input = input;
         }
+        self.local_assistant_navigation(); // Folderstorm: the local assistant's move, before the autopilot
         self.update_autopilot(dt);
         self.update_selection_turn(dt);
         self.vr_update_body_follow(typing, dt);

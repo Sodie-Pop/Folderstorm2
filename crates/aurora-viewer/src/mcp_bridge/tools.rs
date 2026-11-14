@@ -57,6 +57,8 @@ pub struct Ctx<'a> {
     /// Session routing: the profile, managed or not, and the character's
     /// name (only while Read is Allow), which `viewer_status` gives.
     pub identity: folderstorm_mcp_bridge::server::Identity,
+    /// Folderstorm: what the navigation tools read (phase 3, part 4).
+    pub nav: super::navigation::Stage<'a>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

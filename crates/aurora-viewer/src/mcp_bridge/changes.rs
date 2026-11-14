@@ -49,6 +49,9 @@ pub enum Work {
     /// Folderstorm: an entry's picture from a texture, through the Image
     /// window's path (phase 3).
     Image { target: Uuid, texture: Uuid },
+    /// Folderstorm: a move, a take-off or landing, a teleport (phase 3,
+    /// part 4).
+    Navigate(super::navigation::Work),
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +159,10 @@ fn what(inv: &Inventory, ids: &[Uuid]) -> String {
 pub fn plan(tool: &str, args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
     if super::camera::handles(tool) {
         return super::camera::plan(tool, args, cx);
+    }
+    // Folderstorm: phase 3, part 4 (navigation)
+    if folderstorm_mcp_bridge::protocol::navigation::handles(tool) {
+        return super::navigation::plan(tool, args, cx);
     }
     ready(cx)?;
     match tool {
