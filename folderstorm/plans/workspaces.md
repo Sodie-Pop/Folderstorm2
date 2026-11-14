@@ -505,7 +505,7 @@ Every line below is marked `// Folderstorm:`. "CP" is the checkpoint
 | `crates/aurora-viewer/src/ui/widgets.rs`, `bare_window` | Read the same placement request as floaters, so the mini-map can be placed (2–3 lines) | 3 |
 | `crates/aurora-viewer/src/ui/bars/side.rs` (3 existing hook lines), `app.rs` (existing `bars_rect` block) | Same lines, new "around the world" placement | 3 |
 | `crates/aurora-viewer/src/ui/bars.rs`, World menu | One call drawing our *Layouts* submenu | 4 |
-| `crates/aurora-viewer/src/app.rs`, interface pass | One call showing the switcher | 5 |
+| `crates/aurora-viewer/src/app.rs`, interface pass | One call showing the card when the monitors change (4) and the switcher (5) | 4 |
 | `crates/aurora-viewer/src/ui/toolbar/catalogue.rs` | Two commands | 5 |
 | `crates/aurora-viewer/src/ui/bars.rs`, `run_command` | Two match arms → a request to our module | 5 |
 | `crates/aurora-viewer/src/keybinds.rs` | One `Action` variant carrying our own action enum, its label arm, its line in the Controls list (no default chord) | 5 |
@@ -530,7 +530,7 @@ All in the demo's own settings; nothing reaches the user's.
 | `AURORA_DEMO_MONITORS="WxH[+X+Y][@scale],…[,window+X+Y]"` or `wayland` (syntax in `docs/TESTING.md`) | Pretend monitors (unequal, negative coordinates, a missing one) for the diagram and monitor matching, without the hardware | 2 |
 | `AURORA_DEMO_OPTIONS=layout/0:cogs` | Opens the World viewport group with the diagram (existing mechanism) | 2 |
 | `AURORA_DEMO_LAYOUTS=1` | Seeds "Wide" (world on the right half, Inventory and map on the left) and "Single" (viewport off, windows on one screen); opens the Layouts tab. Try with `AURORA_WINDOW_SIZE=3840,1080` | 3 |
-| `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide" | 4 |
+| `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide"; `=unplug` takes the last pretend monitor away after 10 s (the card offers "Single") | 4 |
 | `AURORA_DEMO_SWITCHER=1` | Opens the switcher on the seeded entries | 5 |
 | `AURORA_DEMO_WORKSPACES=1` | Seeds "Sorting" and "Exploring" on the demo inventory; `=folders` adds folder windows | 6 |
 
@@ -829,6 +829,299 @@ checkpoint's report.
   unplug one while locked (unlocks, notice offers "1 monitor"); Aero Snap
   and Win+arrows on a locked window; borderless over two monitors; restart
   while locked.
+
+#### Checkpoint 4 in detail (2026-11-13)
+
+Written before the build, from `claude/workspaces-cp3` at `2f93583` (PR #48,
+not merged: this checkpoint is stacked on it). What differs from the
+sketches of sections 7 to 10 is said here; "As built" below is filled in
+when the checkpoint is done.
+
+**Scope.** The third part of a layout, the *viewer window*, in its three
+modes, with the lock; the automatic unlock; the notice when the monitors
+change; World › Layouts. And two of checkpoint 3's known limits: the
+diagram's bars for *Around the world*, and a window first opened after an
+apply being watched for the "modified" mark. Not here: the switcher, the
+toolbar toggle, favorites and shortcuts (5), workspaces (6).
+
+**1. Store.** A layout gains `window`, absent on every layout saved so far
+(the viewer window is then left alone, as today):
+
+```json
+"window": { "mode": "normal", "x": -8, "y": 0, "width": 3840, "height": 1040,
+            "maximized": false, "locked": true }
+"window": { "mode": "fullscreen", "monitor": 0 }
+"window": { "mode": "borderless", "monitors": [0, 1], "locked": true }
+```
+
+- Desktop pixels. `x`, `y` are the window's outer corner as the system
+  gives it (absent where it does not: Wayland), `width`, `height` its
+  inside: the pair winit reads and sets, so a save and an apply agree
+  whatever the invisible borders of Windows are.
+- `monitor` and `monitors` are places in the layout's own `monitors` list.
+- The store gains `window_held` (the active layout's lock or borderless
+  mode is in force: what a restart puts back) and `on_monitor_change`
+  (`"ask"`, the default, `"apply"` or `"nothing"`; an unknown word reads as
+  `"ask"`).
+- Limits: the frame within ±32 768 pixels, sizes of 1 to 32 768, monitor
+  places inside the list, no place twice. A layout that breaks one is kept
+  as read and never applied, like the others. A file written here and read
+  by checkpoint 3's build keeps `window` untouched (`Layout::other`).
+
+**2. Monitors** (`monitors.rs`, pure): two setups are the same when they
+hold the same monitors (place, size, scale) in any order; which of a
+layout's monitors are present; the rectangle covering chosen monitors; the
+start-up test of `App::resumed` (the title bar's corner on a monitor); a
+watch that reports a new setup once it has not changed for 2 s; and the
+rules of section 8.5, as one function from (saved frame, saved monitors,
+monitors of now, window of now) to what is asked of the window:
+
+| Saved | Asked of the window |
+|---|---|
+| Normal | Position only if its title bar lands on a monitor of now, else left where it is; size cut to the rectangle covering the monitors of now, and never under the viewer's minimum (800 × 560 points); maximized as saved. Locked only if every monitor of the layout is present |
+| Full screen on monitor N | Aurora's full screen on N; N missing: on the monitor the window is on |
+| Borderless over monitors | No border, over the chosen monitors still present; none present: left alone. Locked only if every monitor of the layout is present |
+| any, where the system gives no monitor list | Normal: the size only. Full screen: where the window is. Borderless: left alone |
+
+**3. The window, step by step** (`window.rs`, pure). The module never
+touches winit. Each frame the app tells it what the window is like
+(`Seen`: inside size, outer corner, scale, maximized, full screen,
+minimized, border, resizable, and which window it is) and runs the
+commands it gets back (`Command`: full screen on or off, maximized, border,
+resizable, position, size). Applying a frame is a small machine fed by
+`Seen`:
+
+1. unlock; leave full screen if the goal is not full screen (through
+   Aurora's own setting, so its saved "windowed" geometry stays right) and
+   wait until the window says so;
+2. leave maximized, set the border, wait until the window says so (or
+   0.5 s);
+3. position and size; wait until the window reports the size asked, or 10
+   frames without change, or 1.5 s (section 8.2);
+4. maximize or enter full screen if the goal says so; lock.
+
+Only then are the layout's windows placed (they are fitted to the
+interface of that moment, and the report's "fitted" count is taken then).
+A new apply replaces the machine. No viewer window to drive (a capture, a
+forced size, no window yet): the window part is skipped and the rest
+applies as in checkpoint 3.
+
+**4. Lock** (`viewer.rs`). What is wanted of the window comes from the
+store alone: `window_held` and the active layout's frame give *locked*
+(not resizable) and *borderless* (no border), or neither. The keeper
+compares that with what it last asked and sends the difference, so:
+
+- **Unlock** (World › Layouts, Preferences) clears `window_held`: border
+  and resizing come back at once; the window keeps its place and size.
+- Applying a layout without a lock, or without a window part, unlocks.
+- Entering Aurora's full screen unlocks.
+- A monitor setup that has lost one of the layout's monitors unlocks (once
+  settled, 2 s).
+- A window made anew (GPU recovery) is locked again; at start a held
+  layout is locked again when its monitors are all present, a borderless
+  one put back over them, and otherwise `window_held` is cleared. All of it
+  once the world shows, like the rest of the layouts (section 8.7).
+- Nothing is ever sent to a window no layout holds: without layouts the
+  viewer window behaves exactly as Aurora's.
+
+**5. Save, Update, Previous, modified.**
+
+- *Save as a new layout* gains the part *Viewer window* and the box *Lock
+  the window size*. It records the window of now (section 8.1): Aurora's
+  full screen → full screen on its monitor; no border and exactly over
+  monitors → borderless over them; else normal (maximized: with the normal
+  geometry Aurora remembers for it). Ticking the lock locks at once.
+- *Update* reads the window again for a layout that has the part and keeps
+  that layout's lock box.
+- *Previous arrangement* brings the window back too, when the apply it
+  undoes moved it; the lock in force then comes back with it.
+- *Modified*: the window is compared with what it was once the apply had
+  settled (as the windows are): more than 4 pixels of position or size, or
+  another maximized or full-screen state, marks the layout.
+- The selected layout's window can be edited in the tab: mode (Normal /
+  Full screen / Borderless over monitors), the monitors on a small picture
+  of the layout's monitors (click to choose), the lock box. Editing the
+  layout in use marks it modified; *Apply* then does it.
+
+**6. When the monitors change** (`viewer.rs`, section 8.5). The setup is
+read from what `publish_monitors` already publishes each second. Once a
+new setup has held for 2 s: the automatic unlock above, then by
+`on_monitor_change`:
+
+- *Ask*: a card at the top of the world, "Your monitors changed. Use the
+  layout “1 monitor”?" [Apply] [Not now], for the first layout of the list
+  saved on exactly this setup, unless the layout in use is already one.
+  No such layout and the window was just unlocked: the card says so, [OK].
+- *Apply the matching layout*: applied at once; the card says which, with
+  [Go back] (Previous arrangement) and [OK].
+- *Do nothing*: no card.
+
+The card is not modal, never takes the keyboard, and goes away when a
+layout is applied or the monitors change again. The first setup seen in a
+session is only noted: nothing is offered at start (section 8.3).
+
+**7. World › Layouts** (`menu.rs`): the usable layouts (a click applies;
+the one in use ticked), *Layouts…* (Preferences › Layout › Layouts until
+the switcher of checkpoint 5), *Previous arrangement*, and *Unlock the
+viewer window* while it is held. The menu has no access to the settings:
+it reads a small view the frame call publishes when the list changes, and
+leaves requests the next frame call runs.
+
+**8. Preferences.** The tab gains: the *Viewer window* part and the lock
+box in *Save as a new layout*; a lock on the lines of locked layouts; the
+window editor of point 5; under *Arrangement*, *Unlock the viewer window*
+and *When the monitors change* (Ask / Apply the matching layout / Do
+nothing).
+
+**9. Checkpoint 3's limits.**
+
+- The diagram draws the bars where the settings put them: for *Around the
+  world*, on the area `viewport::bars::around` gives with the bars'
+  thickness as last measured, so a side with room shows its bars in the
+  margin and a side without shows them inside; as thick as they are, to
+  scale (at least 2 points of the diagram).
+- A window of the layout the baseline did not know (never shown before in
+  this session) joins the baseline the first time it is seen, and is
+  watched from then on.
+
+**10. Demo.** `AURORA_DEMO_LAYOUTS=toggle` applies "Wide" and "Single" in
+turn every 5 s; `=lock` gives "Wide" a locked viewer window and applies
+it; `=unplug`, with two pretend monitors in `AURORA_DEMO_MONITORS`, takes
+the last one away after 10 s (the card offers "Single"). The viewer-window
+part needs a real window: not under `AURORA_WINDOW_SIZE` or a capture.
+
+**11. Upstream hooks** (each marked `// Folderstorm:`), beside checkpoint
+3's: `ui/bars.rs`, World menu: one call (section 10); `app.rs`, interface
+pass: one call drawing the card, beside the session host's notice. This is
+section 10's "one call showing the switcher", brought forward: checkpoint
+5 draws the switcher from the same call. The three catalogues;
+`docs/TESTING.md`.
+
+**12. Tests.** Pure: the store's new fields and limits, a file from
+checkpoint 3 read unchanged; `monitors` (same setup in any order, missing,
+covering rectangle, title bar with negative coordinates, the watch's 2 s,
+each row of the table above); `window` (the machine against a pretend
+window that answers at once, late, or never: every wait and every
+timeout; a replaced apply). Frame tests with a pretend viewer window:
+save → apply → same frame; the windows placed only once the window has
+its size; lock, unlock, the lock after a "restart" and after a new
+window; full screen unlocks; a lost monitor unlocks and offers the
+matching layout; the three policies; Previous; the modified mark of the
+window; a newly shown window watched. The tab, the card and the menu
+drawn with the software painter.
+
+#### Checkpoint 4 as built (branch `claude/workspaces-cp4`, 2026-11-13)
+
+Built as detailed above, stacked on checkpoint 3 (PR #48). What the build
+added or changed on the way:
+
+- **Ten still frames are not the end while the window has not moved at
+  all.** Section 8.2 waits for "the requested size, 10 frames without
+  change, or 1.5 s". A window that has not heard the request yet looks the
+  same as one that refuses it, so the ten still frames count once the
+  window has changed at all since the request (the system cut the size), or
+  after half a second without any change. The 1.5 s limit is as planned.
+- **The size is always cut to the monitors there are**, not only when the
+  window stays where it is: a two-monitor layout applied by mistake on one
+  monitor does not hang half its window, and the world with it, off the
+  screen. The saved layout keeps its values.
+- **A layout that holds the window puts it back at start** when it is not
+  where the layout has it (within 4 pixels), then locks it: Aurora reopens
+  a stretched window at 80 % of one monitor, and a borderless one with its
+  border. Section 8.3's "nothing is re-applied at start" still holds for
+  the world, the bars, the windows and every layout that holds nothing. A
+  window already in place is only locked.
+- **The lock box of the layout in use applies at once** in the tab's
+  editor (a normal window's; a borderless one's while it is held). Another
+  mode or other monitors mark the layout modified until *Apply*.
+- **Previous arrangement** brings the viewer window back only when the
+  apply it undoes had a viewer-window part: a layout without one never
+  moves the window, in either direction.
+- **A card that only tells** (a layout applied by your choice, the window
+  unlocked) goes away after 12 s; one that asks waits for its answer.
+- **The first look at the monitors** is 30 frames after the world shows,
+  and they are looked at twice a second (they are published once a
+  second): the card comes 2 to 3.5 s after a change.
+- **The diagram draws the bars to scale** in all three places, from the
+  thickness last measured (`viewport::bars::last_thickness`); before any
+  measure, a top and a bottom bar of a nominal thickness.
+
+**Settings format.** A layout may hold `"window"` as in "1. Store" above.
+The store may hold `"window_held": true` and `"on_monitor_change":
+"apply"` or `"nothing"`; both are left out at their defaults, so a store
+that uses none of this is written exactly as checkpoint 3 wrote it. Nothing
+to migrate, and checkpoint 3's build keeps what it does not know (tests:
+`a_layout_from_before_the_viewer_window_reads_and_writes_as_it_was`,
+`the_viewer_window_is_saved_in_its_three_modes`,
+`a_viewer_window_out_of_its_limits_makes_the_layout_unusable`,
+`the_hold_and_the_monitors_choice_survive_a_restart`).
+
+**Upstream hooks** (line numbers at the checkpoint's last commit; all
+marked `// Folderstorm:`):
+
+| File | Line | Hook |
+|---|---|---|
+| `crates/aurora-viewer/src/app.rs` | 9938 | checkpoint 3's call now passes the window: `self.folderstorm_workspaces_frame(&gfx.window);` (the frame function holds the window apart from `self`) |
+| `crates/aurora-viewer/src/app.rs` | 16380 | new: `self.folderstorm_workspaces_notice(&ctx, &p);` in the interface's pass, after the session host's notice |
+| `crates/aurora-viewer/src/ui/bars.rs` | 1153 | new: `crate::folderstorm::workspaces::menu::show(ui, p);` in the World menu, after *Owned land* |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | | 37 new `fs-layouts-*` keys in our section, 4 reworded |
+| `docs/TESTING.md` | | three paragraphs, one table row widened |
+
+Nothing new in `settings.rs`, `ui/widgets.rs` or `ui/options/`: the store
+is one field, and the tab is ours.
+
+**New files:** `folderstorm/workspaces/{monitors,window,viewer,menu,notice}.rs`,
+`folderstorm/workspaces/tests/viewer.rs`. The only code that touches winit
+is `app/folderstorm_workspaces.rs` (`folderstorm_viewer_window`,
+`folderstorm_viewer_command`): about sixty lines, not testable here.
+
+**Tests.** Pure: `workspaces::store` (+5), `workspaces::monitors` (14),
+`workspaces::window` (11, against a pretend window that answers at once,
+late, or never), `workspaces::capture` (4), `diagram` (+2, one drawn).
+Frame tests with the pretend window and pretend monitors,
+`workspaces::tests::viewer` (28): save and apply, the windows placed only
+once the window has its size, lock and unlock, a restart (in place, shrunk
+by Aurora, a monitor gone, the lock box ticked after it), a window made
+anew, full screen, a lost monitor
+with each of the three choices, the card's buttons, World › Layouts,
+Previous, the modified mark, Update, borderless, full screen on a monitor,
+no window to drive, the editor, a window first shown after the baseline.
+The tab (+8). Drawn with the software painter
+(`FOLDERSTORM_TEST_CAPTURE_DIR`): `preferences-layouts-window.png`,
+`layouts-card-and-menu.png`, `diagram-bars-{inside,around,window}.png`.
+
+**Not checked here** (no graphics device, no window system in the
+sandbox): everything winit does when asked — `set_resizable(false)` and
+Aero Snap, `set_decorations(false)` and the exact cover of the monitors,
+positions with the invisible borders of Windows, how fast Windows answers,
+what Windows does to the window when a monitor is unplugged, a GPU
+recovery; the three demo modes; macOS and Linux. The human's list is in the
+checkpoint's report.
+
+**Known limits.**
+
+- The viewer-window part and the lock work once the world shows, not on
+  the login screen: a held window is free until then (section 8.7).
+- An existing layout cannot gain or lose its viewer-window part: save a
+  new layout with the parts wanted.
+- A locked normal window can still be moved by its title bar (section
+  8.4); the layout then shows as modified.
+- A lock box ticked on the layout in use while one of its monitors is
+  missing does not lock until the monitor is back; *Unlock the viewer
+  window* is offered meanwhile.
+- *Save as a new layout* takes its lock from its own box, not from the
+  lock in force: saved unticked while the window is locked, the new layout
+  (now the one in use) unlocks it.
+- Under the session host, bringing a character forward puts its window on
+  the host's stage, whatever a layout asked: the layout then shows as
+  modified.
+- With pretend monitors (`AURORA_DEMO_MONITORS`), the real window is
+  judged against monitors that are not there: the demo of the card is
+  right, the window's place may not be.
+- The card is drawn in mouselook too, where it cannot be clicked.
+- Checkpoint 3's two other limits stand: windows glued to each other are
+  placed one by one; with the session host's bar docked over the world,
+  the top bars stay inside it.
 
 ### Checkpoint 5: switcher and quick toggle (row 1.5)
 

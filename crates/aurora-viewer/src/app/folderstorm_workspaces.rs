@@ -1,23 +1,104 @@
 //! Folderstorm: layouts in the app (the rules are in
 //! `crate::folderstorm::workspaces` and `crate::folderstorm::viewport::bars`;
-//! folderstorm/plans/workspaces.md, checkpoint 3).
+//! folderstorm/plans/workspaces.md, checkpoints 3 and 4).
+//!
+//! The only place where a layout meets winit: each frame the viewer
+//! window is described to the layouts ([`Seen`]) and what they ask of it
+//! is done ([`Command`]). Everything else is decided in
+//! `crate::folderstorm::workspaces`, without a window.
 
 use super::*;
 use crate::folderstorm::viewport;
 use crate::folderstorm::workspaces::apply;
+use crate::folderstorm::workspaces::window::{Command, Seen};
 
 impl App {
-    /// Each frame, before the interface's pass: the windows of a layout
-    /// applied in the last frame take their places, and the active layout
-    /// is marked modified when one of its windows was moved since
-    /// (`apply::frame`).
-    pub(super) fn folderstorm_workspaces_frame(&mut self) {
+    /// Each frame, before the interface's pass: a layout's viewer window
+    /// is put in place and kept locked, the windows of a layout applied in
+    /// the last frames take their places, the monitors are watched, and
+    /// the active layout is marked modified when something of it was moved
+    /// since (`apply::frame`).
+    pub(super) fn folderstorm_workspaces_frame(&mut self, window: &Window) {
         if !matches!(self.screen, Screen::World) {
             return;
         }
-        self.layouts_demo();
-        if apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings)) {
+        let seen = self.folderstorm_viewer_window(window);
+        self.layouts_demo(seen.as_ref());
+        let outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen);
+        for command in &outcome.commands {
+            self.folderstorm_viewer_command(window, *command);
+        }
+        if outcome.preferences {
+            // as the Me menu's Preferences does, on our tab
+            ui::widgets::open_floater(&self.egui_ctx, "options", &mut self.panels.settings);
+            self.options_ui.open(ui::options::Page::Layout, 3);
+        }
+        if outcome.save {
             self.settings.save();
+        }
+    }
+
+    /// The card shown when the monitors changed, in the interface's pass
+    /// (`crate::folderstorm::workspaces::notice`).
+    pub(super) fn folderstorm_workspaces_notice(&self, ctx: &egui::Context, p: &crate::theme::Palette) {
+        if matches!(self.screen, Screen::World) {
+            crate::folderstorm::workspaces::notice::show(ctx, p);
+        }
+    }
+
+    /// The viewer window as the layouts see it. None while it is not
+    /// theirs to move: a capture, a forced size (`AURORA_WINDOW_SIZE`).
+    fn folderstorm_viewer_window(&self, window: &Window) -> Option<Seen> {
+        use std::hash::{Hash, Hasher};
+        if self.capture.is_some() || forced_window_size().is_some() {
+            return None;
+        }
+        let mut id = std::collections::hash_map::DefaultHasher::new();
+        window.id().hash(&mut id);
+        let size = window.inner_size();
+        let scale = window.scale_factor();
+        let s = &self.settings;
+        // (Aurora keeps the normal size in points, the corner in pixels)
+        let pixels = |points: u32| (f64::from(points) * scale).round() as i32;
+        Some(Seen {
+            id: id.finish(),
+            inner: (size.width, size.height),
+            // (Wayland gives no position)
+            outer: window.outer_position().ok().map(|at| (at.x, at.y)),
+            scale: scale as f32,
+            maximized: window.is_maximized(),
+            fullscreen: window.fullscreen().is_some(),
+            minimized: window.is_minimized().unwrap_or(false),
+            decorated: window.is_decorated(),
+            resizable: window.is_resizable(),
+            normal: s
+                .window_x
+                .zip(s.window_y)
+                .map(|(x, y)| [x, y, pixels(s.window_width), pixels(s.window_height)]),
+        })
+    }
+
+    /// Does one thing a layout asks of the viewer window.
+    fn folderstorm_viewer_command(&mut self, window: &Window, command: Command) {
+        use winit::dpi::{PhysicalPosition, PhysicalSize};
+        log::debug!("layouts: viewer window: {command:?}");
+        match command {
+            // Aurora's own full screen, entered and left by its own code
+            // (`apply_fullscreen_setting`, before the next frame): the
+            // windowed geometry it keeps stays right
+            Command::Fullscreen(on) => self.settings.window_fullscreen = on,
+            Command::Maximized(on) => window.set_maximized(on),
+            Command::Decorations(on) => window.set_decorations(on),
+            Command::Resizable(on) => window.set_resizable(on),
+            Command::Position(x, y) => window.set_outer_position(PhysicalPosition::new(x, y)),
+            Command::Size(width, height) => {
+                let _ = window.request_inner_size(PhysicalSize::new(width, height));
+            }
+        }
+        // the new place is the one Aurora remembers for the next start
+        // (`record_window_geometry`)
+        if matches!(command, Command::Position(..) | Command::Size(..) | Command::Maximized(_)) {
+            self.geom_changed = Some(Instant::now());
         }
     }
 
@@ -29,8 +110,16 @@ impl App {
     /// them; `apply-wide` applies "Wide" at frame 180; `apply-single`
     /// applies "Wide" then, at frame 360, "Single" (windows made small in
     /// the margin get their sizes back).
-    fn layouts_demo(&mut self) {
-        use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store};
+    ///
+    /// With a viewer window to move (`seen`: not under a forced size):
+    /// `toggle` gives "Wide" the window as it is and "Single" its left
+    /// half, and applies them in turn every 300 frames; `lock` gives
+    /// "Wide" the window as it is, locked, and applies it; `unplug`, with
+    /// pretend monitors (`AURORA_DEMO_MONITORS`), saves "Wide" on all of
+    /// them and "Single" on all but the last, applies "Wide", and takes
+    /// the last monitor away at frame 600: the card offers "Single".
+    fn layouts_demo(&mut self, seen: Option<&Seen>) {
+        use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
         static SEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !self.demo {
@@ -48,12 +137,36 @@ impl App {
                 height: h.round(),
                 minimized: false,
             };
+            let monitors = capture::monitors(&ctx);
+            let frame = seen
+                .filter(|_| matches!(mode.as_str(), "toggle" | "lock"))
+                .and_then(|seen| capture::viewer_window(seen, &monitors));
+            // "Single": the left half of the window, never under its minimum
+            let half_frame = match (&frame, seen) {
+                (Some(WindowFrame::Normal { x, y, width, height, .. }), Some(seen)) if mode == "toggle" => Some(WindowFrame::Normal {
+                    x: *x,
+                    y: *y,
+                    width: (*width / 2).max((800.0 * seen.scale).ceil() as u32),
+                    height: *height,
+                    maximized: false,
+                    locked: false,
+                }),
+                _ => None,
+            };
+            let fewer = match mode.as_str() {
+                "unplug" if monitors.len() > 1 => monitors[..monitors.len() - 1].to_vec(),
+                _ => monitors.clone(),
+            };
             let layout = |name: &str, world: viewport::ViewportSettings, places: [(&str, Placement); 3]| {
                 let windows = Placements {
                     frame: room.frame,
                     windows: places.into_iter().map(|(id, place)| (id.to_owned(), place)).collect(),
                 };
-                Layout::new(name, Some(world), Some(windows), capture::monitors(&ctx))
+                let (window, monitors) = match name {
+                    "Wide" => (frame.clone().map(|frame| frame.with_lock(mode == "lock")), monitors.clone()),
+                    _ => (half_frame.clone(), fewer.clone()),
+                };
+                Layout::new(name, Some(world), Some(windows), monitors).with_window(window)
             };
             let half = (width * room.frame.pixels_per_point / 2.0).round() as u32;
             let wide = layout(
@@ -110,10 +223,20 @@ impl App {
             }
         };
         match mode.as_str() {
-            "apply-wide" => apply_at(0, 180, self),
+            "apply-wide" | "lock" => apply_at(0, 180, self),
             "apply-single" => {
                 apply_at(0, 180, self);
                 apply_at(1, 360, self);
+            }
+            "toggle" if self.frame_count >= 180 && (self.frame_count - 180).is_multiple_of(300) => {
+                let index = ((self.frame_count - 180) / 300 % 2) as usize;
+                apply_at(index, self.frame_count, self);
+            }
+            "unplug" => {
+                apply_at(0, 180, self);
+                if self.frame_count == 600 {
+                    crate::folderstorm::diagram::demo_unplug();
+                }
             }
             _ => {}
         }

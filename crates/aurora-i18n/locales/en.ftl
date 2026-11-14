@@ -1487,9 +1487,9 @@ folderstorm-viewport-set-aside = These margins leave the world less than a quart
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
 fs-layouts-tab = Layouts
 fs-layouts-group = Saved layouts
-fs-layouts-intro = A layout remembers where things go: the world viewport with the bars, and the position and size of your windows. It never opens or closes a window, and never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here.
+fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. It never opens or closes a window, and never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
 fs-layouts-list = Layouts
-fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the world, the bars and the windows where the layout has them. Windows you move afterwards are only saved when you choose Update.
+fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the viewer window, the world, the bars and the windows where the layout has them. What you move afterwards is only saved when you choose Update.
 fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
 fs-layouts-unnamed = (no name)
 fs-layouts-active = In use
@@ -1535,7 +1535,7 @@ fs-layouts-waiting = { $count ->
 fs-layouts-previous-done = Back to the arrangement before.
 fs-layouts-save-group = Save the current arrangement
 fs-layouts-save-new = Save as a new layout
-fs-layouts-save-new-help = Saves where things are now under a new name. Untick a part to leave it out: a layout without window positions only changes the world and the bars, and the other way round.
+fs-layouts-save-new-help = Saves where things are now under a new name. Untick a part to leave it out: a layout without the viewer window leaves it where it is, one without window positions only changes the rest. Lock the window size keeps the viewer window from being resized by hand while the layout is in use.
 fs-layouts-name-hint = Name, for example 2 monitors
 fs-layouts-save = Save
 fs-layouts-error-empty = Give the layout a name.
@@ -1547,11 +1547,50 @@ fs-layouts-error-parts = Choose at least one part to save.
 fs-layouts-error-invalid = The current arrangement could not be read. Try again in a moment.
 fs-layouts-arrangement = Arrangement
 fs-layouts-previous = Previous arrangement
-fs-layouts-previous-help = Goes back to the world, the bars and the window positions in place before the last layout was applied, or before Reset bars and world. Pressing it again comes back. Remembered until the viewer closes.
+fs-layouts-previous-help = Goes back to the viewer window, the world, the bars and the window positions in place before the last layout was applied, or before Reset bars and world. Pressing it again comes back. Remembered until the viewer closes.
 fs-layouts-previous-button = Go back
 fs-layouts-reset = Reset bars and world
 fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
 fs-layouts-reset-button = Reset
+fs-layouts-menu = Layouts
+fs-layouts-menu-open = Layouts…
+fs-layouts-part-window = Viewer window
+fs-layouts-lock = Lock the window size
+fs-layouts-locked = Locked
+fs-layouts-holds-window = viewer window { $width } × { $height }
+fs-layouts-holds-window-maximized = viewer window maximized
+fs-layouts-holds-window-fullscreen = full screen on monitor { $n }
+fs-layouts-holds-window-borderless = { $count ->
+    [one] borderless over { $count } monitor
+   *[other] borderless over { $count } monitors
+    }
+fs-layouts-holds-locked = locked
+fs-layouts-mode-normal = Normal
+fs-layouts-mode-fullscreen = Full screen
+fs-layouts-mode-borderless = Borderless over monitors
+fs-layouts-mode-pick-fullscreen = Click the monitor to fill.
+fs-layouts-mode-pick-borderless = Click the monitors to cover. The window loses its border and title bar and lies exactly over them.
+fs-layouts-mode-no-monitors = This layout was saved without a list of monitors: only a normal window can be used.
+fs-layouts-applied-missing = { $count ->
+    [one] { $count } monitor of this layout is missing.
+   *[other] { $count } monitors of this layout are missing.
+    }
+fs-layouts-applied-left = The viewer window stayed where it is.
+fs-layouts-applied-unlocked = The window is not locked.
+fs-layouts-applied-no-window = The viewer window was left as it is.
+fs-layouts-unlock = Unlock the viewer window
+fs-layouts-unlock-help = Gives the viewer window its border and its resizing back when a layout has locked it or made it borderless. It keeps its place and size. A lock is also lifted when a monitor of the layout is unplugged, in full screen, and by any layout without a lock.
+fs-layouts-unlock-button = Unlock
+fs-layouts-monitors = When the monitors change
+fs-layouts-monitors-help = When a monitor is plugged in or unplugged, the viewer can offer the layout you saved on exactly that set of monitors, apply it without asking, or do nothing. It waits two seconds for the system to settle first.
+fs-layouts-monitors-ask = Ask
+fs-layouts-monitors-apply = Apply the matching layout
+fs-layouts-monitors-nothing = Do nothing
+fs-layouts-monitors-offer = Your monitors changed. Use the layout “{ $name }”?
+fs-layouts-monitors-offer-unlocked = Your monitors changed and the viewer window was unlocked. Use the layout “{ $name }”?
+fs-layouts-monitors-applied = Your monitors changed: the layout “{ $name }” was applied.
+fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlocked.
+fs-layouts-monitors-later = Not now
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
