@@ -435,18 +435,20 @@ fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
             .clicked();
         });
         let layout = s.folderstorm_workspaces.active().map(|layout| layout.name.clone());
-        ui.add_enabled_ui(layout.is_some(), |ui| {
-            let mut with = tab.with_layout && layout.is_some();
-            let label = match &layout {
-                Some(name) => tr!("fs-workspaces-with-layout", name = name.as_str()),
-                None => tr!("fs-workspaces-with-no-layout").to_owned(),
-            };
-            if widgets::checkbox(ui, p, &mut with, label).changed() {
-                tab.with_layout = with;
-            }
+        ui.horizontal_wrapped(|ui| {
+            ui.add_enabled_ui(layout.is_some(), |ui| {
+                let mut with = tab.with_layout && layout.is_some();
+                let label = match &layout {
+                    Some(name) => tr!("fs-workspaces-with-layout", name = name.as_str()),
+                    None => tr!("fs-workspaces-with-no-layout").to_owned(),
+                };
+                if widgets::checkbox(ui, p, &mut with, label).changed() {
+                    tab.with_layout = with;
+                }
+            });
+            widgets::checkbox(ui, p, &mut tab.with_folders, tr!("fs-workspaces-remember-folders"))
+                .on_hover_text(tr!("fs-workspaces-remember-folders-help"));
         });
-        widgets::checkbox(ui, p, &mut tab.with_folders, tr!("fs-workspaces-remember-folders"))
-            .on_hover_text(tr!("fs-workspaces-remember-folders-help"));
         if save {
             let keep = apply::Keep {
                 layout: tab.with_layout && layout.is_some(),
