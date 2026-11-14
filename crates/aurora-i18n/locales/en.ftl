@@ -940,6 +940,22 @@ fs-mcp-activity-entry = { $tool }: { $outcome }, { $ago }
 fs-mcp-outcome-done = done
 fs-mcp-outcome-refused = refused
 fs-mcp-outcome-failed = failed
+fs-mcp-activity-receipt = { $summary } · { $state }, { $ago }
+fs-mcp-activity-program = Asked by “{ $client }” (the name the program gives itself).
+fs-mcp-activity-program-unnamed = Asked by a program that gave no name.
+fs-mcp-activity-stop = Stop
+fs-mcp-activity-stop-hint = Stop this request: what has not been sent yet is not sent. A change already sent cannot be recalled.
+fs-mcp-state-waiting = waiting
+fs-mcp-state-asking = waiting for your answer
+fs-mcp-state-queued = allowed, waiting for its turn
+fs-mcp-state-running = under way
+fs-mcp-state-done = done
+fs-mcp-state-failed = refused by the server
+fs-mcp-state-refused = refused
+fs-mcp-state-cancelled = cancelled
+fs-mcp-state-stopped = stopped part way
+fs-mcp-state-stale = not sent: the inventory changed
+fs-mcp-state-unconfirmed = not confirmed yet
 fs-mcp-ago-seconds = { $count ->
     [one] { $count } second ago
    *[other] { $count } seconds ago
@@ -983,6 +999,21 @@ fs-mcp-ask-create-landmark = Create a landmark of where you stand in “{ $folde
 fs-mcp-ask-favorite-add = Add { $what } to Favorites
 fs-mcp-ask-favorite-remove = Remove { $what } from Favorites
 fs-mcp-ask-batch-rename = Rename { $count } entries, “{ $old }” to “{ $new }” first
+fs-mcp-ask-plan-rename = Rename { $count ->
+    [one] one entry
+   *[other] { $count } entries
+}:
+fs-mcp-ask-plan-move = Move { $count ->
+    [one] one entry
+   *[other] { $count } entries
+} to “{ $folder }”:
+fs-mcp-ask-plan-row-rename = “{ $before }” → “{ $after }”
+fs-mcp-ask-plan-row-move = “{ $name }”
+fs-mcp-ask-plan-more = …and { $count } more
+fs-mcp-ask-plan-skipped = { $count ->
+    [one] One entry is left out (the plan says why).
+   *[other] { $count } entries are left out (the plan says why).
+}
 fs-mcp-ask-picture-set = Set the picture of “{ $name }” to “{ $texture }”
 fs-mcp-ask-picture-clear = Remove the picture of “{ $name }”
 fs-mcp-picture-texture = a texture of your inventory

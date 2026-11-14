@@ -943,6 +943,22 @@ fs-mcp-activity-entry = { $tool } : { $outcome }, { $ago }
 fs-mcp-outcome-done = fait
 fs-mcp-outcome-refused = refusé
 fs-mcp-outcome-failed = échec
+fs-mcp-activity-receipt = { $summary } · { $state }, { $ago }
+fs-mcp-activity-program = Demandé par « { $client } » (le nom que le programme se donne).
+fs-mcp-activity-program-unnamed = Demandé par un programme qui ne s'est pas nommé.
+fs-mcp-activity-stop = Arrêter
+fs-mcp-activity-stop-hint = Arrêter cette demande : ce qui n'a pas encore été envoyé ne l'est pas. Une modification déjà envoyée ne peut pas être rappelée.
+fs-mcp-state-waiting = en attente
+fs-mcp-state-asking = attend votre réponse
+fs-mcp-state-queued = autorisé, attend son tour
+fs-mcp-state-running = en cours
+fs-mcp-state-done = fait
+fs-mcp-state-failed = refusé par le serveur
+fs-mcp-state-refused = refusé
+fs-mcp-state-cancelled = annulé
+fs-mcp-state-stopped = arrêté en cours de route
+fs-mcp-state-stale = non envoyé : l'inventaire a changé
+fs-mcp-state-unconfirmed = pas encore confirmé
 fs-mcp-ago-seconds = { $count ->
     [one] il y a { $count } seconde
    *[other] il y a { $count } secondes
@@ -986,6 +1002,21 @@ fs-mcp-ask-create-landmark = Créer un repère de l'endroit où vous êtes dans 
 fs-mcp-ask-favorite-add = Ajouter { $what } aux favoris
 fs-mcp-ask-favorite-remove = Retirer { $what } des favoris
 fs-mcp-ask-batch-rename = Renommer { $count } éléments, d'abord « { $old } » en « { $new } »
+fs-mcp-ask-plan-rename = Renommer { $count ->
+    [one] un élément
+   *[other] { $count } éléments
+} :
+fs-mcp-ask-plan-move = Déplacer { $count ->
+    [one] un élément
+   *[other] { $count } éléments
+} vers « { $folder } » :
+fs-mcp-ask-plan-row-rename = « { $before } » → « { $after } »
+fs-mcp-ask-plan-row-move = « { $name } »
+fs-mcp-ask-plan-more = …et { $count } de plus
+fs-mcp-ask-plan-skipped = { $count ->
+    [one] Un élément est laissé de côté (le plan dit pourquoi).
+   *[other] { $count } éléments sont laissés de côté (le plan dit pourquoi).
+}
 fs-mcp-ask-picture-set = Donner à « { $name } » l'image « { $texture } »
 fs-mcp-ask-picture-clear = Retirer l'image de « { $name } »
 fs-mcp-picture-texture = une texture de votre inventaire
