@@ -373,6 +373,12 @@ impl AutoPilot {
         }
     }
 
+    /// Folderstorm: the local assistant's walk or flight to a point ends
+    /// within its own stop distance (mcp_bridge/navigation.rs).
+    pub fn with_stop_distance(self, stop_distance: f32) -> AutoPilot {
+        AutoPilot { stop_distance, ..self }
+    }
+
     /// startAutoPilotGlobal with a stop distance and a finish callback.
     pub fn start_to(from: Vec3, target: Vec3, stop_distance: f32, arrival: Arrival, now: Instant) -> AutoPilot {
         AutoPilot {

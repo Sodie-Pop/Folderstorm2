@@ -2236,6 +2236,7 @@ name = "folderstorm-session"
 version = "0.1.0"
 dependencies = [
  "folderstorm-brand",
+ "folderstorm-mcp-bridge",
  "serde",
  "serde_json",
 ]

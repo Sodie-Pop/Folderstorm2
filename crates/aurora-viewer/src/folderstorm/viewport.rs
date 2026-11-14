@@ -39,6 +39,9 @@ pub struct ViewportSettings {
     /// The top, bottom and side bars stay inside the viewport; off, they
     /// follow the whole window as in Aurora.
     pub bars_in_viewport: bool,
+    /// Photo mode (its frame, controls and photos) uses the whole window;
+    /// off, it works in the viewport (`crate::folderstorm::photo_viewport`).
+    pub photo_whole_window: bool,
 }
 
 impl Default for ViewportSettings {
@@ -51,6 +54,7 @@ impl Default for ViewportSettings {
             bottom: 0,
             in_mouselook: true,
             bars_in_viewport: true,
+            photo_whole_window: false,
         }
     }
 }
@@ -59,8 +63,8 @@ impl Default for ViewportSettings {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Overrides {
     pub mouselook: bool,
-    /// A photo being taken, the photo viewfinder in full frame, or a screen
-    /// with no world (login).
+    /// A photo being taken or the photo viewfinder in full frame while
+    /// photo mode has the whole window, or a screen with no world (login).
     pub full_frame: bool,
 }
 

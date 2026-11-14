@@ -114,6 +114,9 @@ fn ctx(world: &World) -> Ctx<'_> {
         outfit_points: HashMap::new(),
         stage: Default::default(),
         viewer_session: None,
+        identity: Default::default(),
+        nav: Default::default(),
+        content: Default::default(),
         objects: Scene {
             world: Some(world),
             props: &[],

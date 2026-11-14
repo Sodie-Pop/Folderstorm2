@@ -243,10 +243,9 @@ pub fn avatars(world: &World) -> Vec<(Uuid, Vec3, bool)> {
 }
 
 pub fn avatar_name(world: &World, id: &Uuid) -> String {
-    world
-        .avatar_name(id)
-        .or_else(|| world.social.names.get(id).cloned())
-        .unwrap_or_else(|| "…".into())
+    // Folderstorm: the display name cache too (LLAvatarNameCache::get, as
+    // LLNetMap's tooltip), which asks for a name it lacks; "…" meanwhile
+    world.avatar_name(id).unwrap_or_else(|| world.social.name_of(id))
 }
 
 /// LLWorldMapView::drawAvatar: a dot, with a cap above / below when the
@@ -1579,5 +1578,50 @@ mod beacon_tests {
         track.pending = false;
         track.invalid = true;
         assert!(!hit.contains(hit.rect.center(), &track));
+    }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+
+    #[test]
+    fn an_unknown_avatar_asks_for_its_name_once_and_shows_it_when_it_comes() {
+        let mut world = World::new(std::sync::Arc::new(crate::scene::avatar::AvatarLibrary::load()));
+        let id = Uuid::from_u128(7);
+        let names = &mut world.social.avatar_names;
+        assert!(names.take_asks().is_empty());
+        // hovered: the label waits, and the name is asked for
+        assert_eq!(avatar_name(&world, &id), "…");
+        assert_eq!(world.social.avatar_names.take_asks(), vec![id]);
+        // the next frames ask nothing more while the answer is on its way
+        assert_eq!(avatar_name(&world, &id), "…");
+        assert_eq!(avatar_name(&world, &id), "…");
+        assert!(world.social.avatar_names.take_asks().is_empty());
+        // the display names come back: the label shows the name
+        world.social.avatar_names.on_display_names(
+            &[aurora_net::AvatarNameData {
+                id,
+                username: "jane.doe".into(),
+                display_name: "Jane".into(),
+                legacy_first: "Jane".into(),
+                legacy_last: "Doe".into(),
+                ..Default::default()
+            }],
+            &[],
+            Some(3600),
+        );
+        let name = avatar_name(&world, &id);
+        assert!(name.contains("Jane"), "{name}");
+        assert_eq!(name, world.social.name_of(&id));
+        assert!(world.social.avatar_names.take_asks().is_empty());
+    }
+
+    #[test]
+    fn a_legacy_name_still_shows_without_the_cache() {
+        let mut world = World::new(std::sync::Arc::new(crate::scene::avatar::AvatarLibrary::load()));
+        let id = Uuid::from_u128(8);
+        world.social.names.insert(id, "Bob Roe".into());
+        assert_eq!(avatar_name(&world, &id), "Bob Roe");
     }
 }
