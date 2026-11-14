@@ -99,6 +99,7 @@ pub(super) fn attention_kind(kind: AttentionKind) -> &'static str {
         AttentionKind::Link => tr!("folderstorm-chat-attention-link"),
         AttentionKind::Call => tr!("folderstorm-chat-attention-call"),
         AttentionKind::Other => tr!("folderstorm-chat-attention-other"),
+        AttentionKind::Assistant => tr!("folderstorm-chat-attention-assistant"),
     }
 }
 
@@ -599,6 +600,7 @@ pub(super) mod tests {
             bar_asked: Vec::new(),
             auto_read: Default::default(),
             demo_settings: None,
+            controller: super::super::controller::Controller::without_file(),
         };
         for slot in 0..2 {
             host.chat.status(slot, 1, 1, true);
