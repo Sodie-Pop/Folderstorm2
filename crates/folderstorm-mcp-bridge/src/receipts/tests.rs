@@ -350,3 +350,24 @@ fn a_tracked_answer_carries_its_operation() {
     assert!(e.to_string().contains(&op(2)), "{e}");
     assert_eq!(ledger.with(|s| s.find(Some(S1), &op(2)).map(|r| r.state)), Some(State::Refused));
 }
+
+/// Folderstorm: an answer that says the server's state cannot confirm what
+/// was sent (an object's contents, mcp-objects.md) ends `unconfirmed`, and
+/// a later answer may still settle it; before anything was sent it is an
+/// ordinary answer.
+#[test]
+fn an_unconfirmed_answer_ends_unconfirmed_and_may_settle() {
+    let now = Instant::now();
+    let mut store = Store::default();
+    let args = json!({});
+    store.admit(request(1, None, S1, &args), now);
+    store.update(&op(1), Receipt::mark_sent);
+    let answer = Ok(json!({"done": false, "unconfirmed": true, "item_id": "00000000-0000-0000-0000-000000000001"}));
+    assert_eq!(store.finish(&op(1), &answer, now), Some(State::Unconfirmed));
+    let r = store.find(Some(S1), &op(1)).expect("kept");
+    assert_eq!(r.server, Some(Server::NoAnswer));
+    assert_eq!(r.result, vec!["00000000-0000-0000-0000-000000000001".to_owned()]);
+    assert_eq!(store.settle(&op(1), Late::Confirmed, now), Some(State::Done));
+    store.admit(request(2, None, S1, &args), now);
+    assert_eq!(store.finish(&op(2), &Ok(json!({"unconfirmed": true})), now), Some(State::Done));
+}

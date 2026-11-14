@@ -54,6 +54,8 @@ pub struct Ctx<'a> {
     /// The login's `viewer_session` (None while logged out), which
     /// `viewer_status` gives.
     pub viewer_session: Option<String>,
+    /// Folderstorm: the world the object tools read (mcp-objects.md).
+    pub objects: super::objects::Scene<'a>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

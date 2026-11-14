@@ -27,6 +27,9 @@ pub mod world;
 // Folderstorm: receipts, plans and operations (mcp-receipts.md)
 pub mod assistant;
 
+// Folderstorm: object inspection and lifecycle (mcp-objects.md)
+pub mod objects;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -268,6 +271,13 @@ impl ToolSpec {
         {
             properties.insert(crate::receipts::CLIENT_REQUEST_ID.to_owned(), assistant::client_request_id_schema());
         }
+        // Folderstorm: the object tools' changes need their id (mcp-objects.md)
+        if objects::needs_client_request_id(self.name) {
+            match schema["required"].as_array_mut() {
+                Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
+                None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
+            }
+        }
         schema
     }
 }
@@ -277,6 +287,8 @@ impl ToolSpec {
 /// still refuses them.
 pub fn always_asks(tool: &str, arguments: &Value) -> bool {
     tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true)
+        // Folderstorm: removing from an object, taking an object (mcp-objects.md)
+        || objects::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -792,6 +804,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(inventory::INVENTORY_TOOLS)
         .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
         .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
+        .chain(objects::OBJECT_TOOLS) // Folderstorm: object inspection and lifecycle
 }
 
 #[cfg(test)]

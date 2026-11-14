@@ -34,10 +34,12 @@
 //! out is cancelled.
 
 use super::changes::{self, Planned, Work};
+use super::objects::{self, Objects}; // Folderstorm: object tools (mcp-objects.md)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
+use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: object tools
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
@@ -188,6 +190,8 @@ pub struct Desk {
     late: Vec<LateWait>,
     /// Folderstorm: this login's batch plans.
     plans: Plans,
+    /// Folderstorm: this login's object snapshots, listings and watches.
+    objects: Objects,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -288,6 +292,9 @@ impl Desk {
     /// A new call: a read is answered now; a change is checked, then asks
     /// the user or waits to run; `wait_for_bake` waits.
     pub fn take(&mut self, mut call: Pending, cx: &Ctx, now: Instant) {
+        // Folderstorm: seen for the first time (not back from the dialog's
+        // checks), for the object tools' required id below
+        let fresh = call.tracked().is_none();
         let Some(spec) = protocol::tool(&call.tool) else {
             call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
             return;
@@ -313,6 +320,14 @@ impl Desk {
                     "this plan was executed and its receipt is gone",
                 )),
             });
+        }
+        // Folderstorm: an object change needs its client_request_id
+        // (mcp-objects.md; decision 3 of mcp-receipts.md)
+        if fresh && object_tool::needs_client_request_id(&call.tool) && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none() {
+            return call.answer(Err(ToolError::new(
+                ErrorCode::InvalidArguments,
+                "`client_request_id` is required for an object change: choose a new one for each change, and send the same one again only to ask for that change's receipt",
+            )));
         }
         // Folderstorm: a change gets its receipt (once: a call that comes
         // back from the dialog's checks has it already)
@@ -349,6 +364,10 @@ impl Desk {
             Decision::Ask => call.ask = true,
             Decision::Run => {}
         }
+        // Folderstorm: removing from an object and taking one always ask
+        if object_tool::always_asks(&call.tool) {
+            call.ask = true;
+        }
         if call.tool == "wait_for_bake" {
             match bake_timeout(&call.arguments) {
                 Ok(wait) => self.bakes.push(BakeWait {
@@ -375,12 +394,29 @@ impl Desk {
             let result = plans::preview(&mut self.plans, &call.tool, &call.arguments, cx, execution, now);
             return call.answer(result);
         }
+        // Folderstorm: the object tools' reads (mcp-objects.md)
+        if call.tool == object_tool::LIST {
+            self.objects.list(call, cx, now);
+            return;
+        }
+        if call.tool == object_tool::STATUS {
+            let result = self
+                .objects
+                .status(&call.arguments, &self.receipts, self.session.as_deref(), self.names());
+            return call.answer(result);
+        }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
             call.answer(result);
             return;
         }
-        match changes::plan(&call.tool, &call.arguments, cx) {
+        // Folderstorm: an object change is planned against its snapshot
+        let planned = if objects::handles(&call.tool) {
+            self.objects.plan(&call, cx, now, false)
+        } else {
+            changes::plan(&call.tool, &call.arguments, cx)
+        };
+        match planned {
             Err(e) => call.answer(Err(e)),
             Ok(Planned {
                 work: Work::Nothing,
@@ -694,6 +730,7 @@ impl Desk {
         self.plans = Plans::default();
         self.late.clear();
         self.receipts.with(receipts::Store::clear);
+        self.objects.clear(&refusal); // Folderstorm: object tools
     }
 
     fn refuse_waiting(&mut self, refusal: &ToolError) {
@@ -708,6 +745,7 @@ impl Desk {
         }
         // Folderstorm: phase 3's landmark reads wait too
         landmark::refuse_all(&mut self.landmarks, refusal);
+        self.objects.refuse_all(refusal); // Folderstorm: object listings
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -725,6 +763,9 @@ impl Desk {
         self.receipts = old.receipts;
         self.late = old.late;
         self.login = old.login;
+        // Folderstorm: the object operations' facts stay, the snapshots go
+        old.objects.close(&refused(ACCESS_OFF));
+        self.objects = old.objects;
     }
 
     /// Folderstorm: `flight` answers that it may still land, and listens on
@@ -1023,6 +1064,12 @@ impl Desk {
     pub fn tick_reads(&mut self, world: &crate::world::World, now: Instant) {
         self.journal.follow(&world.inventory, now);
         landmark::tick(&mut self.landmarks, world, now);
+        self.objects.tick(world, now); // Folderstorm: object tools
+    }
+
+    /// Folderstorm: the object tools' state (mcp-objects.md).
+    pub fn objects(&mut self) -> &mut Objects {
+        &mut self.objects
     }
 
     /// Folderstorm: the landmark assets the waiting calls need.

@@ -43,6 +43,9 @@ pub mod inventory_reads;
 pub mod journal;
 pub mod landmark;
 pub mod login;
+pub mod objects; // Folderstorm: object inspection and lifecycle (mcp-objects.md)
+#[cfg(test)]
+mod objects_tests;
 pub mod picture;
 pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
 pub mod setup;
@@ -92,6 +95,9 @@ struct Runtime {
     demo_asked: bool,
     /// The demo's requests waiting for their answer, logged when it comes.
     demo_answers: Vec<(&'static str, Receiver<Result<serde_json::Value, ToolError>>)>,
+    /// Folderstorm: `AURORA_DEMO_MCP=objects`: the demo's listing, which a
+    /// put follows once it answers.
+    demo_listing: Option<Receiver<Result<serde_json::Value, ToolError>>>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -201,7 +207,7 @@ pub fn discovery_dir() -> std::path::PathBuf {
 /// every change, and the demo makes requests of its own so that the dialog
 /// shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan" || v == "objects")
 }
 
 /// `AURORA_DEMO_MCP=plan`: the demo previews a 3-entry move and executes
@@ -257,6 +263,10 @@ impl View<'_> {
             outfit_points: world.outfit_attachment_points(),
             stage: self.stage,
             viewer_session: None,
+            objects: objects::Scene {
+                world: Some(world),
+                props: &self.object_props,
+            },
         }
     }
 
@@ -372,7 +382,9 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             let cx = cx.get_or_insert_with(context);
             rt.desk.take(call, cx, now);
         }
-        let demo_ready = !view.world.inventory.root.is_nil() && (!demo_camera() || view.stage.in_world);
+        let demo_ready = !view.world.inventory.root.is_nil()
+            && (!demo_camera() || view.stage.in_world)
+            && (!objects::demo::wanted() || objects::demo::ready(view.world));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -397,6 +409,12 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 log::info!("local assistant demo: plan previewed: {plan:?}");
                 let plan_id = plan.as_ref().and_then(|p| p["plan_id"].as_str()).unwrap_or_default().to_owned();
                 vec![(plans_tool::EXECUTE_PLAN, serde_json::json!({"plan_id": plan_id}))]
+            } else if objects::demo::wanted() {
+                // Folderstorm: the listing now, the put once it answers (below)
+                let (call, answer) = Pending::detached(objects::demo::LIST, objects::demo::list(), false, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                rt.demo_listing = Some(answer);
+                Vec::new()
             } else {
                 vec![("inventory_create_folder", serde_json::json!({"name": "Sorted by the assistant"}))]
             };
@@ -404,6 +422,24 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
                 rt.desk.take(call, cx.get_or_insert_with(context), now);
                 rt.demo_answers.push((tool, answer));
+            }
+        }
+        // Folderstorm: the demo's listing answered: a put into the same prim
+        if let Some(listing) = rt.demo_listing.take() {
+            match listing.try_recv() {
+                Ok(result) => {
+                    match &result {
+                        Ok(page) => log::info!("local assistant demo: object_contents_list answered {} items", page["total"]),
+                        Err(e) => log::info!("local assistant demo: object_contents_list ended with {e}"),
+                    }
+                    if let Some((tool, arguments)) = result.ok().as_ref().and_then(objects::demo::put_after) {
+                        let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_answers.push((tool, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_listing = Some(listing),
+                Err(TryRecvError::Disconnected) => {}
             }
         }
         rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
@@ -443,6 +479,23 @@ pub fn created_by_assistant(item: Uuid) -> bool {
     })
 }
 
+/// Folderstorm: what the object tools need sent now: an object's
+/// properties or its contents (mcp-objects.md).
+pub fn object_wants() -> Vec<objects::Want> {
+    with(|rt| rt.desk.objects().wanted())
+}
+
+/// Folderstorm: the app sends an object change now (`send`, planned with
+/// `reply`): the viewer watches for its outcome.
+pub fn object_sending(call: Pending, send: &objects::Send, reply: serde_json::Value, world: &World) {
+    with(|rt| rt.desk.objects().sending(call, send, reply, world, Instant::now()));
+}
+
+/// Folderstorm: an association of the object tools, recorded now.
+pub fn object_associate(call: Pending, reply: serde_json::Value) {
+    with(|rt| rt.desk.objects().associate(call, reply));
+}
+
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
 /// asks the landmark cache for them, phase 3).
 pub fn wanted_landmarks() -> Vec<Uuid> {
@@ -467,14 +520,18 @@ pub fn image_finished(request: Uuid, error: Option<&str>) {
 /// dialog. None: the call was answered, or it went back to the dialog.
 pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)> {
     let cx = view.context();
-    let call = with(|rt| {
+    let (call, object_plan) = with(|rt| {
         let Some((generation, session)) = rt.rebind(view) else {
             call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
             return None;
         };
-        rt.desk.recheck(call, generation, session, &cx, Instant::now())
+        let call = rt.desk.recheck(call, generation, session, &cx, Instant::now())?;
+        // Folderstorm: an object change is planned again against its
+        // snapshot, the prim unchanged since (mcp-objects.md)
+        let planned = objects::handles(&call.tool).then(|| rt.desk.objects().plan(&call, &cx, Instant::now(), true));
+        Some((call, planned))
     })?;
-    match changes::plan(&call.tool, &call.arguments, &cx) {
+    match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
         Ok(planned) => Some((call, planned)),
         Err(e) => {
             call.answer(Err(e));
@@ -498,6 +555,13 @@ pub fn sent(request: Option<Uuid>, failure: Option<String>) {
 /// Every inventory and outfit answer of the server passes here first, so
 /// that a waiting change learns its outcome.
 pub fn observe(event: &aurora_net::NetEvent) {
+    // Folderstorm: objects' properties and contents (mcp-objects.md)
+    if matches!(
+        event,
+        aurora_net::NetEvent::ObjectProperties(_) | aurora_net::NetEvent::TaskInventory { .. }
+    ) {
+        return with(|rt| rt.desk.objects().observe(event, Instant::now()));
+    }
     if let aurora_net::NetEvent::InventoryCreated(item) = event {
         with(|rt| {
             if rt.desk.created(item) {

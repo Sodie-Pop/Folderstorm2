@@ -154,6 +154,19 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-camera-hint"),
                     field!(local_assistant.permissions.camera),
                 ),
+                // Folderstorm: object inspection and lifecycle (mcp-objects.md)
+                (
+                    Class::Objects,
+                    tr!("fs-mcp-objects"),
+                    tr!("fs-mcp-objects-hint"),
+                    field!(local_assistant.permissions.objects),
+                ),
+                (
+                    Class::Take,
+                    tr!("fs-mcp-take"),
+                    tr!("fs-mcp-take-hint"),
+                    field!(local_assistant.permissions.take),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

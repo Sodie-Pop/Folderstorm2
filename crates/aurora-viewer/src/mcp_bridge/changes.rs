@@ -49,6 +49,9 @@ pub enum Work {
     /// Folderstorm: an entry's picture from a texture, through the Image
     /// window's path (phase 3).
     Image { target: Uuid, texture: Uuid },
+    /// Folderstorm: an object's contents changed or the object taken, as
+    /// the Contents tab and Take send it (mcp-objects.md).
+    Object(Box<super::objects::Send>),
 }
 
 #[derive(Debug, Clone)]

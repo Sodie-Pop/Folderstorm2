@@ -42,6 +42,9 @@ pub const PLANS: &str = "plans";
 /// Guarded operations (mcp-receipts.md, section 5): early answers,
 /// `assistant_operation_cancel`, the `cancelled` code.
 pub const OPERATIONS: &str = "operations";
+/// Folderstorm: object inspection and lifecycle (mcp-objects.md): the
+/// `object_*` tools and the `objects` and `take` classes.
+pub const OBJECTS: &str = "objects";
 
 /// What this build implements. Later groups add theirs: `plans`,
 /// `operations`…
@@ -54,6 +57,7 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (RECEIPTS, 1),   // Folderstorm: receipts (mcp-receipts.md, checkpoint 3)
     (PLANS, 1),      // Folderstorm: batch plans (checkpoint 4)
     (OPERATIONS, 1), // Folderstorm: guarded operations (checkpoint 5)
+    (OBJECTS, 1),    // Folderstorm: object inspection and lifecycle (mcp-objects.md)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -224,7 +228,7 @@ mod tests {
         assert!(missing(&mine).is_empty());
         assert_eq!(
             missing(&assumed()),
-            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS, PLANS, OPERATIONS]
+            vec![CAMERA, INVENTORY_GAPS, WORLD, LOGIN_BINDING, RECEIPTS, PLANS, OPERATIONS, OBJECTS]
         );
         // a newer viewer: a later version and a group this build lacks
         let mut newer = capabilities();
