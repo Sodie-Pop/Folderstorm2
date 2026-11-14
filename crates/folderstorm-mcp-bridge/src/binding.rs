@@ -50,6 +50,9 @@ pub const OPERATIONS: &str = "operations";
 /// Folderstorm: the navigation tools (phase 3, part 4): `navigation_*`, the
 /// `navigation` permission class.
 pub const NAVIGATION: &str = "navigation";
+/// Folderstorm: content editing (mcp-content.md): notecard and script
+/// reads, previews, saves and compiles, and the `Content` class.
+pub const CONTENT: &str = "content";
 
 /// What this build implements. Later groups add theirs.
 pub const CAPABILITIES: &[(&str, u32)] = &[
@@ -63,6 +66,7 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (PLANS, 1),      // Folderstorm: batch plans (checkpoint 4)
     (OPERATIONS, 1), // Folderstorm: guarded operations (checkpoint 5)
     (NAVIGATION, 1), // Folderstorm: navigation (phase 3, part 4)
+    (CONTENT, 1),    // Folderstorm: content editing (mcp-content.md)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -253,7 +257,8 @@ mod tests {
                 RECEIPTS,
                 PLANS,
                 OPERATIONS,
-                NAVIGATION
+                NAVIGATION,
+                CONTENT
             ]
         );
         // a newer viewer: a later version and a group this build lacks

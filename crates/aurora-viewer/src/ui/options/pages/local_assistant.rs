@@ -161,6 +161,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-navigation-hint"),
                     field!(local_assistant.permissions.navigation),
                 ),
+                (
+                    Class::Content,
+                    tr!("fs-mcp-content"),
+                    tr!("fs-mcp-content-hint"),
+                    field!(local_assistant.permissions.content),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];
