@@ -45,9 +45,10 @@ pub fn reconnect_place(region: &str, size: (u32, u32), position: glam::Vec3) -> 
 /// The pill under the top bar while the region is silent.
 pub fn show(ctx: &egui::Context, p: &Palette, seconds: u32) {
     let text = aurora_i18n::tr!("ui-link-stalled", seconds = seconds as i64);
+    let bars = crate::folderstorm::viewport::bars_offset(ctx, Align2::CENTER_TOP); // Folderstorm: world viewport
     egui::Area::new(Id::unique("link_health_pill"))
         .order(egui::Order::Foreground)
-        .anchor(Align2::CENTER_TOP, Vec2::new(0.0, 64.0))
+        .anchor(Align2::CENTER_TOP, bars + Vec2::new(0.0, 64.0))
         .interactable(false)
         .show(ctx, |ui| {
             super::widgets::overlay(ui, p, egui::Margin::symmetric(12, 6), |ui| {

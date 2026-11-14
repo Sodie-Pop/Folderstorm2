@@ -106,16 +106,20 @@ pub fn margins_for_monitor(window: [i32; 4], monitor: [i32; 4]) -> Option<(u32, 
 /// The bars' area this frame, in egui points: the world viewport's when
 /// the bars stay inside it. None leaves them on the whole window.
 pub fn bars_rect(s: &ViewportSettings, world: Option<[u32; 4]>, pixels_per_point: f32) -> Option<egui::Rect> {
-    let [x, y, w, h] = world.filter(|_| s.bars_in_viewport)?;
+    world.filter(|_| s.bars_in_viewport).map(|rect| in_points(rect, pixels_per_point))
+}
+
+/// A rectangle of window pixels (x, y, width, height) in egui points.
+fn in_points([x, y, w, h]: [u32; 4], pixels_per_point: f32) -> egui::Rect {
     let ppp = if pixels_per_point.is_finite() && pixels_per_point > 0.0 {
         pixels_per_point
     } else {
         1.0
     };
-    Some(egui::Rect::from_min_size(
+    egui::Rect::from_min_size(
         egui::pos2(x as f32 / ppp, y as f32 / ppp),
         egui::vec2(w as f32 / ppp, h as f32 / ppp),
-    ))
+    )
 }
 
 /// Remembers the bars' area for this frame (`bars_screen`, `floater_room`).
@@ -165,6 +169,114 @@ pub fn fit_room(work: egui::Rect, bars: Option<egui::Rect>, window: egui::Rect) 
 /// [`fit_room`] for this frame, from the work area Aurora gives a floater.
 pub fn floater_room(ctx: &egui::Context, work: egui::Rect) -> egui::Rect {
     fit_room(work, confined_bars(ctx), ctx.content_rect())
+}
+
+/// The world's part of the window (`aurora_render::Renderer::world_rect`,
+/// in pixels) and the frame it was set in.
+#[derive(Clone, Copy, Debug)]
+struct WorldArea {
+    frame: u64,
+    rect: Option<[u32; 4]>,
+}
+
+fn world_area_id() -> egui::Id {
+    egui::Id::unique("folderstorm_viewport_world_area")
+}
+
+/// Remembers the world's part of the window for this frame (None: the
+/// world fills it), whatever the bars do: the dialogs centre in it.
+pub fn set_world_area(ctx: &egui::Context, rect: Option<[u32; 4]>) {
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data_mut(|d| d.insert_temp(world_area_id(), WorldArea { frame, rect }));
+}
+
+/// The rectangle dialogs centre in, of the window `window`: the world's part
+/// of it, `world`, when there is one, the window otherwise.
+fn dialog_rect(world: Option<egui::Rect>, window: egui::Rect) -> egui::Rect {
+    world
+        .map(|world| world.intersect(window))
+        .filter(|world| world.is_finite() && world.is_positive())
+        .unwrap_or(window)
+}
+
+/// The rectangle the dialogs, prompts and alerts centre in this frame: the
+/// world viewport (set this frame or the last; a screen with no world, as
+/// the login, leaves none behind), the window when the world fills it.
+pub fn dialog_area(ctx: &egui::Context) -> egui::Rect {
+    let now = ctx.cumulative_frame_nr();
+    let world = ctx
+        .data(|d| d.get_temp::<WorldArea>(world_area_id()))
+        .filter(|area| area.frame.saturating_add(1) >= now)
+        .and_then(|area| area.rect)
+        .map(|rect| in_points(rect, ctx.pixels_per_point()));
+    dialog_rect(world, ctx.content_rect())
+}
+
+/// What moves a point at `align` of `window` to the same point of `area`:
+/// the offset that carries an area anchored to the window (egui's
+/// `Area::anchor`) into `area`.
+fn anchor_shift(align: egui::Align2, area: egui::Rect, window: egui::Rect) -> egui::Vec2 {
+    align.pos_in_rect(&area) - align.pos_in_rect(&window)
+}
+
+/// The offset to add to an area anchored at `align` of the window to anchor
+/// it at the same point of [`dialog_area`]. egui still keeps the area on the
+/// window: a dialog wider or taller than the world spills over its margins
+/// rather than off the screen.
+pub fn dialog_offset(ctx: &egui::Context, align: egui::Align2) -> egui::Vec2 {
+    anchor_shift(align, dialog_area(ctx), ctx.content_rect())
+}
+
+/// The offset to add to an area anchored at `align` of the window to anchor
+/// it at the same point of the bars' area ([`bars_screen`]): for what hangs
+/// from the bars (the notification toasts under the bell, the chat lines
+/// over the chat bar, the banners under the top bar).
+pub fn bars_offset(ctx: &egui::Context, align: egui::Align2) -> egui::Vec2 {
+    anchor_shift(align, bars_screen(ctx), ctx.content_rect())
+}
+
+/// A modal's area, which egui centres on the window, centred in
+/// [`dialog_area`] instead (`ui::widgets::Modal`).
+pub fn modal_area(ctx: &egui::Context, area: egui::Area) -> egui::Area {
+    area.anchor(egui::Align2::CENTER_CENTER, dialog_offset(ctx, egui::Align2::CENTER_CENTER))
+}
+
+/// How far, in points, a floater's default rect may sit from the window's
+/// centre and still count as centred on it.
+const CENTRED_SLACK: f32 = 2.0;
+
+/// Where a floater whose default rect is `rect` opens, in a window
+/// `window` whose dialogs centre in `area` ([`dialog_area`]): a rect centred
+/// on the window (Aurora's `content_rect().center() - size / 2` for pay, buy
+/// land, profiles, groups, the script editor…) is centred in `area`
+/// instead, wholly inside it on each axis it fits on, on the window
+/// otherwise. Any other rect, or `area` being the window, is untouched.
+fn floater_place(rect: egui::Rect, window: egui::Rect, area: egui::Rect) -> egui::Rect {
+    if area == window || !rect.is_finite() || !window.is_positive() || rect.center().distance(window.center()) > CENTRED_SLACK {
+        return rect;
+    }
+    let placed = egui::Rect::from_center_size(area.center(), rect.size());
+    let axis = |min: f32, len: f32, area: egui::Rangef, window: egui::Rangef| {
+        let bounds = if len <= area.span() { area } else { window };
+        min.clamp(bounds.min, (bounds.max - len).max(bounds.min))
+    };
+    let min = egui::pos2(
+        axis(placed.min.x, placed.width(), area.x_range(), window.x_range()),
+        axis(placed.min.y, placed.height(), area.y_range(), window.y_range()),
+    );
+    egui::Rect::from_min_size(min, rect.size())
+}
+
+/// The default position of floater `id` of `size` this frame (`ui::widgets::Floater`):
+/// on its first placement only (egui holds no state for it yet: neither
+/// shown before nor restored from the saved layout), one centred on the
+/// window opens centred in the world viewport instead ([`floater_place`]).
+/// With the viewport off, or the world filling the window, it is unchanged.
+pub fn floater_default(ctx: &egui::Context, id: egui::Id, pos: egui::Pos2, size: egui::Vec2) -> egui::Pos2 {
+    if egui::AreaState::load(ctx, id).is_some() {
+        return pos;
+    }
+    floater_place(egui::Rect::from_min_size(pos, size), ctx.content_rect(), dialog_area(ctx)).min
 }
 
 /// The window and the monitors on the desktop, as (x, y, width, height)
@@ -413,6 +525,182 @@ mod tests {
                 assert!(after.width() <= 304.5, "shrunk to the work area: {after:?}");
             }
         }
+    }
+
+    #[test]
+    fn dialogs_centre_in_the_world_and_stay_on_the_window() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        let right = rect(1920.0, 0.0, 1920.0, 1080.0);
+        assert_eq!(dialog_rect(Some(right), window), right);
+        assert_eq!(dialog_rect(None, window), window);
+        // a world reaching past the window keeps its part on the window, an
+        // empty one leaves the window
+        assert_eq!(dialog_rect(Some(rect(1920.0, 0.0, 4000.0, 1080.0)), window), right);
+        assert_eq!(dialog_rect(Some(rect(1920.0, 0.0, 0.0, 1080.0)), window), window);
+        assert_eq!(dialog_rect(Some(egui::Rect::NOTHING), window), window);
+        // the offset of an anchored area: centre to centre, corner to corner
+        let centre = anchor_shift(egui::Align2::CENTER_CENTER, right, window);
+        assert_eq!(centre, egui::vec2(960.0, 0.0));
+        assert_eq!(anchor_shift(egui::Align2::RIGHT_TOP, right, window), egui::Vec2::ZERO);
+        assert_eq!(anchor_shift(egui::Align2::LEFT_BOTTOM, right, window), egui::vec2(1920.0, 0.0));
+        assert_eq!(anchor_shift(egui::Align2::CENTER_CENTER, window, window), egui::Vec2::ZERO);
+    }
+
+    /// A modal (the local assistant's Ask dialog is one: `widgets::Modal`)
+    /// in a window over two 1920x1080 monitors, `world` the world's part of
+    /// it this frame; `width` the dialog's. Its rect after a few frames.
+    fn modal_rect(ctx: &egui::Context, world: Option<Option<[u32; 4]>>, width: f32) -> egui::Rect {
+        let p = crate::theme::Theme::default().palette();
+        let mut shown = egui::Rect::NOTHING;
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(rect(0.0, 0.0, 3840.0, 1080.0)),
+                    ..Default::default()
+                },
+                |ui| {
+                    if let Some(world) = world {
+                        set_world_area(ui.ctx(), world);
+                    }
+                    let modal = crate::ui::widgets::Modal::new(egui::Id::unique("folderstorm_viewport_modal")).show(ui.ctx(), |ui| {
+                        ui.set_width(width);
+                        ui.label(egui::RichText::new("“claude-code” asks to:").color(p.ink));
+                        ui.label("Rename an item");
+                    });
+                    shown = modal.response.rect;
+                },
+            );
+            output.textures_delta.clear();
+        }
+        shown
+    }
+
+    #[test]
+    fn a_modal_is_centred_in_the_world_viewport() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        for (world, area) in [
+            ([1920, 0, 1920, 1080], rect(1920.0, 0.0, 1920.0, 1080.0)),
+            ([0, 0, 1920, 1080], rect(0.0, 0.0, 1920.0, 1080.0)),
+        ] {
+            let ctx = egui::Context::default();
+            let shown = modal_rect(&ctx, Some(Some(world)), 380.0);
+            assert!(area.contains(shown.center()), "{shown:?} centred in {area:?}");
+            assert!((shown.center().x - area.center().x).abs() < 1.0, "{shown:?}");
+            assert!(area.contains_rect(shown), "wholly in the world: {shown:?}");
+        }
+        // the world filling the window, or no viewport: centred on the window
+        let ctx = egui::Context::default();
+        let shown = modal_rect(&ctx, Some(None), 380.0);
+        assert!((shown.center().x - window.center().x).abs() < 1.0, "{shown:?}");
+        let shown = modal_rect(&egui::Context::default(), None, 380.0);
+        assert!((shown.center().x - window.center().x).abs() < 1.0, "{shown:?}");
+    }
+
+    #[test]
+    fn a_modal_wider_than_the_world_stays_on_the_window() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        // the world on the right quarter, the dialog wider than it
+        let ctx = egui::Context::default();
+        let shown = modal_rect(&ctx, Some(Some([2880, 0, 960, 1080])), 1400.0);
+        assert!(shown.width() > 960.0, "{shown:?}");
+        assert!(window.expand(0.5).contains_rect(shown), "on the window: {shown:?}");
+        assert!((shown.right() - window.right()).abs() < 1.0, "against the window's edge: {shown:?}");
+    }
+
+    #[test]
+    fn the_world_area_is_forgotten_by_screens_without_a_world() {
+        let ctx = egui::Context::default();
+        let right = [1920, 0, 1920, 1080];
+        let in_world = modal_rect(&ctx, Some(Some(right)), 380.0);
+        assert!(in_world.center().x > 1920.0, "{in_world:?}");
+        // the login: nothing sets the world's part any more
+        let login = modal_rect(&ctx, None, 380.0);
+        assert!((login.center().x - 1920.0).abs() < 1.0, "{login:?}");
+    }
+
+    #[test]
+    fn a_window_centred_floater_opens_centred_in_the_world() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        let size = egui::vec2(500.0, 400.0);
+        let centred = egui::Rect::from_center_size(window.center(), size);
+        for world in [rect(1920.0, 0.0, 1920.0, 1080.0), rect(0.0, 0.0, 1920.0, 1080.0)] {
+            let placed = floater_place(centred, window, world);
+            assert_eq!(placed.size(), size);
+            assert_eq!(placed.center(), world.center(), "centred in {world:?}");
+            assert!(world.contains_rect(placed));
+            // a point or two off the window's centre still counts
+            let near = floater_place(centred.translate(egui::vec2(1.5, -1.0)), window, world);
+            assert!(world.contains_rect(near), "{near:?}");
+            // any other default stays where it was asked
+            let aside = egui::Rect::from_min_size(egui::pos2(40.0, 80.0), size);
+            assert_eq!(floater_place(aside, window, world), aside);
+            let off_centre = centred.translate(egui::vec2(30.0, 0.0));
+            assert_eq!(floater_place(off_centre, window, world), off_centre);
+        }
+        // viewport off, or the world filling the window: unchanged
+        assert_eq!(floater_place(centred, window, window), centred);
+    }
+
+    #[test]
+    fn a_floater_larger_than_the_world_stays_on_the_window() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        let world = rect(2880.0, 0.0, 960.0, 1080.0);
+        let centred = egui::Rect::from_center_size(window.center(), egui::vec2(1400.0, 600.0));
+        let placed = floater_place(centred, window, world);
+        assert!(window.contains_rect(placed), "on the window: {placed:?}");
+        assert_eq!(placed.right(), window.right(), "against the window's edge");
+        // the height fits: centred in the world on that axis
+        assert_eq!(placed.center().y, world.center().y);
+        // larger than the window too: from the window's corner
+        let huge = egui::Rect::from_center_size(window.center(), egui::vec2(5000.0, 600.0));
+        assert_eq!(floater_place(huge, window, world).left(), window.left());
+    }
+
+    /// Floater `id`, defaulting to the window's centre, shown a few frames
+    /// in a 3840x1080 window with `world` the world's part of it (None: the
+    /// viewport off). Its rect.
+    fn floater_rect(ctx: &egui::Context, id: &str, world: Option<[u32; 4]>) -> egui::Rect {
+        let screen = rect(0.0, 0.0, 3840.0, 1080.0);
+        let size = egui::vec2(500.0, 400.0);
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx();
+                    let p = crate::theme::Theme::default().palette();
+                    set_world_area(ctx, world);
+                    crate::ui::layout::set_work_area(ctx, screen.shrink2(egui::vec2(8.0, 40.0)));
+                    crate::ui::layout::set_move_area(ctx, screen);
+                    let pos = ctx.content_rect().center() - size * 0.5;
+                    crate::ui::widgets::Floater::new(id, "Pay", pos, size).show(ctx, &p, &mut true, |ui| ui.label("L$"));
+                },
+            );
+            output.textures_delta.clear();
+        }
+        ctx.memory(|m| m.area_rect(egui::Id::unique(id))).expect("shown")
+    }
+
+    #[test]
+    fn a_floater_opens_in_the_world_only_on_its_first_placement() {
+        const ID: &str = "folderstorm_viewport_floater";
+        let world = rect(1920.0, 0.0, 1920.0, 1080.0);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.animation_time = 0.0);
+        let shown = floater_rect(&ctx, ID, Some([1920, 0, 1920, 1080]));
+        assert!(world.contains_rect(shown), "{shown:?}");
+        assert!((shown.center().x - world.center().x).abs() < 1.0, "{shown:?}");
+        // the viewport off: on the window's centre as in Aurora
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.animation_time = 0.0);
+        let plain = floater_rect(&ctx, ID, None);
+        assert!((plain.center().x - 1920.0).abs() < 1.0, "{plain:?}");
+        // a window already placed (shown before, or restored from the saved
+        // layout) does not move when the viewport comes on
+        let again = floater_rect(&ctx, ID, Some([1920, 0, 1920, 1080]));
+        assert_eq!(again.min, plain.min);
     }
 
     #[test]
