@@ -6,24 +6,81 @@
 //! Favorites appear first" (doc/help.md "Workspaces"), and next / previous
 //! favorite from the keyboard (doc/plans/workspace-enhancements.md, 3).
 
-use super::store::{Store, same_name};
+use super::store::{Favorite, Store, same_name};
 
-/// A line of the switcher: a layout that can be used.
+/// What a line names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Kind {
+    Layout,
+    Workspace,
+}
+
+/// A line of the switcher: a layout or a workspace that can be used.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Entry {
-    /// Where the layout is in the store's list.
+    pub kind: Kind,
+    /// Where it is in the store's list of its kind.
     pub index: usize,
     pub favorite: bool,
 }
 
-/// The switcher's lines: the usable favorites in their order, then the
-/// other usable layouts in the list's order. Each layout once.
+impl Entry {
+    /// Its name.
+    pub fn name<'a>(&self, store: &'a Store) -> Option<&'a str> {
+        match self.kind {
+            Kind::Layout => store.layout(self.index).map(|layout| layout.name.as_str()),
+            Kind::Workspace => store.workspace(self.index).map(|workspace| workspace.name.as_str()),
+        }
+    }
+
+    /// Whether it is the layout, or the workspace, in use.
+    pub fn in_use(&self, store: &Store) -> bool {
+        match self.kind {
+            Kind::Layout => store.is_active(self.index),
+            Kind::Workspace => store.is_active_workspace(self.index),
+        }
+    }
+
+    /// Whether it is the entry of this kind and name.
+    pub fn is(&self, store: &Store, kind: Kind, name: &str) -> bool {
+        self.kind == kind && self.name(store).is_some_and(|own| same_name(own, name))
+    }
+}
+
+/// The switcher's lines: the usable favorites in their order (layouts and
+/// workspaces), then the other usable workspaces, then the other usable
+/// layouts, each in its list's order. Each entry once.
 pub fn entries(store: &Store) -> Vec<Entry> {
-    let mut lines: Vec<Entry> = store.favorite_layouts().map(|(index, _)| Entry { index, favorite: true }).collect();
+    let mut lines: Vec<Entry> = store
+        .favorites
+        .iter()
+        .filter_map(|favorite| match favorite {
+            Favorite::Layout(name) => store.find(name).map(|(index, _)| (Kind::Layout, index)),
+            Favorite::Workspace(name) => store.find_workspace(name).map(|(index, _)| (Kind::Workspace, index)),
+            Favorite::Kept(_) => None,
+        })
+        .map(|(kind, index)| Entry {
+            kind,
+            index,
+            favorite: true,
+        })
+        .collect();
     let favorites = lines.len();
-    for index in 0..store.layouts.len() {
-        if store.layout(index).is_some() && !lines[..favorites].iter().any(|line| line.index == index) {
-            lines.push(Entry { index, favorite: false });
+    let others = (0..store.workspaces.len())
+        .filter(|index| store.workspace(*index).is_some())
+        .map(|index| (Kind::Workspace, index))
+        .chain(
+            (0..store.layouts.len())
+                .filter(|index| store.layout(*index).is_some())
+                .map(|index| (Kind::Layout, index)),
+        );
+    for (kind, index) in others {
+        if !lines[..favorites].iter().any(|line| line.kind == kind && line.index == index) {
+            lines.push(Entry {
+                kind,
+                index,
+                favorite: false,
+            });
         }
     }
     lines
@@ -41,17 +98,17 @@ pub fn matches(name: &str, typed: &str) -> bool {
 pub fn filtered(store: &Store, typed: &str) -> Vec<Entry> {
     entries(store)
         .into_iter()
-        .filter(|line| store.layout(line.index).is_some_and(|layout| matches(&layout.name, typed)))
+        .filter(|line| line.name(store).is_some_and(|name| matches(name, typed)))
         .collect()
 }
 
 /// The line selected before the user chooses one, as a place in `lines`:
-/// with nothing typed, the first layout that is not the one in use (open
-/// the switcher, press Enter: the other layout); once something is typed,
-/// the first that answers it.
+/// with nothing typed, the first entry that is not in use (open the
+/// switcher, press Enter: the other one); once something is typed, the
+/// first that answers it.
 pub fn first_choice(store: &Store, lines: &[Entry], typed: &str) -> Option<usize> {
     if typed.trim().is_empty()
-        && let Some(other) = lines.iter().position(|line| !store.is_active(line.index))
+        && let Some(other) = lines.iter().position(|line| !line.in_use(store))
     {
         return Some(other);
     }
@@ -135,10 +192,39 @@ mod tests {
     }
 
     fn names(store: &Store, lines: &[Entry]) -> Vec<String> {
-        lines
-            .iter()
-            .map(|line| store.layout(line.index).expect("usable").name.clone())
-            .collect()
+        lines.iter().map(|line| line.name(store).expect("usable").to_owned()).collect()
+    }
+
+    #[test]
+    fn workspaces_come_after_the_favorites_and_before_the_layouts() {
+        use crate::folderstorm::workspaces::workspace::Workspace;
+        let mut store = store();
+        for name in ["Sorting", "Exploring"] {
+            store
+                .add_workspace(Workspace::new(name, None, std::collections::BTreeSet::new()))
+                .expect("added");
+        }
+        let lines = entries(&store);
+        assert_eq!(
+            names(&store, &lines),
+            ["Sorting", "Exploring", "2 monitors", "1 monitor", "Photos", "Sorting"]
+        );
+        assert_eq!(lines[0].kind, Kind::Workspace);
+        assert_eq!(lines[5].kind, Kind::Layout, "a layout of the same name is another entry");
+        store.set_favorite("1 monitor", true);
+        store.set_favorite_workspace("Exploring", true);
+        let lines = entries(&store);
+        assert_eq!(
+            names(&store, &lines),
+            ["1 monitor", "Exploring", "Sorting", "2 monitors", "Photos", "Sorting"]
+        );
+        assert_eq!(lines.iter().filter(|line| line.favorite).count(), 2);
+        assert!(lines[1].is(&store, Kind::Workspace, "exploring") && !lines[1].is(&store, Kind::Layout, "Exploring"));
+        // the filter and the first choice go through both kinds
+        assert_eq!(names(&store, &filtered(&store, "sort")), ["Sorting", "Sorting"]);
+        assert!(lines[1].in_use(&store), "the workspace added last is in use");
+        store.set_active(Some("1 monitor".to_owned()));
+        assert_eq!(first_choice(&store, &lines, ""), Some(2), "the first that is not in use");
     }
 
     #[test]
@@ -165,7 +251,14 @@ mod tests {
         .expect("read");
         let lines = entries(&store);
         assert_eq!(names(&store, &lines), ["Single", "Wide"]);
-        assert_eq!(lines[0], Entry { index: 2, favorite: true });
+        assert_eq!(
+            lines[0],
+            Entry {
+                kind: Kind::Layout,
+                index: 2,
+                favorite: true
+            }
+        );
     }
 
     #[test]
