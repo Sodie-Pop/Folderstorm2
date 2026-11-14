@@ -5927,7 +5927,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `updates`), the host's settings window opens on that section |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7700,6 +7700,43 @@ failure. Grid validation and any paid upload are performed by the human.
     are in `session-host.json` (`chat_shown`, `reading`, `attention`,
     `settings_window`; per character `attention` and `alerts`). A file of
     checkpoint 9 reads with nothing lost.
+  - **session routing and the MCP controller**
+    (folderstorm/plans/mcp-routing.md).
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_MCP=1 AURORA_DEMO_SESSION_HOST_CONTROLLER=ask AURORA_DEMO_SESSION_HOST_SETTINGS=controller cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - the **MCP controller** section of the settings: "Enable controller
+      MCP" (on in this demo) with "On: listening on 127.0.0.1:…", "Allow
+      profile and monitor metadata", the seven classes with Ask / Allow /
+      Never, a box per character ("Allow controller access"); turned off,
+      the line says "Off: nothing listens" and the file
+      `folderstorm2-controller-<pid>.json` leaves the demo's settings
+      folder (`config\demo`);
+    - the **Ask window** ("MCP controller request"), in front and centred
+      on the host's window: "“Demo assistant” asks to:", "Minimise
+      “demo-2” (character 2) while it waits (Economy)", the countdown,
+      Allow and Refuse. Allow sets demo-2 to Economy (its card says so);
+      Refuse, Escape, closing the window or 60 s change nothing; Enter
+      alone does nothing. With the bar docked
+      (`AURORA_DEMO_SESSION_HOST_BAR=docked`, the host's window hidden)
+      the window still comes forward;
+    - **a sidecar against the demo**: build it (`cargo build -p
+      folderstorm-mcp`), then talk MCP to `folderstorm-mcp --discovery
+      <demo settings folder>` (one JSON line per request on its standard
+      input): `tools/call` of `viewer_list` lists the three
+      demo viewers `demo-1`, `demo-2`, `demo-3`, each with its
+      `viewer_session`; `worn_items` answers `target_required`;
+      `viewer_select` `{"profile": "demo-2"}`, then `worn_items` answers
+      from demo-2; close demo-2 from the host: the next call answers
+      `unavailable`, never demo-1's inventory; `host_characters` lists the
+      three (names only with metadata on); `host_activate`
+      `{"profile": "demo-3"}` opens the Ask window, Allow brings demo-3
+      forward; with the class on Never it is refused at once;
+    - a background character's local-assistant question (Ask before
+      changes in its viewer) shows in the host's inbox as "Local
+      assistant", whatever the Attention kinds ticked; "Switch to answer"
+      brings that character forward with its own dialog.
+    Outside the demo, the controller's settings are in `session-host.json`
+    (`controller`; per character `controller`), all off by default.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames, and each panel's own window to

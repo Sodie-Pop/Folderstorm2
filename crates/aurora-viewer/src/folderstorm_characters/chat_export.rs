@@ -140,11 +140,27 @@ fn describe(world: &World, id: &Uuid) -> (SessionKind, String) {
 /// What waits for the user's answer in this viewer, as its notification
 /// list words it; `generation` is filled in by the caller.
 pub fn attention(world: &World) -> AttentionList {
+    with_question(world, crate::mcp_bridge::open_question())
+}
+
+/// The number an assistant's question takes in the list: far from the
+/// viewer's own notifications' numbers.
+const ASSISTANT_ID: u64 = 1 << 62;
+
+/// [`attention`], with the local assistant's open question first, if any
+/// (session routing: folderstorm/plans/mcp-routing.md, section 4).
+fn with_question(world: &World, question: Option<crate::mcp_bridge::desk::Question>) -> AttentionList {
     let waiting: Vec<_> = world.notifications.listed().filter(|n| n.interactive()).collect();
-    let items = waiting
-        .iter()
-        .take(ipc::MAX_ATTENTION)
-        .map(|n| AttentionItem {
+    let asked = question.map(|q| AttentionItem {
+        id: ASSISTANT_ID | (q.number & (ASSISTANT_ID - 1)),
+        kind: AttentionKind::Assistant,
+        title: q.client.unwrap_or_else(|| aurora_i18n::tr!("fs-mcp-ask-title").to_owned()),
+        text: q.summary,
+    });
+    let room = ipc::MAX_ATTENTION - usize::from(asked.is_some());
+    let items = asked
+        .into_iter()
+        .chain(waiting.iter().take(room).map(|n| AttentionItem {
             id: n.id,
             kind: match n.kind {
                 Kind::Teleport => AttentionKind::Teleport,
@@ -159,12 +175,12 @@ pub fn attention(world: &World) -> AttentionList {
             },
             title: resolved_text(world, &n.title),
             text: resolved_text(world, &n.body),
-        })
+        }))
         .collect();
     AttentionList {
         generation: 0,
         items,
-        more: u32::try_from(waiting.len().saturating_sub(ipc::MAX_ATTENTION)).unwrap_or(u32::MAX),
+        more: u32::try_from(waiting.len().saturating_sub(room)).unwrap_or(u32::MAX),
     }
     .cleaned()
 }
@@ -650,6 +666,46 @@ mod tests {
             })
             .collect();
         assert_eq!(ids, [1, 2, 3]);
+    }
+
+    #[test]
+    fn the_local_assistant_s_question_is_listed_first() {
+        use crate::world::notifications::Data;
+        let mut w = world();
+        let question = || crate::mcp_bridge::desk::Question {
+            number: 7,
+            client: Some("Claude Code".into()),
+            summary: "Move “Boots” to “Clothes”".into(),
+            seconds_left: 50,
+            waiting: 0,
+        };
+        let list = with_question(&w, Some(question()));
+        assert_eq!(list.items.len(), 1);
+        let item = &list.items[0];
+        assert_eq!((item.kind, item.title.as_str()), (AttentionKind::Assistant, "Claude Code"));
+        assert!(item.text.contains("Boots"));
+        assert_eq!(item.id, ASSISTANT_ID | 7);
+        // with the viewer's own questions, it keeps its place and the bound
+        for n in 0..ipc::MAX_ATTENTION {
+            w.notifications.push(
+                Kind::Friendship,
+                format!("Friend {n}"),
+                "offers friendship",
+                Data::Friend {
+                    from: Uuid::from_u128(n as u128 + 1),
+                    tx: Uuid::nil(),
+                    offline: false,
+                },
+            );
+        }
+        let list = with_question(&w, Some(question()));
+        assert_eq!(list.items.len(), ipc::MAX_ATTENTION);
+        assert_eq!(list.items[0].kind, AttentionKind::Assistant);
+        assert_eq!(list.more, 1);
+        // nothing asked: as before
+        let list = with_question(&w, None);
+        assert!(list.items.iter().all(|i| i.kind != AttentionKind::Assistant));
+        assert_eq!(list.more, 0);
     }
 
     #[test]

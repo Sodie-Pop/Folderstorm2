@@ -41,6 +41,7 @@
 
 use crate::bar;
 use crate::behind::Behind3d;
+use crate::controller;
 use crate::hotkeys;
 use crate::identity::{self, AliasError, Colour};
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
@@ -111,6 +112,10 @@ pub struct SlotConfig {
     /// character is active.
     #[serde(default, skip_serializing_if = "settings::Alerts::is_default")]
     pub alerts: settings::Alerts,
+    /// The MCP controller may list and drive it ("Allow controller
+    /// access"; folderstorm/plans/mcp-routing.md). Off by default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub controller: bool,
 }
 
 /// The host's settings file (`session-host.json`): the characters, and the
@@ -153,6 +158,8 @@ pub struct Config {
     pub attention: settings::Attention,
     /// Checkpoint 10: the settings window's place and section.
     pub settings_window: settings::Window,
+    /// The MCP controller: on or off, metadata, the levels of its classes.
+    pub controller: controller::Settings,
 }
 
 impl Default for Config {
@@ -173,6 +180,7 @@ impl Default for Config {
             reading: settings::Reading::default(),
             attention: settings::Attention::default(),
             settings_window: settings::Window::default(),
+            controller: controller::Settings::default(),
         }
     }
 }
@@ -226,6 +234,7 @@ impl Config {
                     monitor_window: monitor_windows::Window::default(),
                     attention: true,
                     alerts: settings::Alerts::default(),
+                    controller: false,
                 })
                 .collect(),
             ..Self::default()
@@ -293,6 +302,8 @@ pub struct Slot {
     pub attention: bool,
     /// Checkpoint 10: what sounds the host's alert for it.
     pub alerts: settings::Alerts,
+    /// The MCP controller may list and drive it.
+    pub controller: bool,
     /// Its monitor is on screen in one of the host's windows.
     seen: bool,
     pub phase: Phase,
@@ -316,6 +327,8 @@ pub struct Slot {
     placed: Option<Instant>,
     /// When the desk first saw it starting (`tick`).
     starting_since: Option<Instant>,
+    /// Restart: started again once this launch has ended.
+    relaunch: bool,
 }
 
 impl Slot {
@@ -330,6 +343,7 @@ impl Slot {
             monitor_window: monitor_windows::Window::default(),
             attention: true,
             alerts: settings::Alerts::default(),
+            controller: false,
             seen: false,
             phase: Phase::Stopped,
             status: None,
@@ -347,6 +361,7 @@ impl Slot {
             was_focused: false,
             placed: None,
             starting_since: None,
+            relaunch: false,
         }
     }
 
@@ -453,6 +468,8 @@ pub struct Desk {
     reading: settings::Reading,
     attention: settings::Attention,
     settings_window: settings::Window,
+    /// The MCP controller's settings.
+    controller: controller::Settings,
     /// The character the cycling monitor shows on screen now.
     cycling_seen: Option<usize>,
     /// Monitors that moved from one character to another since the
@@ -549,6 +566,7 @@ impl Desk {
                     monitor_window: s.monitor_window,
                     attention: s.attention,
                     alerts: s.alerts,
+                    controller: s.controller,
                     ..Slot::new(name, s.standby)
                 });
             }
@@ -571,6 +589,7 @@ impl Desk {
             reading: config.reading,
             attention: config.attention,
             settings_window: config.settings_window,
+            controller: config.controller,
             cycling_seen: None,
             monitor_moves: Vec::new(),
             quitting: None,
@@ -594,6 +613,7 @@ impl Desk {
                     monitor_window: s.monitor_window,
                     attention: s.attention,
                     alerts: s.alerts,
+                    controller: s.controller,
                 })
                 .collect(),
             stage: self.stage,
@@ -610,6 +630,26 @@ impl Desk {
             reading: self.reading,
             attention: self.attention,
             settings_window: self.settings_window,
+            controller: self.controller,
+        }
+    }
+
+    /// The MCP controller's settings.
+    pub fn controller(&self) -> controller::Settings {
+        self.controller
+    }
+
+    pub fn set_controller(&mut self, settings: controller::Settings) {
+        if std::mem::replace(&mut self.controller, settings) != settings {
+            self.effects.push(Effect::Save);
+        }
+    }
+
+    /// "Allow controller access" for that character.
+    pub fn set_controller_access(&mut self, slot: usize, allowed: bool) {
+        if let Some(s) = self.slot_mut(slot).filter(|s| s.controller != allowed) {
+            s.controller = allowed;
+            self.effects.push(Effect::Save);
         }
     }
 
@@ -1449,6 +1489,7 @@ impl Desk {
             monitor_window: s.monitor_window,
             attention: s.attention,
             alerts: s.alerts,
+            controller: s.controller,
             phase: Phase::Starting,
             ..Slot::new(s.profile.clone(), s.standby)
         };
@@ -1558,9 +1599,12 @@ impl Desk {
 
     /// The process of that launch ended; `clean`: with a success code.
     pub fn exited(&mut self, slot: usize, launch: u32, clean: bool, now: Instant) {
+        // ("Quit all" may end with this very exit: no restart then)
+        let quitting = self.quitting.is_some();
         let Some(s) = self.current(slot, launch).filter(|s| s.has_process()) else {
             return;
         };
+        let relaunch = std::mem::take(&mut s.relaunch);
         s.phase = Phase::Ended {
             crashed: !clean && !s.closing && !s.ended,
         };
@@ -1573,6 +1617,50 @@ impl Desk {
         }
         self.sync(Some(now));
         self.finish_quit();
+        if relaunch && !quitting {
+            // (restart: the character's login screen again; never during
+            // "Quit all")
+            self.launch(slot, false);
+        }
+    }
+
+    /// Restart (the MCP controller): a running viewer closes (logs out,
+    /// saves, exits) and is started again once it has ended; one that
+    /// ended is started again. Its login screen comes back: nobody is
+    /// logged in by it.
+    pub fn restart(&mut self, slot: usize) {
+        match self.slot(slot).map(|s| (s.phase, s.closing)) {
+            Some((Phase::Running | Phase::Starting, false)) => {
+                self.close(slot);
+                if let Some(s) = self.slot_mut(slot).filter(|s| s.closing) {
+                    s.relaunch = true;
+                }
+            }
+            Some((Phase::Ended { .. }, _)) => self.launch(slot, false),
+            _ => {}
+        }
+    }
+
+    /// Stop managing (the MCP controller): the host lets a managed viewer
+    /// go, as it does one it could not manage: its command pipe closes, it
+    /// goes on by itself (logged in, its sound and voice back to its own
+    /// settings), and the host only watches for its end. True when it did.
+    pub fn release(&mut self, slot: usize) -> bool {
+        let Some(s) = self.slot_mut(slot).filter(|s| s.live() && !s.closing) else {
+            return false;
+        };
+        let launch = s.launch;
+        s.phase = Phase::Unmanaged;
+        s.activate = false;
+        s.relaunch = false;
+        s.voice_out = false;
+        s.sent = None;
+        self.effects.push(Effect::LetGo { slot, launch });
+        if self.active == Some(slot) {
+            self.active = None;
+        }
+        self.sync(None);
+        true
     }
 
     /// The user picks a character: brought forward if it runs, started if
@@ -1880,6 +1968,7 @@ mod tests {
             monitor_window: monitor_windows::Window::default(),
             attention: true,
             alerts: settings::Alerts::default(),
+            controller: false,
         };
         let config = Config {
             slots: vec![

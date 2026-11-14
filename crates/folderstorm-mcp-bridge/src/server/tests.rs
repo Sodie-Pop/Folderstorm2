@@ -446,3 +446,35 @@ fn a_picture_with_the_interface_asks_even_on_allow() {
     );
     assert!(calls.try_recv().is_err());
 }
+
+#[test]
+fn health_says_who_the_viewer_is_and_its_name_only_with_read() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    // the main profile, unmanaged, nothing told yet
+    let health = client.health().expect("health");
+    assert_eq!(
+        (health.profile.clone(), health.managed, health.character.clone()),
+        (None, false, None)
+    );
+    let wire = client.get("/v1/health").expect("health");
+    assert!(wire.get("profile").is_none() && wire.get("managed").is_none() && wire.get("character").is_none());
+    bridge.set_identity(Identity {
+        profile: Some("Alt1".into()),
+        managed: true,
+        character: Some("Sodie Resident".into()),
+    });
+    // logged out: no name
+    let health = client.health().expect("health");
+    assert_eq!((health.profile.as_deref(), health.managed), (Some("Alt1"), true));
+    assert_eq!(health.character, None, "no login, no name");
+    bridge.set_login(1, true);
+    assert_eq!(client.health().expect("health").character.as_deref(), Some("Sodie Resident"));
+    // Read on Never: no name
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Read, Level::Never);
+    bridge.set_permissions(permissions);
+    let health = client.health().expect("health");
+    assert_eq!((health.character, health.profile.as_deref()), (None, Some("Alt1")));
+    drop(calls);
+}

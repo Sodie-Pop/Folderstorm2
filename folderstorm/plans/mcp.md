@@ -334,8 +334,10 @@ fully unit-tested here. It answers `ping` and ignores notifications, as the
 specification requires.
 
 Discovery: `FOLDERSTORM2_MCP_DISCOVERY` (a directory) overrides the default
-settings directory; `--viewer-pid` picks one viewer when several run;
-otherwise the newest file whose viewer answers is used.
+settings directory; `--viewer-pid` or `--profile` picks one viewer when
+several run; otherwise the only viewer running is used, and with several
+the assistant chooses one with `viewer_select` (session routing,
+[mcp-routing.md](mcp-routing.md)).
 `folderstorm-mcp --diagnose [--viewer-pid N] [--discovery DIR]` prints one
 JSON line (stage reached, port, readiness, both sides' capabilities and
 what the viewer lacks, whether a login is bound; never the token) and exits
@@ -573,6 +575,12 @@ follow once the camera PR's `Class::Camera` has merged (both edit
   exception, `@shownearby`, `@shownames` with an exception,
   `@shownametags`, `@showminimap`), no asset id or URL in any answer; the
   catalogue (`protocol/world.rs`) and the sidecar's `tools/list`.
+
+## Session routing and the host's MCP controller
+
+Several characters, one viewer each (FEATURES 5.1): the sidecar chooses one
+and stays bound to it, and the session host has its own, separate MCP
+controller. See [mcp-routing.md](mcp-routing.md).
 
 ## Next: receipts, plans, login binding and operations
 
