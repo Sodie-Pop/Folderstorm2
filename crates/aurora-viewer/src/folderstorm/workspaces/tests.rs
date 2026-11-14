@@ -10,6 +10,7 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod open;
 mod switcher;
 mod viewer;
 
@@ -437,9 +438,23 @@ fn the_mini_map_takes_the_place_a_layout_gives_it() {
     assert!(apply::take_bare(&v.ctx, egui::Id::unique(MINIMAP)).is_none());
 }
 
+/// As if the window `id` had been closed when the layout `name` was saved
+/// (or the layout saved before layouts knew which windows were open).
+fn saved_closed(v: &mut Viewer, name: &str, id: &str) {
+    for record in &mut v.store.layouts {
+        if let super::store::Record::Layout(layout) = record
+            && layout.name == name
+            && let Some(place) = layout.windows.as_mut().and_then(|windows| windows.windows.get_mut(id))
+        {
+            place.open = false;
+        }
+    }
+}
+
 #[test]
 fn a_closed_window_takes_its_place_when_it_opens() {
     let mut v = two_layouts();
+    saved_closed(&mut v, "Wide", MAP);
     v.open.remove(MAP);
     v.frames(3);
     v.saved = false;
@@ -468,6 +483,7 @@ fn a_closed_window_takes_its_place_when_it_opens() {
 #[test]
 fn a_window_still_waiting_at_quit_is_asked_again_at_the_next_start() {
     let mut v = two_layouts();
+    saved_closed(&mut v, "Wide", MAP);
     v.open.remove(MAP);
     v.frames(3);
     v.apply("Wide");

@@ -486,7 +486,10 @@ mod tests {
             }
             assert!(panels.inventory && panels.chat && panels.minimap && panels.world_map && panels.money_tracker);
             assert!(inventory.additional_open());
-            assert_eq!(panels.movement_controls, classic_controls, "Aurora's window opens on its Camera tab");
+            assert_eq!(
+                panels.movement_controls, classic_controls,
+                "Aurora's window opens on its Camera tab"
+            );
         }
     }
 

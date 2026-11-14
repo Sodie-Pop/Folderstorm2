@@ -471,13 +471,7 @@ mod tests {
         assert_eq!(areas.sides, Rect::from_min_max(pos2(1864.0, 20.0), pos2(3840.0, 1164.0)));
         // no room outside: the two areas are the world
         let tight = rect(40.0, 0.0, 3800.0, 1200.0);
-        assert_eq!(
-            Areas::around(tight, window, BARS),
-            Areas {
-                rows: tight,
-                sides: tight
-            }
-        );
+        assert_eq!(Areas::around(tight, window, BARS), Areas { rows: tight, sides: tight });
     }
 
     /// The real side toolbars (`ui::bars::side::bars`), laid out frame
@@ -507,7 +501,13 @@ mod tests {
 
     impl Viewer {
         fn new(islands: bool, left: bool, right: bool) -> Self {
-            let buttons = |on: bool| if on { vec![button("inventory"), button("people")] } else { Vec::new() };
+            let buttons = |on: bool| {
+                if on {
+                    vec![button("inventory"), button("people")]
+                } else {
+                    Vec::new()
+                }
+            };
             let ctx = egui::Context::default();
             ctx.all_styles_mut(|s| s.animation_time = 0.0);
             Viewer {
@@ -545,10 +545,7 @@ mod tests {
                         areas
                     } else {
                         set_sides(&ctx, None);
-                        Areas {
-                            rows: world,
-                            sides: world,
-                        }
+                        Areas { rows: world, sides: world }
                     };
                     super::super::set_bars_area(&ctx, Some(areas.rows));
                     self.areas = Some(areas);
@@ -559,7 +556,7 @@ mod tests {
                             pos2(areas.rows.right(), areas.rows.bottom() - BOTTOM),
                         )
                     } else {
-                        let frame = egui::Frame::NONE;
+                        let frame = egui::Frame::new();
                         egui::Panel::top("test_top")
                             .frame(frame)
                             .exact_size(TOP)
@@ -616,7 +613,10 @@ mod tests {
         /// Where the buttons of a side toolbar are: the rectangle around them.
         fn toolbar(&self, commands: &[&str]) -> Rect {
             commands.iter().fold(Rect::NOTHING, |all, command| {
-                let button = self.ctx.read_response(crate::ui::bars::tool_button_id(command)).expect("a button drawn");
+                let button = self
+                    .ctx
+                    .read_response(crate::ui::bars::tool_button_id(command))
+                    .expect("a button drawn");
                 all.union(button.rect)
             })
         }
@@ -627,6 +627,11 @@ mod tests {
     }
 
     const LEFT: [&str; 2] = ["inventory", "people"];
+
+    /// The same rectangle, but for what the sums of a frame round off.
+    fn near(a: Rect, b: Rect) -> bool {
+        (a.min - b.min).abs().max_elem() <= 0.01 && (a.max - b.max).abs().max_elem() <= 0.01
+    }
 
     /// The human's case on PR #48: the world on the right half of a window
     /// over two monitors, as high as the window, a left toolbar.
@@ -647,7 +652,7 @@ mod tests {
             // or below it here: they are inside)
             assert_eq!(areas.rows, world, "islands={islands}");
             // and the windows' room starts at the world's edge
-            assert_eq!(v.room().left(), world.left(), "islands={islands}");
+            assert!((v.room().left() - world.left()).abs() <= 0.01, "islands={islands}: {:?}", v.room());
             assert_eq!(v.room().right(), world.right(), "islands={islands}");
             if islands {
                 // centred on the world's height, not between the top and
@@ -656,7 +661,7 @@ mod tests {
             }
             // steady: the next frames lay it out at the same place
             v.frames(window, world, true);
-            assert_eq!(v.toolbar(&LEFT), toolbar, "islands={islands}");
+            assert!(near(v.toolbar(&LEFT), toolbar), "islands={islands}");
         }
     }
 
@@ -672,13 +677,10 @@ mod tests {
             assert!(right.left() >= world.right() && right.left() <= world.right() + 20.0, "{right:?}");
             let areas = v.areas.expect("laid out");
             // the top and bottom bars above and below the world, as wide
-            assert_eq!(
-                areas.rows,
-                Rect::from_min_max(pos2(960.0, 100.0 - TOP), pos2(2880.0, 1100.0 + BOTTOM)),
-                "islands={islands}"
-            );
+            let rows = Rect::from_min_max(pos2(960.0, 100.0 - TOP), pos2(2880.0, 1100.0 + BOTTOM));
+            assert!(near(areas.rows, rows), "islands={islands}: {areas:?}");
             // the windows' room is the world itself
-            assert_eq!(v.room(), world, "islands={islands}");
+            assert!(near(v.room(), world), "islands={islands}: {:?}", v.room());
             if islands {
                 for toolbar in [left, right] {
                     assert!((toolbar.center().y - world.center().y).abs() <= 0.5, "{toolbar:?}");
@@ -712,8 +714,8 @@ mod tests {
                 // exactly as with the bars inside the world
                 let mut inside = Viewer::new(islands, true, true);
                 inside.frames(window, world, false);
-                assert_eq!(inside.toolbar(&LEFT), left, "islands={islands}");
-                assert_eq!(inside.room(), v.room(), "islands={islands}");
+                assert!(near(inside.toolbar(&LEFT), left), "islands={islands}");
+                assert!(near(inside.room(), v.room()), "islands={islands}");
             } else {
                 assert!(left.right() <= world.left(), "{left:?}");
             }
