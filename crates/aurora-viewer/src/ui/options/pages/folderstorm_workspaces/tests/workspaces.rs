@@ -137,7 +137,7 @@ fn the_workspaces_group_is_drawn() {
         tr!("fs-workspaces-save-new").to_owned(),
         tr!("fs-workspaces-save").to_owned(),
     ] {
-        assert!(texts.iter().any(|text| *text == expected), "“{expected}” is drawn");
+        assert!(texts.contains(&expected), "“{expected}” is drawn");
     }
     assert!(!texts.iter().any(|text| text == tr!("common-conversations")), "never Conversations");
 }
