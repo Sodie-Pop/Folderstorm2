@@ -1435,6 +1435,8 @@ folderstorm-viewport-mouselook = Keep the viewport in mouselook
 folderstorm-viewport-mouselook-help = Off, mouselook uses the whole window.
 folderstorm-viewport-bars = Keep the bars inside the viewport
 folderstorm-viewport-bars-help = The top, bottom and side bars stay over the world instead of stretching across the whole window.
+folderstorm-viewport-photo = Photo mode uses the whole window
+folderstorm-viewport-photo-help = Off, photo mode stays in the viewport: its frame and controls, its clicks and wheel, and its photos (the "Window" size included) follow the world's rectangle. On, photo mode fills the whole window, as without a viewport.
 folderstorm-viewport-diagram = Window and monitors
 folderstorm-viewport-diagram-help = Drag an edge of the world to move that margin: it snaps to the monitors' borders and the window's sides, and stops before the world gets under a quarter of the window. Escape during a drag puts the margin back. Click a monitor to select it; a double click puts the world on it.
 folderstorm-viewport-put-world = Put the world on this monitor
@@ -4795,6 +4797,49 @@ folderstorm-chat-attention-call = Call
 folderstorm-chat-attention-other = Question
 folderstorm-chat-demo-nearby = Demo line { $n } in the nearby chat
 folderstorm-chat-demo-im = Demo instant message { $n }
+folderstorm-chat-typing = { $name } is typing…
+folderstorm-chat-volume-whisper = Whisper
+folderstorm-chat-volume-say = Say
+folderstorm-chat-volume-shout = Shout
+folderstorm-chat-volume-help = Nearby chat: { $volume }. Click for the next one. Ctrl+Enter shouts and Shift+Enter whispers one line, whatever is chosen. The character's viewer applies its own rules (restrictions included).
+folderstorm-chat-grid-link-help = { $link } — only the character's own window follows this link. Click to switch to the character.
+folderstorm-chat-link-question = Open this address in your browser?
+folderstorm-chat-link-open = Open in browser
+folderstorm-contacts-new-im-help = New IM as { $name }: one of its groups or friends
+folderstorm-contacts-friends-help = { $name }'s friends
+folderstorm-contacts-friends-of = { $name }'s friends
+folderstorm-contacts-new-im-as = New IM as { $name }
+folderstorm-contacts-search-friends = Search friends
+folderstorm-contacts-search-everyone = Search groups and friends
+folderstorm-contacts-waiting = Waiting for { $name }'s viewer to tell its friends and groups…
+folderstorm-contacts-none = { $name } has no friends or groups to list yet.
+folderstorm-contacts-no-match = Nobody by that name.
+folderstorm-contacts-groups = { $count ->
+    [one] Group
+   *[other] Groups ({ $count })
+}
+folderstorm-contacts-friends = { $count ->
+    [one] Friend
+   *[other] Friends ({ $count })
+}
+folderstorm-contacts-online = Online ({ $count })
+folderstorm-contacts-offline = Offline ({ $count })
+folderstorm-contacts-more = { $count ->
+    [one] One more is only in { $name }'s own lists.
+   *[other] { $count } more are only in { $name }'s own lists.
+}
+folderstorm-contacts-group = Group
+folderstorm-contacts-im = Open an instant message in the character's viewer. Nothing is sent until you type a line.
+folderstorm-contacts-group-chat = Open this group's chat in the character's viewer. Nothing is said until you type a line.
+folderstorm-contacts-profile = Open the profile in the character's viewer, and switch to it
+folderstorm-contacts-opening = Waiting for the character's viewer…
+folderstorm-contacts-dismiss = Dismiss
+folderstorm-contacts-not-opened = { $name } did not open { $who }: { $why }.
+folderstorm-contacts-refused-restricted = a restriction forbids it
+folderstorm-contacts-refused-not-a-group = it is not one of the character's groups
+folderstorm-contacts-refused-unknown = nobody to open
+folderstorm-contacts-no-answer = the character's viewer did not answer
+folderstorm-contacts-not-sent = the character's viewer is not reading
 folderstorm-quick-switch-help = Switch to { $name }.
 folderstorm-quick-show-help = { $name } is the active character: bring its window forward.
 folderstorm-quick-login-help = { $name } waits at its login screen: bring its window forward to log in there.
@@ -5127,6 +5172,49 @@ folderstorm-settings-updates-line = New versions and their channel: the "{ $page
 folderstorm-settings-crash-line = Crash reports: the "{ $page }" page.
 folderstorm-settings-bug-line = To report a bug: "{ $item }", in the viewer's Help menu or on its login screen.
 folderstorm-settings-updates-note = The host and its characters are one program: what the viewer chooses applies to the host too.
+
+## Folderstorm: the session host's MCP controller (folderstorm/plans/mcp-routing.md)
+folderstorm-chat-attention-assistant = Local assistant
+folderstorm-settings-controller = MCP controller
+folderstorm-settings-controller-intro = What an assistant may ask of the host itself: list the characters, bring one forward, change how it waits, its monitor, its login window, restart, log out, stop managing. Separate from each character's local assistant.
+folderstorm-controller-access = Host access
+folderstorm-controller-enable = Enable controller MCP
+folderstorm-controller-enable-help = A local program (an assistant through folderstorm-mcp) may reach the host itself on this computer only, with a key only your account can read. Turning it on never turns on a character's local assistant and never logs anyone in.
+folderstorm-controller-metadata = Allow profile and monitor metadata
+folderstorm-controller-metadata-help = The list then also gives each character's name, alias and colour, and what its monitor shows. Off: only the profile names, their states and which one is active.
+folderstorm-controller-off = Off: nothing listens.
+folderstorm-controller-listening = On: listening on 127.0.0.1:{ $port } for this computer only.
+folderstorm-controller-starting = Starting…
+folderstorm-controller-failed = It could not start ({ $reason }). Turn it off and on to try again.
+folderstorm-controller-separate = Each character's own local assistant (its viewer's Preferences › Privacy › Local assistant) stays as it is: this grants nothing in a viewer, and a viewer's access grants nothing here. Nobody is ever logged in from here.
+folderstorm-controller-actions = What it may do
+folderstorm-controller-actions-intro = Ask: this host asks you each time, in a window of its own. Allow: done without asking. Never: refused.
+folderstorm-controller-class-activate = Activate characters
+folderstorm-controller-class-background = Change background mode
+folderstorm-controller-class-monitors = Manage monitor previews
+folderstorm-controller-class-login = Open login windows
+folderstorm-controller-class-restart = Restart characters
+folderstorm-controller-class-logout = Log out characters
+folderstorm-controller-class-stop = Stop managing characters
+folderstorm-controller-ask = Ask
+folderstorm-controller-allow = Allow
+folderstorm-controller-never = Never
+folderstorm-controller-characters = Characters
+folderstorm-controller-characters-intro = Only the characters ticked here are listed and can be acted on; the others do not exist for an assistant.
+folderstorm-controller-allow-character = { $number }: { $name } — allow controller access
+folderstorm-controller-ask-title = MCP controller request
+folderstorm-controller-ask-activate = Bring “{ $name }” (character { $number }) forward
+folderstorm-controller-ask-warm = Let “{ $name }” (character { $number }) wait behind (Warm)
+folderstorm-controller-ask-economy = Minimise “{ $name }” (character { $number }) while it waits (Economy)
+folderstorm-controller-ask-monitor-open = Open the monitor of “{ $name }” (character { $number })
+folderstorm-controller-ask-monitor-close = Close the monitor of “{ $name }” (character { $number })
+folderstorm-controller-ask-cycling-open = Open the cycling monitor
+folderstorm-controller-ask-cycling-close = Close the cycling monitor
+folderstorm-controller-ask-login = Open the login window of “{ $name }” (character { $number }); you log in there yourself
+folderstorm-controller-ask-restart = Restart “{ $name }” (character { $number }): log out, close, and start again at its login window
+folderstorm-controller-ask-logout = Log “{ $name }” (character { $number }) out and close its viewer
+folderstorm-controller-ask-stop = Stop managing “{ $name }” (character { $number }): its viewer goes on by itself
+folderstorm-controller-ask-note = Closing this window refuses. You can change what is asked in the host's settings › MCP controller.
 busy-pause-window-title = { $title } — Paused
 video-memory-full-notice = Video memory is full and the world cannot be drawn. Close programs that use the graphics card: it comes back on its own.
 video-memory-full-window-title = { $title } — Video memory full

@@ -56,6 +56,19 @@ pub struct Config {
     pub viewer_timeout: Duration,
 }
 
+/// Who the viewer is, for `/v1/health` (session routing,
+/// folderstorm/plans/mcp-routing.md): told by the frame thread.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Identity {
+    /// Its `--profile`; None for the main profile.
+    pub profile: Option<String>,
+    /// A session host manages it.
+    pub managed: bool,
+    /// The name it shows for its own avatar while logged in; health gives
+    /// it only while Read is Allow.
+    pub character: Option<String>,
+}
+
 /// A call waiting for the viewer's answer.
 pub struct Pending {
     pub tool: String,
@@ -193,6 +206,8 @@ struct Shared {
     queue: SyncSender<Pending>,
     /// The login the frame thread is on, and its `viewer_session`.
     binding: Mutex<Binding>,
+    /// Session routing: the profile, managed or not, the character.
+    identity: Mutex<Identity>,
 }
 
 /// The running bridge. Dropping it stops the listener and deletes the
@@ -223,6 +238,7 @@ impl Bridge {
             activity: Mutex::new(VecDeque::new()),
             queue,
             binding: Mutex::new(Binding::default()),
+            identity: Mutex::new(Identity::default()),
         });
         let discovery = match &config.discovery_dir {
             Some(dir) => Some(discovery::write(dir, &Discovery::new(config.pid, port, &shared.token))?),
@@ -289,6 +305,16 @@ impl Bridge {
         self.shared.viewer_session()
     }
 
+    /// Who the viewer is (its profile, managed or not, its avatar's name),
+    /// from the frame thread; health gives the name only while Read is
+    /// Allow.
+    pub fn set_identity(&self, identity: Identity) {
+        let mut held = self.shared.identity.lock().unwrap_or_else(PoisonError::into_inner);
+        if *held != identity {
+            *held = identity;
+        }
+    }
+
     /// The recent calls, newest last.
     pub fn activity(&self) -> Vec<Activity> {
         self.shared
@@ -342,25 +368,47 @@ impl Shared {
     }
 }
 
-/// Decrements the connection count when a connection's thread ends.
-struct Slot(Arc<Shared>);
+/// What an accept loop serves: the bridge, or the host's MCP controller
+/// (`crate::controller`). Both share the bounds of [`accept_loop`].
+pub(crate) trait Served: Send + Sync + 'static {
+    fn stopping(&self) -> bool;
+    fn connections(&self) -> &AtomicUsize;
+    fn serve(&self, stream: &mut TcpStream);
+}
 
-impl Drop for Slot {
-    fn drop(&mut self) {
-        self.0.connections.fetch_sub(1, Ordering::SeqCst);
+impl Served for Shared {
+    fn stopping(&self) -> bool {
+        self.stopping.load(Ordering::SeqCst)
+    }
+
+    fn connections(&self) -> &AtomicUsize {
+        &self.connections
+    }
+
+    fn serve(&self, stream: &mut TcpStream) {
+        serve(stream, self);
     }
 }
 
-fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
+/// Decrements the connection count when a connection's thread ends.
+struct Slot<S: Served>(Arc<S>);
+
+impl<S: Served> Drop for Slot<S> {
+    fn drop(&mut self) {
+        self.0.connections().fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+pub(crate) fn accept_loop<S: Served>(listener: TcpListener, shared: Arc<S>) {
     for stream in listener.incoming() {
-        if shared.stopping.load(Ordering::SeqCst) {
+        if shared.stopping() {
             break;
         }
         let Ok(mut stream) = stream else { continue };
         let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
         let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-        if shared.connections.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-            shared.connections.fetch_sub(1, Ordering::SeqCst);
+        if shared.connections().fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
+            shared.connections().fetch_sub(1, Ordering::SeqCst);
             // take the request in first: closing on unread bytes resets the
             // connection before the client reads the answer
             let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
@@ -372,7 +420,7 @@ fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
         let slot = Slot(shared.clone());
         let spawned = std::thread::Builder::new().name("mcp-bridge-call".into()).spawn(move || {
             let slot = slot;
-            serve(&mut stream, &slot.0);
+            slot.0.serve(&mut stream);
         });
         if let Err(e) = spawned {
             log::warn!("local assistant bridge: no thread for a connection: {e}");
@@ -380,11 +428,11 @@ fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
     }
 }
 
-fn reply(stream: &mut TcpStream, status: u16, body: &Value) {
+pub(crate) fn reply(stream: &mut TcpStream, status: u16, body: &Value) {
     let _ = http::write_response(stream, status, body.to_string().as_bytes());
 }
 
-fn reply_error(stream: &mut TcpStream, error: &ToolError) {
+pub(crate) fn reply_error(stream: &mut TcpStream, error: &ToolError) {
     reply(stream, error.code.status(), &json!({"ok": false, "error": error}));
 }
 
@@ -395,19 +443,26 @@ fn serve(stream: &mut TcpStream, shared: &Shared) {
     }
 }
 
-fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
-    let (head, body) = http::read_message(stream, http::MAX_REQUEST_BODY).map_err(|e| match e {
+/// Read one request, bounded.
+pub(crate) fn read_request(stream: &mut TcpStream) -> Result<(http::Head, Vec<u8>), ToolError> {
+    http::read_message(stream, http::MAX_REQUEST_BODY).map_err(|e| match e {
         HttpError::TooLarge => ToolError::new(ErrorCode::TooLarge, "request too large"),
         HttpError::Malformed(what) => ToolError::new(ErrorCode::BadRequest, what),
         HttpError::Io(_) => ToolError::new(ErrorCode::BadRequest, "request not received"),
-    })?;
+    })
+}
+
+/// The checks every request passes before anything else, the bridge's and
+/// the host controller's: no web page (`Origin`), no DNS rebinding (the
+/// `Host` must be the loopback address and our port), the bearer token.
+pub(crate) fn check_head(head: &http::Head, port: u16, token: &Token) -> Result<(), ToolError> {
     // A browser page sends Origin: no web page may drive the bridge.
     if head.header("origin").is_some() {
         return Err(ToolError::new(ErrorCode::Forbidden, "requests from web pages are refused"));
     }
     // DNS rebinding: the Host must be the loopback address and our port.
     let host_ok = head.header("host").is_some_and(|host| {
-        let port = shared.port.to_string();
+        let port = port.to_string();
         host.rsplit_once(':')
             .is_some_and(|(name, p)| p == port && (name == "127.0.0.1" || name.eq_ignore_ascii_case("localhost")))
     });
@@ -417,10 +472,16 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
     let authorized = head
         .header("authorization")
         .and_then(|v| v.strip_prefix("Bearer "))
-        .is_some_and(|t| shared.token.matches(t.trim()));
+        .is_some_and(|t| token.matches(t.trim()));
     if !authorized {
         return Err(ToolError::new(ErrorCode::Unauthorized, "missing or wrong bearer token"));
     }
+    Ok(())
+}
+
+fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
+    let (head, body) = read_request(stream)?;
+    check_head(&head, shared.port, &shared.token)?;
     if shared.stopping.load(Ordering::SeqCst) {
         return Err(ToolError::new(ErrorCode::Unavailable, "the bridge is stopping"));
     }
@@ -431,13 +492,20 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
     match (method, path) {
         ("GET", "/v1/health") => {
             let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
+            let read_allowed = permissions.check(Class::Read).is_ok();
+            let viewer_session = shared.viewer_session();
+            let identity = shared.identity.lock().unwrap_or_else(PoisonError::into_inner).clone();
             let health = Health {
                 api: crate::API_VERSION,
                 product: folderstorm_brand::PRODUCT.to_owned(),
                 version: shared.version.clone(),
-                read_allowed: permissions.check(Class::Read).is_ok(),
+                read_allowed,
                 capabilities: Some(binding::capabilities()),
-                viewer_session: shared.viewer_session(),
+                // (a name only for a login, and only with Read)
+                character: identity.character.filter(|_| read_allowed && viewer_session.is_some()),
+                viewer_session,
+                profile: identity.profile,
+                managed: identity.managed,
             };
             serde_json::to_value(health).map_err(|_| ToolError::new(ErrorCode::Internal, "health not serialized"))
         }
@@ -456,7 +524,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
 }
 
 /// A client's name as the dialog may show it: printable, one line, short.
-fn clean_client(name: &str) -> Option<String> {
+pub(crate) fn clean_client(name: &str) -> Option<String> {
     let name: String = name.chars().filter(|c| !c.is_control()).take(CLIENT_NAME_MAX).collect();
     let name = name.trim();
     (!name.is_empty()).then(|| name.to_owned())

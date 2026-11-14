@@ -12,10 +12,13 @@
 //!   versions both sides advertise;
 //! - [`receipts`]: the record of each change an assistant asked for;
 //! - [`server`]: the 127.0.0.1 listener;
+//! - [`controller`]: the session host's MCP controller, a separate
+//!   authority with its own listener, token and classes;
 //! - [`client`]: the sidecar's side of the wire.
 
 pub mod binding;
 pub mod client;
+pub mod controller;
 pub mod discovery;
 mod http;
 pub mod policy;

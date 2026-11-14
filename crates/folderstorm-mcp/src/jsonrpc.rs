@@ -104,7 +104,7 @@ impl<B: Backend> Server<B> {
             );
             return Ok(json!({"content": [{"type": "text", "text": refused.to_string()}], "isError": true}));
         }
-        if folderstorm_mcp_bridge::protocol::tool(name).is_none() {
+        if !crate::routing::known(name) {
             return Err(format!("unknown tool: {name}"));
         }
         let arguments = match &params["arguments"] {
@@ -151,7 +151,7 @@ fn initialize(params: &Value) -> Value {
         "capabilities": {"tools": {"listChanged": false}},
         "serverInfo": {"name": "folderstorm-mcp", "title": format!("{} local assistant", folderstorm_brand::PRODUCT), "version": env!("CARGO_PKG_VERSION")},
         "instructions": format!(
-            "Reads and organises the inventory and outfits of the {} viewer running on this computer, moves its camera and takes pictures. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake before a picture. Frame the avatar with camera_preset or camera_shot, then camera_snapshot returns the picture; inventory_snapshot_thumbnail sets it as an outfit's or folder's picture. Calls are bound to the login the viewer was on at the first call: after a logout, another login or a viewer restart a call answers session_changed and is not run; call viewer_status and look again before retrying. A tool that answers unsupported needs a newer viewer.",
+            "Reads and organises the inventory and outfits of the {} viewer running on this computer, moves its camera and takes pictures. Call viewer_status first. Address items by their id: names are not unique. Each change needs the user's permission, set in the viewer: it may be refused, or the viewer may ask the user first (up to 60 s). Nothing is ever deleted for good: inventory_trash moves to the Trash. After an outfit change, call wait_for_bake before a picture. Frame the avatar with camera_preset or camera_shot, then camera_snapshot returns the picture; inventory_snapshot_thumbnail sets it as an outfit's or folder's picture. Calls are bound to the login the viewer was on at the first call: after a logout, another login or a viewer restart a call answers session_changed and is not run; call viewer_status and look again before retrying. A tool that answers unsupported needs a newer viewer. Several characters may run, one viewer each: when a call answers target_required, call viewer_list, ask the user which character, then viewer_select; calls then stay with that character and are never sent to another. The host_* tools ask the session host itself (list, bring forward, background mode, monitors, login window, restart, log out, stop managing): a separate permission the user turns on in the host's settings; they never log anyone in.",
             folderstorm_brand::PRODUCT
         )
     });
@@ -166,7 +166,7 @@ fn initialize(params: &Value) -> Value {
 const RECEIPTS_HINT: &str = "Every change answers with an operation_id and its state, in errors and timeouts too: after a timeout or a lost answer, call assistant_operation_status instead of retrying. A change may take your own client_request_id: sent again with the same arguments, it returns the first receipt and runs nothing. For several renames or moves, preview a plan (inventory_preview_batch_rename, inventory_preview_batch_move), show it to the user, then inventory_execute_plan runs it once (stale if the inventory changed: preview again); with wait false it answers at once and you poll assistant_operation_status. assistant_operation_cancel stops an operation not sent yet.";
 
 fn tools_list() -> Value {
-    let tools: Vec<Value> = protocol::all()
+    let mut tools: Vec<Value> = protocol::all()
         .map(|t| {
             json!({
                 "name": t.name,
@@ -180,6 +180,24 @@ fn tools_list() -> Value {
             })
         })
         .collect();
+    // the sidecar's own (folderstorm/plans/mcp-routing.md)
+    tools.extend(crate::routing::LOCAL_TOOLS.iter().map(|t| {
+        json!({
+            "name": t.name,
+            "description": t.description,
+            "inputSchema": (t.schema)(),
+            "annotations": {"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false}
+        })
+    }));
+    // the session host's controller
+    tools.extend(folderstorm_mcp_bridge::controller::HOST_TOOLS.iter().map(|t| {
+        json!({
+            "name": t.name,
+            "description": t.description,
+            "inputSchema": (t.schema)(),
+            "annotations": {"readOnlyHint": t.class.is_none(), "destructiveHint": false, "openWorldHint": false}
+        })
+    }));
     json!({"tools": tools})
 }
 
@@ -267,7 +285,13 @@ mod tests {
             .iter()
             .map(|t| t["name"].clone())
             .collect();
-        assert_eq!(names.len(), protocol::all().count());
+        assert_eq!(
+            names.len(),
+            protocol::all().count() + crate::routing::LOCAL_TOOLS.len() + folderstorm_mcp_bridge::controller::HOST_TOOLS.len()
+        );
+        for name in ["viewer_list", "viewer_select", "host_characters", "host_logout"] {
+            assert!(names.contains(&json!(name)), "{name}");
+        }
         for name in [
             "inventory_search",
             "inventory_move",
