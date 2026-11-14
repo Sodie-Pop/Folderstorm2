@@ -2621,3 +2621,17 @@ exactly caused the past bug in the earlier port (section 17).
    real loss in one character never downgrades or closes the others.
 7. **Windows is the target platform**; Linux and macOS are nice to have
    (launcher, chat and monitors; switching best effort).
+
+## 18. Decisions (the human, 2026-11-13)
+
+After testing checkpoints 2 to 10:
+
+- **Dropped** (not to be built):
+  - session sets (launching several profiles together);
+  - a free colour picker for characters (the palette of checkpoint 7 stays);
+  - background sound limited to alerts ("alerts only", section 10);
+  - choosing which groups of settings a profile copy takes (section 13);
+  - the updater's "quit all and update" (section 5).
+- **Deferred to the end of the project:**
+  - the host taking over viewers that are already running (section 11);
+  - the bird's-eye switch effect (checkpoint 7's design note).
