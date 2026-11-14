@@ -18,12 +18,16 @@
 mod bar;
 mod comfort;
 mod condensed;
+mod controller; // (session routing: the MCP controller)
 mod identity;
 mod inbox;
 mod monitor_windows;
 mod monitors;
 mod panels;
 mod settings;
+// (checkpoint 11: New IM, Friends and links, drawn and clicked)
+#[cfg(test)]
+mod conversations_tests;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
@@ -137,6 +141,8 @@ struct Window_ {
     monitors: monitor_windows::Monitors,
     /// Checkpoint 10: the settings' window.
     settings: settings::Settings,
+    /// Session routing: the MCP controller's Ask window.
+    ask: controller::Ask,
 }
 
 impl Window_ {
@@ -170,6 +176,7 @@ impl Window_ {
             bar: Default::default(),
             monitors: Default::default(),
             settings: Default::default(),
+            ask: Default::default(),
         }
     }
 }
@@ -240,15 +247,31 @@ enum Act {
     /// Checkpoint 10 (`ui/settings.rs`): a click in the settings' window,
     /// or a way to it.
     Settings(settings::Act),
+    /// Session routing (`ui/controller.rs`): the MCP controller's
+    /// settings, a character's access, an answer in the Ask window.
+    Controller(controller::Act),
 }
 
 impl Window_ {
+    /// Checkpoint 11: each conversation a viewer opened at the host's
+    /// request is shown in the window that asked for it.
+    fn show_opened(&mut self) {
+        for opened in self.host.book.take_opened() {
+            if opened.window == ::folderstorm_session::chat::SHARED_WINDOW {
+                self.chat.opened(opened.slot, opened.conversation);
+            } else {
+                self.monitors.opened(opened.window, opened.slot, opened.conversation);
+            }
+        }
+    }
+
     /// What the window being drawn (`self.drawing`) shows.
     fn content(&mut self, ui: &mut egui::Ui) -> Vec<Act> {
         let p = self.palette;
         let now = Instant::now();
         let mut acts = Vec::new();
         self.monitors_begin();
+        self.show_opened();
         // (checkpoint 7: the window with the condensed characters keeps
         // less room around what it shows)
         let tight = self.host.desk.condensed() && self.home(Panel::Controls) == self.drawing;
@@ -292,6 +315,11 @@ impl Window_ {
             Which::Settings => {
                 // (checkpoint 10) the sections' list, then a page
                 self.settings_window(ui, &mut acts);
+                false
+            }
+            Which::Ask => {
+                // (session routing) the controller's oldest question
+                self.ask_window(ui, &mut acts);
                 false
             }
         };
@@ -673,6 +701,7 @@ impl Window_ {
                     if self.host.desk.remove(slot) {
                         // nothing of it is left for the next character of that slot
                         self.host.chat.forget(slot);
+                        self.host.book.forget(slot);
                         self.host.inbox.clear(slot);
                         self.identity.close_for(slot);
                     }
@@ -727,6 +756,7 @@ impl Window_ {
                 Act::BarEdit(edit) => self.bar_edit(edit),
                 Act::Monitors(act) => self.monitors_apply(act, now),
                 Act::Settings(act) => self.settings_apply(act),
+                Act::Controller(act) => self.controller_apply(act, now),
                 Act::Condensed(condensed) => {
                     self.host.desk.set_condensed(condensed);
                     // (the cards' pages have no way back from the lines)
@@ -855,6 +885,7 @@ fn capture_path(path: &std::path::Path, which: Which) -> std::path::PathBuf {
         Which::Monitor(slot) => Seat::Slot(slot).key(),
         Which::Cycling => Seat::Cycling.key(),
         Which::Settings => "settings".to_owned(),
+        Which::Ask => "ask".to_owned(),
     };
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
     let mut name = format!("{stem}-{key}");
@@ -986,6 +1017,11 @@ impl ApplicationHandler for Window_ {
                 if let Some(section) = self.host.demo_settings.take() {
                     self.open_settings(section, None);
                 }
+                // (checkpoint 11, demo only) New IM or Friends, open
+                if let Some(which) = self.host.demo_contacts.take() {
+                    self.chat.show_sheet(0, Some(which));
+                    self.chat_page = true;
+                }
             }
             Err(error) => {
                 self.error = Some(error.to_string());
@@ -1022,6 +1058,8 @@ impl ApplicationHandler for Window_ {
             Which::Monitor(_) | Which::Cycling if Seat::of(which).is_some_and(|seat| self.monitor_event(seat, &event)) => return,
             // the settings' window closed: nothing else
             Which::Settings if self.settings_event(&event) => return,
+            // the Ask window closed: its question is refused
+            Which::Ask if self.ask_event(&event) => return,
             _ => {}
         }
         if let WindowEvent::Focused(focused) = event
@@ -1079,6 +1117,11 @@ impl ApplicationHandler for Window_ {
                     log::warn!("session host: the settings' window is not drawn ({error}): closed");
                     self.settings_event(&WindowEvent::CloseRequested);
                 }
+                Which::Ask => {
+                    // nor the Ask window's: its question is refused
+                    log::warn!("session host: the MCP controller's window is not drawn ({error}): refused");
+                    self.ask_event(&WindowEvent::CloseRequested);
+                }
             }
         }
     }
@@ -1091,6 +1134,7 @@ impl ApplicationHandler for Window_ {
             .flatten()
             .chain(&mut self.bar.view)
             .chain(&mut self.settings.view)
+            .chain(&mut self.ask.view)
         {
             pane.detach();
         }
@@ -1146,6 +1190,8 @@ impl ApplicationHandler for Window_ {
         self.sync_monitors(event_loop);
         // (checkpoint 10) and the settings' window
         self.sync_settings(event_loop);
+        // (session routing) and the MCP controller's Ask window
+        self.sync_ask(event_loop);
         // (checkpoint 8) and the bar's compact window; the host's own
         // window hides or shows; what a bar asked for comes forward
         self.sync_bar(event_loop);
@@ -1155,6 +1201,7 @@ impl ApplicationHandler for Window_ {
             .chain(&mut self.bar.view)
             .chain(self.monitors.views_mut())
             .chain(&mut self.settings.view)
+            .chain(&mut self.ask.view)
         {
             if std::mem::take(&mut view.redraw)
                 && let Some(window) = &view.window

@@ -123,10 +123,11 @@ impl FriendPromptUi {
         let behind = self.behind(list, id);
         let mut out = None;
         let mut later = false;
+        let world = crate::folderstorm::viewport::dialog_offset(ctx, egui::Align2::CENTER_CENTER); // Folderstorm: world viewport
         egui::Area::new(egui::Id::unique("friend_prompt"))
             .fade_in(false)
             .order(egui::Order::Foreground)
-            .anchor(egui::Align2::CENTER_CENTER, Vec2::new(0.0, (1.0 - arrive) * 24.0))
+            .anchor(egui::Align2::CENTER_CENTER, world + Vec2::new(0.0, (1.0 - arrive) * 24.0))
             .constrain(true)
             .show(ctx, |ui| {
                 ui.multiply_opacity(arrive);
