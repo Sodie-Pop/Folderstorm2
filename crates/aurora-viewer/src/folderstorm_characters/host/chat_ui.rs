@@ -15,12 +15,13 @@
 
 use super::Host;
 use super::chips;
+use super::contacts_ui;
 use super::faces::{self, Face};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::chat::{Blocked, Chat, Entry, Note, Thread, Viewing};
 use ::folderstorm_session::inbox::Inbox;
-use ::folderstorm_session::ipc::{self, AttentionKind, Conversation, LineKind, MAX_SLOTS, SendRefusal, SessionKind};
+use ::folderstorm_session::ipc::{self, AttentionKind, Conversation, LineKind, MAX_SLOTS, SendRefusal, SessionKind, Volume};
 use aurora_i18n::tr;
 use egui::{RichText, Vec2};
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -52,6 +53,11 @@ pub(super) struct ChatPanel {
     pub inbox_beside: bool,
     /// Checkpoint 9: the "+N" list of each character's tab is open.
     more: [bool; MAX_SLOTS],
+    /// Checkpoint 11: the "New IM" or "Friends" sheet of each character's
+    /// tab, in the lines' place.
+    sheets: [Option<contacts_ui::Sheet>; MAX_SLOTS],
+    /// Checkpoint 11: a web link that waits for the user's yes.
+    link: Option<LinkAsk>,
 }
 
 /// What the panel asks of the window.
@@ -111,11 +117,38 @@ impl ChatPanel {
             Tab::Character(slot) => {
                 let shown = self.shown[slot];
                 match chat.open_thread(slot, shown) {
-                    // (the "+N" list is in the lines' place)
-                    Some(_) if !self.more[slot] => Viewing::Thread(slot, shown),
+                    // (the "+N" list, or a sheet, is in the lines' place)
+                    Some(_) if !self.more[slot] && self.sheets[slot].is_none() => Viewing::Thread(slot, shown),
                     _ => Viewing::Nothing,
                 }
             }
+        }
+    }
+
+    /// The character's tab, with that sheet open (or none): the demo's
+    /// `AURORA_DEMO_SESSION_HOST_CONTACTS`, and the tests.
+    pub(super) fn show_sheet(&mut self, slot: usize, sheet: Option<::folderstorm_session::contacts::Which>) {
+        self.tab = Tab::Character(slot);
+        self.sheets[slot] = sheet.map(|which| contacts_ui::Sheet {
+            which,
+            query: String::new(),
+        });
+    }
+
+    /// Tests: the web link waiting for the user's yes.
+    #[cfg(test)]
+    pub(super) fn test_link(&self) -> Option<&LinkAsk> {
+        self.link.as_ref()
+    }
+
+    /// Checkpoint 11: a conversation opened from this window: its
+    /// character's tab shows it.
+    pub(super) fn opened(&mut self, slot: usize, conversation: Conversation) {
+        if slot < MAX_SLOTS {
+            self.tab = Tab::Character(slot);
+            self.shown[slot] = conversation;
+            self.sheets[slot] = None;
+            self.more[slot] = false;
         }
     }
 
@@ -164,11 +197,17 @@ impl ChatPanel {
         let target = match self.tab {
             Tab::All => self.target,
             Tab::Character(slot) => {
-                hidden = self.conversations(ui, p, &mut host.chat, slot, &mut asked);
+                hidden = self.conversations(ui, p, &mut host.chat, slot, &name(slot), &mut asked);
                 host.chat.open_thread(slot, self.shown[slot]).map(|t| (slot, t.conversation))
             }
         };
         self.attention(ui, p, &host.inbox, &name, &mut asked);
+        // (checkpoint 11) what became of this window's last request
+        if contacts_ui::notice_row(ui, p, &host.book, ::folderstorm_session::chat::SHARED_WINDOW, &name) {
+            host.book.dismiss(::folderstorm_session::chat::SHARED_WINDOW);
+        }
+        let mut open = None;
+        let mut web = None;
         let room = (ui.available_height() - COMPOSE_ROOM).max(80.0);
         egui::Frame::new()
             .fill(p.field)
@@ -182,7 +221,19 @@ impl ChatPanel {
                     .max_height(room - 20.0)
                     .stick_to_bottom(true)
                     .show(ui, |ui| match self.tab {
-                        Tab::All => self.feed(ui, p, &host.chat, &name, &tint, &mut asked),
+                        Tab::All => web = self.feed(ui, p, &host.chat, &name, &tint, &mut asked),
+                        Tab::Character(slot) if self.sheets[slot].is_some() => {
+                            // "New IM" or "Friends": the character's own lists
+                            let in_world = host.chat.login(slot).is_some();
+                            if let Some(sheet) = self.sheets[slot].as_mut() {
+                                let clicks = contacts_ui::sheet(ui, p, &host.book, slot, &name(slot), in_world, sheet);
+                                if clicks.close {
+                                    self.sheets[slot] = None;
+                                    asked.acted = true;
+                                }
+                                open = clicks.open.map(|(what, who)| (slot, what, who));
+                            }
+                        }
                         Tab::Character(slot) if self.more[slot] => {
                             // "+N": the conversations that have no chip
                             let clicks = chips::list(ui, p, &host.chat, slot, &hidden);
@@ -198,8 +249,10 @@ impl ChatPanel {
                                 }
                                 // (checkpoint 10: the viewer's notices only when shown)
                                 for entry in thread.entries().filter(|entry| host.chat.shows_entry(entry)) {
-                                    if entry_row(ui, p, entry, None) == Clicked::Answer {
-                                        asked.switch = Some(slot);
+                                    match entry_row(ui, p, entry, None) {
+                                        Clicked::Answer | Clicked::Grid => asked.switch = Some(slot),
+                                        Clicked::Web(target) => web = Some(target),
+                                        Clicked::Nothing | Clicked::Place => {}
                                     }
                                 }
                             }
@@ -209,7 +262,33 @@ impl ChatPanel {
                         },
                     });
             });
+        if let Some((slot, what, who)) = open {
+            // asked of that character's viewer, which decides; a profile is
+            // in its own window: the character comes forward
+            match host.book.open(
+                slot,
+                host.chat.login(slot),
+                ::folderstorm_session::chat::SHARED_WINDOW,
+                what,
+                &who,
+                now,
+            ) {
+                Ok(_) if contacts_ui::wants_switch(what) => asked.switch = Some(slot),
+                Ok(_) => {}
+                Err(why) => log::info!("session host: nothing asked of character {} ({why:?})", slot + 1),
+            }
+            asked.acted = true;
+        }
+        if let Some(target) = web {
+            self.link = follow_web(ui.ctx(), &target);
+        }
         ui.add_space(6.0);
+        if let Some(ask) = &self.link
+            && link_question(ui, p, ask)
+        {
+            self.link = None;
+            asked.acted = true;
+        }
         match target {
             Some((slot, conversation)) => {
                 // who will say it: the real name too, behind an alias
@@ -235,14 +314,39 @@ impl ChatPanel {
 
     /// The conversations of a character as chips (`chips.rs`): the
     /// nearby chat first, two rows at most. Returns those behind "+N".
-    fn conversations(&mut self, ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, slot: usize, asked: &mut Asked) -> Vec<Conversation> {
+    /// Checkpoint 11: "New IM" and "Friends" at the row's end.
+    fn conversations(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Palette,
+        chat: &mut Chat,
+        slot: usize,
+        name: &str,
+        asked: &mut Asked,
+    ) -> Vec<Conversation> {
         if chat.open_thread(slot, self.shown[slot]).is_none()
             && let Some(first) = chat.open_threads(slot).next()
         {
             self.shown[slot] = first.conversation;
         }
-        let drawn = chips::row(ui, p, chat, slot, Some(self.shown[slot]), self.more[slot]);
+        let (shown, more) = (self.shown[slot], self.more[slot]);
+        let (drawn, sheet_changed) = contacts_ui::chips_and_buttons(
+            ui,
+            p,
+            |ui| chips::row(ui, p, chat, slot, Some(shown), more),
+            &mut self.sheets[slot],
+            name,
+        );
+        if sheet_changed {
+            self.more[slot] = false;
+            asked.acted = true;
+        }
+        let was = (self.shown[slot], self.more[slot]);
         asked.acted |= drawn.asked.apply(chat, slot, &mut self.shown[slot], &mut self.more[slot]);
+        if (self.shown[slot], self.more[slot]) != was {
+            // a chip chosen, or "+N": the sheet gives the lines' place back
+            self.sheets[slot] = None;
+        }
         // (nothing behind "+N" any more: its list has nothing to show)
         self.more[slot] &= !drawn.hidden.is_empty();
         ui.add_space(4.0);
@@ -321,7 +425,8 @@ impl ChatPanel {
         name: &dyn Fn(usize) -> String,
         tint: &dyn Fn(usize) -> Option<egui::Color32>,
         asked: &mut Asked,
-    ) {
+    ) -> Option<String> {
+        let mut web = None;
         if chat.feed().next().is_none() {
             ui.label(RichText::new(tr!("folderstorm-chat-all-empty")).color(p.muted));
         }
@@ -334,26 +439,75 @@ impl ChatPanel {
             match entry_row(ui, p, &item.entry, Some((&place, chosen, tint(item.slot)))) {
                 Clicked::Nothing => {}
                 Clicked::Place => self.target = Some((item.slot, item.conversation)),
-                Clicked::Answer => asked.switch = Some(item.slot),
+                Clicked::Answer | Clicked::Grid => asked.switch = Some(item.slot),
+                Clicked::Web(target) => web = Some(target),
             }
         }
+        web
     }
 }
 
 /// What a click on a line's row asks for.
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(super) enum Clicked {
     Nothing,
     /// Its character and conversation label ("All" tab).
     Place,
     /// "Switch to answer" of an offer's card.
     Answer,
+    /// Checkpoint 11: a web page's link, its address to open.
+    Web(String),
+    /// Checkpoint 11: a grid's link, which only the character's own window
+    /// follows: the host brings that character forward.
+    Grid,
+}
+
+/// A link of a line as drawn: its characters in the row's text.
+enum Link {
+    Web(String),
+    Grid(String),
+}
+
+/// Appends a line's text to the row, its links in their own colour and
+/// underlined, and notes where each link is (checkpoint 11).
+fn append_linked(
+    job: &mut egui::text::LayoutJob,
+    links: &mut Vec<(std::ops::Range<usize>, Link)>,
+    p: &Palette,
+    text: &str,
+    format: &egui::TextFormat,
+) {
+    use ::folderstorm_session::links::{Piece, pieces};
+    for piece in pieces(text) {
+        let start = job.text.chars().count();
+        match piece {
+            Piece::Text(text) => job.append(text, 0.0, format.clone()),
+            Piece::Web { shown, target } => {
+                let link = egui::TextFormat {
+                    color: p.indigo_light,
+                    underline: egui::Stroke::new(1.0, p.indigo_light),
+                    ..format.clone()
+                };
+                job.append(shown, 0.0, link);
+                links.push((start..start + shown.chars().count(), Link::Web(target)));
+            }
+            Piece::Grid(shown) => {
+                let link = egui::TextFormat {
+                    color: p.teal,
+                    underline: egui::Stroke::new(1.0, p.teal.gamma_multiply(0.6)),
+                    ..format.clone()
+                };
+                job.append(shown, 0.0, link);
+                links.push((start..start + shown.chars().count(), Link::Grid(shown.to_owned())));
+            }
+        }
+    }
 }
 
 /// One entry, as one text that wraps as a whole. `place`: the character
 /// and conversation label of the "All" tab, whether the box writes there
 /// and the character's colour; a click on the row then chooses that
-/// conversation.
+/// conversation. A link of the line asks for itself (checkpoint 11).
 pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Option<(&str, bool, Option<egui::Color32>)>) -> Clicked {
     let body = egui::TextStyle::Body.resolve(ui.style());
     let small = egui::FontId::new(body.size * 0.85, body.family.clone());
@@ -364,6 +518,7 @@ pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Op
         ..Default::default()
     };
     let mut job = egui::text::LayoutJob::default();
+    let mut links = Vec::new();
     if let Some((label, chosen, tint)) = place {
         let color = if chosen { p.violet_light } else { tint.unwrap_or(p.muted) };
         job.append(&format!("[{label}] "), 0.0, part(&small, color, false));
@@ -380,12 +535,12 @@ pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Op
                 LineKind::Card => (p.amber, p.ink),
             };
             if line.emote {
-                job.append(&line.text, 0.0, part(&body, text_color, true));
+                append_linked(&mut job, &mut links, p, &line.text, &part(&body, text_color, true));
             } else {
                 if !line.from.is_empty() {
                     job.append(&format!("{}: ", line.from), 0.0, part(&body, name_color, false));
                 }
-                job.append(&line.text, 0.0, part(&body, text_color, false));
+                append_linked(&mut job, &mut links, p, &line.text, &part(&body, text_color, false));
             }
             card = line.kind == LineKind::Card;
         }
@@ -412,17 +567,45 @@ pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Op
     let mut clicked = Clicked::Nothing;
     ui.horizontal_wrapped(|ui| {
         let mut row = egui::Label::new(job);
-        if place.is_some() {
+        if place.is_some() || !links.is_empty() {
             row = row.sense(egui::Sense::click());
         }
-        let row = ui.add(row);
-        if place.is_some()
-            && row
-                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text(tr!("folderstorm-chat-pick-help"))
-                .clicked()
-        {
-            clicked = Clicked::Place;
+        let (at, galley, row) = row.layout_in_ui(ui);
+        if ui.is_rect_visible(row.rect) {
+            ui.painter().galley(at, galley.clone(), p.ink);
+        }
+        // the link under the pointer, if any
+        let under = row.hover_pos().and_then(|pointer| {
+            let index = galley.cursor_from_pos(pointer - at).index.0;
+            links
+                .iter()
+                .find(|(range, _)| range.contains(&index) || (index > range.start && index == range.end))
+                .map(|(_, link)| link)
+        });
+        match under {
+            Some(Link::Web(target)) => {
+                let row = row.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(target.as_str());
+                if row.clicked() {
+                    clicked = Clicked::Web(target.clone());
+                }
+            }
+            Some(Link::Grid(link)) => {
+                let row = row
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(tr!("folderstorm-chat-grid-link-help", link = link.clone()));
+                if row.clicked() {
+                    clicked = Clicked::Grid;
+                }
+            }
+            None if place.is_some() => {
+                let row = row
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(tr!("folderstorm-chat-pick-help"));
+                if row.clicked() {
+                    clicked = Clicked::Place;
+                }
+            }
+            None => {}
         }
         // an offer's card: answered in the character's own window
         if card
@@ -443,6 +626,77 @@ pub(super) fn entry_row(ui: &mut egui::Ui, p: &Palette, entry: &Entry, place: Op
     clicked
 }
 
+/// A web page asked to open from a line, waiting for the user's yes: an
+/// address the viewer's judge does not trust (checkpoint 11).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct LinkAsk {
+    pub target: String,
+    /// Why it looks dangerous, if it does.
+    pub why: Option<&'static str>,
+}
+
+/// A click on a web link: only an http(s) address leaves the host, in the
+/// system's browser; a trusted site at once, any other after a question
+/// ([`link_question`]), as the viewer's own link warning does
+/// (`link_trust::classify`; its "do not warn" choice is the viewer's and
+/// is not read here: the host always asks).
+pub(super) fn follow_web(ctx: &egui::Context, target: &str) -> Option<LinkAsk> {
+    if !::folderstorm_session::links::web_target_allowed(target) || crate::link_trust::refused_scheme(target).is_some() {
+        log::warn!("session host: a link that is not a web page was not opened");
+        return None;
+    }
+    match crate::link_trust::classify(target) {
+        crate::link_trust::Trust::Trusted => {
+            ctx.open_url(egui::OpenUrl::new_tab(target));
+            None
+        }
+        crate::link_trust::Trust::Unknown => Some(LinkAsk {
+            target: target.to_owned(),
+            why: None,
+        }),
+        crate::link_trust::Trust::Dangerous(why) => Some(LinkAsk {
+            target: target.to_owned(),
+            why: Some(why),
+        }),
+    }
+}
+
+/// The question of a web link not trusted, above the box: open it in the
+/// system's browser, or not. True when it was answered (it then goes).
+pub(super) fn link_question(ui: &mut egui::Ui, p: &Palette, ask: &LinkAsk) -> bool {
+    let mut answered = false;
+    egui::Frame::new()
+        .fill(p.field)
+        .stroke(egui::Stroke::new(1.0, if ask.why.is_some() { p.danger } else { p.amber }))
+        .inner_margin(6.0)
+        .corner_radius(ui.visuals().window_corner_radius)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.add(egui::Label::new(RichText::new(tr!("folderstorm-chat-link-question")).strong().color(p.ink)).truncate());
+            ui.add(egui::Label::new(RichText::new(&ask.target).color(p.indigo_light)).truncate())
+                .on_hover_text(&ask.target);
+            if let Some(why) = ask.why {
+                ui.add(egui::Label::new(RichText::new(why).color(p.danger)).wrap());
+            }
+            ui.horizontal(|ui| {
+                let open = tr!("folderstorm-chat-link-open");
+                let kind = if ask.why.is_some() {
+                    ActionKind::Danger
+                } else {
+                    ActionKind::Primary
+                };
+                if widgets::action_button(ui, p, "external-link", open, kind, Vec2::new(0.0, 24.0)).clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(&ask.target));
+                    answered = true;
+                }
+                if widgets::action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, Vec2::new(0.0, 24.0)).clicked() {
+                    answered = true;
+                }
+            });
+        });
+    answered
+}
+
 /// Who a box speaks for, and where.
 #[derive(Clone, Copy)]
 pub(super) struct Speaker<'a> {
@@ -455,6 +709,27 @@ pub(super) struct Speaker<'a> {
     /// names the character: the box is one row, its button an icon, and
     /// the field does not take the keyboard back after a line.
     pub said_as: Option<&'a str>,
+}
+
+/// The size of the nearby chat's volume button.
+const VOLUME_BUTTON: Vec2 = Vec2::new(28.0, 26.0);
+
+/// The nearby chat's volume as the chat bar shows it: its icon, lit when
+/// it is not "say"; a click goes to the next one. True when clicked.
+fn volume_button(ui: &mut egui::Ui, p: &Palette, volume: Volume) -> bool {
+    let (icon, label) = match volume {
+        Volume::Whisper => ("volume-2", tr!("folderstorm-chat-volume-whisper")),
+        Volume::Normal => ("volume", tr!("folderstorm-chat-volume-say")),
+        Volume::Shout => ("speakerphone", tr!("folderstorm-chat-volume-shout")),
+    };
+    let kind = if volume == Volume::Normal {
+        ActionKind::Flat
+    } else {
+        ActionKind::Primary
+    };
+    widgets::action_button(ui, p, icon, "", kind, VOLUME_BUTTON)
+        .on_hover_text(tr!("folderstorm-chat-volume-help", volume = label))
+        .clicked()
 }
 
 /// What became of the box in this frame.
@@ -513,9 +788,27 @@ pub(super) fn compose(ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, who: Spea
     let state = chat.can_send(slot, conversation);
     let editable = chat.logged_in(slot);
     let mut text = chat.draft(slot, conversation).to_owned();
-    let mut send = false;
+    let mut send = None;
+    let nearby = conversation == Conversation::Nearby;
+    // (checkpoint 11) who types in this conversation, as its viewer says
+    let typing = chat.thread(slot, conversation).filter(|t| t.typing).map(title);
+    if let (Some(who), Some(_)) = (&typing, said_as) {
+        ui.label(
+            RichText::new(tr!("folderstorm-chat-typing", name = who.clone()))
+                .italics()
+                .color(p.muted),
+        );
+    }
     ui.horizontal(|ui| {
-        let button_room = if said_as.is_some() { 110.0 } else { 40.0 };
+        let mut button_room = if said_as.is_some() { 110.0 } else { 40.0 };
+        if nearby {
+            button_room += VOLUME_BUTTON.x + ui.spacing().item_spacing.x;
+        }
+        if let (Some(who), None) = (&typing, said_as) {
+            // (one row in a monitor's window: a sign before the field)
+            super::faces::sign(ui, "pencil-filled", p.muted, &tr!("folderstorm-chat-typing", name = who.clone()));
+            button_room += 16.0 + ui.spacing().item_spacing.x;
+        }
         let width = (ui.available_width() - button_room).max(80.0);
         let field = widgets::text_field(ui, editable, &mut text, |b, _| {
             egui::TextEdit::singleline(b)
@@ -529,7 +822,34 @@ pub(super) fn compose(ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, who: Spea
             done.typed = true;
         }
         done.focused = field.has_focus();
-        let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        // (Enter ends the field's typing; Ctrl+Enter leaves it the keyboard)
+        let enter = ui.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                egui::Event::Key {
+                    key: egui::Key::Enter,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } => Some(*modifiers),
+                _ => None,
+            })
+        });
+        let entered = enter.is_some() && (field.lost_focus() || field.has_focus());
+        // (checkpoint 11) the nearby chat's volume, as the chat bar's:
+        // Ctrl+Enter shouts and Shift+Enter whispers whatever is chosen
+        let mut volume = chat.volume(slot);
+        if nearby && volume_button(ui, p, volume) {
+            volume = volume.next();
+            chat.set_volume(slot, volume);
+            done.acted = true;
+        }
+        if let Some(modifiers) = enter.filter(|_| entered) {
+            if modifiers.command {
+                volume = Volume::Shout;
+            } else if modifiers.shift {
+                volume = Volume::Whisper;
+            }
+        }
         let can = chat.can_send(slot, conversation).is_ok();
         let button = match said_as {
             Some(_) => widgets::action_button_if(ui, p, "send-filled", tr!("common-send"), ActionKind::Primary, BUTTON, can),
@@ -537,17 +857,20 @@ pub(super) fn compose(ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, who: Spea
                 .on_hover_text(tr!("common-send")),
         };
         if (button.clicked() || entered) && can {
-            send = true;
+            send = Some(volume);
             if said_as.is_some() {
                 // the next line is typed without another click
                 field.request_focus();
                 done.focused = true;
             } else {
+                field.surrender_focus();
                 done.focused = false;
             }
         }
     });
-    if send && chat.submit(slot, conversation, now).is_ok() {
+    if let Some(volume) = send
+        && chat.submit_at(slot, conversation, now, volume).is_ok()
+    {
         done.acted = true;
     }
     let note = match state {
@@ -585,6 +908,8 @@ pub(super) mod tests {
         let mut host = Host {
             desk: Desk::new(Config::demo(2)),
             chat: Chat::default(),
+            book: Default::default(),
+            demo_contacts: None,
             alert: false,
             comfort: Default::default(),
             viewers: Default::default(),

@@ -25,6 +25,9 @@ mod monitor_windows;
 mod monitors;
 mod panels;
 mod settings;
+// (checkpoint 11: New IM, Friends and links, drawn and clicked)
+#[cfg(test)]
+mod conversations_tests;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
@@ -250,12 +253,25 @@ enum Act {
 }
 
 impl Window_ {
+    /// Checkpoint 11: each conversation a viewer opened at the host's
+    /// request is shown in the window that asked for it.
+    fn show_opened(&mut self) {
+        for opened in self.host.book.take_opened() {
+            if opened.window == ::folderstorm_session::chat::SHARED_WINDOW {
+                self.chat.opened(opened.slot, opened.conversation);
+            } else {
+                self.monitors.opened(opened.window, opened.slot, opened.conversation);
+            }
+        }
+    }
+
     /// What the window being drawn (`self.drawing`) shows.
     fn content(&mut self, ui: &mut egui::Ui) -> Vec<Act> {
         let p = self.palette;
         let now = Instant::now();
         let mut acts = Vec::new();
         self.monitors_begin();
+        self.show_opened();
         // (checkpoint 7: the window with the condensed characters keeps
         // less room around what it shows)
         let tight = self.host.desk.condensed() && self.home(Panel::Controls) == self.drawing;
@@ -685,6 +701,7 @@ impl Window_ {
                     if self.host.desk.remove(slot) {
                         // nothing of it is left for the next character of that slot
                         self.host.chat.forget(slot);
+                        self.host.book.forget(slot);
                         self.host.inbox.clear(slot);
                         self.identity.close_for(slot);
                     }
@@ -999,6 +1016,11 @@ impl ApplicationHandler for Window_ {
                 // (checkpoint 10, demo only) the settings, on a section
                 if let Some(section) = self.host.demo_settings.take() {
                     self.open_settings(section, None);
+                }
+                // (checkpoint 11, demo only) New IM or Friends, open
+                if let Some(which) = self.host.demo_contacts.take() {
+                    self.chat.show_sheet(0, Some(which));
+                    self.chat_page = true;
                 }
             }
             Err(error) => {

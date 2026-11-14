@@ -18,14 +18,22 @@
 //!
 //! Told: the lines of this session only (`Origin::Live`). The history read
 //! from the transcripts stays in the viewer: the host keeps no archive.
+//!
+//! Checkpoint 11: a conversation is told as soon as it is open, before its
+//! first line (one the host asked to open shows there at once), with
+//! whether its resident types to the character now (the viewer's own "is
+//! typing"); and the character's friends and groups are told whole when
+//! they change ([`contacts`]), bounded, online friends first.
 
 use crate::ui::chat::{line_body, resolved_text, sender_name};
 use crate::world::notifications::Kind;
 use crate::world::transcripts::LineClock;
 use crate::world::{ChatKind, ChatLine, Origin, World};
+use ::folderstorm_session::contacts::{sort_friends, sort_groups};
 use ::folderstorm_session::export::{Clock, Cursor, Sends};
 use ::folderstorm_session::ipc::{
-    self, AttentionItem, AttentionKind, AttentionList, ChatBatch, Conversation, LineKind, SessionKind, ToHost,
+    self, AttentionItem, AttentionKind, AttentionList, ChatBatch, Contact, Contacts, Conversation, LineKind, Open, OpenRefusal,
+    SessionKind, ToHost,
 };
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -40,14 +48,19 @@ const RECHECK_EVERY: Duration = Duration::from_secs(2);
 const RECHECK_LINES: usize = 200;
 /// Answers to the host that wait for room in the link's queue.
 const MAX_OUTBOX: usize = 64;
+/// The friends and groups are looked at this often (checkpoint 11).
+const CONTACTS_EVERY: Duration = Duration::from_secs(1);
 
 /// Where the export of one conversation is.
 #[derive(Debug, Default)]
 struct Told {
     cursor: Cursor,
-    /// The title and unread count last told.
+    /// The title, unread count and typist last told.
     title: String,
     unread: u32,
+    typing: bool,
+    /// Told while it had no line yet (checkpoint 11).
+    announced: bool,
     /// The last lines told: their numbers, and what was told of them.
     lines: VecDeque<(u64, u64)>,
 }
@@ -59,6 +72,9 @@ pub struct Export {
     generation: Option<u32>,
     /// The lines the host asked this viewer to say, each at most once.
     pub sends: Sends,
+    /// Checkpoint 11: what the host asked this viewer to open, each at
+    /// most once.
+    pub opens: Sends,
     nearby: Told,
     sessions: HashMap<Uuid, Told>,
     /// Answers to the host not queued yet (the queue was full).
@@ -68,6 +84,10 @@ pub struct Export {
     /// RLVa on, names hidden, places hidden, as of the last look.
     privacy: (bool, bool, bool),
     attention: Option<AttentionList>,
+    /// Checkpoint 11: the friends and groups last told, and when they
+    /// were last looked at.
+    contacts: Option<Contacts>,
+    contacts_checked: Option<Instant>,
     /// The demo's next line, and how many it made.
     pub demo: Option<(Instant, u32)>,
 }
@@ -137,6 +157,70 @@ fn describe(world: &World, id: &Uuid) -> (SessionKind, String) {
     }
 }
 
+/// The name of a friend as the lists show it, or the anonymous name RLVa
+/// gives one it hides.
+fn friend_name(world: &World, id: Uuid) -> String {
+    if world.rlva_can_name(id) {
+        world.social.name_of(&id)
+    } else {
+        crate::world::rlva::privacy::anonymous(id).display_name.clone()
+    }
+}
+
+/// The character's friends and groups as the host is told them: online
+/// friends first, bounded (what does not fit is counted); `generation`
+/// is filled in by the caller.
+pub fn contacts(world: &World) -> Contacts {
+    let mut friends: Vec<Contact> = world
+        .social
+        .friends
+        .iter()
+        .map(|f| Contact {
+            who: Conversation::session(f.id.as_u128()),
+            name: friend_name(world, f.id),
+            online: f.online,
+        })
+        .collect();
+    sort_friends(&mut friends);
+    let mut groups: Vec<Contact> = world
+        .groups
+        .groups
+        .iter()
+        .map(|g| Contact {
+            who: Conversation::session(g.id.as_u128()),
+            name: world.rlva_filter_text(&g.name).into_owned(),
+            online: false,
+        })
+        .collect();
+    sort_groups(&mut groups);
+    let mut list = Contacts::default();
+    for friend in friends {
+        list.push_friend(friend);
+    }
+    for group in groups {
+        list.push_group(group);
+    }
+    list
+}
+
+/// Checkpoint 11: what the host asked to open, checked as this viewer's
+/// own People, Contacts and profiles check it, before anything opens: a
+/// resident who is not the character or a group, one of its groups, and
+/// RLVa's `@startim` and `@startimto` (whose notice shows in this viewer,
+/// as for a click here) or `@shownames` for a profile. The id to open.
+pub fn may_open(world: &mut World, open: Open) -> Result<Uuid, OpenRefusal> {
+    let target = open.target().map(Uuid::from_u128).ok_or(OpenRefusal::Unknown)?;
+    let group = world.groups.is_member(&target);
+    match open {
+        Open::Im(_) if target == world.agent_id || group || world.is_group_session(&target) => Err(OpenRefusal::Unknown),
+        Open::Group(_) if !group => Err(OpenRefusal::NotAGroup),
+        Open::Im(_) | Open::Group(_) if !world.rlva_start_ims(&[target]) => Err(OpenRefusal::Restricted),
+        Open::Profile(_) if group => Err(OpenRefusal::Unknown),
+        Open::Profile(_) if !world.rlva_can_name(target) => Err(OpenRefusal::Restricted),
+        Open::Im(_) | Open::Group(_) | Open::Profile(_) => Ok(target),
+    }
+}
+
 /// What waits for the user's answer in this viewer, as its notification
 /// list words it; `generation` is filled in by the caller.
 pub fn attention(world: &World) -> AttentionList {
@@ -191,6 +275,8 @@ struct Source<'a> {
     kind: SessionKind,
     title: String,
     unread: u32,
+    /// Its resident types to the character now (checkpoint 11).
+    typing: bool,
     lines: &'a VecDeque<ChatLine>,
     clock: Clock,
 }
@@ -202,21 +288,28 @@ impl Told {
         let nearby = source.conversation == Conversation::Nearby;
         loop {
             let Some(plan) = self.cursor.plan(source.clock) else {
-                // nothing new but its name or its unread count
-                if self.cursor.started() && (self.title != source.title || self.unread != source.unread) {
+                // nothing new but its name, its unread count or who types;
+                // or a conversation open with no line yet, told once
+                // (checkpoint 11: one the host asked for shows at once)
+                let told = self.cursor.started() || self.announced;
+                let first = !told && !nearby;
+                if first || (told && (self.title != source.title || self.unread != source.unread || self.typing != source.typing)) {
                     let batch = ChatBatch {
                         generation,
                         conversation: source.conversation,
                         kind: source.kind,
                         title: source.title.clone(),
                         unread: source.unread,
+                        typing: source.typing,
                         ..Default::default()
                     };
                     if !send(ToHost::Chat(Box::new(batch))) {
                         return false;
                     }
+                    self.announced = true;
                     self.title.clone_from(&source.title);
                     self.unread = source.unread;
+                    self.typing = source.typing;
                 }
                 return true;
             };
@@ -229,6 +322,7 @@ impl Told {
                 missed: u32::try_from(plan.missed).unwrap_or(u32::MAX),
                 unread: source.unread,
                 lines: Vec::new(),
+                typing: source.typing,
             };
             let mut end = plan.lines.start;
             let mut told = Vec::new();
@@ -257,6 +351,7 @@ impl Told {
             self.cursor.told(source.clock, end);
             self.title.clone_from(&source.title);
             self.unread = source.unread;
+            self.typing = source.typing;
             if end >= source.clock.len {
                 return true;
             }
@@ -312,6 +407,8 @@ impl Export {
         self.nearby = Told::default();
         self.sessions.clear();
         self.attention = None;
+        self.contacts = None;
+        self.contacts_checked = None;
         self.rechecked = None;
         self.demo = None;
     }
@@ -342,6 +439,7 @@ impl Export {
             kind: SessionKind::Nearby,
             title: String::new(),
             unread: 0,
+            typing: false,
             lines: &world.chat,
             clock: clock_of(world.chat_clock, world.chat.len()),
         };
@@ -359,6 +457,7 @@ impl Export {
                 kind,
                 title,
                 unread: u32::try_from(session.unread).unwrap_or(u32::MAX),
+                typing: kind == SessionKind::Resident && world.social.is_typing(&session.other),
                 lines: &session.lines,
                 clock: clock_of(session.clock, session.lines.len()),
             };
@@ -376,6 +475,16 @@ impl Export {
         };
         if self.attention.as_ref() != Some(&list) && send(ToHost::Attention(Box::new(list.clone()))) {
             self.attention = Some(list);
+        }
+        if self.contacts_checked.is_none_or(|at| now.duration_since(at) >= CONTACTS_EVERY) {
+            self.contacts_checked = Some(now);
+            let list = Contacts {
+                generation,
+                ..contacts(world)
+            };
+            if self.contacts.as_ref() != Some(&list) && send(ToHost::Contacts(Box::new(list.clone()))) {
+                self.contacts = Some(list);
+            }
         }
     }
 }
@@ -746,5 +855,135 @@ mod tests {
             true
         });
         assert!(emptied);
+    }
+
+    #[test]
+    fn a_conversation_is_told_as_soon_as_it_is_open_with_who_types_in_it() {
+        let (mut w, mut export, now) = (world(), Export::default(), Instant::now());
+        assert!(look(&mut export, &w, now).is_empty());
+        // opened (by the user here, or at the host's request): told at once
+        w.social.session_mut(JANE);
+        let told = look(&mut export, &w, now);
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert_eq!((told[0].conversation, told[0].kind), (jane(), SessionKind::Resident));
+        assert!(told[0].lines.is_empty() && !told[0].typing);
+        assert!(look(&mut export, &w, now).is_empty(), "told once");
+        // she types, then stops
+        w.social.set_typing(JANE, true);
+        let told = look(&mut export, &w, now);
+        assert!(told.len() == 1 && told[0].typing && told[0].lines.is_empty(), "{told:?}");
+        assert!(look(&mut export, &w, now).is_empty());
+        w.social.set_typing(JANE, false);
+        let told = look(&mut export, &w, now);
+        assert!(told.len() == 1 && !told[0].typing);
+        // her first line then comes as any other's
+        im(&mut w, "hello");
+        let told = look(&mut export, &w, now);
+        assert_eq!(texts(&told, jane()), ["Jane Doe: hello"]);
+        // the nearby chat is not told before its first line
+        assert!(told.iter().all(|b| b.conversation != Conversation::Nearby));
+    }
+
+    /// One look; the friends and groups lists told.
+    fn contacts_told(export: &mut Export, world: &World, at: Instant) -> Vec<Contacts> {
+        let mut lists = Vec::new();
+        export.step(world, 1, at, &mut |message| {
+            if let ToHost::Contacts(list) = message {
+                lists.push(*list);
+            }
+            true
+        });
+        lists
+    }
+
+    #[test]
+    fn friends_and_groups_are_told_online_first_and_again_when_they_change() {
+        let (mut w, mut export, now) = (world(), Export::default(), Instant::now());
+        let friend = |n: u128| Uuid::from_u128(0x1000 + n);
+        for (n, name, online) in [(1, "Zed Resident", true), (2, "amy Resident", false), (3, "Bea Resident", true)] {
+            w.social.friends.push(crate::world::social::Friend {
+                id: friend(n),
+                online,
+                rights_given: 1,
+                rights_has: 1,
+            });
+            w.social.names.insert(friend(n), name.into());
+        }
+        w.groups.groups.push(aurora_net::GroupMembership {
+            id: Uuid::from_u128(0x9000),
+            name: "Plaza Market".into(),
+            insignia: Uuid::nil(),
+            powers: 0,
+            accept_notices: true,
+            list_in_profile: true,
+            contribution: 0,
+        });
+        let lists = contacts_told(&mut export, &w, now);
+        assert_eq!(lists.len(), 1);
+        let names: Vec<(&str, bool)> = lists[0].friends.iter().map(|c| (c.name.as_str(), c.online)).collect();
+        assert_eq!(names, [("Bea Resident", true), ("Zed Resident", true), ("amy Resident", false)]);
+        assert_eq!(lists[0].friends[0].who, Conversation::session(friend(3).as_u128()));
+        assert_eq!(lists[0].groups.len(), 1);
+        assert_eq!(lists[0].groups[0].name, "Plaza Market");
+        assert_eq!(lists[0].generation, 1);
+        // unchanged: not told again
+        assert!(contacts_told(&mut export, &w, now + CONTACTS_EVERY).is_empty());
+        // a friend comes online: told at the next look a second later
+        w.social.set_online(&[friend(2)], true);
+        assert!(contacts_told(&mut export, &w, now + CONTACTS_EVERY + Duration::from_millis(300)).is_empty());
+        let lists = contacts_told(&mut export, &w, now + 2 * CONTACTS_EVERY);
+        assert_eq!(lists.len(), 1);
+        assert!(lists[0].friends.iter().all(|c| c.online));
+        // a name RLVa hides is hidden from the host too
+        restrict(&mut w, "@shownames=n");
+        let lists = contacts_told(&mut export, &w, now + 3 * CONTACTS_EVERY);
+        assert_eq!(lists.len(), 1);
+        assert!(
+            lists[0]
+                .friends
+                .iter()
+                .all(|c| !["Zed", "Bea", "amy"].iter().any(|n| c.name.contains(n))),
+            "{:?}",
+            lists[0].friends
+        );
+    }
+
+    #[test]
+    fn what_the_host_asks_to_open_is_checked_as_this_viewer_checks_it() {
+        let mut w = world();
+        let jane = Conversation::session(JANE.as_u128());
+        let group = Uuid::from_u128(0x9000);
+        w.groups.groups.push(aurora_net::GroupMembership {
+            id: group,
+            name: "Plaza Market".into(),
+            insignia: Uuid::nil(),
+            powers: 0,
+            accept_notices: true,
+            list_in_profile: true,
+            contribution: 0,
+        });
+        let builders = Conversation::session(group.as_u128());
+        assert_eq!(may_open(&mut w, Open::Im(jane)), Ok(JANE));
+        assert_eq!(may_open(&mut w, Open::Profile(jane)), Ok(JANE));
+        assert_eq!(may_open(&mut w, Open::Group(builders)), Ok(group));
+        // nobody, the character itself, a group asked as a resident, a
+        // group it is not in
+        assert_eq!(may_open(&mut w, Open::Im(Conversation::Nearby)), Err(OpenRefusal::Unknown));
+        assert_eq!(
+            may_open(&mut w, Open::Im(Conversation::session(ME.as_u128()))),
+            Err(OpenRefusal::Unknown)
+        );
+        assert_eq!(may_open(&mut w, Open::Im(builders)), Err(OpenRefusal::Unknown));
+        assert_eq!(may_open(&mut w, Open::Profile(builders)), Err(OpenRefusal::Unknown));
+        assert_eq!(may_open(&mut w, Open::Group(jane)), Err(OpenRefusal::NotAGroup));
+        // RLVa: @startim forbids a new conversation, never one already open
+        restrict(&mut w, "@startim=n");
+        assert_eq!(may_open(&mut w, Open::Im(jane)), Err(OpenRefusal::Restricted));
+        assert_eq!(may_open(&mut w, Open::Group(builders)), Err(OpenRefusal::Restricted));
+        w.social.session_mut(JANE);
+        assert_eq!(may_open(&mut w, Open::Im(jane)), Ok(JANE), "already open here");
+        // @shownames: no profile of a resident it hides
+        restrict(&mut w, "@shownames=n");
+        assert_eq!(may_open(&mut w, Open::Profile(jane)), Err(OpenRefusal::Restricted));
     }
 }

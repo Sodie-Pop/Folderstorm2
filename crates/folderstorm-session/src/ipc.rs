@@ -46,6 +46,15 @@
 //! ([`AttentionKind::Assistant`]), so that the host's inbox shows a
 //! question waiting in a background character's window.
 //!
+//! Since protocol 7 (checkpoint 11) the host may ask a viewer to open a
+//! conversation or a profile ([`ToViewer::Open`]), as the user would in
+//! that viewer's own window; the viewer decides (its RLVa rules, its
+//! groups) and answers ([`ToHost::Opened`]). Nothing is said to anyone by
+//! opening. A viewer tells its friends and groups, bounded
+//! ([`ToHost::Contacts`]), whether someone types to it in a conversation
+//! ([`ChatBatch::typing`]), and says a line of the nearby chat at the
+//! volume the host asks ([`Volume`]).
+//!
 //! A frame is a little-endian `u32` length, then that many bytes of JSON,
 //! [`MAX_FRAME`] at most. Text that comes from the other side is cleaned
 //! and bounded before anything shows it ([`Status::cleaned`]).
@@ -71,7 +80,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 6;
+pub const PROTOCOL: u32 = 7;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -243,6 +252,19 @@ pub enum ToViewer {
         generation: u32,
         conversation: Conversation,
         text: String,
+        /// Checkpoint 11: how loud a line of the nearby chat is said
+        /// (normal anywhere else, [`Volume::in_conversation`]).
+        #[serde(default)]
+        volume: Volume,
+    },
+    /// Checkpoint 11: open a conversation or a profile in the viewer's own
+    /// window, as the user would there. `id` grows with every request the
+    /// host makes of this viewer (one not above the last is refused);
+    /// `generation`: the login it was asked for. Nothing is said to anyone.
+    Open {
+        id: u64,
+        generation: u32,
+        open: Open,
     },
     /// The user read that conversation in the host's window.
     MarkRead {
@@ -263,11 +285,13 @@ impl ToViewer {
                 generation,
                 conversation,
                 text,
+                volume,
             } => Self::SendChat {
                 id,
                 generation,
                 conversation,
                 text: clean_text(&text, MAX_SEND),
+                volume: volume.in_conversation(conversation),
             },
             Self::Bar(state) => Self::Bar(Box::new(state.cleaned())),
             other => other,
@@ -298,6 +322,184 @@ impl Conversation {
             Self::Nearby => None,
             Self::Session(high, low) => Some((u128::from(high) << 64) | u128::from(low)),
         }
+    }
+}
+
+/// How loud a line of the nearby chat is said (checkpoint 11): the chat
+/// bar's whisper, say and shout.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Volume {
+    Whisper,
+    #[default]
+    Normal,
+    Shout,
+}
+
+impl Volume {
+    /// The volume a line to `conversation` is said at: a volume is the
+    /// nearby chat's (and its channels'); a conversation has none.
+    pub fn in_conversation(self, conversation: Conversation) -> Self {
+        match conversation {
+            Conversation::Nearby => self,
+            Conversation::Session(..) => Self::Normal,
+        }
+    }
+
+    /// The next one of a button that goes round them: say, shout,
+    /// whisper, say.
+    pub fn next(self) -> Self {
+        match self {
+            Self::Normal => Self::Shout,
+            Self::Shout => Self::Whisper,
+            Self::Whisper => Self::Normal,
+        }
+    }
+}
+
+/// What the host asks a viewer to open (checkpoint 11), by the id the
+/// viewer gave it ([`Contacts`]): a resident's conversation is the
+/// session of that resident's id, a group's that of the group's id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Open {
+    /// An instant message with a resident.
+    Im(Conversation),
+    /// The chat of one of the character's groups.
+    Group(Conversation),
+    /// A resident's profile, in the viewer's own window.
+    Profile(Conversation),
+}
+
+impl Open {
+    /// The id it names; None for the nearby chat or the nil id, which
+    /// name nobody.
+    pub fn target(self) -> Option<u128> {
+        let (Self::Im(c) | Self::Group(c) | Self::Profile(c)) = self;
+        c.id().filter(|id| *id != 0)
+    }
+
+    /// The conversation it opens, if it opens one.
+    pub fn conversation(self) -> Option<Conversation> {
+        match self {
+            Self::Im(c) | Self::Group(c) if self.target().is_some() => Some(c),
+            _ => None,
+        }
+    }
+}
+
+/// Why a viewer did not open what the host asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpenRefusal {
+    /// The character is not in the world.
+    NotInWorld,
+    /// It logged out or in since it was asked.
+    Stale,
+    /// A restriction (RLVa `@startim`, `@startimto`, `@shownames`)
+    /// forbids it.
+    Restricted,
+    /// Not one of the character's groups.
+    NotAGroup,
+    /// Nobody: the nil id, the character itself, a group asked as a
+    /// resident.
+    Unknown,
+    /// The request's number was already seen.
+    Repeated,
+}
+
+/// What became of [`ToViewer::Open`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpenOutcome {
+    /// Opened in the viewer's own window; a conversation then comes to the
+    /// host as any other.
+    Opened,
+    Refused(OpenRefusal),
+}
+
+/// One friend or group of a character, as its viewer tells it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contact {
+    /// The conversation an instant message with them (or their group's
+    /// chat) is: [`Conversation::Session`] of their id.
+    pub who: Conversation,
+    /// The name the viewer shows (its RLVa rules applied).
+    pub name: String,
+    /// A friend online, as the viewer knows it (always false for a group).
+    pub online: bool,
+}
+
+/// The most friends and groups a viewer tells.
+pub const MAX_FRIENDS: usize = 300;
+pub const MAX_GROUPS: usize = 150;
+/// What the friends and the groups of a list may weigh as JSON, so that
+/// the whole list is well under [`MAX_FRAME`] whatever the names.
+const FRIENDS_BUDGET: usize = 44 * 1024;
+const GROUPS_BUDGET: usize = 14 * 1024;
+
+/// A character's friends and groups, whole: the latest list replaces the
+/// others (checkpoint 11). Bounded: the friends online come first, and
+/// what did not fit is counted, never silently left out.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contacts {
+    pub generation: u32,
+    pub friends: Vec<Contact>,
+    pub groups: Vec<Contact>,
+    /// How many friends and groups more than told: in the viewer's own
+    /// lists.
+    pub more_friends: u32,
+    pub more_groups: u32,
+}
+
+fn weight(contact: &Contact) -> usize {
+    serde_json::to_vec(contact).map_or(usize::MAX, |json| json.len() + 1)
+}
+
+impl Contacts {
+    /// Adds a friend if the list still has room for it; false (counted in
+    /// `more_friends`) when it has not.
+    pub fn push_friend(&mut self, contact: Contact) -> bool {
+        Self::push(&mut self.friends, &mut self.more_friends, contact, MAX_FRIENDS, FRIENDS_BUDGET)
+    }
+
+    /// The same for a group.
+    pub fn push_group(&mut self, contact: Contact) -> bool {
+        let contact = Contact { online: false, ..contact };
+        Self::push(&mut self.groups, &mut self.more_groups, contact, MAX_GROUPS, GROUPS_BUDGET)
+    }
+
+    fn push(list: &mut Vec<Contact>, more: &mut u32, contact: Contact, max: usize, budget: usize) -> bool {
+        let contact = Contact {
+            name: clean(&contact.name, MAX_NAME),
+            ..contact
+        };
+        let held: usize = list.iter().map(weight).sum();
+        if list.len() >= max || held.saturating_add(weight(&contact)) > budget {
+            *more = more.saturating_add(1);
+            return false;
+        }
+        list.push(contact);
+        true
+    }
+
+    /// The list with every name bounded and cleaned, nobody named twice
+    /// and nobody who is not a session's id: what the host keeps and shows
+    /// of what a viewer sent.
+    pub fn cleaned(mut self) -> Self {
+        fn tidy(list: &mut Vec<Contact>, max: usize, more: &mut u32) {
+            let before = list.len();
+            let mut seen = std::collections::HashSet::new();
+            list.retain(|c| c.who.id().is_some_and(|id| id != 0) && seen.insert(c.who));
+            list.truncate(max);
+            let dropped = before - list.len();
+            *more = more.saturating_add(u32::try_from(dropped).unwrap_or(u32::MAX));
+            for c in list.iter_mut() {
+                c.name = clean(&c.name, MAX_NAME);
+            }
+        }
+        tidy(&mut self.friends, MAX_FRIENDS, &mut self.more_friends);
+        tidy(&mut self.groups, MAX_GROUPS, &mut self.more_groups);
+        for group in &mut self.groups {
+            group.online = false;
+        }
+        self
     }
 }
 
@@ -373,6 +575,10 @@ pub struct ChatBatch {
     /// The viewer's own unread count of the conversation.
     pub unread: u32,
     pub lines: Vec<ChatLine>,
+    /// Checkpoint 11: the resident of this conversation types to the
+    /// character now (the viewer's own "is typing").
+    #[serde(default)]
+    pub typing: bool,
 }
 
 impl ChatBatch {
@@ -621,7 +827,7 @@ pub fn clean_text(text: &str, max: usize) -> String {
         .to_owned()
 }
 
-fn clean(text: &str, max: usize) -> String {
+pub(crate) fn clean(text: &str, max: usize) -> String {
     text.chars()
         .filter(|c| !c.is_control())
         .take(max)
@@ -655,6 +861,13 @@ pub enum ToHost {
     Frame(FrameHeader),
     /// Checkpoint 8: a click on the bar this viewer draws.
     Bar(bar::Request),
+    /// Checkpoint 11: what became of [`ToViewer::Open`] number `id`.
+    Opened {
+        id: u64,
+        outcome: OpenOutcome,
+    },
+    /// Checkpoint 11: the character's friends and groups, whole.
+    Contacts(Box<Contacts>),
 }
 
 /// Why a frame was not read.
@@ -1085,6 +1298,7 @@ mod tests {
             restart: true,
             missed: 2,
             unread: 1,
+            typing: true,
             lines: vec![ChatLine {
                 number: 1 << 40,
                 time: 1_800_000_000,
@@ -1126,6 +1340,12 @@ mod tests {
                 generation: 3,
                 conversation,
                 text: "hi".into(),
+                volume: Volume::Normal,
+            },
+            ToViewer::Open {
+                id: 2,
+                generation: 3,
+                open: Open::Group(conversation),
             },
             ToViewer::MarkRead {
                 generation: 3,
@@ -1180,6 +1400,7 @@ mod tests {
             generation: 1,
             conversation: Conversation::Nearby,
             text: format!("  hi\u{0}\u{8} {}", "y".repeat(3000)),
+            volume: Volume::Shout,
         }
         .cleaned();
         let ToViewer::SendChat { text, .. } = send else {
@@ -1358,5 +1579,120 @@ mod tests {
             read_frame::<ToHost>(&mut wire.as_slice()).expect("read"),
             ToHost::Status(Box::new(status))
         );
+    }
+
+    #[test]
+    fn a_volume_is_the_nearby_chat_s_and_goes_round_three_steps() {
+        let jane = Conversation::session(0x4a);
+        for volume in [Volume::Whisper, Volume::Normal, Volume::Shout] {
+            assert_eq!(volume.in_conversation(Conversation::Nearby), volume);
+            assert_eq!(volume.in_conversation(jane), Volume::Normal, "an IM has no volume");
+        }
+        assert_eq!(Volume::Normal.next(), Volume::Shout);
+        assert_eq!(Volume::Normal.next().next().next(), Volume::Normal);
+        // a shout asked in a conversation is said normally, where it is acted on
+        let ToViewer::SendChat { volume, .. } = ToViewer::SendChat {
+            id: 1,
+            generation: 1,
+            conversation: jane,
+            text: "hi".into(),
+            volume: Volume::Shout,
+        }
+        .cleaned() else {
+            panic!("another command");
+        };
+        assert_eq!(volume, Volume::Normal);
+        // a line of before protocol 7 has no volume: normal
+        let old = r#"{"SendChat":{"id":1,"generation":1,"conversation":"Nearby","text":"hi"}}"#;
+        assert!(matches!(
+            serde_json::from_str::<ToViewer>(old).expect("reads"),
+            ToViewer::SendChat {
+                volume: Volume::Normal,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn an_open_request_names_someone_and_its_answer_comes_back() {
+        let jane = Conversation::session(0x4a);
+        assert_eq!(Open::Im(jane).target(), Some(0x4a));
+        assert_eq!(Open::Im(jane).conversation(), Some(jane));
+        assert_eq!(Open::Group(jane).conversation(), Some(jane));
+        assert_eq!(Open::Profile(jane).conversation(), None, "a profile is no conversation");
+        for nobody in [Conversation::Nearby, Conversation::Session(0, 0)] {
+            assert_eq!(Open::Im(nobody).target(), None);
+            assert_eq!(Open::Im(nobody).conversation(), None);
+        }
+        let mut wire = Vec::new();
+        for message in [
+            ToHost::Opened {
+                id: 4,
+                outcome: OpenOutcome::Opened,
+            },
+            ToHost::Opened {
+                id: 5,
+                outcome: OpenOutcome::Refused(OpenRefusal::Restricted),
+            },
+        ] {
+            write_frame(&mut wire, &message).expect("written");
+            assert_eq!(read_frame::<ToHost>(&mut wire.as_slice()).expect("read"), message);
+            wire.clear();
+        }
+    }
+
+    #[test]
+    fn a_contacts_list_is_bounded_cleaned_and_fits_a_frame() {
+        let contact = |n: u128, name: &str, online| Contact {
+            who: Conversation::session(n),
+            name: name.to_owned(),
+            online,
+        };
+        // the worst names: four bytes a character, and quotes JSON doubles
+        let worst = "\u{1F600}\"".repeat(MAX_NAME);
+        let mut list = Contacts::default();
+        let mut taken = 0;
+        for n in 1..=1000u128 {
+            taken += usize::from(list.push_friend(contact(n, &worst, true)));
+        }
+        for n in 1..=1000u128 {
+            list.push_group(contact(5000 + n, &worst, true));
+        }
+        assert_eq!(list.friends.len(), taken);
+        assert!(taken > 50, "{taken}");
+        assert_eq!(list.more_friends as usize, 1000 - taken);
+        assert_eq!(list.friends.len() + list.more_friends as usize, 1000, "nothing left out silently");
+        assert!(list.groups.iter().all(|g| !g.online), "a group is never online");
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToHost::Contacts(Box::new(list.clone()))).expect("a full list fits a frame");
+        assert!(wire.len() < MAX_FRAME, "{} bytes", wire.len());
+        // ordinary names: up to the most friends a list tells
+        let mut list = Contacts::default();
+        for n in 1..=400u128 {
+            list.push_friend(contact(n, "Jane Resident (jane.resident)", n % 2 == 0));
+        }
+        assert_eq!((list.friends.len(), list.more_friends), (MAX_FRIENDS, 100));
+        // what the host keeps: names cleaned, nobody twice, nobody who is no one
+        let sent = Contacts {
+            friends: vec![
+                contact(7, "Jane\u{7}\nDoe", true),
+                contact(7, "Jane again", false),
+                contact(0, "nil", true),
+                Contact {
+                    who: Conversation::Nearby,
+                    name: "nearby".into(),
+                    online: true,
+                },
+                contact(8, &"x".repeat(300), false),
+            ],
+            groups: vec![contact(9, "Builders", true)],
+            ..Default::default()
+        }
+        .cleaned();
+        assert_eq!(sent.friends.len(), 2);
+        assert_eq!(sent.friends[0].name, "JaneDoe");
+        assert_eq!(sent.friends[1].name.chars().count(), MAX_NAME);
+        assert_eq!(sent.more_friends, 3);
+        assert!(!sent.groups[0].online);
     }
 }
