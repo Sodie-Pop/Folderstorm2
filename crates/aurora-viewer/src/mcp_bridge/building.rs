@@ -231,6 +231,23 @@ fn texture_kind(texture: Uuid) -> &'static str {
     }
 }
 
+/// The prim's number of faces, as the Build window counts them
+/// (`BuildTool::num_faces` without a local mesh preview): the texture entry
+/// always holds the most a prim may have.
+fn face_count(world: &World, idx: usize) -> usize {
+    let Some(o) = world.objects.get(idx) else { return 0 };
+    let volume = o.visual_volume();
+    let n = if volume.is_mesh() {
+        8
+    } else if volume.is_sculpt() {
+        1
+    } else {
+        aurora_prim::volume::num_faces(&volume)
+    };
+    let held = o.te.as_deref().map_or(0, |te| te.faces.len());
+    n.clamp(1, aurora_prim::te::MAX_TES).min(held)
+}
+
 /// The face's PBR material (None: none), as the Build window reads it.
 fn pbr(world: &World, idx: usize, face: u8) -> Option<Uuid> {
     crate::build::BuildTool::gltf_asset(world, idx, face)
@@ -248,7 +265,7 @@ fn fingerprint(world: &World, idx: usize) -> u64 {
         o.update_flags.hash(&mut h);
         linked(world, idx).hash(&mut h);
         if let Some(te) = &o.te {
-            aurora_prim::te::pack_texture_entry(te, te.faces.len()).hash(&mut h);
+            aurora_prim::te::pack_texture_entry(te, face_count(world, idx)).hash(&mut h);
         }
         o.extra.render_materials.hash(&mut h);
     }
@@ -263,7 +280,7 @@ fn describe(world: &World, idx: usize, name: &str) -> Value {
             .map(|te| {
                 te.faces
                     .iter()
-                    .take(FACES_MAX)
+                    .take(face_count(world, idx).min(FACES_MAX))
                     .enumerate()
                     .map(|(n, f)| {
                         json!({
@@ -294,7 +311,7 @@ fn describe(world: &World, idx: usize, name: &str) -> Value {
         "may_move": f & flags::OBJECT_MOVE != 0,
         "may_copy": f & flags::OBJECT_COPY != 0,
         "linked_prims": linked(world, idx),
-        "face_count": o.te.as_deref().map_or(0, |te| te.faces.len()),
+        "face_count": face_count(world, idx),
         "faces": faces,
         "note": DATA_NOTE,
     })
@@ -813,16 +830,17 @@ impl Building {
             o.te.as_deref()
                 .cloned()
                 .ok_or_else(|| err(ErrorCode::NotReady, "the object's faces are not known yet"))?;
-        if te.faces.len() > FACES_MAX {
+        let count = face_count(world, t.idx);
+        if count > FACES_MAX {
             return Err(not_allowed(
                 "an object with more than 64 faces is left to the viewer's Build window",
             ));
         }
-        if usize::from(face) >= te.faces.len() {
+        if usize::from(face) >= count {
             return Err(invalid(format!(
                 "this object has {} faces (0 to {})",
-                te.faces.len(),
-                te.faces.len().saturating_sub(1)
+                count,
+                count.saturating_sub(1)
             )));
         }
         Ok((face, te))
@@ -911,7 +929,7 @@ impl Building {
                     handle: t.handle,
                     local_id: t.local_id,
                     media_url: o.media_url.clone(),
-                    texture_entry: aurora_prim::te::pack_texture_entry(&te, te.faces.len()),
+                    texture_entry: aurora_prim::te::pack_texture_entry(&te, face_count(world, t.idx)),
                 },
                 expect: Expect::Face { face, wanted },
             },

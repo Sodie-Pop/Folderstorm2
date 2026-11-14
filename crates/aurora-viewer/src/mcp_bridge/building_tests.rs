@@ -367,7 +367,7 @@ fn a_transform_without_an_update_ends_unconfirmed_then_settles_late() {
     let rev = revision(&mut desk, &world, now);
     let (c, answer) = call(
         TRANSFORM,
-        json!({"object_id": the_box().to_string(), "revision": rev, "rotation": [0.0, 0.0, 0.7071068, 0.7071068], "client_request_id": "t-3"}),
+        json!({"object_id": the_box().to_string(), "revision": rev, "rotation": [0.0, 0.0, 0.6, 0.8], "client_request_id": "t-3"}),
     );
     desk.take(c, &ctx(&world), now);
     let send = sent(run(&mut desk, &world, now));
@@ -491,13 +491,8 @@ fn a_surface_change_sends_the_whole_entry_and_needs_a_full_permission_texture() 
     let BuildCmd::SetTextures { texture_entry, .. } = &send.command else {
         panic!("an ObjectImage")
     };
-    let faces = world
-        .objects
-        .get(index(&world))
-        .and_then(|o| o.te.clone())
-        .expect("faces")
-        .faces
-        .len();
+    let faces = read(&mut desk, &world, now).expect("read")["face_count"].as_u64().expect("count") as usize;
+    assert!((1..=9).contains(&faces), "a box's faces, not the entry's 45: {faces}");
     let mut te = aurora_prim::te::parse_texture_entry(texture_entry).expect("an entry");
     te.faces.truncate(faces);
     let asset = world.inventory.items[&TEXTURE].asset_id;
