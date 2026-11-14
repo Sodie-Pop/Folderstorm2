@@ -64,6 +64,7 @@ mod describe;
 mod dev_toolbox;
 mod folders;
 mod folderstorm_viewport;
+mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
 mod hover_pick;
 mod texture_picker;
 use folders::chat_log_root;
@@ -9936,6 +9937,7 @@ impl App {
         crate::folderstorm::viewport::set_world_area(&self.egui_ctx, gfx.renderer.world_rect());
         folderstorm_viewport::publish_monitors(&self.egui_ctx, &gfx.window, self.frame_count);
         crate::folderstorm::chat_upload::frame(&self.settings.folderstorm_chat_upload, &self.palette); // Folderstorm
+        self.folderstorm_workspaces_frame(); // Folderstorm: layouts (app/folderstorm_workspaces.rs)
         let (w, h) = gfx.renderer.size();
         // a photo drawn at its own size this frame: its proportions, the
         // part of it this frame draws, the height its details are chosen for
@@ -16922,12 +16924,8 @@ impl App {
                 };
                 // the bars this frame: hidden with the interface (an edge
                 // brings the islands back) and in mouselook, like Firestorm's
-                // Folderstorm: in a custom world viewport the bars stay inside it
-                let viewport_bars = crate::folderstorm::viewport::bars_rect(
-                    &self.settings.folderstorm_viewport,
-                    renderer.world_rect(),
-                    ctx.pixels_per_point(),
-                );
+                // Folderstorm: in a custom world viewport the bars stay inside it, or around it
+                let viewport_bars = self.folderstorm_bars_rect(&ctx, renderer.world_rect(), renderer.size());
                 let viewport_bars = crate::folderstorm_characters::bar::bars_room(&ctx, viewport_bars); // Folderstorm: under the session host's bar
                 crate::folderstorm::viewport::set_bars_area(&ctx, viewport_bars);
                 let mut bars_child = viewport_bars.map(|r| ui.new_child(egui::UiBuilder::new().max_rect(r)));

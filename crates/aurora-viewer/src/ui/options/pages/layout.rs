@@ -185,6 +185,7 @@ pub fn page(cx: &mut Cx, tab: usize) {
                 " s",
             );
         }),
+        3 => super::folderstorm_workspaces::page(cx), // Folderstorm: layouts
         _ => cx.group(tr!("ui-options-at-startup"), |cx| {
             cx.toggle(tr!("ui-options-conversations-at-startup"), "", &field!(show_chat));
             cx.toggle(tr!("ui-options-performance-at-startup"), "", &field!(show_perf));
