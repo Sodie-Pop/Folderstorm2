@@ -1088,3 +1088,43 @@ fn an_assistant_tests_a_script_on_an_owned_prim_end_to_end() {
     assert_eq!(questions.len(), 3, "touch, the answer, the recipe: {questions:?}");
     bridge.stop();
 }
+
+/// `AURORA_DEMO_MCP=script-testing`: the demo's own calls, on the plaza
+/// with the avatar near the box: listed, touched, the dialog answered, the
+/// recipe passed.
+#[test]
+fn the_demo_touches_the_box_answers_its_dialog_and_passes_its_recipe() {
+    use super::script_testing::demo;
+    script_feed::set_capturing(true);
+    let mut world = plaza();
+    assert!(demo::ready(&world) && demo::near(&world));
+    let sim = Sim::new();
+    let now = Instant::now();
+    let mut desk = desk_with(allow_all());
+    let (tool, args) = demo::list();
+    let listing = take(&mut desk, &world, tool, args, now);
+    sim.serve(&mut desk, &world, now);
+    let page = answered(&listing).expect("listed");
+    let (tool, args) = demo::touch();
+    let touched = take(&mut desk, &world, tool, args, now);
+    let q = desk.question(now).expect("asks");
+    desk.decide(q.number, true);
+    let (call, planned) = next_change(&mut desk, &world, now).expect("runs");
+    app(&mut desk, &mut world, call, planned, now);
+    assert!(answered(&touched).is_ok());
+    let (tool, args) = demo::dialogs();
+    let listed = answered(&take(&mut desk, &world, tool, args, now)).expect("listed");
+    let (tool, args) = demo::reply_after(&listed).expect("the box's dialog");
+    let replied = take(&mut desk, &world, tool, args, now);
+    let (call, planned) = next_change(&mut desk, &world, now).expect("runs");
+    let commands = app(&mut desk, &mut world, call, planned, now);
+    assert!(answered(&replied).is_ok());
+    assert!(matches!(&commands[..], [NetCommand::ScriptDialogReply { channel: demo::DIALOG_CHANNEL, label, .. }] if label == "Open"));
+    let (_, args) = demo::begin_after(&page, true).expect("a recipe");
+    assert_eq!(args["steps"].as_array().map(Vec::len), Some(7));
+    let run = begin(&mut desk, &mut world, args, now).expect("run");
+    let (s, _) = run_until_done(&mut desk, &mut world, &sim, &run, now, Duration::from_secs(30));
+    assert_eq!(s["state"], "passed", "{s}");
+    let (_, far) = demo::begin_after(&page, false).expect("a recipe");
+    assert_eq!(far["steps"].as_array().map(Vec::len), Some(5), "no channel step out of range");
+}

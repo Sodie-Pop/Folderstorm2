@@ -634,7 +634,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                         1 => Some((2, script_testing::demo::dialogs())),
                         2 => script_testing::demo::reply_after(&value).map(|n| (3, n)),
                         3 => Some((4, script_testing::demo::list())),
-                        4 => script_testing::demo::begin_after(&value).map(|n| (5, n)),
+                        4 => script_testing::demo::begin_after(&value, script_testing::demo::near(view.world)).map(|n| (5, n)),
                         5 => value["run_id"].as_str().map(|id| (6, script_testing::demo::status(id))),
                         6 if running => value["run_id"].as_str().map(|id| (6, script_testing::demo::status(id))),
                         _ => None,

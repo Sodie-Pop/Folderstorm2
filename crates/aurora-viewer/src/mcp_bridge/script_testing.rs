@@ -1949,24 +1949,38 @@ pub mod demo {
         ))
     }
 
-    /// The recipe on the box, its door script from the listing `page`.
-    pub fn begin_after(page: &Value) -> Option<(&'static str, Value)> {
+    /// The avatar is near enough to the box for a channel line (the demo's
+    /// start is 26 m away; `AURORA_DEMO_POS=150,124` stands closer).
+    pub fn near(world: &crate::world::World) -> bool {
+        world
+            .objects
+            .index_of_uuid(&BOX)
+            .and_then(|idx| crate::scene::Scene::object_transform_unshifted(world, idx, std::time::Instant::now()))
+            .is_some_and(|(p, _, _)| p.distance(world.agent.position) <= super::SAY_RANGE)
+    }
+
+    /// The recipe on the box, its door script from the listing `page`; a
+    /// channel step when the avatar is `near`.
+    pub fn begin_after(page: &Value, near: bool) -> Option<(&'static str, Value)> {
         let snapshot = page["snapshot_id"].as_str()?;
         let item = page["items"].as_array()?.iter().find(|i| i["type"] == "script")?["item_id"].as_str()?;
         let object = BOX.to_string();
+        let mut steps = vec![
+            json!({"action": "touch", "object_id": object}),
+            json!({"action": "wait_output", "object_id": object, "text": "Touched", "expected": true, "timeout_seconds": 10}),
+            json!({"action": "wait_dialog", "object_id": object, "expected": true, "timeout_seconds": 10}),
+        ];
+        if near {
+            steps.push(json!({"action": "send_channel", "object_id": object, "channel": LISTEN_CHANNEL, "text": "ping"}));
+            steps.push(json!({"action": "wait_output", "object_id": object, "text": "Heard", "expected": true, "timeout_seconds": 10}));
+        }
+        steps.push(json!({"action": "reset", "object_id": object, "snapshot_id": snapshot, "item_id": item}));
+        steps.push(json!({"action": "assert_running", "object_id": object, "snapshot_id": snapshot, "item_id": item, "expected": true, "timeout_seconds": 10}));
         Some((
             BEGIN,
             json!({
                 "object_ids": [object],
-                "steps": [
-                    {"action": "touch", "object_id": object},
-                    {"action": "wait_output", "object_id": object, "text": "Touched", "expected": true, "timeout_seconds": 10},
-                    {"action": "wait_dialog", "object_id": object, "expected": true, "timeout_seconds": 10},
-                    {"action": "send_channel", "object_id": object, "channel": LISTEN_CHANNEL, "text": "ping"},
-                    {"action": "wait_output", "object_id": object, "text": "Heard", "expected": true, "timeout_seconds": 10},
-                    {"action": "reset", "object_id": object, "snapshot_id": snapshot, "item_id": item},
-                    {"action": "assert_running", "object_id": object, "snapshot_id": snapshot, "item_id": item, "expected": true, "timeout_seconds": 10}
-                ],
+                "steps": steps,
                 "timeout_seconds": 60,
                 "client_request_id": "demo-test-1",
             }),

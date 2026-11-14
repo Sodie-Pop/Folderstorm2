@@ -205,3 +205,31 @@ listeners, RLVa on a grid.
 - A touch on a face or point (`face`, `uv`, `local_point`).
 - `assert_contents`, and rez or take steps with provenance.
 - A receive feed for script channels (never planned: owner-say only).
+
+## As built
+
+Branch `claude/mcp-script-testing`, on `claude/mcp-task-scripts`.
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/protocol/script_testing.rs` (new) | the seven tools, bounds, `needs_client_request_id`, `always_asks`, `extra_classes` |
+| `policy.rs` | `Class::Interact` (`interact`), presets and migration |
+| `binding.rs`, `protocol.rs`, `protocol/assistant.rs`, `protocol/inventory.rs` | `script_testing: 1`; `pub mod`, `all()`, the required id, always asks; the group bound to its login; the catalogue count |
+| sidecar `jsonrpc.rs` | `SCRIPT_TESTING_HINT`; `script_test_stop` not read-only |
+| viewer `mcp_bridge/script_testing.rs` (new) | prims, dialogs (fingerprint, `dialog_id`, L$ and channel refusals), rate limit, freeze and plan, the runs, the demo |
+| `mcp_bridge/script_feed.rs` | `mark` and `since`, for the runs |
+| `mcp_bridge/desk.rs`, `changes.rs`, `mcp_bridge.rs` | `Work::Interact`, `Work::ScriptTest`; reads, freeze, plan, extra classes, required id; tick, clear, close; the running replies; the app's entry points; the demo |
+| `app/local_assistant.rs` | the sends with their RLVa checks (`Touch`, `Chat`, the notification's own answer, `SetScriptRunning`, `ScriptReset`, `GetScriptRunning`); the demo box's answers |
+| Preferences page, catalogues | the Interact row; the Ask sentences and step lines, en/fr/ja |
+
+Differences from the design above:
+
+- A run's action step is `sent` once the app sent it; the runs' sends go
+  through the app each frame (`script_test_sends`), and a step refused at
+  the send ends the run `inconclusive`.
+- A run that ends cancels its steps not sent yet; a delay or an action
+  under way counts as cancelled, an assertion under way as inconclusive.
+- `wait_output` reads error lines too (a recipe that allows errors can
+  wait for one).
+- The demo adds its channel step only when the avatar stands within 20 m
+  of the box (the demo's start is 26 m away).
