@@ -1716,6 +1716,65 @@ fs-chat-upload-max-help = Les images plus lourdes sont refusées avant tout envo
 fs-chat-upload-confirm = Demander avant chaque envoi
 fs-chat-upload-confirm-help = Montre l'image, son poids et l'hébergeur, et attend Envoyer. Désactivé, une image est envoyée dès qu'elle est collée ou choisie. Un fichier déposé demande toujours d'abord : le viewer ne peut pas savoir exactement sur quel champ il a été déposé.
 fs-chat-upload-public = Sur l'hébergeur de Folderstorm, les images sont gardées jusqu'à 180 jours, ou moins s'il a besoin de place. Elles ne sont pas listées publiquement, mais toute personne qui a un lien peut voir l'image.
+
+# Folderstorm: folder upload (folderstorm/folder_upload, Inventory › + › Upload a folder here…)
+fs-folder-upload-menu = Importer un dossier ici…
+fs-folder-upload-dialog = Choisir un dossier à importer
+fs-folder-upload-offline = Connectez-vous pour importer un dossier.
+fs-folder-upload-destination = Ce dossier ne peut pas recevoir de nouveaux objets : choisissez un autre dossier.
+fs-folder-upload-busy = L'importateur est occupé : attendez la fin de ses fichiers en cours, ou fermez sa confirmation, puis réessayez.
+fs-folder-upload-from = Dossier { $folder } → { $destination }
+fs-folder-upload-files = { $files ->
+    [one] { $files } fichier à importer
+   *[other] { $files } fichiers à importer
+    }, { $folders ->
+    [one] { $folders } nouveau dossier
+   *[other] { $folders } nouveaux dossiers
+    }
+fs-folder-upload-textures = { $count ->
+    [one] { $count } texture
+   *[other] { $count } textures
+    }
+fs-folder-upload-sounds = { $count ->
+    [one] { $count } son
+   *[other] { $count } sons
+    }
+fs-folder-upload-animations = { $count ->
+    [one] { $count } animation
+   *[other] { $count } animations
+    }
+fs-folder-upload-materials = { $count ->
+    [one] { $count } matériau
+   *[other] { $count } matériaux
+    }
+fs-folder-upload-meshes = { $count ->
+    [one] { $count } mesh
+   *[other] { $count } meshes
+    }
+fs-folder-upload-more = et { $count } de plus
+fs-folder-upload-skipped = { $count ->
+    [one] { $count } fichier ne sera pas importé (type non pris en charge) : { $names }
+   *[other] { $count } fichiers ne seront pas importés (type non pris en charge) : { $names }
+    }
+fs-folder-upload-empty = { $count ->
+    [one] { $count } dossier ne contient aucun fichier à importer et n'est pas créé.
+   *[other] { $count } dossiers ne contiennent aucun fichier à importer et ne sont pas créés.
+    }
+fs-folder-upload-links = { $count ->
+    [one] { $count } raccourci ou lien n'est pas suivi.
+   *[other] { $count } raccourcis ou liens ne sont pas suivis.
+    }
+fs-folder-upload-truncated = Ce dossier est très grand : seule une partie a été vérifiée pour les fichiers qui ne seront pas importés.
+fs-folder-upload-existing = { $destination } a déjà un dossier nommé { $names } : un second est créé à côté.
+fs-folder-upload-shared = Plusieurs fichiers prennent le même nom dans un dossier : { $names }.
+fs-folder-upload-errors = { $count ->
+    [one] { $count } fichier a une erreur : retirez-le ou décochez-le avant l'import.
+   *[other] { $count } fichiers ont une erreur : retirez-les ou décochez-les avant l'import.
+    }
+fs-folder-upload-balance = Solde : { $balance } L$, puis { $after } L$ après cet import.
+fs-folder-upload-short = Pas assez de L$ : cet import coûte { $cost } L$ et le solde est de { $balance } L$.
+fs-folder-upload-receipt = Import du dossier { $folder } : { $uploaded } importés, { $failed } en échec, { $cancelled } non envoyés, { $spent } L$ dépensés.
+fs-folder-upload-receipt-failed = En échec : { $names }.
 ui-options-place-bar-stretch = Étirer la barre du lieu jusqu'à droite
 ui-options-place-bar-stretch-help = L'îlot du lieu va jusqu'à l'îlot du compte ; désactivé, il prend la largeur de ce qu'il affiche.
 ui-options-place-bar-rights-text = Nommer les droits de la parcelle

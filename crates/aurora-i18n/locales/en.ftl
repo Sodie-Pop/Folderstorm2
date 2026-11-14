@@ -1713,6 +1713,65 @@ fs-chat-upload-max-help = Larger images are refused before anything is sent. Fol
 fs-chat-upload-confirm = Ask before each upload
 fs-chat-upload-confirm-help = Shows the image, its size and the host, and waits for Upload. Off, an image is uploaded as soon as it is pasted or chosen. A dropped file always asks first: the viewer cannot tell exactly which field it was dropped on.
 fs-chat-upload-public = On Folderstorm's host, images are kept up to 180 days, or less when the host needs room. They are not listed publicly, but anyone with a link can view the image.
+
+# Folderstorm: folder upload (folderstorm/folder_upload, Inventory › + › Upload a folder here…)
+fs-folder-upload-menu = Upload a folder here…
+fs-folder-upload-dialog = Choose a folder to upload
+fs-folder-upload-offline = Log in to upload a folder.
+fs-folder-upload-destination = This folder cannot take new items: choose another folder.
+fs-folder-upload-busy = The uploader is busy: wait for its current files, or close its confirmation, then try again.
+fs-folder-upload-from = Folder { $folder } → { $destination }
+fs-folder-upload-files = { $files ->
+    [one] { $files } file to upload
+   *[other] { $files } files to upload
+    }, { $folders ->
+    [one] { $folders } new folder
+   *[other] { $folders } new folders
+    }
+fs-folder-upload-textures = { $count ->
+    [one] { $count } texture
+   *[other] { $count } textures
+    }
+fs-folder-upload-sounds = { $count ->
+    [one] { $count } sound
+   *[other] { $count } sounds
+    }
+fs-folder-upload-animations = { $count ->
+    [one] { $count } animation
+   *[other] { $count } animations
+    }
+fs-folder-upload-materials = { $count ->
+    [one] { $count } material
+   *[other] { $count } materials
+    }
+fs-folder-upload-meshes = { $count ->
+    [one] { $count } mesh
+   *[other] { $count } meshes
+    }
+fs-folder-upload-more = and { $count } more
+fs-folder-upload-skipped = { $count ->
+    [one] { $count } file will not be uploaded (type not supported): { $names }
+   *[other] { $count } files will not be uploaded (type not supported): { $names }
+    }
+fs-folder-upload-empty = { $count ->
+    [one] { $count } folder holds no file to upload and is not created.
+   *[other] { $count } folders hold no file to upload and are not created.
+    }
+fs-folder-upload-links = { $count ->
+    [one] { $count } shortcut or link is not followed.
+   *[other] { $count } shortcuts or links are not followed.
+    }
+fs-folder-upload-truncated = This folder is very large: only part of it was checked for files that will not be uploaded.
+fs-folder-upload-existing = { $destination } already has a folder named { $names }: a second one is created beside it.
+fs-folder-upload-shared = Several files get the same name in one folder: { $names }.
+fs-folder-upload-errors = { $count ->
+    [one] { $count } file has an error: remove it or untick it before uploading.
+   *[other] { $count } files have an error: remove them or untick them before uploading.
+    }
+fs-folder-upload-balance = Balance: L${ $balance }, then L${ $after } after this upload.
+fs-folder-upload-short = Not enough L$: this upload costs L${ $cost } and the balance is L${ $balance }.
+fs-folder-upload-receipt = Folder upload { $folder }: { $uploaded } uploaded, { $failed } failed, { $cancelled } not sent, L${ $spent } spent.
+fs-folder-upload-receipt-failed = Failed: { $names }.
 ui-options-place-bar-stretch = Stretch the place bar to the right
 ui-options-place-bar-stretch-help = The place island reaches the account island; off, it is as wide as what it shows.
 ui-options-place-bar-rights-text = Name the parcel rights

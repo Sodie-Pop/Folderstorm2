@@ -239,6 +239,26 @@ under Preferences › Chat › Image uploads (a build can carry an upload folder
 Folderstorm's host, shown only as present or absent, but never a token: the
 only token is one the user saves for their own host).
 
+**Folder upload (Folderstorm2).** `AURORA_DEMO_FOLDER_UPLOAD=preview|confirm|upload`
+writes a small `Creator Kit` folder below `.scratch/folder-upload-demo/`
+(textures in nested folders, `Wood.png` and `Wood.tga`, a sound, an
+animation, `Notes/Readme.txt`, an empty folder and a `Thumbs.db`), puts an
+inventory folder of the same name in the root, and at frame 200 runs
+Inventory › + › *Upload a folder here…* on the root without the dialog. The
+uploader opens on Folder preview, routed as a mirror into the root.
+`confirm` then opens the confirmation: under the uploader's total, the
+Folderstorm block names the folder and the destination, counts the files by
+type and the new folders, lists `Notes/Readme.txt` as not uploaded, says two
+folders are not created, warns that the root already has a `Creator Kit`
+and that two files get the name `Wood`, and gives the balance before and
+after. `upload` confirms and runs the batch on the offline demo server
+(fictitious L$), then posts the receipt notice in the nearby chat. Closing
+the uploader puts back the routing (Use default folders, layout,
+destination, Include source folder) the settings had before, unless it was
+changed meanwhile. With no variable, check the menu entry itself on an
+inventory folder's **+** menu (greyed in the Trash, the Library and Current
+Outfit), Cancel in the folder dialog, and Cancel in the confirmation.
+
 **Viewport diagram (Folderstorm2).** Preferences › Layout › Bars and windows ›
 World viewport, behind the cog of "Use a custom world viewport", starts with a
 diagram of the viewer window, the world and the monitors.
