@@ -1704,6 +1704,22 @@ fs-workspaces-invalid-help = This entry of the settings file is not a workspace 
 fs-workspaces-layout = Layout applied with it
 fs-workspaces-layout-keep = Keep the layout in use
 fs-workspaces-windows = Windows it opens (the others are closed; Conversations stays as it is):
+fs-workspaces-remember-folders = Remember Inventory folders
+fs-workspaces-remember-folders-help = Also keeps the Inventory folder windows open now (Open in a new window): each one's folder and its place, up to 16. Applying the workspace reopens them and closes the other folder windows. Only for the account that saved them; never what a folder contains.
+fs-workspaces-remember-folders-now = { $count ->
+    [one] Remember Inventory folders ({ $count } folder window open now)
+   *[other] Remember Inventory folders ({ $count } folder windows open now)
+    }
+fs-workspaces-holds-folders = { $count ->
+    [one] Remembers { $count } Inventory folder window.
+   *[other] Remembers { $count } Inventory folder windows.
+    }
+fs-workspaces-folders-missing = { $count ->
+    [one] { $count } Inventory folder of this workspace was not found (deleted, or the Inventory is not loaded yet) and was skipped.
+   *[other] { $count } Inventory folders of this workspace were not found (deleted, or the Inventory is not loaded yet) and were skipped.
+    }
+fs-workspaces-folders-blocked = Inventory is hidden by RLVa: its folder windows were not opened.
+fs-workspaces-folders-other-account = Its Inventory folders were saved by another account and were skipped.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message

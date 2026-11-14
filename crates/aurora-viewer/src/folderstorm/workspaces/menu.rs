@@ -60,8 +60,8 @@ pub enum Request {
     /// *Update*: the workspace of this name takes the windows open now.
     UpdateWorkspace(String),
     /// *Save new* as a workspace: the windows open now under a name, with
-    /// the layout in use when asked.
-    SaveWorkspace(String, bool),
+    /// the layout in use and the Inventory folder windows when asked.
+    SaveWorkspace(String, super::apply::Keep),
 }
 
 /// What a keyboard action asks (`crate::folderstorm::keys`). `hidden`: in

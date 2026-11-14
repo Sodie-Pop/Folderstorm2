@@ -41,6 +41,8 @@ struct Tab {
     /// in use.
     new_name: String,
     with_layout: bool,
+    /// *Remember Inventory folders* for the new workspace.
+    with_folders: bool,
     /// The name being typed for the selected workspace.
     rename: Option<String>,
     ask: Option<Ask>,
@@ -234,6 +236,21 @@ fn window_boxes(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) 
     changed
 }
 
+/// *Remember Inventory folders* of the workspace: ticked, it takes the
+/// folder windows open now; unticked, it forgets them. True when changed.
+fn folders_box(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) -> bool {
+    let ctx = ui.ctx().clone();
+    let mut on = s
+        .folderstorm_workspaces
+        .workspace(index)
+        .is_some_and(|workspace| workspace.folders.is_some());
+    let label = tr!("fs-workspaces-remember-folders-now", count = apply::folder_windows_now(&ctx));
+    let ticked = widgets::checkbox(ui, p, &mut on, label)
+        .on_hover_text(tr!("fs-workspaces-remember-folders-help"))
+        .changed();
+    ticked && apply::remember_folders(&ctx, &mut Live::of(s), index, on)
+}
+
 /// Under the list: what the selected entry does and what can be done with
 /// it. True when the settings changed.
 fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut Tab, index: usize) -> bool {
@@ -384,6 +401,7 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
     if tab.rename.is_none() && tab.ask.is_none() && usable {
         changed |= layout_picker(ui, s, index);
         changed |= window_boxes(ui, p, s, index);
+        changed |= folders_box(ui, p, s, index);
     }
     changed
 }
@@ -427,9 +445,14 @@ fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
                 tab.with_layout = with;
             }
         });
+        widgets::checkbox(ui, p, &mut tab.with_folders, tr!("fs-workspaces-remember-folders"))
+            .on_hover_text(tr!("fs-workspaces-remember-folders-help"));
         if save {
-            let with_layout = tab.with_layout && layout.is_some();
-            match apply::save_new_workspace(&ctx, &mut Live::of(s), &tab.new_name, with_layout) {
+            let keep = apply::Keep {
+                layout: tab.with_layout && layout.is_some(),
+                folders: tab.with_folders,
+            };
+            match apply::save_new_workspace(&ctx, &mut Live::of(s), &tab.new_name, keep) {
                 Ok(index) => {
                     tab.new_name.clear();
                     tab.selected = Some(index);

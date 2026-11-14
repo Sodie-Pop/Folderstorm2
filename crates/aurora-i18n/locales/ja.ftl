@@ -1623,6 +1623,13 @@ fs-workspaces-invalid-help = 設定ファイルのこの項目は、このバー
 fs-workspaces-layout = 一緒に適用するレイアウト
 fs-workspaces-layout-keep = 使用中のレイアウトのまま
 fs-workspaces-windows = 開くウィンドウ（他は閉じます。「会話」はそのままです）：
+fs-workspaces-remember-folders = 持ち物のフォルダを記憶
+fs-workspaces-remember-folders-help = 今開いている持ち物のフォルダウィンドウ（「新しいウィンドウで開く」）も保存します。各ウィンドウのフォルダと位置を最大 16 個まで記憶します。ワークスペースを適用すると、それらを開き直して他のフォルダウィンドウを閉じます。保存したアカウントでのみ有効です。フォルダの中身は保存しません。
+fs-workspaces-remember-folders-now = 持ち物のフォルダを記憶（今開いているフォルダウィンドウ：{ $count } 個）
+fs-workspaces-holds-folders = 持ち物のフォルダウィンドウ { $count } 個を記憶しています。
+fs-workspaces-folders-missing = このワークスペースの持ち物フォルダ { $count } 個が見つからないため（削除されたか、持ち物がまだ読み込まれていません）、スキップしました。
+fs-workspaces-folders-blocked = 持ち物は RLVa により非表示のため、フォルダウィンドウは開きませんでした。
+fs-workspaces-folders-other-account = 持ち物のフォルダは別のアカウントで保存されたため、スキップしました。
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります

@@ -15,7 +15,11 @@ const PLACES: &str = "places";
 impl Viewer {
     fn save_workspace(&mut self, name: &str, with_layout: bool) -> Result<usize, StoreError> {
         let ctx = self.ctx.clone();
-        apply::save_new_workspace(&ctx, &mut self.live(), name, with_layout)
+        let keep = apply::Keep {
+            layout: with_layout,
+            folders: false,
+        };
+        apply::save_new_workspace(&ctx, &mut self.live(), name, keep)
     }
 
     fn apply_workspace(&mut self, name: &str) -> apply::Report {
@@ -246,11 +250,12 @@ fn the_requests_apply_star_update_and_save_a_workspace() {
     v.set_open(&[MAP]);
     v.ask(Request::UpdateWorkspace("Exploring".to_owned()));
     assert_eq!(v.store.find_workspace("Exploring").expect("saved").1.open.len(), 1);
-    v.ask(Request::SaveWorkspace("Map only".to_owned(), true));
+    let keep = |layout: bool| apply::Keep { layout, folders: false };
+    v.ask(Request::SaveWorkspace("Map only".to_owned(), keep(true)));
     let (_, saved) = v.store.find_workspace("Map only").expect("saved");
     assert_eq!(saved.layout.as_deref(), v.active_layout());
     // a name taken is refused, and said
-    v.ask(Request::SaveWorkspace("map ONLY".to_owned(), false));
+    v.ask(Request::SaveWorkspace("map ONLY".to_owned(), keep(false)));
     assert_eq!(v.store.workspaces.len(), 3);
     assert!(apply::refused(&v.ctx).is_some());
     // one that is gone: nothing
