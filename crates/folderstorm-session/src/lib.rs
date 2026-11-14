@@ -78,12 +78,21 @@
 //! Session routing and the MCP controller (folderstorm/plans/mcp-routing.md):
 //! - [`controller`]: what the host's MCP controller may list and do, its
 //!   settings, its questions decided again while they wait.
+//!
+//! Checkpoint 11 (conversations from the host):
+//! - [`contacts`]: each character's friends and groups as its viewer
+//!   tells them, their order and search, and the conversations the host
+//!   asks a viewer to open, with the answer or the notice that comes back;
+//! - [`links`]: the links of a line, and which of them the host may open;
+//! - [`chat`]: a conversation opened from the host, who types, and the
+//!   volume of a line of the nearby chat.
 
 pub mod bar;
 pub mod behind;
 pub mod chat;
 pub mod chips;
 pub mod controller;
+pub mod contacts;
 pub mod copy;
 pub mod export;
 pub mod gpu;
@@ -92,6 +101,7 @@ pub mod hotkeys;
 pub mod identity;
 pub mod inbox;
 pub mod ipc;
+pub mod links;
 pub mod managed;
 pub mod monitor;
 pub mod monitor_windows;

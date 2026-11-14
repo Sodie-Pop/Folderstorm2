@@ -4766,6 +4766,49 @@ folderstorm-chat-attention-call = Call
 folderstorm-chat-attention-other = Question
 folderstorm-chat-demo-nearby = Demo line { $n } in the nearby chat
 folderstorm-chat-demo-im = Demo instant message { $n }
+folderstorm-chat-typing = { $name } is typing…
+folderstorm-chat-volume-whisper = Whisper
+folderstorm-chat-volume-say = Say
+folderstorm-chat-volume-shout = Shout
+folderstorm-chat-volume-help = Nearby chat: { $volume }. Click for the next one. Ctrl+Enter shouts and Shift+Enter whispers one line, whatever is chosen. The character's viewer applies its own rules (restrictions included).
+folderstorm-chat-grid-link-help = { $link } — only the character's own window follows this link. Click to switch to the character.
+folderstorm-chat-link-question = Open this address in your browser?
+folderstorm-chat-link-open = Open in browser
+folderstorm-contacts-new-im-help = New IM as { $name }: one of its groups or friends
+folderstorm-contacts-friends-help = { $name }'s friends
+folderstorm-contacts-friends-of = { $name }'s friends
+folderstorm-contacts-new-im-as = New IM as { $name }
+folderstorm-contacts-search-friends = Search friends
+folderstorm-contacts-search-everyone = Search groups and friends
+folderstorm-contacts-waiting = Waiting for { $name }'s viewer to tell its friends and groups…
+folderstorm-contacts-none = { $name } has no friends or groups to list yet.
+folderstorm-contacts-no-match = Nobody by that name.
+folderstorm-contacts-groups = { $count ->
+    [one] Group
+   *[other] Groups ({ $count })
+}
+folderstorm-contacts-friends = { $count ->
+    [one] Friend
+   *[other] Friends ({ $count })
+}
+folderstorm-contacts-online = Online ({ $count })
+folderstorm-contacts-offline = Offline ({ $count })
+folderstorm-contacts-more = { $count ->
+    [one] One more is only in { $name }'s own lists.
+   *[other] { $count } more are only in { $name }'s own lists.
+}
+folderstorm-contacts-group = Group
+folderstorm-contacts-im = Open an instant message in the character's viewer. Nothing is sent until you type a line.
+folderstorm-contacts-group-chat = Open this group's chat in the character's viewer. Nothing is said until you type a line.
+folderstorm-contacts-profile = Open the profile in the character's viewer, and switch to it
+folderstorm-contacts-opening = Waiting for the character's viewer…
+folderstorm-contacts-dismiss = Dismiss
+folderstorm-contacts-not-opened = { $name } did not open { $who }: { $why }.
+folderstorm-contacts-refused-restricted = a restriction forbids it
+folderstorm-contacts-refused-not-a-group = it is not one of the character's groups
+folderstorm-contacts-refused-unknown = nobody to open
+folderstorm-contacts-no-answer = the character's viewer did not answer
+folderstorm-contacts-not-sent = the character's viewer is not reading
 folderstorm-quick-switch-help = Switch to { $name }.
 folderstorm-quick-show-help = { $name } is the active character: bring its window forward.
 folderstorm-quick-login-help = { $name } waits at its login screen: bring its window forward to log in there.

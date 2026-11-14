@@ -4772,6 +4772,49 @@ folderstorm-chat-attention-call = Appel
 folderstorm-chat-attention-other = Question
 folderstorm-chat-demo-nearby = Ligne de démo { $n } dans le chat local
 folderstorm-chat-demo-im = Message privé de démo { $n }
+folderstorm-chat-typing = { $name } écrit…
+folderstorm-chat-volume-whisper = Chuchoter
+folderstorm-chat-volume-say = Dire
+folderstorm-chat-volume-shout = Crier
+folderstorm-chat-volume-help = Chat local : { $volume }. Cliquer pour passer au suivant. Ctrl+Entrée crie et Maj+Entrée chuchote une ligne, quel que soit le choix. Le viewer du personnage applique ses propres règles (restrictions comprises).
+folderstorm-chat-grid-link-help = { $link } — seule la fenêtre du personnage suit ce lien. Cliquer pour passer à ce personnage.
+folderstorm-chat-link-question = Ouvrir cette adresse dans votre navigateur ?
+folderstorm-chat-link-open = Ouvrir dans le navigateur
+folderstorm-contacts-new-im-help = Nouveau message privé en tant que { $name } : un de ses groupes ou amis
+folderstorm-contacts-friends-help = Amis de { $name }
+folderstorm-contacts-friends-of = Amis de { $name }
+folderstorm-contacts-new-im-as = Nouveau message privé en tant que { $name }
+folderstorm-contacts-search-friends = Chercher parmi les amis
+folderstorm-contacts-search-everyone = Chercher parmi les groupes et les amis
+folderstorm-contacts-waiting = En attente des amis et groupes du viewer de { $name }…
+folderstorm-contacts-none = { $name } n'a encore ni ami ni groupe à afficher.
+folderstorm-contacts-no-match = Personne de ce nom.
+folderstorm-contacts-groups = { $count ->
+    [one] Groupe
+   *[other] Groupes ({ $count })
+}
+folderstorm-contacts-friends = { $count ->
+    [one] Ami
+   *[other] Amis ({ $count })
+}
+folderstorm-contacts-online = En ligne ({ $count })
+folderstorm-contacts-offline = Hors ligne ({ $count })
+folderstorm-contacts-more = { $count ->
+    [one] Un autre n'est que dans les listes de { $name }.
+   *[other] { $count } autres ne sont que dans les listes de { $name }.
+}
+folderstorm-contacts-group = Groupe
+folderstorm-contacts-im = Ouvrir un message privé dans le viewer du personnage. Rien n'est envoyé avant que vous écriviez une ligne.
+folderstorm-contacts-group-chat = Ouvrir le chat de ce groupe dans le viewer du personnage. Rien n'est dit avant que vous écriviez une ligne.
+folderstorm-contacts-profile = Ouvrir le profil dans le viewer du personnage et passer à ce personnage
+folderstorm-contacts-opening = En attente du viewer du personnage…
+folderstorm-contacts-dismiss = Fermer
+folderstorm-contacts-not-opened = { $name } n'a pas ouvert { $who } : { $why }.
+folderstorm-contacts-refused-restricted = une restriction l'interdit
+folderstorm-contacts-refused-not-a-group = ce n'est pas un groupe du personnage
+folderstorm-contacts-refused-unknown = personne à ouvrir
+folderstorm-contacts-no-answer = le viewer du personnage n'a pas répondu
+folderstorm-contacts-not-sent = le viewer du personnage ne lit pas
 folderstorm-quick-switch-help = Basculer vers { $name }.
 folderstorm-quick-show-help = { $name } est le personnage actif : amener sa fenêtre au premier plan.
 folderstorm-quick-login-help = { $name } attend sur son écran de connexion : amener sa fenêtre au premier plan pour s'y connecter.
