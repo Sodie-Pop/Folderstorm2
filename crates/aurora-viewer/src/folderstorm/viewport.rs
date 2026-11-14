@@ -19,6 +19,7 @@
 //! module only decides the rectangle.
 
 pub mod bars;
+pub mod build_tools;
 
 use serde::{Deserialize, Serialize};
 

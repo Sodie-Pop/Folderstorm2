@@ -21,6 +21,9 @@ pub struct Cam {
     pub width: f32,
     pub height: f32,
     pub ppp: f32,
+    /// Folderstorm: the viewport's top-left corner in the window, physical
+    /// pixels (a custom world viewport, `folderstorm::viewport::build_tools`).
+    pub origin: glam::Vec2,
 }
 
 impl Default for Cam {
@@ -37,6 +40,7 @@ impl Default for Cam {
             width: 1.0,
             height: 1.0,
             ppp: 1.0,
+            origin: glam::Vec2::ZERO, // Folderstorm: world viewport
         }
     }
 }
@@ -58,6 +62,7 @@ impl Cam {
             width: width.max(1.0),
             height: height.max(1.0),
             ppp: ppp.max(0.1),
+            origin: glam::Vec2::ZERO, // Folderstorm: world viewport
         }
     }
 
@@ -126,6 +131,7 @@ impl Cam {
             let (origin, dir) = view.ray(x, y);
             return (origin - Vec3::X, dir);
         }
+        let (x, y) = (x - self.origin.x, y - self.origin.y); // Folderstorm: world viewport
         let ndc = |z: f32| Vec4::new(x / self.width * 2.0 - 1.0, 1.0 - y / self.height * 2.0, z, 1.0);
         let un = |v: Vec4| {
             let p = self.inv_view_proj * v;
@@ -147,8 +153,8 @@ impl Cam {
     pub fn clip_to_screen(&self, c: Vec4) -> Pos2 {
         let ndc = c.truncate() / c.w;
         Pos2::new(
-            (ndc.x * 0.5 + 0.5) * self.width / self.ppp,
-            (0.5 - ndc.y * 0.5) * self.height / self.ppp,
+            ((ndc.x * 0.5 + 0.5) * self.width + self.origin.x) / self.ppp, // Folderstorm: world viewport
+            ((0.5 - ndc.y * 0.5) * self.height + self.origin.y) / self.ppp,
         )
     }
 

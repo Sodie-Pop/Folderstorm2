@@ -2028,8 +2028,8 @@ fn send_updates(world: &World, d: &Drag, linked: bool, out: &mut Vec<BuildCmd>) 
 fn readout(p: &Painter3d, v: [f32; 3]) {
     let cam = p.cam;
     let pal = p.pal;
-    let cx = cam.width / cam.ppp * 0.5;
-    let rect = egui::Rect::from_min_size(Pos2::new(cx - 117.5, 56.0), egui::vec2(235.0, 30.0));
+    let cx = (cam.width * 0.5 + cam.origin.x) / cam.ppp; // Folderstorm: world viewport
+    let rect = egui::Rect::from_min_size(Pos2::new(cx - 117.5, 56.0 + cam.origin.y / cam.ppp), egui::vec2(235.0, 30.0));
     p.painter.rect(
         rect,
         p.mark_radius(),
