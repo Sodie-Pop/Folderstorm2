@@ -518,6 +518,8 @@ pub struct Settings {
     pub folderstorm_viewport: crate::folderstorm::viewport::ViewportSettings,
     // Folderstorm: chat image upload (folderstorm/chat_upload), never its token
     pub folderstorm_chat_upload: crate::folderstorm::chat_upload::UploadSettings,
+    // Folderstorm: layouts (folderstorm/workspaces)
+    pub folderstorm_workspaces: crate::folderstorm::workspaces::Store,
     /// The crosshair in mouselook (ShowCrosshairs; #1166).
     pub crosshair: crate::ui::crosshair::Settings,
     /// LLViewerJoystick: device, axis mapping and separate avatar/flycam tuning.
@@ -2039,6 +2041,7 @@ impl Default for Settings {
             camera: Default::default(),
             folderstorm_viewport: Default::default(),    // Folderstorm: world viewport
             folderstorm_chat_upload: Default::default(), // Folderstorm: chat image upload
+            folderstorm_workspaces: Default::default(),  // Folderstorm: layouts
             crosshair: Default::default(),
             joystick: Default::default(),
             gamepad: crate::joystick::Settings::gamepad_defaults(),
@@ -3307,6 +3310,7 @@ impl Settings {
             newer_file: old.newer_file,
             // Named profiles are user content, like separate preset files.
             graphics_saved: old.graphics_saved,
+            folderstorm_workspaces: old.folderstorm_workspaces, // Folderstorm: layouts are user content too
             // Reset this avatar's hover options while keeping other accounts.
             hover_height_accounts: old.hover_height_accounts,
             hover_height_account: old.hover_height_account,

@@ -272,6 +272,94 @@ window or barely under it says why it cannot; that margins set too large with
 the sliders show a dashed outline and the note that the world fills the
 window; and that with `wayland` the window is drawn alone.
 
+**Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
+demo's own settings, opens Inventory, the world map and People, and opens
+Preferences › Layout › Layouts. "Wide" has the world on the right half of the
+window with the bars around it and the three windows in the left margin;
+"Single" has no viewport and the windows over the world. `apply-wide` applies
+"Wide" by itself at frame 180; `apply-single` applies "Wide" then, at frame
+360, "Single". Try it on a wide window:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test layouts"
+```
+
+Check that a click selects a layout and Apply (or a double click) moves the
+world, the bars and the three windows, and says how many windows it placed;
+that the layout in use shows "In use", then "In use · modified" within a
+second of moving one of its windows or changing the viewport, until Update
+(which asks first) or another Apply; that "Previous arrangement" goes back and
+forth; that "Save as a new layout" refuses an empty or taken name and saves
+only the ticked parts; that Rename, Delete (asks first) and the arrows work;
+that a window closed when a layout is applied takes its place when opened; and
+that "Reset bars and world" turns the viewport off without moving a window.
+Preferences itself is never moved. The bars' three places are under
+Preferences › Layout › Bars and windows › World viewport › Bars;
+`AURORA_DEMO_VIEWPORT=bars-around` shows "Around the world" alone: the world
+on the right two thirds with an eighth of the height free above and below, the
+top bars above the world, the bottom bar below it and a side toolbar (add one
+with `AURORA_DEMO_TOOLBAR=side`) in the left margin.
+
+The viewer window in a layout needs a window the demo may move: run these
+three **without** `AURORA_WINDOW_SIZE` (under a forced size, as in a capture,
+the layouts leave the viewer window alone and say so). `toggle` gives "Wide"
+the window as it is and "Single" its left half, and applies them in turn every
+five seconds: the window, then the world, the bars and the three windows
+follow. `lock` gives "Wide" the window as it is with *Lock the window size*
+and applies it: the window can no longer be resized by its border, the list
+shows a lock, and World › Layouts › *Unlock the viewer window* (or the button
+under *Arrangement*) frees it. `unplug` wants pretend monitors: it saves
+"Wide" on all of them and "Single" on all but the last, applies "Wide", and
+takes the last monitor away at frame 600; about two seconds later a card at
+the top of the world offers "Single" (Apply / Not now), or applies it by itself
+when *When the monitors change* is on *Apply the matching layout*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=toggle cargo run -p aurora-viewer -- --title "Test layouts toggle"
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=lock cargo run -p aurora-viewer -- --title "Test layouts lock"
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=unplug AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test layouts unplug"
+```
+
+Check also World › Layouts (the two layouts, the one in use ticked, *Layouts…*,
+*Previous arrangement*), and in the tab the selected layout's *Viewer window*:
+Normal / Full screen / Borderless over monitors, the monitors clicked on the
+small picture, the lock box. The world viewport's diagram draws the bars where
+they are: with *Around the world*, each side's bars in the margin when it has
+room for them, inside the world otherwise.
+
+**The layouts' switcher (Folderstorm2).** `AURORA_DEMO_SWITCHER=1` seeds the
+same two layouts, makes both favorites and the two layouts of the toolbar's
+toggle, and opens the switcher (World › Layouts › *Layouts…*) instead of
+Preferences. `toggle` also asks for the toggle every five seconds, as its
+toolbar button would; run it without `AURORA_WINDOW_SIZE` and the viewer window
+follows (whole, then its left half):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_SWITCHER=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test switcher"
+AURORA_DEMO=1 AURORA_DEMO_SWITCHER=toggle cargo run -p aurora-viewer -- --title "Test switcher toggle"
+```
+
+Check that the field has the keyboard when the window opens; that typing
+keeps the layouts with those letters, favorites first; that Up and Down
+choose, Enter applies the chosen layout and closes the window, and Esc closes
+it; that with nothing typed Enter goes to the layout that is not in use; that
+a star makes a favorite (first in the list and in World › Layouts); that the
+picture shows the chosen layout on the monitors of now (a missing monitor
+dashed, with a line saying so); that *Update* asks before it replaces the
+layout in use; that *Save new…* takes a name and its parts in the window and
+refuses a taken name; and that the arrows walk nobody while the field has the
+keyboard. In the Toolbar buttons window, add *Layouts* and *Switch layout* to a
+bar: the first is lit while the switcher is open, the second names the layout
+it goes to (dimmed, and opening Preferences, until its two layouts are chosen
+under Preferences › Layout › Layouts › Quick switch). In Preferences ›
+Shortcuts › Other, give the five *Layouts* actions a key each: none has one by
+default.
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
@@ -6043,6 +6131,8 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory\|right-half\|left-half\|photo-window` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world; `right-half`, `left-half`: the world on one of two monitors, for photo mode in it with `AURORA_DEMO_SNAPSHOT=viewfinder`; `photo-window`: photo mode given the whole window); dialogs centred in the world |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
+| `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
+| `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |

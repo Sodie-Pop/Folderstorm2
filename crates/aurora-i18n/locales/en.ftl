@@ -1499,8 +1499,11 @@ folderstorm-viewport-monitor = Monitor { $n } ({ $width }×{ $height })
 folderstorm-viewport-no-monitors = No monitor found under the window.
 folderstorm-viewport-mouselook = Keep the viewport in mouselook
 folderstorm-viewport-mouselook-help = Off, mouselook uses the whole window.
-folderstorm-viewport-bars = Keep the bars inside the viewport
-folderstorm-viewport-bars-help = The top, bottom and side bars stay over the world instead of stretching across the whole window.
+folderstorm-viewport-bars = Bars
+folderstorm-viewport-bars-help = Where the top, bottom and side bars go. Inside the world: over it, as before. Around the world: each bar in the margin beside the world when that margin has room for it, inside the world otherwise. Over the whole window: stretched across the window, as without a viewport.
+folderstorm-viewport-bars-inside = Inside the world
+folderstorm-viewport-bars-around = Around the world
+folderstorm-viewport-bars-window = Over the whole window
 folderstorm-viewport-photo = Photo mode uses the whole window
 folderstorm-viewport-photo-help = Off, photo mode stays in the viewport: its frame and controls, its clicks and wheel, and its photos (the "Window" size included) follow the world's rectangle. On, photo mode fills the whole window, as without a viewport.
 folderstorm-viewport-diagram = Window and monitors
@@ -1511,6 +1514,159 @@ folderstorm-viewport-monitor-scaled = { $width }×{ $height } · { $percent } %
 folderstorm-viewport-not-under = This monitor is not under the viewer window.
 folderstorm-viewport-too-small = Too little of this monitor is under the viewer window.
 folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
+
+# Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
+fs-layouts-tab = Layouts
+fs-layouts-group = Saved layouts
+fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. It never opens or closes a window, and never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
+fs-layouts-list = Layouts
+fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the viewer window, the world, the bars and the windows where the layout has them. What you move afterwards is only saved when you choose Update.
+fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
+fs-layouts-unnamed = (no name)
+fs-layouts-active = In use
+fs-layouts-modified = In use · modified
+fs-layouts-newer = Made by a newer version
+fs-layouts-invalid = Cannot be used
+fs-layouts-newer-help = This layout was made by a newer version of the viewer. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-layouts-invalid-help = This entry of the settings file is not a layout this version can read. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-layouts-apply = Apply
+fs-layouts-update = Update
+fs-layouts-rename = Rename
+fs-layouts-move-up = Move up
+fs-layouts-move-down = Move down
+fs-layouts-ask-update = Replace “{ $name }” with the current arrangement?
+fs-layouts-ask-delete = Delete the layout “{ $name }”?
+fs-layouts-part-world = World viewport and bars
+fs-layouts-part-windows = Window positions
+fs-layouts-holds-windows = { $count ->
+    [one] { $count } window
+   *[other] { $count } windows
+    }
+fs-layouts-holds-monitors = { $count ->
+    [one] saved on { $count } monitor
+   *[other] saved on { $count } monitors
+    }
+fs-layouts-applied = “{ $name }” applied.
+fs-layouts-applied-windows = { $count ->
+    [one] “{ $name }” applied: { $count } window placed.
+   *[other] “{ $name }” applied: { $count } windows placed.
+    }
+fs-layouts-applied-fitted = { $count ->
+    [one] { $count } did not fit the viewer window at its saved place and was fitted for now; the layout itself is unchanged.
+   *[other] { $count } did not fit the viewer window at their saved places and were fitted for now; the layout itself is unchanged.
+    }
+fs-layouts-applied-unknown = { $count ->
+    [one] { $count } window of this layout is not known to this version and was left alone.
+   *[other] { $count } windows of this layout are not known to this version and were left alone.
+    }
+fs-layouts-waiting = { $count ->
+    [one] { $count } closed window will take its place when you open it.
+   *[other] { $count } closed windows will take their places when you open them.
+    }
+fs-layouts-previous-done = Back to the arrangement before.
+fs-layouts-save-group = Save the current arrangement
+fs-layouts-save-new = Save as a new layout
+fs-layouts-save-new-help = Saves where things are now under a new name. Untick a part to leave it out: a layout without the viewer window leaves it where it is, one without window positions only changes the rest. Lock the window size keeps the viewer window from being resized by hand while the layout is in use.
+fs-layouts-name-hint = Name, for example 2 monitors
+fs-layouts-save = Save
+fs-layouts-error-empty = Give the layout a name.
+fs-layouts-error-long = A name has at most { $count } characters.
+fs-layouts-error-control = A name cannot contain line breaks or tabs.
+fs-layouts-error-taken = Another layout already has this name.
+fs-layouts-error-full = There are already { $count } layouts: delete one first.
+fs-layouts-error-parts = Choose at least one part to save.
+fs-layouts-error-invalid = The current arrangement could not be read. Try again in a moment.
+fs-layouts-arrangement = Arrangement
+fs-layouts-previous = Previous arrangement
+fs-layouts-previous-help = Goes back to the viewer window, the world, the bars and the window positions in place before the last layout was applied, or before Reset bars and world. Pressing it again comes back. Remembered until the viewer closes.
+fs-layouts-previous-button = Go back
+fs-layouts-reset = Reset bars and world
+fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
+fs-layouts-reset-button = Reset
+fs-layouts-menu = Layouts
+fs-layouts-menu-open = Layouts…
+fs-layouts-part-window = Viewer window
+fs-layouts-lock = Lock the window size
+fs-layouts-locked = Locked
+fs-layouts-holds-window = viewer window { $width } × { $height }
+fs-layouts-holds-window-maximized = viewer window maximized
+fs-layouts-holds-window-fullscreen = full screen on monitor { $n }
+fs-layouts-holds-window-borderless = { $count ->
+    [one] borderless over { $count } monitor
+   *[other] borderless over { $count } monitors
+    }
+fs-layouts-holds-locked = locked
+fs-layouts-mode-normal = Normal
+fs-layouts-mode-fullscreen = Full screen
+fs-layouts-mode-borderless = Borderless over monitors
+fs-layouts-mode-pick-fullscreen = Click the monitor to fill.
+fs-layouts-mode-pick-borderless = Click the monitors to cover. The window loses its border and title bar and lies exactly over them.
+fs-layouts-mode-no-monitors = This layout was saved without a list of monitors: only a normal window can be used.
+fs-layouts-applied-missing = { $count ->
+    [one] { $count } monitor of this layout is missing.
+   *[other] { $count } monitors of this layout are missing.
+    }
+fs-layouts-applied-left = The viewer window stayed where it is.
+fs-layouts-applied-unlocked = The window is not locked.
+fs-layouts-applied-no-window = The viewer window was left as it is.
+fs-layouts-unlock = Unlock the viewer window
+fs-layouts-unlock-help = Gives the viewer window its border and its resizing back when a layout has locked it or made it borderless. It keeps its place and size. A lock is also lifted when a monitor of the layout is unplugged, in full screen, and by any layout without a lock.
+fs-layouts-unlock-button = Unlock
+fs-layouts-monitors = When the monitors change
+fs-layouts-monitors-help = When a monitor is plugged in or unplugged, the viewer can offer the layout you saved on exactly that set of monitors, apply it without asking, or do nothing. It waits two seconds for the system to settle first.
+fs-layouts-monitors-ask = Ask
+fs-layouts-monitors-apply = Apply the matching layout
+fs-layouts-monitors-nothing = Do nothing
+fs-layouts-monitors-offer = Your monitors changed. Use the layout “{ $name }”?
+fs-layouts-monitors-offer-unlocked = Your monitors changed and the viewer window was unlocked. Use the layout “{ $name }”?
+fs-layouts-monitors-applied = Your monitors changed: the layout “{ $name }” was applied.
+fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlocked.
+fs-layouts-monitors-later = Not now
+fs-layouts-favorite = Favorite
+fs-layouts-quick = Quick switch
+fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts window (World › Layouts › Layouts…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts, and are the ones the shortcuts Next and Previous favorite layout go round.
+fs-layouts-toggle-first = First layout
+fs-layouts-toggle-second = Second layout
+fs-layouts-toggle-help = The two layouts the “Switch layout” toolbar button and its shortcut switch between, for example “2 monitors” and “1 monitor”: the second when the first is in use, the first otherwise.
+fs-layouts-toggle-none = Not chosen
+
+# Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
+fs-switcher-title = Layouts
+fs-switcher-help = Type part of a layout's name: the list keeps the layouts that have it, favorites first. Up and Down choose, Enter applies the chosen layout and closes this window, Esc closes it. A click on a star makes a layout a favorite. The picture shows what the chosen layout would give on the monitors connected now. Update saves the arrangement of now in the layout in use; Save new… keeps it under another name.
+fs-switcher-hint = Type a layout's name, then Enter
+fs-switcher-favorites = Favorites
+fs-switcher-layouts = Other layouts
+fs-switcher-star = Add to the favorites
+fs-switcher-unstar = Remove from the favorites
+fs-switcher-empty = No layout saved yet. Arrange the world and your windows as you like them, then choose Save new….
+fs-switcher-no-match = No layout has this in its name.
+fs-switcher-picture-help = What applying this layout would give on the monitors connected now: the viewer window (outlined), the world (lit) and the windows the layout places. A monitor of the layout that is not connected is dashed.
+fs-switcher-note-missing = { $count ->
+    [one] { $count } monitor of this layout is not connected.
+   *[other] { $count } monitors of this layout are not connected.
+    }
+fs-switcher-note-no-window = The viewer window cannot be moved here: it would be left as it is.
+fs-switcher-note-left = The viewer window would stay where it is.
+fs-switcher-note-unlocked = The window would not be locked.
+fs-switcher-note-set-aside = Its margins would leave the world less than a quarter of the window: the world would fill the window.
+fs-switcher-note-fitted = { $count ->
+    [one] { $count } window would be fitted to the room there is.
+   *[other] { $count } windows would be fitted to the room there is.
+    }
+fs-switcher-update = Update “{ $name }”
+fs-switcher-update-help = Saves the arrangement of now in the layout in use, for the parts it holds. Asks first.
+fs-switcher-save-new = Save new…
+fs-switcher-preferences-help = Rename, delete and reorder the layouts, edit a layout's viewer window, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts.
+fs-switcher-keys = Up and Down choose, Enter applies and closes, Esc closes.
+fs-switcher-command = Layouts
+fs-switcher-toggle-command = Switch layout
+fs-switcher-toggle-to = Switch to the layout “{ $name }”
+fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts (a click opens it).
+fs-keys-section = Layouts
+fs-keys-layout-switcher = Layouts window
+fs-keys-layout-toggle = Switch between the two layouts
+fs-keys-next-favorite = Next favorite layout
+fs-keys-previous-favorite = Previous favorite layout
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
