@@ -209,7 +209,6 @@ fn the_receipt_reports_each_file_and_counts_retired_drafts_as_uploaded() {
             spent: 20,
         }
     );
-    assert_eq!(receipt.files(), 4);
 }
 
 // --- the run, step by step ---

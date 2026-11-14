@@ -307,12 +307,6 @@ pub struct Receipt {
     pub spent: i32,
 }
 
-impl Receipt {
-    pub fn files(&self) -> usize {
-        self.uploaded.len() + self.failed.len() + self.cancelled.len()
-    }
-}
-
 /// Follows the drafts sent by one confirmation until the queue is idle.
 #[derive(Debug, Default, Clone)]
 pub struct Tracker {

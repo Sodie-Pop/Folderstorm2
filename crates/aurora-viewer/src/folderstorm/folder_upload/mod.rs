@@ -144,6 +144,7 @@ impl Default for State {
 }
 
 impl State {
+    #[cfg(test)]
     pub fn run(&self) -> Option<&Run> {
         self.run.as_ref()
     }
