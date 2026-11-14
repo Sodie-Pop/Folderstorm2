@@ -1708,6 +1708,15 @@ fs-workspaces-layout = Disposition appliquée avec lui
 fs-workspaces-layout-keep = Garder la disposition en service
 fs-workspaces-windows = Fenêtres qu'il ouvre (les autres sont fermées ; Conversations reste comme elle est) :
 fs-workspaces-remember-folders = Retenir les dossiers d'inventaire
+fs-strip-show = Bande des favorites
+fs-strip-show-help = Affiche vos dispositions et espaces de travail favoris sous la barre supérieure, un clic pour appliquer : au bout droit de la rangée des favoris quand elle est affichée (Interface › Accès aux favoris › Rangée sous la barre supérieure), dans une petite barre à part sinon. Ce qui ne tient pas est dans Plus…, avec la fenêtre Dispositions et espaces de travail et Arrangement précédent. Masquée en vue subjective. Donnez son étoile à une disposition ou à un espace de travail dans la fenêtre Dispositions et espaces de travail.
+fs-strip-box = Afficher la bande des favorites
+fs-strip-hide = Masquer la bande des favorites
+fs-strip-more = { $n } de plus
+fs-strip-more-tip = Plus…
+fs-strip-layout = Disposition
+fs-strip-workspace = Espace de travail
+fs-strip-pill-hint = Cliquer pour appliquer
 fs-workspaces-remember-folders-help = Garde aussi les fenêtres de dossier d'inventaire ouvertes maintenant (Ouvrir dans une nouvelle fenêtre) : le dossier de chacune et sa place, jusqu'à 16. Appliquer l'espace de travail les rouvre et ferme les autres fenêtres de dossier. Seulement pour le compte qui les a enregistrées ; jamais ce qu'un dossier contient.
 fs-workspaces-remember-folders-now = { $count ->
     [one] Retenir les dossiers d'inventaire ({ $count } fenêtre de dossier ouverte maintenant)

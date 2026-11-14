@@ -547,6 +547,10 @@ pub struct Store {
     /// The workspace last applied, saved or updated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_workspace: Option<String>,
+    /// The favorites strip is shown (`super::strip`). The user's choice
+    /// for the viewer, not a part of a layout or of a workspace.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub strip: bool,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -563,6 +567,7 @@ struct Raw {
     toggle: serde_json::Value,
     workspaces: serde_json::Value,
     active_workspace: Option<String>,
+    strip: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -609,6 +614,8 @@ impl From<Raw> for Store {
             toggle: Toggle::default(),
             workspaces: super::workspace::read_list(raw.workspaces),
             active_workspace: raw.active_workspace,
+            // (anything but `true` reads as off, as an entry is read on its own)
+            strip: raw.strip.as_bool().unwrap_or(false),
         };
         if store.active_workspace().is_none() {
             store.active_workspace = None;

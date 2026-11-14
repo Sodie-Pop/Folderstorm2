@@ -1705,6 +1705,15 @@ fs-workspaces-layout = Layout applied with it
 fs-workspaces-layout-keep = Keep the layout in use
 fs-workspaces-windows = Windows it opens (the others are closed; Conversations stays as it is):
 fs-workspaces-remember-folders = Remember Inventory folders
+fs-strip-show = Favorites strip
+fs-strip-show-help = Shows your favorite layouts and workspaces under the top bar, one click to apply: at the right end of the favourites' row when it is shown (Interface › Favourites access › Row below the top bar), in a small bar of their own otherwise. What does not fit is in More…, with the Layouts & workspaces window and Previous arrangement. Hidden in mouselook. Give a layout or a workspace its star in the Layouts & workspaces window.
+fs-strip-box = Show the favorites strip
+fs-strip-hide = Hide the favorites strip
+fs-strip-more = { $n } more
+fs-strip-more-tip = More…
+fs-strip-layout = Layout
+fs-strip-workspace = Workspace
+fs-strip-pill-hint = Click to apply
 fs-workspaces-remember-folders-help = Also keeps the Inventory folder windows open now (Open in a new window): each one's folder and its place, up to 16. Applying the workspace reopens them and closes the other folder windows. Only for the account that saved them; never what a folder contains.
 fs-workspaces-remember-folders-now = { $count ->
     [one] Remember Inventory folders ({ $count } folder window open now)

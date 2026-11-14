@@ -24,6 +24,7 @@ pub(super) const ICON_WORKSPACE: &str = "app-window-filled";
 pub(super) const ICON_OPEN: &str = "layout-dashboard-filled";
 pub(super) const ICON_PREVIOUS: &str = "arrow-back-up";
 pub(super) const ICON_UNLOCK: &str = "lock-open";
+pub(super) const ICON_STRIP: &str = "star-filled";
 
 /// Something asked from the menu or the card, run before the next frame's
 /// interface.
@@ -62,6 +63,8 @@ pub enum Request {
     /// *Save new* as a workspace: the windows open now under a name, with
     /// the layout in use and the Inventory folder windows when asked.
     SaveWorkspace(String, super::apply::Keep),
+    /// The favorites strip shown or put away (`super::strip`).
+    Strip(bool),
 }
 
 /// What a keyboard action asks (`crate::folderstorm::keys`). `hidden`: in
@@ -108,6 +111,37 @@ pub struct View {
     /// The layout the toolbar's toggle would apply now; None until its two
     /// layouts are chosen.
     pub toggle: Option<String>,
+    /// The favorites strip is shown (`super::strip`).
+    pub strip: bool,
+    /// What the strip shows: the usable favorites of both kinds, in the
+    /// user's order.
+    pub favorites: Vec<Favorite>,
+}
+
+/// A favorite as the strip shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Favorite {
+    pub kind: pick::Kind,
+    pub name: String,
+    pub in_use: bool,
+}
+
+impl Favorite {
+    /// What a click on it asks.
+    pub fn apply(&self) -> Request {
+        match self.kind {
+            pick::Kind::Layout => Request::Apply(self.name.clone()),
+            pick::Kind::Workspace => Request::ApplyWorkspace(self.name.clone()),
+        }
+    }
+
+    /// The icon of its kind.
+    pub fn icon(&self) -> &'static str {
+        match self.kind {
+            pick::Kind::Layout => ICON_LAYOUT,
+            pick::Kind::Workspace => ICON_WORKSPACE,
+        }
+    }
 }
 
 impl View {
@@ -130,6 +164,18 @@ impl View {
                 .ok()
                 .and_then(|index| store.layout(index))
                 .map(|layout| layout.name.clone()),
+            strip: store.strip,
+            favorites: lines
+                .iter()
+                .filter(|line| line.favorite)
+                .filter_map(|line| {
+                    Some(Favorite {
+                        kind: line.kind,
+                        name: line.name(store)?.to_owned(),
+                        in_use: line.in_use(store),
+                    })
+                })
+                .collect(),
         }
     }
 }
@@ -154,6 +200,12 @@ pub(super) fn stamp(store: &Store, previous: bool) -> u64 {
     store.active_workspace.hash(&mut hasher);
     for favorite in &store.favorites {
         favorite.workspace().hash(&mut hasher);
+    }
+    // the strip: shown or not, and the favorites of both kinds in their
+    // one order
+    store.strip.hash(&mut hasher);
+    for favorite in &store.favorites {
+        (favorite.layout(), favorite.workspace()).hash(&mut hasher);
     }
     // (never the stamp of a session that has published nothing)
     hasher.finish() | 1
@@ -203,6 +255,9 @@ pub(super) fn body(ui: &mut egui::Ui, p: &Palette) {
     }
     if view.held && menu::item(ui, p, ICON_UNLOCK, tr!("fs-layouts-unlock")) {
         request = Some(Request::Unlock);
+    }
+    if menu::check(ui, p, ICON_STRIP, tr!("fs-strip-show"), view.strip, true) {
+        request = Some(Request::Strip(!view.strip));
     }
     if let Some(request) = request {
         ask(ui.ctx(), request);

@@ -627,6 +627,7 @@ pub fn row(ctx: &egui::Context, p: &Palette, icons: &Icons, view: &View, under: 
         if r.on_hover_text(aurora_i18n::tr!("favorites-row-fold")).clicked() {
             out = Some(FavAction::Fold(true));
         }
+        let fold = crate::folderstorm::workspaces::strip::in_row(ui, p, icons, rect, fold); // Folderstorm: the favorite layouts and workspaces at the row's end
         let mut x = rect.left() + PAD;
         if view.list.is_empty() {
             let hint = ui.painter().layout_no_wrap(

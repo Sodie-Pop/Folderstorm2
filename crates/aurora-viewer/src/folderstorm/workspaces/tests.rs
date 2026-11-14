@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 
 mod folders;
 mod open;
+mod strip;
 mod switcher;
 mod viewer;
 mod workspace;
@@ -53,6 +54,18 @@ struct Viewer {
     texts: Vec<(String, Rect)>,
     /// The Inventory's folder windows, as the app has them.
     inventory: Folders,
+    /// The top bar, as far as the favorites strip goes. None: no bars.
+    bars: Option<Bars>,
+}
+
+/// What the top bar's code does around the favorites strip
+/// (`ui/bars/islands.rs`, `top`): the favourites' row under `under` when
+/// the favourites are shown as a row, then the strip's own call.
+#[derive(Clone, Debug)]
+struct Bars {
+    under: Rect,
+    /// The favourites as a row (*Favourites access*); None: in the menu.
+    landmarks: Option<crate::ui::bars::favorites::View>,
 }
 
 /// A pretend Inventory: the account logged in, the folders it has, and
@@ -139,6 +152,7 @@ impl Viewer {
             events: Vec::new(),
             texts: Vec::new(),
             inventory: Folders::default(),
+            bars: None,
         }
     }
 
@@ -212,6 +226,7 @@ impl Viewer {
         let folder_windows = self.inventory.windows.clone();
         let menu = self.menu;
         let hidden = self.hidden;
+        let bars = self.bars.clone();
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
@@ -227,6 +242,16 @@ impl Viewer {
                 // as the interface's pass does: the card and the switcher,
                 // and the menu when open
                 super::interface(ctx, &p, hidden);
+                if let Some(bars) = &bars {
+                    use crate::ui::bars::{favorites, islands};
+                    let icons = crate::ui::icons::Icons::default();
+                    let row = bars
+                        .landmarks
+                        .as_ref()
+                        .map(|view| favorites::row(ctx, &p, &icons, view, bars.under).0.bottom());
+                    islands::set_favorites_row_bottom(ctx, row);
+                    super::strip::own_row(ctx, &p, &icons, bars.under);
+                }
                 if menu {
                     egui::Area::new(egui::Id::unique("test-world-menu"))
                         .order(egui::Order::Foreground)

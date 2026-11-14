@@ -925,6 +925,7 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
                 outcome.save |= done.is_ok();
                 refused = done.err();
             }
+            Request::Strip(on) => outcome.save |= std::mem::replace(&mut live.store.strip, on) != on,
             Request::SaveWorkspace(name, keep) => {
                 let done = save_new_workspace(ctx, live, &name, keep);
                 outcome.save |= done.is_ok();

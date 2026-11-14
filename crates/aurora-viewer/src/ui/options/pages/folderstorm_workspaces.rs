@@ -184,6 +184,11 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
             cx.keywords("layout toggle switch switcher workspace toolbar button dual monitor two monitors shortcut keyboard favorite")
                 .row(label, tr!("fs-layouts-toggle-help"), &Nothing, |ui, s| toggle_picker(ui, s, place));
         }
+        // (Folderstorm (C++): "Show workspace favorites strip", off until chosen)
+        cx.keywords("layout workspace favorite favorites strip row bar pills landmark star quick switch")
+            .row(tr!("fs-strip-show"), tr!("fs-strip-show-help"), &Nothing, |ui, s| {
+                super::super::toggle(ui, &p, &mut s.folderstorm_workspaces.strip)
+            });
     });
 }
 
