@@ -1497,9 +1497,9 @@ folderstorm-viewport-too-small = Too little of this monitor is under the viewer 
 folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
 
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
-fs-layouts-tab = Layouts
+fs-layouts-tab = Layouts & workspaces
 fs-layouts-group = Saved layouts
-fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. It never opens or closes a window, and never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
+fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. Applying it opens the windows it was saved with open and closes none (closing is what a workspace does), and it never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
 fs-layouts-list = Layouts
 fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the viewer window, the world, the bars and the windows where the layout has them. What you move afterwards is only saved when you choose Update.
 fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
@@ -1573,7 +1573,7 @@ fs-layouts-reset = Reset bars and world
 fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
 fs-layouts-reset-button = Reset
 fs-layouts-menu = Layouts
-fs-layouts-menu-open = Layouts…
+fs-layouts-menu-open = Layouts & workspaces…
 fs-layouts-part-window = Viewer window
 fs-layouts-lock = Lock the window size
 fs-layouts-locked = Locked
@@ -1613,22 +1613,22 @@ fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlo
 fs-layouts-monitors-later = Not now
 fs-layouts-favorite = Favorite
 fs-layouts-quick = Quick switch
-fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts window (World › Layouts › Layouts…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts, and are the ones the shortcuts Next and Previous favorite layout go round.
+fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts & workspaces window (World › Layouts › Layouts & workspaces…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts & workspaces” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts; the favorite layouts are the ones the shortcuts Next and Previous favorite layout go round.
 fs-layouts-toggle-first = First layout
 fs-layouts-toggle-second = Second layout
 fs-layouts-toggle-help = The two layouts the “Switch layout” toolbar button and its shortcut switch between, for example “2 monitors” and “1 monitor”: the second when the first is in use, the first otherwise.
 fs-layouts-toggle-none = Not chosen
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
-fs-switcher-title = Layouts
-fs-switcher-help = Type part of a layout's name: the list keeps the layouts that have it, favorites first. Up and Down choose, Enter applies the chosen layout and closes this window, Esc closes it. A click on a star makes a layout a favorite. The picture shows what the chosen layout would give on the monitors connected now. Update saves the arrangement of now in the layout in use; Save new… keeps it under another name.
-fs-switcher-hint = Type a layout's name, then Enter
+fs-switcher-title = Layouts & workspaces
+fs-switcher-help = Type part of a name: the list keeps the workspaces and the layouts that have it, favorites first. Up and Down choose, Enter applies the chosen entry and closes this window, Esc closes it. A click on a star makes a favorite. A layout says where things go: the picture shows what it would give on the monitors connected now. A workspace says which windows are open: applying it opens them and closes the others, on its layout if it names one. Update saves the arrangement of now in the layout in use, or the windows open now in the workspace in use; Save new… keeps them under another name.
+fs-switcher-hint = Type a name, then Enter
 fs-switcher-favorites = Favorites
-fs-switcher-layouts = Other layouts
+fs-switcher-layouts = Layouts
 fs-switcher-star = Add to the favorites
 fs-switcher-unstar = Remove from the favorites
-fs-switcher-empty = No layout saved yet. Arrange the world and your windows as you like them, then choose Save new….
-fs-switcher-no-match = No layout has this in its name.
+fs-switcher-empty = Nothing saved yet. Arrange the world and your windows as you like them, then choose Save new….
+fs-switcher-no-match = No layout or workspace has this in its name.
 fs-switcher-picture-help = What applying this layout would give on the monitors connected now: the viewer window (outlined), the world (lit) and the windows the layout places. A monitor of the layout that is not connected is dashed.
 fs-switcher-note-missing = { $count ->
     [one] { $count } monitor of this layout is not connected.
@@ -1645,17 +1645,65 @@ fs-switcher-note-fitted = { $count ->
 fs-switcher-update = Update “{ $name }”
 fs-switcher-update-help = Saves the arrangement of now in the layout in use, for the parts it holds. Asks first.
 fs-switcher-save-new = Save new…
-fs-switcher-preferences-help = Rename, delete and reorder the layouts, edit a layout's viewer window, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts.
+fs-switcher-preferences-help = Rename, delete and reorder the layouts and the workspaces, edit a layout's viewer window or the windows of a workspace, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts & workspaces.
 fs-switcher-keys = Up and Down choose, Enter applies and closes, Esc closes.
-fs-switcher-command = Layouts
+fs-switcher-command = Layouts & workspaces
 fs-switcher-toggle-command = Switch layout
 fs-switcher-toggle-to = Switch to the layout “{ $name }”
-fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts (a click opens it).
+fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts & workspaces (a click opens it).
 fs-keys-section = Layouts
-fs-keys-layout-switcher = Layouts window
+fs-keys-layout-switcher = Layouts & workspaces window
 fs-keys-layout-toggle = Switch between the two layouts
 fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
+
+# Folderstorm: workspaces (folderstorm/workspaces/workspace.rs, checkpoint 6)
+fs-switcher-workspaces = Workspaces
+fs-workspaces-one = Workspace
+fs-workspaces-closes = Applying it closes the other windows. Conversations stays as it is.
+fs-workspaces-save-layout = Layout
+fs-workspaces-save-workspace = Workspace
+fs-workspaces-name-hint = Name, for example Sorting
+fs-workspaces-with-layout = Always use the layout “{ $name }” with it
+fs-workspaces-with-no-layout = Always use the layout in use with it (none is in use)
+fs-workspaces-save-help = Saves which windows are open now under a new name. Applying the workspace opens them and closes the others, wherever the layout in use puts them; tick the box to make it also apply the layout in use now. It never holds what a window shows.
+fs-workspaces-save-new = Save as a new workspace
+fs-workspaces-save = Save workspace
+fs-workspaces-ask-update = Replace the windows of the workspace “{ $name }” with the ones open now?
+fs-workspaces-ask-delete = Delete the workspace “{ $name }”?
+fs-workspaces-update-help = Saves the windows open now in the workspace. Its layout choice is kept. Asks first.
+fs-workspaces-error-empty = Give the workspace a name.
+fs-workspaces-error-taken = Another workspace already has this name.
+fs-workspaces-error-full = There are already { $count } workspaces: delete one first.
+fs-workspaces-error-invalid = The workspace could not be saved. Try again in a moment.
+fs-workspaces-holds-layout = Uses the layout “{ $name }”.
+fs-workspaces-holds-no-layout = Keeps the layout in use.
+fs-workspaces-holds-none = Opens no window.
+fs-workspaces-holds-opens = Opens: { $names }.
+fs-workspaces-applied = Workspace “{ $name }” applied.
+fs-workspaces-applied-no-layout = Its layout cannot be used: the layout in use was kept.
+fs-workspaces-applied-opened = { $count ->
+    [one] { $count } window opened.
+   *[other] { $count } windows opened.
+    }
+fs-workspaces-applied-closed = { $count ->
+    [one] { $count } window closed.
+   *[other] { $count } windows closed.
+    }
+fs-workspaces-applied-blocked = { $count ->
+    [one] { $count } window cannot be opened right now and was left closed.
+   *[other] { $count } windows cannot be opened right now and were left closed.
+    }
+fs-workspaces-group = Saved workspaces
+fs-workspaces-intro = A workspace remembers which windows are open, for an activity: “Sorting” with both Inventory windows, “Exploring” with the maps. Applying it opens those windows and closes the others; where they go is the layout's business, so a workspace works on any layout. It can also name a layout to apply with it. Conversations is never opened or closed, and nothing a window shows is saved.
+fs-workspaces-list = Workspaces
+fs-workspaces-list-help = Click a workspace to select it, then Apply; a double click applies it at once. Applying opens the windows ticked below and closes the others, after its layout if it has one. Update saves the windows open now in it.
+fs-workspaces-empty = No workspace saved yet. Open the windows you want for an activity, then save them below.
+fs-workspaces-newer-help = This workspace was made by a newer version of the viewer. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-workspaces-invalid-help = This entry of the settings file is not a workspace this version can read. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-workspaces-layout = Layout applied with it
+fs-workspaces-layout-keep = Keep the layout in use
+fs-workspaces-windows = Windows it opens (the others are closed; Conversations stays as it is):
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message

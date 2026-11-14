@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 mod open;
 mod switcher;
 mod viewer;
+mod workspace;
 
 const INVENTORY: &str = "inventory";
 const PEOPLE: &str = "people";
@@ -65,6 +66,10 @@ impl apply::Shell for Windows<'_> {
 
     fn open(&mut self, _: &egui::Context, window: &windows::Window) -> bool {
         !self.blocked.contains(window.id) && self.open.insert(window.id)
+    }
+
+    fn close(&mut self, _: &egui::Context, window: &windows::Window) {
+        self.open.remove(window.id);
     }
 }
 

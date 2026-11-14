@@ -1500,9 +1500,9 @@ folderstorm-viewport-too-small = Une trop petite partie de cet écran est sous l
 folderstorm-viewport-set-aside = Ces marges laissent au monde moins d'un quart de la fenêtre : pour l'instant, le monde occupe toute la fenêtre.
 
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
-fs-layouts-tab = Dispositions
+fs-layouts-tab = Dispositions et espaces de travail
 fs-layouts-group = Dispositions enregistrées
-fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. Elle n'ouvre ni ne ferme jamais une fenêtre, et ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
+fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. L'appliquer ouvre les fenêtres qui étaient ouvertes à son enregistrement et n'en ferme aucune (fermer est l'affaire d'un espace de travail), et elle ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
 fs-layouts-list = Dispositions
 fs-layouts-list-help = Cliquez sur une disposition pour la sélectionner, puis sur Appliquer ; un double clic l'applique tout de suite. Appliquer remet la fenêtre du viewer, le monde, les barres et les fenêtres là où la disposition les a. Ce que vous déplacez ensuite n'est enregistré que si vous choisissez Mettre à jour.
 fs-layouts-empty = Aucune disposition enregistrée. Placez le monde et vos fenêtres comme vous les aimez, puis enregistrez l'arrangement ci-dessous.
@@ -1576,7 +1576,7 @@ fs-layouts-reset = Réinitialiser les barres et le monde
 fs-layouts-reset-help = Désactive la zone du monde et remet les barres dans le monde, comme au premier démarrage. Les fenêtres restent où elles sont, et aucune disposition n'est modifiée ni supprimée.
 fs-layouts-reset-button = Réinitialiser
 fs-layouts-menu = Dispositions
-fs-layouts-menu-open = Dispositions…
+fs-layouts-menu-open = Dispositions et espaces de travail…
 fs-layouts-part-window = Fenêtre du viewer
 fs-layouts-lock = Verrouiller la taille de la fenêtre
 fs-layouts-locked = Verrouillée
@@ -1616,22 +1616,22 @@ fs-layouts-monitors-unlocked = Vos écrans ont changé : la fenêtre du viewer a
 fs-layouts-monitors-later = Pas maintenant
 fs-layouts-favorite = Favorite
 fs-layouts-quick = Changement rapide
-fs-layouts-quick-intro = Trois façons de changer de disposition sans ouvrir les Préférences. La fenêtre Dispositions (Monde › Dispositions › Dispositions…) : tapez une partie d'un nom et appuyez sur Entrée. Deux boutons de barre, à trouver dans Boutons de la barre… : « Dispositions » ouvre cette fenêtre, « Changer de disposition » passe en un clic de l'une des deux dispositions choisies ci-dessous à l'autre. Et cinq raccourcis sans touche tant que vous ne leur en donnez pas, dans Préférences › Raccourcis › Autres › Dispositions. Les favorites viennent en premier dans la fenêtre et dans Monde › Dispositions, et ce sont elles que parcourent les raccourcis Disposition favorite suivante et précédente.
+fs-layouts-quick-intro = Trois façons de changer de disposition sans ouvrir les Préférences. La fenêtre Dispositions et espaces de travail (Monde › Dispositions › Dispositions et espaces de travail…) : tapez une partie d'un nom et appuyez sur Entrée. Deux boutons de barre, à trouver dans Boutons de la barre… : « Dispositions et espaces de travail » ouvre cette fenêtre, « Changer de disposition » passe en un clic de l'une des deux dispositions choisies ci-dessous à l'autre. Et cinq raccourcis sans touche tant que vous ne leur en donnez pas, dans Préférences › Raccourcis › Autres › Dispositions. Les favoris viennent en premier dans la fenêtre et dans Monde › Dispositions ; les dispositions favorites sont celles que parcourent les raccourcis Disposition favorite suivante et précédente.
 fs-layouts-toggle-first = Première disposition
 fs-layouts-toggle-second = Seconde disposition
 fs-layouts-toggle-help = Les deux dispositions entre lesquelles passent le bouton de barre « Changer de disposition » et son raccourci, par exemple « 2 écrans » et « 1 écran » : la seconde quand la première est en service, la première sinon.
 fs-layouts-toggle-none = Non choisie
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
-fs-switcher-title = Dispositions
-fs-switcher-help = Tapez une partie du nom d'une disposition : la liste garde celles qui la contiennent, les favorites en premier. Haut et Bas choisissent, Entrée applique la disposition choisie et ferme cette fenêtre, Échap la ferme. Un clic sur une étoile fait d'une disposition une favorite. L'image montre ce que donnerait la disposition choisie sur les écrans branchés maintenant. Mettre à jour enregistre l'arrangement actuel dans la disposition en service ; Enregistrer une nouvelle… le garde sous un autre nom.
-fs-switcher-hint = Tapez le nom d'une disposition, puis Entrée
+fs-switcher-title = Dispositions et espaces de travail
+fs-switcher-help = Tapez une partie d'un nom : la liste garde les espaces de travail et les dispositions qui la contiennent, les favoris en premier. Haut et Bas choisissent, Entrée applique l'entrée choisie et ferme cette fenêtre, Échap la ferme. Un clic sur une étoile en fait un favori. Une disposition dit où vont les choses : l'image montre ce qu'elle donnerait sur les écrans branchés maintenant. Un espace de travail dit quelles fenêtres sont ouvertes : l'appliquer les ouvre et ferme les autres, sur sa disposition s'il en nomme une. Mettre à jour enregistre l'arrangement actuel dans la disposition en service, ou les fenêtres ouvertes maintenant dans l'espace de travail en service ; Enregistrer une nouvelle… les garde sous un autre nom.
+fs-switcher-hint = Tapez un nom, puis Entrée
 fs-switcher-favorites = Favorites
-fs-switcher-layouts = Autres dispositions
+fs-switcher-layouts = Dispositions
 fs-switcher-star = Ajouter aux favorites
 fs-switcher-unstar = Retirer des favorites
-fs-switcher-empty = Aucune disposition enregistrée. Arrangez le monde et vos fenêtres comme vous les aimez, puis choisissez Enregistrer une nouvelle….
-fs-switcher-no-match = Aucune disposition n'a cela dans son nom.
+fs-switcher-empty = Rien d'enregistré pour l'instant. Arrangez le monde et vos fenêtres comme vous les aimez, puis choisissez Enregistrer une nouvelle….
+fs-switcher-no-match = Aucune disposition ni aucun espace de travail n'a cela dans son nom.
 fs-switcher-picture-help = Ce que donnerait cette disposition sur les écrans branchés maintenant : la fenêtre du viewer (encadrée), le monde (éclairé) et les fenêtres que la disposition place. Un écran de la disposition qui n'est pas branché est en pointillés.
 fs-switcher-note-missing = { $count ->
     [one] { $count } écran de cette disposition n'est pas branché.
@@ -1648,17 +1648,65 @@ fs-switcher-note-fitted = { $count ->
 fs-switcher-update = Mettre à jour « { $name } »
 fs-switcher-update-help = Enregistre l'arrangement actuel dans la disposition en service, pour les parties qu'elle contient. Demande d'abord.
 fs-switcher-save-new = Enregistrer une nouvelle…
-fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions, modifier la fenêtre du viewer d'une disposition, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Disposition › Dispositions.
+fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions et les espaces de travail, modifier la fenêtre du viewer d'une disposition ou les fenêtres d'un espace de travail, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Disposition › Dispositions et espaces de travail.
 fs-switcher-keys = Haut et Bas choisissent, Entrée applique et ferme, Échap ferme.
-fs-switcher-command = Dispositions
+fs-switcher-command = Dispositions et espaces de travail
 fs-switcher-toggle-command = Changer de disposition
 fs-switcher-toggle-to = Passer à la disposition « { $name } »
-fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions (un clic l'ouvre).
+fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions et espaces de travail (un clic l'ouvre).
 fs-keys-section = Dispositions
-fs-keys-layout-switcher = Fenêtre Dispositions
+fs-keys-layout-switcher = Fenêtre Dispositions et espaces de travail
 fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
 fs-keys-next-favorite = Disposition favorite suivante
 fs-keys-previous-favorite = Disposition favorite précédente
+
+# Folderstorm: workspaces (folderstorm/workspaces/workspace.rs, checkpoint 6)
+fs-switcher-workspaces = Espaces de travail
+fs-workspaces-one = Espace de travail
+fs-workspaces-closes = L'appliquer ferme les autres fenêtres. Conversations reste comme elle est.
+fs-workspaces-save-layout = Disposition
+fs-workspaces-save-workspace = Espace de travail
+fs-workspaces-name-hint = Nom, par exemple Tri
+fs-workspaces-with-layout = Toujours utiliser la disposition « { $name } » avec lui
+fs-workspaces-with-no-layout = Toujours utiliser la disposition en service avec lui (aucune n'est en service)
+fs-workspaces-save-help = Enregistre sous un nouveau nom quelles fenêtres sont ouvertes maintenant. Appliquer l'espace de travail les ouvre et ferme les autres, là où la disposition en service les place ; cochez la case pour qu'il applique aussi la disposition en service maintenant. Il ne contient jamais ce qu'une fenêtre affiche.
+fs-workspaces-save-new = Enregistrer comme nouvel espace de travail
+fs-workspaces-save = Enregistrer l'espace
+fs-workspaces-ask-update = Remplacer les fenêtres de l'espace de travail « { $name } » par celles ouvertes maintenant ?
+fs-workspaces-ask-delete = Supprimer l'espace de travail « { $name } » ?
+fs-workspaces-update-help = Enregistre dans l'espace de travail les fenêtres ouvertes maintenant. Son choix de disposition est gardé. Demande d'abord.
+fs-workspaces-error-empty = Donnez un nom à l'espace de travail.
+fs-workspaces-error-taken = Un autre espace de travail porte déjà ce nom.
+fs-workspaces-error-full = Il y a déjà { $count } espaces de travail : supprimez-en un d'abord.
+fs-workspaces-error-invalid = L'espace de travail n'a pas pu être enregistré. Réessayez dans un instant.
+fs-workspaces-holds-layout = Utilise la disposition « { $name } ».
+fs-workspaces-holds-no-layout = Garde la disposition en service.
+fs-workspaces-holds-none = N'ouvre aucune fenêtre.
+fs-workspaces-holds-opens = Ouvre : { $names }.
+fs-workspaces-applied = Espace de travail « { $name } » appliqué.
+fs-workspaces-applied-no-layout = Sa disposition ne peut pas être utilisée : la disposition en service a été gardée.
+fs-workspaces-applied-opened = { $count ->
+    [one] { $count } fenêtre ouverte.
+   *[other] { $count } fenêtres ouvertes.
+    }
+fs-workspaces-applied-closed = { $count ->
+    [one] { $count } fenêtre fermée.
+   *[other] { $count } fenêtres fermées.
+    }
+fs-workspaces-applied-blocked = { $count ->
+    [one] { $count } fenêtre ne peut pas être ouverte pour l'instant et est restée fermée.
+   *[other] { $count } fenêtres ne peuvent pas être ouvertes pour l'instant et sont restées fermées.
+    }
+fs-workspaces-group = Espaces de travail enregistrés
+fs-workspaces-intro = Un espace de travail retient quelles fenêtres sont ouvertes, pour une activité : « Tri » avec les deux fenêtres d'inventaire, « Exploration » avec les cartes. L'appliquer ouvre ces fenêtres et ferme les autres ; où elles vont est l'affaire de la disposition, donc un espace de travail fonctionne sur n'importe quelle disposition. Il peut aussi nommer une disposition à appliquer avec lui. Conversations n'est jamais ouverte ni fermée, et rien de ce qu'une fenêtre affiche n'est enregistré.
+fs-workspaces-list = Espaces de travail
+fs-workspaces-list-help = Cliquez sur un espace de travail pour le sélectionner, puis Appliquer ; un double clic l'applique tout de suite. L'appliquer ouvre les fenêtres cochées ci-dessous et ferme les autres, après sa disposition s'il en a une. Mettre à jour y enregistre les fenêtres ouvertes maintenant.
+fs-workspaces-empty = Aucun espace de travail enregistré. Ouvrez les fenêtres voulues pour une activité, puis enregistrez-les ci-dessous.
+fs-workspaces-newer-help = Cet espace de travail a été créé par une version plus récente du viewer. Il est gardé tel quel et ne peut être ni appliqué ni modifié ici ; il peut seulement être supprimé.
+fs-workspaces-invalid-help = Cette entrée du fichier de réglages n'est pas un espace de travail que cette version sait lire. Elle est gardée telle quelle et ne peut être ni appliquée ni modifiée ici ; elle peut seulement être supprimée.
+fs-workspaces-layout = Disposition appliquée avec lui
+fs-workspaces-layout-keep = Garder la disposition en service
+fs-workspaces-windows = Fenêtres qu'il ouvre (les autres sont fermées ; Conversations reste comme elle est) :
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message

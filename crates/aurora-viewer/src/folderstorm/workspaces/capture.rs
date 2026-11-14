@@ -74,6 +74,19 @@ fn is_open(ctx: &egui::Context, id: &str) -> bool {
     ctx.data(|d| d.get_temp::<Open>(open_id())).is_some_and(|open| open.contains(id))
 }
 
+/// The windows open now that a workspace opens and closes
+/// (`super::workspace::switched`), by id.
+pub fn open(ctx: &egui::Context) -> BTreeSet<String> {
+    ctx.data(|d| d.get_temp::<Open>(open_id()))
+        .map(|open| {
+            open.iter()
+                .filter(|id| super::workspace::switched(id))
+                .map(|id| (*id).to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn expanded_size(ctx: &egui::Context, id: egui::Id) -> Option<Vec2> {
     ctx.data_mut(|d| d.get_persisted::<Vec2>(id.with(EXPANDED_SIZE)))
 }

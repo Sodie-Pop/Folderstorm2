@@ -41,6 +41,7 @@ use super::switcher;
 use super::viewer;
 use super::window::{Command, Hold, Seen};
 use super::windows::{self, Kind, Window};
+use super::workspace::{self, Workspace};
 use crate::folderstorm::viewport::ViewportSettings;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -93,6 +94,9 @@ pub trait Shell {
     /// (RLVa hides it, or the viewer's settings no longer have that
     /// window): it is left closed and the apply says so.
     fn open(&mut self, ctx: &egui::Context, window: &Window) -> bool;
+    /// Closes `window`, which is open: a workspace's business (never a
+    /// layout's).
+    fn close(&mut self, ctx: &egui::Context, window: &Window);
 }
 
 /// A viewer that opens nothing and says every window is closed: the tests
@@ -109,6 +113,8 @@ impl Shell for NoShell {
     fn open(&mut self, _: &egui::Context, _: &Window) -> bool {
         false
     }
+
+    fn close(&mut self, _: &egui::Context, _: &Window) {}
 }
 
 /// The parts of a layout.
@@ -146,20 +152,32 @@ struct Arrangement {
     windows: Option<Placements>,
     active: Option<String>,
     modified: bool,
+    /// The windows open then and the workspace in use then: kept only when
+    /// the apply this undoes is a workspace's (it opens and closes).
+    shown: Option<(BTreeSet<String>, Option<String>)>,
 }
 
 /// What an apply did, for one line under the list.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Report {
-    /// The layout applied; None for *Previous arrangement*.
+    /// The layout applied; None for *Previous arrangement*, and for a
+    /// workspace that keeps the layout in use.
     pub name: Option<String>,
+    /// The workspace applied, if one was.
+    pub workspace: Option<String>,
+    /// Open windows the workspace does not list: closed.
+    pub closed: usize,
+    /// The workspace names a layout that cannot be used: the layout in use
+    /// was kept.
+    pub no_layout: bool,
     /// Windows of the layout that were given a place.
     pub windows: usize,
     /// Of those, the ones whose saved place did not fit as it was.
     pub fitted: usize,
     /// Windows of the layout this version does not know: left alone.
     pub unknown: usize,
-    /// Closed windows the layout was saved with open: opened.
+    /// Closed windows the layout was saved with open, or that the
+    /// workspace lists: opened.
     pub opened: usize,
     /// Of the same, the ones that could not be opened now: left closed.
     pub blocked: usize,
@@ -203,6 +221,16 @@ struct Queued {
     frame: u64,
 }
 
+/// The windows a workspace has open, until they are opened and the others
+/// closed: with its layout's windows when it has one, in the next frame
+/// otherwise.
+#[derive(Clone, Debug)]
+struct QueuedOpen {
+    open: BTreeSet<String>,
+    /// The frame the apply was asked in: done in a later one.
+    frame: u64,
+}
+
 /// Where a window was asked to go, until it is there.
 #[derive(Clone, Copy, Debug)]
 struct Target {
@@ -219,6 +247,7 @@ struct Session {
     started: bool,
     previous: Option<Arrangement>,
     queued: Option<Queued>,
+    queued_open: Option<QueuedOpen>,
     /// Windows given a request and not yet seen at their place.
     targets: BTreeMap<String, Target>,
     /// The frame from which the windows have settled.
@@ -375,6 +404,7 @@ fn arrangement(ctx: &egui::Context, live: &Live, window: bool) -> Arrangement {
         windows: capture::windows(ctx),
         active: live.store.active_layout.clone(),
         modified: live.store.modified,
+        shown: None,
     }
 }
 
@@ -433,6 +463,7 @@ fn start(
             windows: w.clone(),
             frame: now,
         });
+        s.queued_open = None;
         s.settle = Some(now + SETTLE);
         s.baseline = None;
         s.notice = None;
@@ -465,9 +496,19 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
     let Some(kept) = session(ctx, |s| s.previous.take()) else {
         return false;
     };
-    let before = arrangement(ctx, live, kept.window.is_some());
+    let mut before = arrangement(ctx, live, kept.window.is_some());
+    // a workspace's apply is undone with its windows, and comes back with them
+    before.shown = kept
+        .shown
+        .is_some()
+        .then(|| (capture::open(ctx), live.store.active_workspace.clone()));
     let window = kept.window.as_ref().map(|(frame, monitors, _)| (frame, monitors.as_slice()));
     let (report, held) = start(ctx, live, window, Some(&kept.world), kept.windows.as_ref());
+    if let Some((open, workspace)) = kept.shown {
+        let frame = ctx.cumulative_frame_nr();
+        session(ctx, |s| s.queued_open = Some(QueuedOpen { open, frame }));
+        live.store.active_workspace = workspace.filter(|name| live.store.find_workspace(name).is_some());
+    }
     // the marks of then, if that layout is still in the list
     let active = kept.active.filter(|name| live.store.find(name).is_some());
     let modified = kept.modified && active.is_some();
@@ -487,6 +528,73 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
         s.report = Some(report);
     });
     true
+}
+
+/// Applies the workspace at `index` of the workspaces: its layout when it
+/// names one that can be used, exactly as [`apply`] does; then, in the
+/// frame the layout's windows are placed (the next one without a layout),
+/// the windows it lists are opened and the other windows a workspace
+/// switches are closed ([`frame`]). The arrangement it replaces, with the
+/// windows open now, is kept for [`previous`].
+pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<Report, StoreError> {
+    let workspace: Workspace = live.store.workspace(index).ok_or(StoreError::Missing)?.clone();
+    workspace.check().map_err(|_| StoreError::Invalid)?;
+    let layout = workspace.layout.as_deref().and_then(|name| live.store.find(name)).map(|(index, _)| index);
+    let moves_window = layout
+        .and_then(|index| live.store.layout(index))
+        .is_some_and(|layout| layout.window.is_some());
+    let mut before = arrangement(ctx, live, moves_window);
+    before.shown = Some((capture::open(ctx), live.store.active_workspace.clone()));
+    let applied = layout.and_then(|index| apply(ctx, live, index).ok());
+    let mut report = Report {
+        // (named, and not usable: a newer or damaged entry of the list)
+        no_layout: workspace.layout.is_some() && applied.is_none(),
+        ..applied.unwrap_or_default()
+    };
+    report.workspace = Some(workspace.name.clone());
+    live.store.active_workspace = Some(workspace.name);
+    let frame = ctx.cumulative_frame_nr();
+    session(ctx, |s| {
+        s.queued_open = Some(QueuedOpen {
+            open: workspace.open,
+            frame,
+        });
+        s.previous = Some(before);
+        s.report = Some(report.clone());
+        s.notice = None;
+    });
+    Ok(report)
+}
+
+/// *Save as a new workspace*: the windows open now under `name`, with the
+/// layout in use when `with_layout`; it becomes the workspace in use.
+pub fn save_new_workspace(ctx: &egui::Context, live: &mut Live, name: &str, with_layout: bool) -> Result<usize, StoreError> {
+    let layout = live.store.active().filter(|_| with_layout).map(|layout| layout.name.clone());
+    let index = live
+        .store
+        .add_workspace(Workspace::new(name, layout.as_deref(), capture::open(ctx)))?;
+    session(ctx, |s| s.report = None);
+    Ok(index)
+}
+
+/// *Update* of a workspace: the one at `index` takes the windows open now
+/// and becomes the workspace in use.
+pub fn update_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<(), StoreError> {
+    live.store.update_workspace(index, &capture::open(ctx))?;
+    session(ctx, |s| s.report = None);
+    Ok(())
+}
+
+/// Whether the workspace in use no longer describes what is open: the
+/// windows open now (`open`, as [`capture::open`] gives them) are not its
+/// list. Worked out when asked; nothing is stored.
+pub fn workspace_modified(store: &Store, open: &BTreeSet<String>) -> bool {
+    store.active_workspace().is_some_and(|workspace| !workspace.matches(open))
+}
+
+/// The windows open now that a workspace switches.
+pub fn open_now(ctx: &egui::Context) -> BTreeSet<String> {
+    capture::open(ctx)
 }
 
 /// Whether [`previous`] has an arrangement to bring back.
@@ -677,6 +785,11 @@ fn apply_asked(ctx: &egui::Context, live: &mut Live, index: Option<usize>) -> bo
     index.is_some_and(|index| apply(ctx, live, index).is_ok())
 }
 
+/// Where the usable workspace `name` is in its list.
+fn workspace_at(store: &Store, name: &str) -> Option<usize> {
+    store.find_workspace(name).map(|(index, _)| index)
+}
+
 /// Runs what the menu, the card, the switcher, the toolbar's buttons and
 /// the keyboard asked since the last frame.
 fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
@@ -720,6 +833,24 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
             }
             Request::SaveNew(name, parts) => {
                 let done = save_new(ctx, live, &name, parts);
+                outcome.save |= done.is_ok();
+                refused = done.err();
+            }
+            Request::ApplyWorkspace(name) => {
+                let index = workspace_at(live.store, &name);
+                outcome.save |= index.is_some_and(|index| apply_workspace(ctx, live, index).is_ok());
+            }
+            Request::StarWorkspace(name, on) => outcome.save |= live.store.set_favorite_workspace(&name, on),
+            Request::UpdateWorkspace(name) => {
+                let done = match workspace_at(live.store, &name) {
+                    Some(index) => update_workspace(ctx, live, index),
+                    None => Err(StoreError::Missing),
+                };
+                outcome.save |= done.is_ok();
+                refused = done.err();
+            }
+            Request::SaveWorkspace(name, with_layout) => {
+                let done = save_new_workspace(ctx, live, &name, with_layout);
                 outcome.save |= done.is_ok();
                 refused = done.err();
             }
@@ -774,7 +905,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     }
     session(ctx, |slot| *slot = s);
     // the switcher draws a copy of the store, kept up while it is open
-    switcher::publish(ctx, live.store, live.world);
+    switcher::publish(ctx, live.store, live.world, &capture::open(ctx));
     // (with the session back in its place: an apply reads and writes it)
     if let Some(index) = apply_now
         && apply(ctx, live, index).is_ok()
@@ -809,29 +940,58 @@ fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &R
     // (the windows wait for the viewer window: they are fitted to the
     // interface it gives)
     let viewer_busy = s.viewer.busy();
-    if let Some(queued) = s.queued.take_if(|queued| queued.frame < now && !viewer_busy) {
-        s.targets.clear();
-        let (mut fitted, mut opened, mut blocked) = (0, 0, 0);
-        for (id, place) in &queued.windows.windows {
-            if let Some(window) = windows::find(id) {
-                // open when the layout was saved, closed now: opened the
-                // app's way, before its place is asked (opening a window
-                // expands it; the request minimizes it again if saved so)
-                if place.open && !shell.is_open(window) {
-                    match shell.open(ctx, window) {
+    let layout = s.queued.take_if(|queued| queued.frame < now && !viewer_busy);
+    // a workspace's windows: with its layout's, or alone
+    let shown = match (&s.queued, viewer_busy) {
+        (None, false) => s.queued_open.take_if(|queued| queued.frame < now),
+        _ => None,
+    };
+    if layout.is_some() || shown.is_some() {
+        let (mut fitted, mut opened, mut blocked, mut closed) = (0, 0, 0, 0);
+        // the workspace's list first: what it has open is opened the app's
+        // way, the other windows it switches are closed
+        if let Some(shown) = &shown {
+            for window in workspace::switchable() {
+                match (shown.open.contains(window.id), shell.is_open(window)) {
+                    (true, false) => match shell.open(ctx, window) {
                         true => opened += 1,
                         false => blocked += 1,
+                    },
+                    (false, true) => {
+                        shell.close(ctx, window);
+                        closed += 1;
                     }
+                    _ => {}
                 }
-                let place = fit(place, &queued.windows.frame, &room.frame);
-                fitted += usize::from(place.changed);
-                request(ctx, s, window, room, &place);
+            }
+        }
+        if let Some(queued) = &layout {
+            s.targets.clear();
+            for (id, place) in &queued.windows.windows {
+                if let Some(window) = windows::find(id) {
+                    // open when the layout was saved, closed now: opened the
+                    // app's way, before its place is asked (opening a window
+                    // expands it; the request minimizes it again if saved
+                    // so). With a workspace, its list has decided already.
+                    if shown.is_none() && place.open && !shell.is_open(window) {
+                        match shell.open(ctx, window) {
+                            true => opened += 1,
+                            false => blocked += 1,
+                        }
+                    }
+                    let place = fit(place, &queued.windows.frame, &room.frame);
+                    fitted += usize::from(place.changed);
+                    request(ctx, s, window, room, &place);
+                }
             }
         }
         if let Some(report) = &mut s.report {
-            report.fitted = fitted;
+            if layout.is_some() {
+                report.fitted = fitted;
+            }
             report.opened = opened;
             report.blocked = blocked;
+            report.closed = closed;
         }
         s.settle = Some(now + SETTLE);
         s.baseline = None;

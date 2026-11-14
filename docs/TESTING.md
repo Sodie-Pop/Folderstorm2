@@ -351,6 +351,20 @@ AURORA_DEMO=1 AURORA_DEMO_SWITCHER=1 AURORA_WINDOW_SIZE=3840,1080 \
 AURORA_DEMO=1 AURORA_DEMO_SWITCHER=toggle cargo run -p aurora-viewer -- --title "Test switcher toggle"
 ```
 
+**Workspaces (Folderstorm2).** `AURORA_DEMO_WORKSPACES=1` seeds the same as
+`AURORA_DEMO_SWITCHER=1` and two workspaces, both favorites: "Sorting"
+(Inventory, the additional Inventory window and People, with the layout
+"Single") and "Exploring" (mini-map, world map and Places, on whichever layout
+is in use), and opens the switcher (now *Layouts & workspaces*). Applying one
+opens its windows and closes the others; Conversations is left as it is.
+`apply` also applies "Sorting" after three seconds and "Exploring" three
+seconds later:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=1 cargo run -p aurora-viewer -- --title "Test workspaces"
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=apply cargo run -p aurora-viewer -- --title "Test workspaces apply"
+```
+
 Check that the field has the keyboard when the window opens; that typing
 keeps the layouts with those letters, favorites first; that Up and Down
 choose, Enter applies the chosen layout and closes the window, and Esc closes
@@ -6120,6 +6134,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|reopen\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself; `reopen` closes two windows then applies "Wide", which opens them. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
+| `AURORA_DEMO_WORKSPACES=1\|apply` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring" |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |

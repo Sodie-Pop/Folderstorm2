@@ -1,4 +1,4 @@
-//! Folderstorm: Preferences › Layout › Layouts
+//! Folderstorm: Preferences › Layout › Layouts & workspaces
 //! (`crate::folderstorm::workspaces`, FEATURES.md row 1.3). Folderstorm (C++)
 //! saved its bar placement as named profiles under Move & View › Layout:
 //! apply, rename, delete, Reset.
@@ -11,6 +11,9 @@
 //! toolbar's toggle (*Quick switch*). Like the rest of Preferences, everything
 //! applies at once; Update and Delete ask first, in the page. The rows
 //! edit no tracked setting: "Reset this page" never deletes a layout.
+//! The workspaces' groups are in [`workspaces_group`].
+
+mod workspaces_group;
 
 use super::super::cx::{Cx, Nothing};
 use crate::folderstorm::workspaces::apply::{self, Live, Parts};
@@ -174,6 +177,7 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 clicked && apply::reset_world(ui.ctx(), &mut Live::of(s))
             });
     });
+    workspaces_group::groups(cx);
     cx.group(tr!("fs-layouts-quick"), |cx| {
         cx.note(tr!("fs-layouts-quick-intro"));
         for (place, label) in [(0, tr!("fs-layouts-toggle-first")), (1, tr!("fs-layouts-toggle-second"))] {
@@ -399,7 +403,8 @@ fn list(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
         let waiting = s.folderstorm_workspaces.pending.len();
         if tab.went_back {
             muted(ui, p, tr!("fs-layouts-previous-done"));
-        } else if let Some(report) = apply::report(&ctx) {
+        } else if let Some(report) = apply::report(&ctx).filter(|report| report.workspace.is_none()) {
+            // (a workspace's is said under the workspaces)
             muted(ui, p, report_text(&report, waiting));
         }
     });
@@ -846,6 +851,8 @@ mod tests {
     use crate::ui::widgets::Floater;
     use crate::ui::widgets::elide_tests::{Frames, Text};
     use egui::Rect;
+
+    mod workspaces;
 
     /// Preferences on the Layouts tab, over a viewer with two windows open.
     struct Window {
