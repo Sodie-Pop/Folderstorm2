@@ -429,7 +429,7 @@ fn confirm_texts(published: Option<Context>) -> Vec<String> {
     let mut prefs = crate::imports::Preferences::default();
     let mut texts = Vec::new();
     for _ in 0..4 {
-        let output = ctx.run_ui(
+        let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 1000.0))),
                 ..Default::default()
@@ -439,6 +439,7 @@ fn confirm_texts(published: Option<Context>) -> Vec<String> {
                 crate::imports::ui::show(ui.ctx(), &theme.palette(), &mut imports, &mut prefs, &world, &Default::default());
             },
         );
+        output.textures_delta.clear();
         texts = output
             .shapes
             .iter()
