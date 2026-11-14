@@ -55,7 +55,6 @@ Needed before shipping any build. They also keep merges simple.
 | 2.7 | Outfit safety | Context-menu Wear (items) and Wear objects (folders) disabled by default (option to enable); folder Add To / Replace Current Outfit always ask (Cancel by default, no "don't ask again"). | check | `doc/inventory-outfit-safety.md` | P2 | ✅ #4: Wear and Wear objects greyed until enabled; Replace / Add always ask |
 | 2.8 | Restore previous look | After replacing the outfit with a folder, one action restores the look worn just before. | – | branch `codex/previous-look` | P2 | ✅ #8: Appearance ⚙ › Restore previous look |
 | 2.9 | Outfit Gallery thumbnail size | Slider for photo width, 80–256 px. | check | `doc/help.md` "Outfit Gallery" | P3 | ✅ #5 |
-| 2.10 | Landmark folders on the favorites bar | Group favorite landmarks in local folders on the favorites bar, with drag and drop. | check | branch `codex/landmark-folders` | P2 | ⬜ |
 | 2.11 | Folder-preserving bulk upload | Upload a folder of files and recreate its folder tree in Inventory. | check | branch `codex/sl-folder-upload` | P3 | ⬜ |
 | 2.12 | Safe link replacement | Replace links (e.g. after a re-delivery): create the new link first, only then move the old one; report each item's result. | – | `doc/plans/safe-link-replacement.md` | P3 | ⬜ |
 
