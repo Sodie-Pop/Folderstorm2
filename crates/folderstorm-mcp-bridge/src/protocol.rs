@@ -27,6 +27,9 @@ pub mod world;
 // Folderstorm: receipts, plans and operations (mcp-receipts.md)
 pub mod assistant;
 
+// Folderstorm: phase 3, part 4 (navigation), its own catalogue
+pub mod navigation;
+
 // Folderstorm: content editing (mcp-content.md)
 pub mod content;
 
@@ -61,6 +64,19 @@ pub struct Health {
     /// The login the viewer runs bound calls on now; None while logged out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_session: Option<String>,
+    /// Session routing (`sessions`): the viewer's `--profile`; None for
+    /// the main profile (and for a viewer older than session routing, which
+    /// only ever wrote its discovery file from the main profile).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Session routing: a session host manages this viewer.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub managed: bool,
+    /// Session routing: the name the viewer shows for its own avatar, only
+    /// while it is logged in and Read is Allow (names go to an assistant
+    /// only with Read; mcp-receipts.md, decision 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character: Option<String>,
 }
 
 impl Health {
@@ -112,6 +128,10 @@ pub enum ErrorCode {
     /// The running viewer does not implement this tool (it is older than
     /// the sidecar): nothing was sent.
     Unsupported,
+    /// Session routing: several viewers run and the sidecar was not told
+    /// which one to use (`viewer_select`, `--profile`): nothing was sent.
+    /// Made by the sidecar only; no viewer sends it.
+    TargetRequired,
     /// Folderstorm: a `client_request_id` already used with other
     /// arguments, or retired: nothing was run (receipts).
     Conflict,
@@ -133,7 +153,12 @@ impl ErrorCode {
             ErrorCode::BadRequest | ErrorCode::InvalidArguments | ErrorCode::UnknownTool | ErrorCode::Ambiguous => 400,
             ErrorCode::NotFound => 404,
             ErrorCode::TooLarge => 413,
-            ErrorCode::NotReady | ErrorCode::SessionChanged | ErrorCode::Conflict | ErrorCode::Stale | ErrorCode::Cancelled => 409,
+            ErrorCode::NotReady
+            | ErrorCode::SessionChanged
+            | ErrorCode::TargetRequired
+            | ErrorCode::Conflict
+            | ErrorCode::Stale
+            | ErrorCode::Cancelled => 409,
             ErrorCode::Unsupported => 501,
             ErrorCode::Busy | ErrorCode::Unavailable => 503,
             ErrorCode::Timeout => 504,
@@ -151,6 +176,8 @@ impl ErrorCode {
             // both came with login binding, as `features` itself did
             ErrorCode::SessionChanged => Some((binding::LOGIN_BINDING, ErrorCode::NotReady)),
             ErrorCode::Unsupported => Some((binding::LOGIN_BINDING, ErrorCode::UnknownTool)),
+            // (the sidecar's own: never on the wire from a viewer)
+            ErrorCode::TargetRequired => Some((binding::SESSIONS, ErrorCode::NotReady)),
             // Folderstorm: receipts (mcp-receipts.md, section 3)
             ErrorCode::Conflict => Some((binding::RECEIPTS, ErrorCode::InvalidArguments)),
             ErrorCode::Stale => Some((binding::PLANS, ErrorCode::NotAllowed)),
@@ -271,7 +298,21 @@ impl ToolSpec {
         {
             properties.insert(crate::receipts::CLIENT_REQUEST_ID.to_owned(), assistant::client_request_id_schema());
         }
+        // a teleport cannot be looked at afterwards: its id is required
+        if self.needs_client_request_id() {
+            match schema["required"].as_array_mut() {
+                Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
+                None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
+            }
+        }
         schema
+    }
+
+    /// Folderstorm: whether a call must give a `client_request_id`: a change
+    /// whose effect cannot be looked at afterwards (mcp-receipts.md,
+    /// decision 3), so that a retry after a lost answer is never sent twice.
+    pub fn needs_client_request_id(&self) -> bool {
+        navigation::needs_client_request_id(self.name)
     }
 }
 
@@ -279,7 +320,9 @@ impl ToolSpec {
 /// with the viewer's interface shows its windows, chat included. Never
 /// still refuses them.
 pub fn always_asks(tool: &str, arguments: &Value) -> bool {
-    tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true)
+    (tool == "camera_snapshot" && arguments["interface"].as_bool() == Some(true))
+        // Folderstorm: a teleport never happens without the user seeing where
+        || navigation::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -795,6 +838,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(inventory::INVENTORY_TOOLS)
         .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
         .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
+        .chain(navigation::NAVIGATION_TOOLS) // Folderstorm: navigation
         .chain(content::CONTENT_TOOLS) // Folderstorm: content editing
 }
 

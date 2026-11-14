@@ -154,6 +154,13 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-camera-hint"),
                     field!(local_assistant.permissions.camera),
                 ),
+                // Folderstorm: phase 3, part 4 (navigation)
+                (
+                    Class::Navigation,
+                    tr!("fs-mcp-navigation"),
+                    tr!("fs-mcp-navigation-hint"),
+                    field!(local_assistant.permissions.navigation),
+                ),
                 (
                     Class::Content,
                     tr!("fs-mcp-content"),

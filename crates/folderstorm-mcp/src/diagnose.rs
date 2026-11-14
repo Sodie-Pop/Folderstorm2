@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 /// The report and whether the check passed.
-pub fn run(dir: Option<&Path>, pid: Option<u32>) -> (Value, bool) {
+pub fn run(dir: Option<&Path>, scope: &connect::Scope) -> (Value, bool) {
     let mut report = json!({
         "ok": false,
         "product": folderstorm_brand::PRODUCT,
@@ -18,8 +18,14 @@ pub fn run(dir: Option<&Path>, pid: Option<u32>) -> (Value, bool) {
         "sidecar_capabilities": binding::capabilities(),
         "discovery_dir": dir.map(|d| d.display().to_string()),
     });
-    let (client, found_pid) = match connect::find(dir, pid, true) {
-        Ok(found) => (found.client, found.pid),
+    // (session routing: how many viewers answer, and which is checked)
+    let all = connect::candidates(dir, scope, true);
+    report["viewers"] = json!(all.as_ref().map_or(0, Vec::len));
+    let (client, found_pid) = match all.map(|mut all| all.swap_remove(0)) {
+        Ok(found) => {
+            report["profile"] = json!(connect::profile_of(&found.health));
+            (found.client, found.pid)
+        }
         Err(e) => {
             report["stage"] = json!(match e {
                 NotFound::NoFolder | NotFound::NoFile => "discovery",

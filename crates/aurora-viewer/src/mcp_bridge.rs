@@ -27,6 +27,10 @@
 //! Every change the desk takes gets a receipt (section 4): the desk keeps
 //! them for the login, Preferences shows them in Recent activity, and
 //! `assistant_operation_status` reads them back.
+//!
+//! Navigation (phase 3, part 4) is planned in [`navigation`]; the app starts
+//! the move or the teleport, and the desk's navigator follows it once per
+//! frame just before the autopilot runs ([`navigation_frame`]).
 
 pub mod ask;
 pub mod camera;
@@ -46,6 +50,9 @@ pub mod inventory_reads;
 pub mod journal;
 pub mod landmark;
 pub mod login;
+pub mod navigation; // Folderstorm: phase 3, part 4 (navigation)
+#[cfg(test)]
+mod navigation_tests;
 pub mod picture;
 pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
 pub mod setup;
@@ -93,6 +100,9 @@ struct Runtime {
     started: bool,
     /// `AURORA_DEMO_MCP=ask|camera`: the demo's own requests were made.
     demo_asked: bool,
+    /// Folderstorm: `AURORA_DEMO_MCP=navigation`'s step: 0 walking, 1 the
+    /// walk answered (the teleport goes), 2 teleporting, 3 done.
+    demo_step: u8,
     /// The demo's requests waiting for their answer, logged when it comes.
     demo_answers: Vec<(&'static str, Receiver<Result<serde_json::Value, ToolError>>)>,
     /// Folderstorm: `AURORA_DEMO_MCP=content`: the demo's reads, saved
@@ -198,16 +208,38 @@ pub fn set_session(settings: Option<LocalAssistant>) {
     with(|rt| rt.session = settings);
 }
 
-/// Where the discovery file goes: the settings folder in use.
+/// Where the discovery file goes: the main profile's settings folder,
+/// whatever this process's profile, so that the sidecar finds every
+/// character's viewer in one place (session routing,
+/// folderstorm/plans/mcp-routing.md, section 1). The pid in the file's name
+/// keeps them apart.
 pub fn discovery_dir() -> std::path::PathBuf {
-    crate::settings::config_dir()
+    crate::folderstorm_characters::profile::main_config_dir()
 }
 
-/// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`): the session asks before
-/// every change, and the demo makes requests of its own so that the dialog
-/// shows.
+/// Who this viewer is, for the sidecar (session routing): its profile,
+/// managed by a session host or not, and its avatar's name while logged in
+/// (the bridge gives the name only while Read is Allow).
+fn identity(view: &View) -> folderstorm_mcp_bridge::server::Identity {
+    folderstorm_mcp_bridge::server::Identity {
+        profile: crate::folderstorm_characters::profile::current().map(|p| p.shown().to_owned()),
+        managed: crate::cli::get().managed,
+        character: view.logged_in().then(|| view.world.own_name()).filter(|n| !n.is_empty()),
+    }
+}
+
+/// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`, `navigation`, `content`):
+/// the session asks before every change, and the demo makes requests of its
+/// own so that the dialog shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan" || v == "content")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera" || v == "plan" || v == "navigation" || v == "content")
+}
+
+/// Folderstorm: `AURORA_DEMO_MCP=navigation`: the demo walks the avatar 8 m
+/// east, then teleports it back near where it started (both asked), then
+/// logs `navigation_status`.
+fn demo_navigation() -> bool {
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "navigation")
 }
 
 /// `AURORA_DEMO_MCP=plan`: the demo previews a 3-entry move and executes
@@ -240,6 +272,9 @@ pub struct View<'a> {
     pub object_props: Vec<&'a HashMap<Uuid, aurora_net::build::ObjectProps>>,
     /// The Sound Explorer's history, for `world_audio_sources`.
     pub sounds: Option<&'a crate::scene::sounds::history::History>,
+    /// Folderstorm: what the viewer itself does with the avatar, for the
+    /// navigation tools.
+    pub navigation: navigation::Native,
     /// Folderstorm: the items open in the notecard window or the script
     /// editor, which content saves leave alone.
     pub content_open: HashSet<Uuid>,
@@ -266,6 +301,12 @@ impl View<'_> {
             outfit_points: world.outfit_attachment_points(),
             stage: self.stage,
             viewer_session: None,
+            identity: Default::default(),
+            nav: navigation::Stage {
+                world: Some(world),
+                in_world: self.stage.in_world,
+                native: self.navigation,
+            },
             content: content::Limits {
                 open: self.content_open.clone(),
                 ..content::Limits::of(&world.rlva)
@@ -358,6 +399,16 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         }
         // before any call: the desk decides again with what is in force
         running.bridge.set_login(generation, view.logged_in());
+        let me = identity(view);
+        running.bridge.set_identity(me.clone());
+        // (viewer_status names the character only while Read is Allow, as
+        // the health does)
+        let me = folderstorm_mcp_bridge::server::Identity {
+            character: me
+                .character
+                .filter(|_| wanted.permissions.check(folderstorm_mcp_bridge::Class::Read).is_ok()),
+            ..me
+        };
         let session = running.bridge.viewer_session();
         rt.desk.set_login(generation, session.clone());
         rt.desk.set_permissions(wanted.permissions);
@@ -366,6 +417,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         let mut cx = None;
         let context = || tools::Ctx {
             viewer_session: session.clone(),
+            identity: me.clone(),
             ..view.context()
         };
         // the studio's waiting calls follow the desk's rules too
@@ -386,7 +438,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             rt.desk.take(call, cx, now);
         }
         let demo_ready = !view.world.inventory.root.is_nil()
-            && (!demo_camera() || view.stage.in_world)
+            && (!(demo_camera() || demo_navigation()) || view.stage.in_world)
             && (!content::demo::wanted() || view.world.inventory.items.contains_key(&content::demo::NOTES));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
@@ -398,6 +450,13 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                         serde_json::json!({"source": "world", "width": 512, "height": 512, "save": true}),
                     ),
                 ]
+            } else if demo_navigation() {
+                // Folderstorm: 8 m east, on the ground
+                let p = view.world.agent.position;
+                vec![(
+                    folderstorm_mcp_bridge::protocol::navigation::MOVE_TO,
+                    serde_json::json!({"position": [p.x + 8.0, p.y, p.z]}),
+                )]
             } else if demo_plan() {
                 // Folderstorm: a plan, previewed now (a read answers at once)
                 let ids: Vec<String> = [8100u128, 8102, 8103].iter().map(|n| Uuid::from_u128(*n).to_string()).collect();
@@ -430,6 +489,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 rt.demo_answers.push((tool, answer));
             }
         }
+        let mut answered = Vec::new();
         // Folderstorm: a content read answered: the demo saves an edit
         for read in std::mem::take(&mut rt.demo_reads) {
             match read.try_recv() {
@@ -456,15 +516,70 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
             Ok(result) => {
                 log_demo_answer(tool, &result);
+                answered.push(*tool);
                 false
             }
             Err(TryRecvError::Empty) => true,
             Err(TryRecvError::Disconnected) => false,
         });
+        // Folderstorm: the navigation demo's next steps
+        if view.demo && demo_navigation() {
+            use folderstorm_mcp_bridge::protocol::navigation::{MOVE_TO, STATUS, TELEPORT};
+            let cx = cx.get_or_insert_with(context);
+            if rt.demo_step == 0 && answered.contains(&MOVE_TO) {
+                rt.demo_step = 1;
+                if let Some(here) = view.world.agent_global() {
+                    let to = here + glam::DVec3::new(-14.0, 10.0, 0.0);
+                    let arguments = serde_json::json!({"global_position": [to.x, to.y, to.z], "client_request_id": "demo-teleport-1"});
+                    let (call, answer) = Pending::detached(TELEPORT, arguments, true, Some("Demo assistant"));
+                    rt.desk.take(call, cx, now);
+                    rt.demo_answers.push((TELEPORT, answer));
+                    rt.demo_step = 2;
+                }
+            } else if rt.demo_step == 2 && answered.contains(&TELEPORT) {
+                rt.demo_step = 3;
+                let (call, answer) = Pending::detached(STATUS, serde_json::json!({}), false, Some("Demo assistant"));
+                rt.desk.take(call, cx, now);
+                if let Ok(result) = answer.try_recv() {
+                    log_demo_answer(STATUS, &result);
+                }
+            }
+        }
         rt.studio.tick(&view.camera, now);
         rt.desk.tick_reads(view.world, now);
         rt.desk.tick(&view.bake(), now)
     })
+}
+
+/// Folderstorm (session routing): the Ask dialog's open question, for a
+/// managed viewer's Attention list, so that the host's inbox shows it while
+/// this character is in the background: its number, the program's name and
+/// what it asks. None when nothing is asked.
+pub fn open_question() -> Option<desk::Question> {
+    with(|rt| rt.desk.question(Instant::now()))
+}
+
+/// Folderstorm: once per frame, just before the autopilot runs: the
+/// assistant's move or teleport under way is followed from what the frame
+/// shows; returns what the app does now (phase 3, part 4).
+pub fn navigation_frame(frame: &navigation::Frame) -> Vec<navigation::Act> {
+    with(|rt| rt.desk.navigate(frame, Instant::now()))
+}
+
+/// Folderstorm: the app started the assistant's move with autopilot `pilot`.
+pub fn navigation_moving(call: Pending, mv: navigation::Move, pilot: navigation::PilotId) {
+    with(|rt| rt.desk.start_move(call, mv, pilot, Instant::now()));
+}
+
+/// Folderstorm: the app submitted the assistant's teleport.
+pub fn navigation_teleporting(call: Pending, teleport: navigation::Teleport) {
+    with(|rt| rt.desk.start_teleport(call, teleport, Instant::now()));
+}
+
+/// Folderstorm: how long before the assistant may submit a teleport (None:
+/// one is under way).
+pub fn teleport_wait() -> Option<std::time::Duration> {
+    with(|rt| rt.desk.teleport_wait(Instant::now()))
 }
 
 /// Folderstorm: Preferences' Stop: the operation is cancelled if it was not
@@ -573,6 +688,11 @@ pub fn sent(request: Option<Uuid>, failure: Option<String>) {
 /// Every inventory and outfit answer of the server passes here first, so
 /// that a waiting change learns its outcome.
 pub fn observe(event: &aurora_net::NetEvent) {
+    // Folderstorm: the simulator's reason, for the assistant's teleport
+    if let aurora_net::NetEvent::TeleportFailed { reason } = event {
+        with(|rt| rt.desk.teleport_failed(reason));
+        return;
+    }
     if let aurora_net::NetEvent::InventoryCreated(item) = event {
         with(|rt| {
             if rt.desk.created(item) {

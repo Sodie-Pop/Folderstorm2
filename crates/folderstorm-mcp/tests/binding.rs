@@ -174,6 +174,8 @@ fn every_tool_is_listed_whatever_the_viewer() {
     assert_eq!(
         a["result"]["tools"].as_array().expect("tools").len(),
         folderstorm_mcp_bridge::protocol::all().count()
+            + folderstorm_mcp::routing::LOCAL_TOOLS.len()
+            + folderstorm_mcp_bridge::controller::HOST_TOOLS.len()
     );
 }
 
@@ -264,9 +266,11 @@ fn an_older_viewer_without_capabilities_is_called_unbound() {
     assert_eq!(v.pinned(), None, "an older viewer has no login to pin");
     let calls = old.calls();
     assert_eq!(calls.len(), 2);
+    let mut features = folderstorm_mcp_bridge::binding::capabilities();
+    features.extend(folderstorm_mcp_bridge::controller::capabilities());
     for call in &calls {
         assert!(call.get("session").is_none(), "{call}");
-        assert_eq!(call["features"], json!(folderstorm_mcp_bridge::binding::capabilities()));
+        assert_eq!(call["features"], json!(features));
     }
 }
 

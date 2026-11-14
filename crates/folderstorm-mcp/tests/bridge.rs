@@ -110,13 +110,13 @@ fn an_assistant_reaches_the_viewer_through_the_sidecar() {
 #[test]
 fn diagnose_reports_without_the_token() {
     let dir = tempfile::tempdir().expect("temp dir");
-    let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), None);
+    let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), &folderstorm_mcp::connect::Scope::Any);
     assert!(!ok);
     assert_eq!(report["stage"], "discovery");
 
     let (bridge, calls) = start(dir.path(), 777);
     let viewer = fake_viewer(calls);
-    let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), Some(777));
+    let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), &folderstorm_mcp::connect::Scope::Pid(777));
     assert!(ok, "{report}");
     assert_eq!(report["stage"], "done");
     assert_eq!(report["port"], bridge.port());
@@ -127,7 +127,7 @@ fn diagnose_reports_without_the_token() {
     assert_eq!(report["login_bound"], false, "the fake viewer reports no login");
     assert!(!report.to_string().contains(bridge.token().secret()));
     assert!(bridge.activity().is_empty(), "a probe is not an assistant's activity");
-    let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), Some(778));
+    let (report, ok) = folderstorm_mcp::diagnose::run(Some(dir.path()), &folderstorm_mcp::connect::Scope::Pid(778));
     assert!(!ok);
     assert_eq!(report["stage"], "discovery");
     bridge.stop();
@@ -146,10 +146,13 @@ fn a_stale_file_is_skipped() {
         std::fs::write(&path, kept).expect("rewritten");
         path
     };
-    assert!(matches!(find(Some(dir.path()), None, false), Err(NotFound::NoAnswer)));
+    assert!(matches!(
+        find(Some(dir.path()), &folderstorm_mcp::connect::Scope::Any, false),
+        Err(NotFound::NoAnswer)
+    ));
     let (bridge, calls) = start(dir.path(), 2);
     let viewer = fake_viewer(calls);
-    let found = find(Some(dir.path()), None, false).expect("the live viewer");
+    let found = find(Some(dir.path()), &folderstorm_mcp::connect::Scope::Any, false).expect("the live viewer");
     assert_eq!(found.pid, 2);
     assert_eq!(found.health.capabilities, Some(folderstorm_mcp_bridge::binding::capabilities()));
     assert_eq!(discovery::find(dir.path(), None).len(), 2);

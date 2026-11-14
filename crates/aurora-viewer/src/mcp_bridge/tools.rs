@@ -54,6 +54,11 @@ pub struct Ctx<'a> {
     /// The login's `viewer_session` (None while logged out), which
     /// `viewer_status` gives.
     pub viewer_session: Option<String>,
+    /// Session routing: the profile, managed or not, and the character's
+    /// name (only while Read is Allow), which `viewer_status` gives.
+    pub identity: folderstorm_mcp_bridge::server::Identity,
+    /// Folderstorm: what the navigation tools read (phase 3, part 4).
+    pub nav: super::navigation::Stage<'a>,
     /// Folderstorm: RLVa's restrictions on notecards and scripts, and the
     /// editors open now (content editing).
     pub content: super::content::Limits,
@@ -126,6 +131,10 @@ fn status(cx: &Ctx) -> Value {
         // (folderstorm/plans/mcp-receipts.md, sections 2 and 3)
         "viewer_session": cx.viewer_session,
         "capabilities": folderstorm_mcp_bridge::binding::capabilities(),
+        // which character this is (folderstorm/plans/mcp-routing.md)
+        "profile": cx.identity.profile.as_deref().unwrap_or("main"),
+        "managed": cx.identity.managed,
+        "character": cx.identity.character,
         "inventory": {
             "usable": usable && !cx.inventory_locked,
             "locked_by_rlv": cx.inventory_locked,

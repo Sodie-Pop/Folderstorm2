@@ -37,12 +37,15 @@ pub enum Section {
     Hotkeys,
     /// Files, windows, diagnostics, credits.
     Advanced,
+    /// The MCP controller: the host's own assistant access
+    /// (folderstorm/plans/mcp-routing.md).
+    Controller,
     /// Where the viewer's own updates and support settings are.
     Updates,
 }
 
 impl Section {
-    pub const ALL: [Section; 8] = [
+    pub const ALL: [Section; 9] = [
         Section::Toolbar,
         Section::Characters,
         Section::Chat,
@@ -50,6 +53,7 @@ impl Section {
         Section::Monitors,
         Section::Hotkeys,
         Section::Advanced,
+        Section::Controller,
         Section::Updates,
     ];
 
@@ -63,6 +67,7 @@ impl Section {
             Section::Monitors => "monitors",
             Section::Hotkeys => "hotkeys",
             Section::Advanced => "advanced",
+            Section::Controller => "controller",
             Section::Updates => "updates",
         }
     }
@@ -79,6 +84,7 @@ impl Section {
             "monitor" => Section::Monitors,
             "keys" | "shortcuts" => Section::Hotkeys,
             "diagnostics" | "files" => Section::Advanced,
+            "mcp" | "mcp-controller" | "assistant" => Section::Controller,
             "support" | "update" => Section::Updates,
             "1" | "yes" | "on" | "true" => Section::default(),
             other => return Section::ALL.into_iter().find(|section| section.key() == other),
@@ -233,6 +239,9 @@ impl Attention {
             AttentionKind::Teleport => self.teleports,
             AttentionKind::Permissions => self.permissions,
             AttentionKind::Inventory => self.inventory,
+            // (session routing: an assistant's question to a character, its
+            // own kind, whatever the others chosen)
+            AttentionKind::Assistant => true,
             AttentionKind::Friendship
             | AttentionKind::Group
             | AttentionKind::Script
