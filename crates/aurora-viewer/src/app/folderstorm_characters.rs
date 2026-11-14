@@ -266,7 +266,9 @@ impl App {
                         g.window.set_minimized(true);
                     }
                 }
-                HostEvent::Command(command @ (ipc::ToViewer::SendChat { .. } | ipc::ToViewer::MarkRead { .. })) => {
+                HostEvent::Command(
+                    command @ (ipc::ToViewer::SendChat { .. } | ipc::ToViewer::MarkRead { .. } | ipc::ToViewer::Open { .. }),
+                ) => {
                     self.folderstorm_chat_command(command);
                 }
                 // (cleaned and bounded by the link's thread; kept for the

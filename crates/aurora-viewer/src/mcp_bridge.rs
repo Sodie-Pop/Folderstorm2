@@ -202,9 +202,24 @@ pub fn set_session(settings: Option<LocalAssistant>) {
     with(|rt| rt.session = settings);
 }
 
-/// Where the discovery file goes: the settings folder in use.
+/// Where the discovery file goes: the main profile's settings folder,
+/// whatever this process's profile, so that the sidecar finds every
+/// character's viewer in one place (session routing,
+/// folderstorm/plans/mcp-routing.md, section 1). The pid in the file's name
+/// keeps them apart.
 pub fn discovery_dir() -> std::path::PathBuf {
-    crate::settings::config_dir()
+    crate::folderstorm_characters::profile::main_config_dir()
+}
+
+/// Who this viewer is, for the sidecar (session routing): its profile,
+/// managed by a session host or not, and its avatar's name while logged in
+/// (the bridge gives the name only while Read is Allow).
+fn identity(view: &View) -> folderstorm_mcp_bridge::server::Identity {
+    folderstorm_mcp_bridge::server::Identity {
+        profile: crate::folderstorm_characters::profile::current().map(|p| p.shown().to_owned()),
+        managed: crate::cli::get().managed,
+        character: view.logged_in().then(|| view.world.own_name()).filter(|n| !n.is_empty()),
+    }
 }
 
 /// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`): the session asks before
@@ -277,6 +292,7 @@ impl View<'_> {
             outfit_points: world.outfit_attachment_points(),
             stage: self.stage,
             viewer_session: None,
+            identity: Default::default(),
             nav: navigation::Stage {
                 world: Some(world),
                 in_world: self.stage.in_world,
@@ -370,6 +386,16 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         }
         // before any call: the desk decides again with what is in force
         running.bridge.set_login(generation, view.logged_in());
+        let me = identity(view);
+        running.bridge.set_identity(me.clone());
+        // (viewer_status names the character only while Read is Allow, as
+        // the health does)
+        let me = folderstorm_mcp_bridge::server::Identity {
+            character: me
+                .character
+                .filter(|_| wanted.permissions.check(folderstorm_mcp_bridge::Class::Read).is_ok()),
+            ..me
+        };
         let session = running.bridge.viewer_session();
         rt.desk.set_login(generation, session.clone());
         rt.desk.set_permissions(wanted.permissions);
@@ -378,6 +404,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         let mut cx = None;
         let context = || tools::Ctx {
             viewer_session: session.clone(),
+            identity: me.clone(),
             ..view.context()
         };
         // the studio's waiting calls follow the desk's rules too
@@ -475,6 +502,14 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         rt.desk.tick_reads(view.world, now);
         rt.desk.tick(&view.bake(), now)
     })
+}
+
+/// Folderstorm (session routing): the Ask dialog's open question, for a
+/// managed viewer's Attention list, so that the host's inbox shows it while
+/// this character is in the background: its number, the program's name and
+/// what it asks. None when nothing is asked.
+pub fn open_question() -> Option<desk::Question> {
+    with(|rt| rt.desk.question(Instant::now()))
 }
 
 /// Folderstorm: once per frame, just before the autopilot runs: the

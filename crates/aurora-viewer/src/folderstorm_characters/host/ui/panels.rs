@@ -51,6 +51,9 @@ pub(in super::super) enum Which {
     Cycling,
     /// Checkpoint 10: the settings' window (`ui/settings.rs`).
     Settings,
+    /// Session routing: the MCP controller's Ask window
+    /// (`ui/controller.rs`).
+    Ask,
 }
 
 /// What every window of the host is drawn with.
@@ -200,6 +203,7 @@ impl Window_ {
             Which::Bar => self.bar.view.as_ref(),
             Which::Monitor(_) | Which::Cycling => Seat::of(which).and_then(|seat| self.monitors.view(seat)),
             Which::Settings => self.settings.view.as_ref(),
+            Which::Ask => self.ask.view.as_ref(),
         }
     }
 
@@ -210,6 +214,7 @@ impl Window_ {
             Which::Bar => self.bar.view.as_mut(),
             Which::Monitor(_) | Which::Cycling => Seat::of(which).and_then(|seat| self.monitors.view_mut(seat)),
             Which::Settings => self.settings.view.as_mut(),
+            Which::Ask => self.ask.view.as_mut(),
         }
     }
 
@@ -235,6 +240,9 @@ impl Window_ {
         if self.settings.view.as_ref().is_some_and(is) {
             return Some(Which::Settings);
         }
+        if self.ask.view.as_ref().is_some_and(is) {
+            return Some(Which::Ask);
+        }
         if let Some((seat, _)) = self.monitors.views().find(|(_, view)| is(view)) {
             return Some(seat.which());
         }
@@ -253,6 +261,7 @@ impl Window_ {
             .flatten()
             .chain(&mut self.bar.view)
             .chain(&mut self.settings.view)
+            .chain(&mut self.ask.view)
         {
             pane.redraw = true;
         }

@@ -50,13 +50,33 @@ impl Discovery {
     }
 }
 
-fn prefix() -> String {
-    format!("{}-mcp-", folderstorm_brand::SLUG)
+/// What a discovery file leads to: a viewer's bridge, or the session
+/// host's MCP controller (folderstorm/plans/mcp-routing.md, section 3).
+/// Both live in the same folder; a reader of one kind never reads the
+/// other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Viewer,
+    Controller,
+}
+
+impl Kind {
+    fn prefix(self) -> String {
+        match self {
+            Kind::Viewer => format!("{}-mcp-", folderstorm_brand::SLUG),
+            Kind::Controller => format!("{}-controller-", folderstorm_brand::SLUG),
+        }
+    }
+
+    /// `folderstorm2-mcp-<pid>.json`, `folderstorm2-controller-<pid>.json`.
+    pub fn file_name(self, pid: u32) -> String {
+        format!("{}{pid}.json", self.prefix())
+    }
 }
 
 /// `folderstorm2-mcp-<pid>.json`.
 pub fn file_name(pid: u32) -> String {
-    format!("{}{pid}.json", prefix())
+    Kind::Viewer.file_name(pid)
 }
 
 /// The folder the sidecar reads by default: the environment override, else
@@ -72,9 +92,14 @@ pub fn default_dir() -> Option<PathBuf> {
 /// readable by the user only, then renamed into place, so that a reader
 /// never sees half a file nor a moment of wider permissions.
 pub fn write(dir: &Path, discovery: &Discovery) -> std::io::Result<PathBuf> {
+    write_as(Kind::Viewer, dir, discovery)
+}
+
+/// [`write`] for a file of that kind.
+pub fn write_as(kind: Kind, dir: &Path, discovery: &Discovery) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
-    let path = dir.join(file_name(discovery.pid));
-    let temp = dir.join(format!(".{}.tmp", file_name(discovery.pid)));
+    let path = dir.join(kind.file_name(discovery.pid));
+    let temp = dir.join(format!(".{}.tmp", kind.file_name(discovery.pid)));
     let body = serde_json::to_vec_pretty(discovery).map_err(std::io::Error::other)?;
     let _ = std::fs::remove_file(&temp);
     let result = (|| {
@@ -126,7 +151,12 @@ pub fn read(path: &Path) -> Option<Discovery> {
 /// Files left by a viewer that crashed are still listed: the caller skips
 /// those whose port does not answer.
 pub fn find(dir: &Path, pid: Option<u32>) -> Vec<(PathBuf, Discovery)> {
-    let prefix = prefix();
+    find_kind(Kind::Viewer, dir, pid)
+}
+
+/// [`find`] for the files of that kind.
+pub fn find_kind(kind: Kind, dir: &Path, pid: Option<u32>) -> Vec<(PathBuf, Discovery)> {
+    let prefix = kind.prefix();
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -140,7 +170,7 @@ pub fn find(dir: &Path, pid: Option<u32>) -> Vec<(PathBuf, Discovery)> {
         .filter_map(|e| read(&e.path()).map(|d| (e.path(), d)))
         .filter(|(path, d)| {
             // the name and the content agree, or the file was renamed by hand
-            path.file_name().is_some_and(|n| n.to_string_lossy() == file_name(d.pid))
+            path.file_name().is_some_and(|n| n.to_string_lossy() == kind.file_name(d.pid))
         })
         .filter(|(_, d)| pid.is_none_or(|pid| d.pid == pid))
         .collect();
@@ -197,6 +227,25 @@ mod tests {
         let only: Vec<_> = find(dir.path(), Some(10)).into_iter().map(|(_, d)| d.pid).collect();
         assert_eq!(only, vec![10]);
         assert!(find(dir.path(), Some(12)).is_empty());
+    }
+
+    #[test]
+    fn viewers_and_controllers_never_read_each_other_s_files() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let viewer = sample(20, 1);
+        let host = sample(21, 2);
+        write(dir.path(), &viewer).expect("written");
+        let path = write_as(Kind::Controller, dir.path(), &host).expect("written");
+        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("folderstorm2-controller-21.json"));
+        let pids = |kind| {
+            find_kind(kind, dir.path(), None)
+                .into_iter()
+                .map(|(_, d)| d.pid)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(pids(Kind::Viewer), vec![20]);
+        assert_eq!(pids(Kind::Controller), vec![21]);
+        assert_eq!(find(dir.path(), None).len(), 1);
     }
 
     #[test]
