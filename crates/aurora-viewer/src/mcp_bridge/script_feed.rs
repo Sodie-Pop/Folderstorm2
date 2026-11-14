@@ -15,7 +15,9 @@
 
 use super::tools::{Ctx, err};
 use aurora_net::{ChatMessage, ChatSourceType, ChatType};
-use folderstorm_mcp_bridge::protocol::task_scripts::{FEED_BYTES_MAX, FEED_LINE_MAX, FEED_LINES_MAX, POLL_BYTES_MAX, POLL_DEFAULT, POLL_MAX};
+use folderstorm_mcp_bridge::protocol::task_scripts::{
+    FEED_BYTES_MAX, FEED_LINE_MAX, FEED_LINES_MAX, POLL_BYTES_MAX, POLL_DEFAULT, POLL_MAX,
+};
 use folderstorm_mcp_bridge::{ErrorCode, ToolError};
 use serde_json::{Map, Value, json};
 use std::cell::{Cell, RefCell};
@@ -321,9 +323,7 @@ mod tests {
         let page = feed.poll(&json!({"cursor": cursor, "limit": 1}), &same).expect("page");
         assert_eq!(page["events"][0]["text"], "after 1");
         assert_eq!(page["more"], true);
-        let page = feed
-            .poll(&json!({"cursor": page["next_cursor"]}), &same)
-            .expect("next");
+        let page = feed.poll(&json!({"cursor": page["next_cursor"]}), &same).expect("next");
         assert_eq!(page["events"][0]["text"], "after 2");
         assert_eq!(page["more"], false);
         // the same cursor again reads the same lines (nothing consumed)
@@ -365,7 +365,10 @@ mod tests {
         let feed = Feed::default();
         let other = Feed::default();
         let cursor = other.poll(&json!({"start": "now"}), &same).expect("now")["next_cursor"].clone();
-        assert_eq!(feed.poll(&json!({"cursor": cursor}), &same).expect_err("stale").code, ErrorCode::Stale);
+        assert_eq!(
+            feed.poll(&json!({"cursor": cursor}), &same).expect_err("stale").code,
+            ErrorCode::Stale
+        );
         for bad in [
             json!({}),
             json!({"start": "later"}),

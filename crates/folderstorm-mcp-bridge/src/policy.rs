@@ -160,11 +160,13 @@ impl From<Saved> for Permissions {
         let objects = s.objects.unwrap_or(later);
         let take = s.take.unwrap_or(later);
         // Folderstorm: the same for running scripts, objects and take included
-        let scripts = s.scripts.unwrap_or(if later == Level::Ask && objects == Level::Ask && take == Level::Ask {
-            Level::Ask
-        } else {
-            Level::Never
-        });
+        let scripts = s
+            .scripts
+            .unwrap_or(if later == Level::Ask && objects == Level::Ask && take == Level::Ask {
+                Level::Ask
+            } else {
+                Level::Never
+            });
         Permissions {
             read: s.read,
             edit: s.edit,

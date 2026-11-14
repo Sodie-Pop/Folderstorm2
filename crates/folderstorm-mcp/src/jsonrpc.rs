@@ -157,7 +157,9 @@ fn initialize(params: &Value) -> Value {
     });
     // Folderstorm: receipts, plans and operations (mcp-receipts.md)
     if let Some(text) = answer["instructions"].as_str() {
-        answer["instructions"] = json!(format!("{text} {RECEIPTS_HINT} {NAVIGATION_HINT} {CONTENT_HINT} {OBJECTS_HINT} {TASK_SCRIPTS_HINT}"));
+        answer["instructions"] = json!(format!(
+            "{text} {RECEIPTS_HINT} {NAVIGATION_HINT} {CONTENT_HINT} {OBJECTS_HINT} {TASK_SCRIPTS_HINT}"
+        ));
     }
     answer
 }
@@ -571,11 +573,25 @@ mod task_script_tests {
     fn lists_the_task_script_tools_with_their_hints() {
         let a = initialize(&json!({}));
         let instructions = a["instructions"].as_str().expect("instructions");
-        assert!(instructions.contains("object_script_get") && instructions.contains("script_debug_poll"), "{instructions}");
+        assert!(
+            instructions.contains("object_script_get") && instructions.contains("script_debug_poll"),
+            "{instructions}"
+        );
         let list = tools_list();
         let tools = list["tools"].as_array().expect("tools");
-        let tool = |name: &str| tools.iter().find(|t| t["name"] == name).cloned().unwrap_or_else(|| panic!("{name} listed"));
-        for read in ["object_script_get", "object_script_preview", "object_script_status", "script_debug_poll"] {
+        let tool = |name: &str| {
+            tools
+                .iter()
+                .find(|t| t["name"] == name)
+                .cloned()
+                .unwrap_or_else(|| panic!("{name} listed"))
+        };
+        for read in [
+            "object_script_get",
+            "object_script_preview",
+            "object_script_status",
+            "script_debug_poll",
+        ] {
             assert_eq!(tool(read)["annotations"]["readOnlyHint"], true, "{read}");
         }
         for change in ["object_script_save_compile", "object_script_set_running", "object_script_reset"] {

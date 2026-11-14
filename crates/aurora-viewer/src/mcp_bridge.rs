@@ -801,9 +801,7 @@ pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)>
         // snapshot, the prim unchanged since (mcp-objects.md)
         let planned = objects::handles(&call.tool).then(|| rt.desk.objects().plan(&call, &cx, Instant::now(), true));
         // Folderstorm: and a task script change (mcp-task-scripts.md)
-        let planned = planned.or_else(|| {
-            task_scripts::is_change(&call.tool).then(|| rt.desk.task_script_plan(&call, &cx, Instant::now()))
-        });
+        let planned = planned.or_else(|| task_scripts::is_change(&call.tool).then(|| rt.desk.task_script_plan(&call, &cx, Instant::now())));
         Some((call, planned))
     })?;
     match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
@@ -842,20 +840,18 @@ pub fn observe(event: &aurora_net::NetEvent) {
         aurora_net::NetEvent::ObjectProperties(_) | aurora_net::NetEvent::TaskInventory { .. }
     ) {
         return with(|rt| {
-            rt.desk.task_scripts().observe(event, Instant::now());
+            rt.desk.task_script_observe(event, Instant::now());
             rt.desk.objects().observe(event, Instant::now());
         });
     }
     // Folderstorm: scripts inside objects: their source, association, save
     // and running state (mcp-task-scripts.md)
     match event {
-        aurora_net::NetEvent::ScriptLoaded { target, .. } | aurora_net::NetEvent::ScriptSaved { target, .. }
-            if !target.object.is_nil() =>
-        {
-            return with(|rt| rt.desk.task_scripts().observe(event, Instant::now()));
+        aurora_net::NetEvent::ScriptLoaded { target, .. } | aurora_net::NetEvent::ScriptSaved { target, .. } if !target.object.is_nil() => {
+            return with(|rt| rt.desk.task_script_observe(event, Instant::now()));
         }
         aurora_net::NetEvent::ScriptExperiences { .. } | aurora_net::NetEvent::ScriptRunning { .. } => {
-            return with(|rt| rt.desk.task_scripts().observe(event, Instant::now()));
+            return with(|rt| rt.desk.task_script_observe(event, Instant::now()));
         }
         _ => {}
     }

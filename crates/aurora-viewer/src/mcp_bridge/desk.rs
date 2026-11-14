@@ -37,8 +37,8 @@ use super::changes::{self, Planned, Work};
 use super::content::{self, Content}; // Folderstorm: content editing
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::objects::{self, Objects}; // Folderstorm: object tools (mcp-objects.md)
-use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
+use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
@@ -482,7 +482,9 @@ impl Desk {
                 .status(&call.arguments, &self.receipts, self.session.as_deref(), self.names());
             // Folderstorm: a task script operation's facts (mcp-task-scripts.md)
             if let Ok(answer) = &mut result
-                && let Some(facts) = answer["receipt"]["operation_id"].as_str().and_then(|op| self.task_scripts.facts(op))
+                && let Some(facts) = answer["receipt"]["operation_id"]
+                    .as_str()
+                    .and_then(|op| self.task_scripts.facts(op))
             {
                 answer["script"] = facts;
             }
@@ -498,9 +500,7 @@ impl Desk {
             return;
         }
         if call.tool == task_tool::PREVIEW {
-            let save = self
-                .permissions
-                .decide_all([Class::Content, Class::Objects, Class::Read]);
+            let save = self.permissions.decide_all([Class::Content, Class::Objects, Class::Read]);
             let result = self.task_scripts.preview(&call.arguments, &self.objects, cx, save, now);
             return call.answer(result);
         }
@@ -1367,6 +1367,17 @@ impl Desk {
     /// and the scripts saved).
     pub fn task_scripts(&mut self) -> &mut TaskScripts {
         &mut self.task_scripts
+    }
+
+    /// Folderstorm: a script answer of the server for the task script
+    /// tools; a confirmed save marks its prim changed for the object tools
+    /// at once (their snapshots taken before are stale) and lists it again.
+    pub fn task_script_observe(&mut self, event: &aurora_net::NetEvent, now: Instant) {
+        self.task_scripts.observe(event, now);
+        for (handle, local_id, object) in self.task_scripts.take_relists() {
+            self.objects.relist(handle, local_id, object);
+            self.objects.touched(object);
+        }
     }
 
     /// Folderstorm: a task script change planned again just before the

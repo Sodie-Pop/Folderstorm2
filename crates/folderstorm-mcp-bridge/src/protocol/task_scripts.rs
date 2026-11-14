@@ -255,13 +255,20 @@ mod tests {
                     t.name
                 );
                 assert!(t.wait >= CHANGE_WAIT);
-                assert!(!protocol::always_asks(t.name, &json!({"running": true})), "{} never always asks", t.name);
+                assert!(
+                    !protocol::always_asks(t.name, &json!({"running": true})),
+                    "{} never always asks",
+                    t.name
+                );
             }
         }
         assert_eq!(TASK_SCRIPT_TOOLS.len(), 7);
         assert_eq!(poll_schema()["properties"]["limit"]["maximum"], POLL_MAX);
         assert_eq!(save_schema()["properties"]["text"]["maxLength"], protocol::content::TEXT_MAX);
-        assert_eq!(set_running_schema()["required"], json!(["object_id", "snapshot_id", "item_id", "running"]));
+        assert_eq!(
+            set_running_schema()["required"],
+            json!(["object_id", "snapshot_id", "item_id", "running"])
+        );
         assert!(handles(GET) && handles(DEBUG_POLL) && !handles("object_contents_list"));
     }
 

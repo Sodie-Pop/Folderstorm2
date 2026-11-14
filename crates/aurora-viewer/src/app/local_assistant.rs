@@ -63,9 +63,7 @@ impl App {
             .preview
             .into_iter()
             .chain(inventory.windows.iter().filter_map(|w| w.state.preview))
-            .chain(
-                self.script_editors.documents.iter().map(|e| e.target.item),
-            )
+            .chain(self.script_editors.documents.iter().map(|e| e.target.item))
             .collect()
     }
 

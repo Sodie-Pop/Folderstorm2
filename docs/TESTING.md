@@ -5585,7 +5585,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5748,6 +5748,26 @@ in the folder), each with the snapshot of a fresh `object_contents_list`
 and a `client_request_id`; reusing an old snapshot answers `stale`.
 Capture the dialogs and the two Preferences rows in English, French and
 Japanese.
+
+`AURORA_DEMO_MCP=task-scripts` (Folderstorm2,
+folderstorm/plans/mcp-task-scripts.md: `src/mcp_bridge/task_scripts.rs`,
+`src/mcp_bridge/script_feed.rs`): the same session settings ("Ask before
+changes"); once the plaza's cut box is loaded, the demo lists its contents,
+reads its door script with `object_script_get` (the log reads `task script
+step 1 answered {… "editable":true …}`, never the source), then asks, as
+"Demo assistant", to save it with one line added: the Ask dialog says "Save
+and compile the script “…” in the object “…” (one line added, 0 removed),
+stopped afterwards" and lists the added line. Allow: the log reads `step 2
+answered {… "source_saved":true,"compiled":true …}`; the box is listed
+again, then the demo asks to reset the script ("Reset the script “…” in the
+object “…” (it starts over from the beginning)"); Allow: `step 4 answered
+{… "reset_confirmed":false …}`. Opening the script from the box's Contents
+tab shows the added line. With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+row "Run my objects' scripts". A real client can then call
+`object_script_status`, `object_script_set_running` and `script_debug_poll`
+(`start=now`, then its cursor). Capture the dialogs and the row in English,
+French and Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and

@@ -200,3 +200,35 @@ metadata on a grid, the dialog's look.
 - Script name and line in the feed (the grid does not give them).
 - Test sessions, touch and dialog replies (Folderstorm (C++)'s PR D) are
   other groups.
+
+## As built
+
+Branch `claude/mcp-task-scripts`, on `main` (objects and content merged).
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/protocol/task_scripts.rs` (new) | the seven tools, limits, `needs_client_request_id`, `extra_classes` |
+| `policy.rs` | `Class::Scripts` (`scripts`), presets and migration |
+| `binding.rs`, `protocol.rs`, `protocol/inventory.rs` | `task_scripts: 1`; `pub mod`, `all()`, the required id; the catalogue count |
+| sidecar `jsonrpc.rs` | `TASK_SCRIPTS_HINT` in the instructions |
+| viewer `mcp_bridge/task_scripts.rs` (new) | reads (source and association), snapshots, preview, freeze and plan, sends, the save's, start's, stop's and reset's outcomes, facts, the demo |
+| viewer `mcp_bridge/script_feed.rs` (new) | the feed (thread-local on the frame thread), `script_debug_poll` |
+| `mcp_bridge/objects.rs` | `prim`, `task_item`, `item_name`, `prim_name`, `touched`, `relist`; `shown` and `rights` shared; `object_operation_status` accepts the task script changes |
+| `mcp_bridge/desk.rs` | `call_decision` adds `extra_classes`; the required id; the reads; the freeze and plan; `object_operation_status` adds the `script` facts; clear, refuse, close; `tick_reads` (relists after a save) |
+| `mcp_bridge/changes.rs`, `mcp_bridge.rs` | `Work::TaskScript`; module lines, `replan`, `observe` (script events, listings), the app's entry points, the feed's capture switch, the demo |
+| `app/local_assistant.rs` | fetches (`LoadScript`, `LoadScriptExperiences`), running queries, the sends with their RLVa check, the saved asset in the Contents tab; open script editors on task scripts count as busy |
+| `world/mod.rs` (upstream) | one `// Folderstorm:` line: `mcp_bridge::script_feed::capture` before the Script debug routing |
+| Preferences page, catalogues | the Scripts row; five Ask sentences; en/fr/ja |
+
+Differences from the design above:
+
+- The save's frozen arguments use the content saves' key
+  (`frozen_content`), so that the Ask dialog lists the changed lines with
+  no new hook; a call carrying it from the sidecar is refused.
+- After a confirmed save the viewer marks the prim changed for the object
+  tools (their snapshots answer `stale`: list again), lists it again and
+  asks the script's running state; the save's facts keep the state seen.
+- An uncertain upload error (`script-save-unconfirmed`, `script-timeout`)
+  ends the call (`timeout`) with nothing left to listen to: the HTTP
+  exchange is over. Only a save with no answer at all within 30 s keeps
+  listening, for 10 minutes.
