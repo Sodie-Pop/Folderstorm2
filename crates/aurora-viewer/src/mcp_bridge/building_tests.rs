@@ -3,7 +3,7 @@
 //! physical, a child), revisions and staleness, vectors and limits, the
 //! parcel, textures and materials with full rights only, rezzes (never an
 //! id guessed, candidates, `object_rez_identify`), next owner rights with
-//! the Properties rules (always asking), outcomes, RLVa, no asset id in any
+//! the Properties rules (its own class's level), outcomes, RLVa, no asset id in any
 //! answer, and end to end over a real socket.
 
 use super::building::{self, Send};
@@ -763,15 +763,20 @@ fn next_owner(
 }
 
 #[test]
-fn next_owner_rights_always_ask_and_follow_the_properties_rules() {
+fn next_owner_rights_follow_their_class_and_the_properties_rules() {
     let world = plaza();
-    let mut desk = desk_with(allow_all());
     let now = Instant::now();
-    // asks even on Allow
-    let answer = next_owner(&mut desk, &world, NOTECARD, (true, true, false), "n-1", now);
-    let q = desk.question(now).expect("asks even on Allow");
+    // NextOwner on Ask: asks, the sentence shows the rights
+    let mut ask = allow_all();
+    ask.set(Class::NextOwner, Level::Ask);
+    let mut asking = desk_with(ask);
+    let _ = next_owner(&mut asking, &world, NOTECARD, (true, true, false), "n-0", now);
+    let q = asking.question(now).expect("asks on Ask");
     assert!(q.summary.contains('✗'), "{}", q.summary);
-    desk.decide(q.number, true);
+    // on Allow: no dialog
+    let mut desk = desk_with(allow_all());
+    let answer = next_owner(&mut desk, &world, NOTECARD, (true, true, false), "n-1", now);
+    assert!(desk.question(now).is_none(), "NextOwner on Allow: no dialog");
     let Some(Work::Inventory(change)) = run(&mut desk, &world, now) else {
         panic!("the Properties window's inventory patch")
     };
@@ -800,12 +805,19 @@ fn next_owner_rights_always_ask_and_follow_the_properties_rules() {
     );
     desk.take(c, &ctx(&world), now);
     assert_eq!(code(answered(&answer)), ErrorCode::Stale);
-    // Never on Edit refuses it
+    // Never on NextOwner refuses it; Edit no longer counts
     let mut permissions = allow_all();
-    permissions.set(Class::Edit, Level::Never);
+    permissions.set(Class::NextOwner, Level::Never);
     let mut desk = desk_with(permissions);
     let answer = next_owner(&mut desk, &world, NOTECARD, (true, false, true), "n-10", now);
     assert_eq!(code(answered(&answer)), ErrorCode::PermissionDenied);
+    let mut permissions = allow_all();
+    permissions.set(Class::Edit, Level::Never);
+    let mut desk = desk_with(permissions);
+    let answer = next_owner(&mut desk, &world, NOTECARD, (true, false, true), "n-11", now);
+    assert!(desk.question(now).is_none());
+    assert!(run(&mut desk, &world, now).is_some(), "Edit on Never does not refuse it");
+    drop(answer);
 }
 
 #[test]

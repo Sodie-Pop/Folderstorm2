@@ -351,8 +351,6 @@ pub fn always_asks(tool: &str, arguments: &Value) -> bool {
         || objects::always_asks(tool)
         // Folderstorm: a touch, a channel line, a test recipe (mcp-script-testing.md)
         || script_testing::always_asks(tool)
-        // Folderstorm: a change of next owner rights (mcp-building.md)
-        || building::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
