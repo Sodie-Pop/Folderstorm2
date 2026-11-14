@@ -304,7 +304,10 @@ pub fn own_row(ctx: &egui::Context, p: &Palette, icons: &Icons, under: Rect) {
     });
     islands::set_favorites_row_bottom(ctx, Some(rect.bottom()));
     #[cfg(test)]
-    ctx.data_mut(|d| d.insert_temp(Id::unique("folderstorm_strip_own"), (ctx.cumulative_frame_nr(), rect)));
+    {
+        let frame = ctx.cumulative_frame_nr();
+        ctx.data_mut(|d| d.insert_temp(Id::unique("folderstorm_strip_own"), (frame, rect)));
+    }
 }
 
 /// The strip's own island, when the last frame drew it.

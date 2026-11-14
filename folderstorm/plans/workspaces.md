@@ -1814,8 +1814,7 @@ box, the limit of 16. `ui::inventory::folderstorm_windows` (1) and
 ### 1.6 in detail: the favorites strip (2026-11-14)
 
 Written before the build, from `claude/workspaces-cp6-folders` at `e335151`
-(PR #64, not merged: this row is stacked on it). "As built" below is filled
-in when the row is done.
+(PR #64, not merged: this row is stacked on it). "As built" follows.
 
 **What Folderstorm (C++) did.** First a row of its own under the navigation
 and landmark bars, with the labels "Workspaces:" and "Layouts:"
@@ -1899,9 +1898,75 @@ own pushes `favorites_row_bottom`; the store writes nothing while off.
 *Show the interface in mouselook*; the bars set to hide themselves; a
 custom world viewport with the bars inside and around it.
 
+#### 1.6 as built (branch `claude/workspaces-favorites-strip`, 2026-11-14)
+
+As planned above, with these differences and details:
+
+- **Where.** `folderstorm/workspaces/strip.rs`: `in_row` (the landmark
+  row's right end, at most half of it, after a divider; it hands the row
+  back where its landmarks and their own "n more" must stop) and
+  `own_row` (a short island of our own where the row would be, or beside
+  its tab when folded; `islands::favorites_row_bottom` is set to its
+  bottom so the windows stay under it). `own_row` draws nothing in a frame
+  where `in_row` already drew the strip.
+- **What it shows.** `menu::View` has `strip` and `favorites` (kind, name,
+  in use, modified), built from `pick::entries` in the user's order. The
+  tooltip says the kind and "In use" or "In use · modified". The
+  "modified" mark (`menu::Modified`, `apply::modified` and
+  `workspace_modified`) is worked out in the frame call **only while the
+  strip is shown**, and is part of the menu's stamp, so the view is
+  published again when it changes.
+- **More….** Always there: the favorites that did not fit (a check on
+  the ones in use), *Layouts & workspaces…*, *Previous arrangement*
+  (greyed when there is none), *Hide the favorites strip*. Its face is
+  the `dots-filled` icon when nothing is left over, else `chevrons-right`
+  and "n more".
+- **Requests.** One more: `menu::Request::Strip(bool)`; a pill asks
+  `Apply` or `ApplyWorkspace` as World › Layouts does.
+- **The setting.** `Store.strip` (`"strip": true` in
+  `folderstorm_workspaces`, absent while off; anything else reads as off).
+  Off by default. Changed in Preferences › Layout › Layouts & workspaces ›
+  Quick switch (*Favorites strip*), in the switcher's footer (*Show the
+  favorites strip*), in World › Layouts (a check) and by *More…* › *Hide
+  the favorites strip*. No migration.
+- **Hidden.** `workspaces::interface` (already called before the bars in
+  the interface's pass) tells the strip whether the camera is in
+  mouselook or the interface is put away; then neither entry point draws.
+  It also goes with the top bar, whose code calls it.
+- **Upstream hooks.** Three lines, as planned: `ui/bars/favorites.rs`
+  (`row`, after the fold button), `ui/bars/islands.rs` (`top`, after the
+  favourites' row) and `ui/bars.rs` (`top_bars`, the Legacy top bar, same
+  place). Nothing else upstream; the i18n catalogues get nine `fs-strip-*`
+  entries.
+- **Demo.** `AURORA_DEMO_STRIP=1|row|many` (`docs/TESTING.md`), in
+  `app/folderstorm_workspaces.rs` with the other layouts demos. `row`
+  sets Interface › Favourites access to the row (unfolded).
+- **Tests.** `workspaces::tests::strip` (15): what fits (pure), names cut,
+  the file, its own island and its order, mouselook, a click applies and
+  lights, the "modified" mark, overflow in *More…* and applying from it,
+  *More…*'s three entries, *More…* alone without favorites, on the
+  landmark row (landmarks stop before our divider and have the whole row
+  again without the strip), beside the folded tab, the menu's check and
+  the switcher's box, and a picture test. The pretend viewer of the tests
+  can now draw its frames with the software painter (`Viewer::painted`,
+  `Viewer::picture`, `FOLDERSTORM_TEST_CAPTURE_DIR`):
+  `strip-island.png`, `strip-row.png`, `strip-folded.png`,
+  `strip-more.png`.
+
+**Known limits.**
+
+- The pictures are drawn with a pretend place island and the real
+  favourites' row, not the whole top bar; the islands and the Legacy bars
+  were not drawn together with the strip in the sandbox.
+- Dragging a favorite on the strip to reorder it is not offered (the
+  order is the switcher's).
+- With many landmarks and many favorites, each keeps its half; the
+  landmarks do not give room to the strip when they need less.
+
 ## 14. Later (outline only)
 
-- **1.6 Favorites strip.** Being built: "1.6 in detail" above.
+- **1.6 Favorites strip.** Built: "1.6 in detail" and "1.6 as built"
+  above.
 - **1.7 Workspace context.** Optional parts of a workspace: a graphics
   profile *by name* (Aurora's `graphics_saved`), a camera preset, and HUDs to
   add, stored as the user's own Inventory item ids (never asset ids) and worn
