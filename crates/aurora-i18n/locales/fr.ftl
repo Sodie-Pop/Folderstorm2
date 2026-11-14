@@ -940,6 +940,8 @@ fs-mcp-take = Prendre mes objets
 fs-mcp-take-hint = Prendre dans votre inventaire les objets qui vous appartiennent et que vous pouvez modifier, ou en prendre une copie. Retirer un objet du monde demande toujours d'abord.
 fs-mcp-scripts = Exécuter les scripts de mes objets
 fs-mcp-scripts-hint = Démarrer, arrêter et réinitialiser les scripts des objets qui vous appartiennent et que vous pouvez modifier, et laisser un script en marche après que l'assistant l'a enregistré. Un script en marche agit dans le monde comme son code le dit. Jamais les objets portés, jamais ceux des autres.
+fs-mcp-interact = Toucher mes objets et leur parler
+fs-mcp-interact-hint = Toucher les objets qui vous appartiennent et que vous pouvez modifier, répondre aux dialogues de script qu'ils ouvrent et parler sur des canaux de script près d'eux, puis lancer les recettes de test que vous approuvez. Un toucher, une ligne sur un canal et un test demandent toujours d'abord. Jamais un dialogue qui parle de L$, jamais les demandes de permission, les paiements, les offres de téléportation ou d'inventaire, jamais les objets des autres.
 fs-mcp-changes-note = Demander ouvre une fenêtre dans le viewer avant chaque changement ; sans réponse sous 60 secondes, le changement est refusé. La suppression définitive et Vider la corbeille ne sont jamais autorisées.
 fs-mcp-status = État
 fs-mcp-status-hint = Si la connexion est ouverte. La clé d'accès n'est jamais affichée.
@@ -1121,6 +1123,32 @@ fs-mcp-ask-task-script-save-run = Enregistrer et compiler le script « { $name }
 fs-mcp-ask-task-script-start = Démarrer le script « { $name } » de l'objet « { $object } »
 fs-mcp-ask-task-script-stop = Arrêter le script « { $name } » de l'objet « { $object } »
 fs-mcp-ask-task-script-reset = Réinitialiser le script « { $name } » de l'objet « { $object } » (il repart du début)
+fs-mcp-ask-touch = Toucher une fois l'objet « { $object } », comme un clic
+fs-mcp-ask-channel = Dire « { $text } » sur le canal { $channel } pour l'objet « { $object } » : tout script qui écoute ce canal à moins de 20 m l'entend, pas seulement cet objet
+fs-mcp-ask-dialog-button = Répondre « { $button } » au dialogue de l'objet « { $object } » (canal { $channel })
+fs-mcp-ask-dialog-text = Répondre à la boîte de texte de l'objet « { $object } » (canal { $channel })
+fs-mcp-ask-dialog-message = Dialogue : « { $message } »
+fs-mcp-ask-dialog-typed = Réponse : « { $text } »
+fs-mcp-ask-script-test = Lancer un test { $steps ->
+    [one] d'une étape
+   *[other] de { $steps } étapes
+} sur { $objects ->
+    [one] un de vos objets
+   *[other] { $objects } de vos objets
+} pendant { $seconds } s au plus, sans redemander pour ses étapes
+fs-mcp-test-step-touch = { $n }. Toucher « { $object } »
+fs-mcp-test-step-channel = { $n }. Dire « { $text } » sur le canal { $channel } près de « { $object } » (entendu par tout script qui écoute)
+fs-mcp-test-step-reset = { $n }. Réinitialiser le script « { $name } » de « { $object } »
+fs-mcp-test-step-start = { $n }. Démarrer le script « { $name } » de « { $object } »
+fs-mcp-test-step-stop = { $n }. Arrêter le script « { $name } » de « { $object } »
+fs-mcp-test-step-wait-output = { $n }. Attendre jusqu'à { $seconds } s « { $text } » de « { $object } »
+fs-mcp-test-step-wait-no-output = { $n }. Vérifier pendant { $seconds } s que « { $object } » ne dit pas « { $text } »
+fs-mcp-test-step-wait-dialog = { $n }. Attendre jusqu'à { $seconds } s un dialogue de « { $object } »
+fs-mcp-test-step-wait-no-dialog = { $n }. Vérifier pendant { $seconds } s que « { $object } » n'ouvre aucun dialogue
+fs-mcp-test-step-assert-running = { $n }. Vérifier que le script « { $name } » de « { $object } » est en marche
+fs-mcp-test-step-assert-stopped = { $n }. Vérifier que le script « { $name } » de « { $object } » est arrêté
+fs-mcp-test-step-delay = { $n }. Attendre { $seconds } s
+fs-mcp-test-errors-allowed = Les erreurs de script ne font pas échouer ce test.
 inventory-folder-jump-menu = Aller au dossier…
 inventory-folder-jump-menu-tip = Trouver un dossier par son nom ou celui de son parent, puis l'ouvrir (Ctrl+J).
 inventory-folder-jump-title = Aller à un dossier de l'inventaire

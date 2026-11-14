@@ -61,6 +61,12 @@ pub enum Work {
     /// Folderstorm: a script inside an object saved, started, stopped or
     /// reset, as its script editor sends it (mcp-task-scripts.md).
     TaskScript(Box<super::task_scripts::Send>),
+    /// Folderstorm: a touch, a dialog answer or a channel line, as the
+    /// viewer's click, its script window and its chat send them
+    /// (mcp-script-testing.md).
+    Interact(Box<super::script_testing::Interaction>),
+    /// Folderstorm: a frozen test recipe the desk then drives.
+    ScriptTest(Box<super::script_testing::Recipe>),
 }
 
 #[derive(Debug, Clone)]

@@ -59,6 +59,9 @@ mod objects_tests;
 pub mod picture;
 pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
 pub mod script_feed; // Folderstorm: script output feed (mcp-task-scripts.md)
+pub mod script_testing; // Folderstorm: script testing (mcp-script-testing.md)
+#[cfg(test)]
+mod script_testing_tests;
 pub mod setup;
 pub mod studio;
 pub mod task_scripts; // Folderstorm: scripts inside objects (mcp-task-scripts.md)
@@ -122,6 +125,9 @@ struct Runtime {
     /// answer it waits for, and the script it works on.
     demo_task: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
     demo_task_item: Option<String>,
+    /// Folderstorm: `AURORA_DEMO_MCP=script-testing`: the demo's step and
+    /// the answer it waits for.
+    demo_test: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -243,11 +249,19 @@ fn identity(view: &View) -> folderstorm_mcp_bridge::server::Identity {
 }
 
 /// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`, `navigation`, `content`,
-/// `objects`, `task-scripts`): the session asks before every change, and
-/// the demo makes requests of its own so that the dialog shows.
+/// `objects`, `task-scripts`, `script-testing`): the session asks before
+/// every change, and the demo makes requests of its own so that the dialog
+/// shows.
 fn demo_asks() -> bool {
     std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| {
-        v == "ask" || v == "camera" || v == "plan" || v == "navigation" || v == "content" || v == "objects" || v == "task-scripts"
+        v == "ask"
+            || v == "camera"
+            || v == "plan"
+            || v == "navigation"
+            || v == "content"
+            || v == "objects"
+            || v == "task-scripts"
+            || v == "script-testing"
     })
 }
 
@@ -464,7 +478,8 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             && (!(demo_camera() || demo_navigation()) || view.stage.in_world)
             && (!content::demo::wanted() || view.world.inventory.items.contains_key(&content::demo::NOTES))
             && (!objects::demo::wanted() || objects::demo::ready(view.world))
-            && (!task_scripts::demo::wanted() || task_scripts::demo::ready(view.world));
+            && (!task_scripts::demo::wanted() || task_scripts::demo::ready(view.world))
+            && (!script_testing::demo::wanted() || script_testing::demo::ready(view.world));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -504,6 +519,13 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     rt.desk.take(call, cx.get_or_insert_with(context), now);
                     rt.demo_reads.push(answer);
                 }
+                Vec::new()
+            } else if script_testing::demo::wanted() {
+                // Folderstorm: the listing now, then a touch, the dialog and a recipe
+                let (tool, arguments) = script_testing::demo::list();
+                let (call, answer) = Pending::detached(tool, arguments, false, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                rt.demo_test = Some((0, answer));
                 Vec::new()
             } else if task_scripts::demo::wanted() {
                 // Folderstorm: the listing now, then a read, a save and a reset
@@ -596,6 +618,35 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     }
                 }
                 Err(TryRecvError::Empty) => rt.demo_task = Some((step, answer)),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
+        // Folderstorm: the script testing demo's next step
+        if let Some((step, answer)) = rt.demo_test.take() {
+            match answer.try_recv() {
+                Ok(result) => {
+                    let running = step == 6 && result.as_ref().is_ok_and(|v| v["state"] == "running");
+                    if !running {
+                        log_demo_test(step, &result);
+                    }
+                    let next = result.ok().and_then(|value| match step {
+                        0 => Some((1, script_testing::demo::touch())),
+                        1 => Some((2, script_testing::demo::dialogs())),
+                        2 => script_testing::demo::reply_after(&value).map(|n| (3, n)),
+                        3 => Some((4, script_testing::demo::list())),
+                        4 => script_testing::demo::begin_after(&value).map(|n| (5, n)),
+                        5 => value["run_id"].as_str().map(|id| (6, script_testing::demo::status(id))),
+                        6 if running => value["run_id"].as_str().map(|id| (6, script_testing::demo::status(id))),
+                        _ => None,
+                    });
+                    if let Some((step, (tool, arguments))) = next {
+                        let ask = matches!(step, 1 | 3 | 5);
+                        let (call, answer) = Pending::detached(tool, arguments, ask, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_test = Some((step, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_test = Some((step, answer)),
                 Err(TryRecvError::Disconnected) => {}
             }
         }
@@ -767,6 +818,28 @@ pub fn task_script_saving(object: Uuid, item: Uuid) -> bool {
     with(|rt| rt.desk.task_scripts().saving(object, item))
 }
 
+/// Folderstorm: the sends the test run under way wants now
+/// (mcp-script-testing.md).
+pub fn script_test_sends() -> Vec<(u64, script_testing::Send)> {
+    with(|rt| rt.desk.testing().wanted())
+}
+
+/// Folderstorm: a test run's send `token` left, or could not.
+pub fn script_test_sent(token: u64, result: Result<(), String>) {
+    with(|rt| rt.desk.testing().sent(token, result, Instant::now()));
+}
+
+/// Folderstorm: a planned interaction (touch, dialog answer, channel line)
+/// was sent, or could not be.
+pub fn interaction_sent(call: Pending, interaction: &script_testing::Interaction, reply: serde_json::Value, result: Result<(), ToolError>) {
+    with(|rt| rt.desk.testing().interacted(call, interaction, reply, result, Instant::now()));
+}
+
+/// Folderstorm: a planned test run starts.
+pub fn script_test_start(call: Pending, recipe: script_testing::Recipe) {
+    with(|rt| rt.desk.testing().start(call, recipe, Instant::now()));
+}
+
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
 /// asks the landmark cache for them, phase 3).
 pub fn wanted_landmarks() -> Vec<Uuid> {
@@ -802,6 +875,9 @@ pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)>
         let planned = objects::handles(&call.tool).then(|| rt.desk.objects().plan(&call, &cx, Instant::now(), true));
         // Folderstorm: and a task script change (mcp-task-scripts.md)
         let planned = planned.or_else(|| task_scripts::is_change(&call.tool).then(|| rt.desk.task_script_plan(&call, &cx, Instant::now())));
+        // Folderstorm: and a script testing change (mcp-script-testing.md)
+        let planned =
+            planned.or_else(|| script_testing::is_change(&call.tool).then(|| rt.desk.script_test_plan(&call, &cx, Instant::now())));
         Some((call, planned))
     })?;
     match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
@@ -851,7 +927,11 @@ pub fn observe(event: &aurora_net::NetEvent) {
             return with(|rt| rt.desk.task_script_observe(event, Instant::now()));
         }
         aurora_net::NetEvent::ScriptExperiences { .. } | aurora_net::NetEvent::ScriptRunning { .. } => {
-            return with(|rt| rt.desk.task_script_observe(event, Instant::now()));
+            return with(|rt| {
+                rt.desk.task_script_observe(event, Instant::now());
+                // Folderstorm: a test run's running assertions (mcp-script-testing.md)
+                rt.desk.testing().observe(event);
+            });
         }
         _ => {}
     }
@@ -900,6 +980,25 @@ fn log_demo_task(step: u8, result: &Result<serde_json::Value, ToolError>) {
             log::info!("local assistant demo: task script step {step} answered {value}");
         }
         Err(e) => log::info!("local assistant demo: task script step {step} ended with {e}"),
+    }
+}
+
+/// Folderstorm: the script testing demo's step answered: what it did,
+/// never the grid's text.
+fn log_demo_test(step: u8, result: &Result<serde_json::Value, ToolError>) {
+    match result {
+        Ok(value) => {
+            let mut value = value.clone();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("items");
+                object.remove("dialogs");
+                object.remove("steps");
+                object.remove("runtime_errors");
+                object.remove("note");
+            }
+            log::info!("local assistant demo: script testing step {step} answered {value}");
+        }
+        Err(e) => log::info!("local assistant demo: script testing step {step} ended with {e}"),
     }
 }
 

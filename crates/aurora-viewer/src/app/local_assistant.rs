@@ -113,6 +113,126 @@ impl App {
         }
         // Folderstorm: scripts inside objects (mcp-task-scripts.md)
         self.local_assistant_task_script_frame();
+        // Folderstorm: the test run's steps (mcp-script-testing.md)
+        for (token, send) in mcp_bridge::script_test_sends() {
+            let result = self.local_assistant_interaction(&send).map_err(|e| e.message);
+            mcp_bridge::script_test_sent(token, result);
+        }
+    }
+
+    /// Folderstorm: a touch, a dialog answer, a channel line or a script's
+    /// running state, sent as the viewer's click, its script window, its
+    /// chat and the object's script editor send them, each checked for
+    /// RLVa just before (mcp-script-testing.md). The demo's box answers.
+    fn local_assistant_interaction(&mut self, send: &mcp_bridge::script_testing::Send) -> Result<(), ToolError> {
+        use aurora_net::build::BuildCmd;
+        use mcp_bridge::script_testing::Send;
+        let blocked = || ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this");
+        match send {
+            Send::Touch { local_id, .. } => {
+                let command = NetCommand::Touch { local_id: *local_id };
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                self.send(command);
+            }
+            Send::Channel { channel, text } => {
+                if self.world.rlva.enabled() && !self.world.rlva.allows_channel(*channel) {
+                    return Err(blocked());
+                }
+                self.send(NetCommand::Chat {
+                    message: text.clone(),
+                    channel: *channel,
+                    chat_type: aurora_net::ChatType::Normal,
+                });
+            }
+            Send::Dialog {
+                notification,
+                fingerprint,
+                object,
+                channel,
+                button,
+                label,
+            } => {
+                let live = self
+                    .world
+                    .notifications
+                    .list
+                    .iter()
+                    .find(|n| n.id == *notification)
+                    .and_then(mcp_bridge::script_testing::fingerprint);
+                if live != Some(*fingerprint) {
+                    return Err(ToolError::new(
+                        ErrorCode::Stale,
+                        "the dialog was answered, closed or replaced in the meantime: nothing was sent. List again with object_dialog_list",
+                    ));
+                }
+                let check = NetCommand::ScriptDialogReply {
+                    sender: None,
+                    object_id: *object,
+                    channel: *channel,
+                    index: button.map_or(0, |i| i as i32),
+                    label: label.clone(),
+                };
+                if !self.world.rlva_allows_command(&check, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                let response = match button {
+                    Some(i) => crate::world::notifications::Response::Button(*i),
+                    None => {
+                        if let Some(n) = self.world.notifications.list.iter_mut().find(|n| n.id == *notification) {
+                            n.text.clone_from(label);
+                        }
+                        crate::world::notifications::Response::SendText
+                    }
+                };
+                let (commands, _) = self.world.respond_notification(*notification, response);
+                for command in commands {
+                    self.send(command);
+                }
+            }
+            Send::Running {
+                handle,
+                object,
+                item,
+                running,
+            } => {
+                let command = NetCommand::Build(BuildCmd::SetScriptRunning {
+                    handle: *handle,
+                    object_id: *object,
+                    item_id: *item,
+                    running: *running,
+                });
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                self.send(command);
+            }
+            Send::Reset { handle, object, item } => {
+                let command = NetCommand::Build(BuildCmd::ScriptReset {
+                    handle: *handle,
+                    object_id: *object,
+                    item_id: *item,
+                });
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                self.send(command);
+            }
+            Send::Query { handle, object, item } => self.send(NetCommand::Build(BuildCmd::GetScriptRunning {
+                handle: *handle,
+                object_id: *object,
+                item_id: *item,
+            })),
+        }
+        if self.demo {
+            for event in mcp_bridge::script_testing::demo::answers(send, self.world.agent_id) {
+                if let Some(e) = self.world.apply(event) {
+                    self.on_app_event(e);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Folderstorm: what the task script tools wait for, asked the way the
@@ -385,6 +505,15 @@ impl App {
             Work::Content(save) => self.local_assistant_content(call, &planned, save),
             Work::Object(send) => self.local_assistant_object(call, planned.reply, *send), // Folderstorm: mcp-objects.md
             Work::TaskScript(send) => self.local_assistant_task_script(call, planned.reply, *send), // Folderstorm: mcp-task-scripts.md
+            // Folderstorm: mcp-script-testing.md
+            Work::Interact(interaction) => {
+                let result = self.local_assistant_interaction(&interaction.send);
+                if result.is_ok() {
+                    log::info!("local assistant interaction: {}", interaction.tool);
+                }
+                mcp_bridge::interaction_sent(call, &interaction, planned.reply, result);
+            }
+            Work::ScriptTest(recipe) => mcp_bridge::script_test_start(call, *recipe),
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));
