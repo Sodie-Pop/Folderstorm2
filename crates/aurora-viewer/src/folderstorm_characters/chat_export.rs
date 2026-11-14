@@ -788,6 +788,7 @@ mod tests {
             seconds_left: 50,
             waiting: 0,
             detail: Vec::new(),
+            per_object: false,
         };
         let list = with_question(&w, Some(question()));
         assert_eq!(list.items.len(), 1);

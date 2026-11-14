@@ -56,7 +56,7 @@ use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::server::VIEWER_TIMEOUT;
 use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -68,6 +68,9 @@ struct Asking {
     summary: String,
     deadline: Instant,
     decision: Option<bool>,
+    /// Folderstorm: allowed with "Allow for this object this session"
+    /// (mcp-script-testing.md).
+    for_session: bool,
 }
 
 /// A change sent, waiting for the server.
@@ -165,6 +168,10 @@ pub struct Question {
     /// Folderstorm: a plan's rows under its sentence (at most 5, "and N
     /// more", the entries left out); empty for any other change.
     pub detail: Vec<String>,
+    /// Folderstorm: a touch: the dialog offers "Allow once" and "Allow for
+    /// this object this session" ([`Desk::decide_for_session`],
+    /// mcp-script-testing.md).
+    pub per_object: bool,
 }
 
 /// A change allowed, to run on this frame.
@@ -218,6 +225,11 @@ pub struct Desk {
     testing: ScriptTesting,
     /// Folderstorm: this login's object revisions, edits and rezzes.
     building: Building,
+    /// Folderstorm: the objects whose touches the user allowed for this
+    /// session from the Ask dialog (mcp-script-testing.md): cleared at a
+    /// login change, when access is turned off and when the Interact level
+    /// changes; never saved.
+    touch_grants: HashSet<Uuid>,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -430,10 +442,17 @@ impl Desk {
             }
         }
         // the levels may have changed while the call was queued
-        match call_decision(&self.permissions, &call) {
+        match self.decide_call(&call) {
             Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
             Decision::Ask => call.ask = true,
-            Decision::Run => {}
+            Decision::Run => {
+                // Folderstorm: a touch of an object allowed for this
+                // session needs no question (mcp-script-testing.md)
+                if self.touch_granted(&call) {
+                    call.ask = false;
+                    call.receipt(|r| r.decide(receipts::Decision::ApprovedForSession));
+                }
+            }
         }
         // Folderstorm: a teleport (and a picture with the interface) asks
         // even on Allow, a call made in the process too
@@ -922,6 +941,11 @@ impl Desk {
     /// The user's levels in force, given each frame before the calls: the
     /// calls waiting are decided again with them ([`Desk::tick`]).
     pub fn set_permissions(&mut self, permissions: Permissions) {
+        // Folderstorm: the touches allowed for this session end with the
+        // Interact level they were allowed under (mcp-script-testing.md)
+        if permissions.level(Class::Interact) != self.permissions.level(Class::Interact) {
+            self.touch_grants.clear();
+        }
         self.permissions = permissions;
     }
 
@@ -949,6 +973,7 @@ impl Desk {
         self.task_scripts.clear(&refusal); // Folderstorm: task scripts
         self.testing.clear(); // Folderstorm: script testing
         self.building.clear(&refusal); // Folderstorm: building
+        self.touch_grants.clear(); // Folderstorm: touches allowed for the session
         super::script_feed::clear();
     }
 
@@ -1048,7 +1073,7 @@ impl Desk {
         }
         let taken = self.login;
         self.set_login(login, session);
-        match self.review_as(taken, call_decision(&self.permissions, &call)) {
+        match self.review_as(taken, self.decide_call(&call)) {
             Review::Refuse(refusal) => {
                 call.answer(Err(refusal));
                 None
@@ -1079,6 +1104,7 @@ impl Desk {
                     detail
                 }
             },
+            per_object: script_testing::touched_object(&first.call.tool, &first.call.arguments).is_some(),
         })
     }
 
@@ -1098,6 +1124,42 @@ impl Desk {
         self.asks[index].decision = Some(allow);
     }
 
+    /// Folderstorm: "Allow for this object this session" on a touch's
+    /// question (mcp-script-testing.md): allowed, and that object's next
+    /// touches need no question until the login changes, access is turned
+    /// off or the Interact level changes. Any other question ignores it.
+    pub fn decide_for_session(&mut self, number: u64) {
+        let Some(index) = self.asks.iter().position(|a| a.number == number && a.decision.is_none()) else {
+            return;
+        };
+        let call = &self.asks[index].call;
+        let Some(object) = script_testing::touched_object(&call.tool, &call.arguments) else {
+            return;
+        };
+        if call_decision(&self.permissions, call) != Decision::Ask {
+            // Never meanwhile refuses at once; Allow needs no grant
+            return self.decide(number, true);
+        }
+        self.touch_grants.insert(object);
+        self.asks[index].decision = Some(true);
+        self.asks[index].for_session = true;
+    }
+
+    /// Folderstorm: whether `call` is a touch of an object the user allowed
+    /// for this session.
+    fn touch_granted(&self, call: &Pending) -> bool {
+        script_testing::touched_object(&call.tool, &call.arguments).is_some_and(|object| self.touch_grants.contains(&object))
+    }
+
+    /// What the levels say of `call` now ([`call_decision`]), a touch of an
+    /// object allowed for this session running without a question.
+    fn decide_call(&self, call: &Pending) -> Decision {
+        match call_decision(&self.permissions, call) {
+            Decision::Ask if self.touch_granted(call) => Decision::Run,
+            decided => decided,
+        }
+    }
+
     /// Once per frame: settle the questions (answered or timed out), the
     /// changes the server never confirmed and the bake waits; returns the
     /// changes the app runs now.
@@ -1110,7 +1172,18 @@ impl Desk {
             }
             match ask.decision {
                 Some(true) => {
-                    ask.call.receipt(|r| r.decide(receipts::Decision::Approved));
+                    let decision = if ask.for_session {
+                        receipts::Decision::ApprovedForSession
+                    } else {
+                        receipts::Decision::Approved
+                    };
+                    ask.call.receipt(|r| r.decide(decision));
+                    self.queue(ask.call, ask.summary);
+                }
+                // Folderstorm: another touch of an object just allowed for
+                // this session (mcp-script-testing.md)
+                None if self.touch_granted(&ask.call) && call_decision(&self.permissions, &ask.call) == Decision::Ask => {
+                    ask.call.receipt(|r| r.decide(receipts::Decision::ApprovedForSession));
                     self.queue(ask.call, ask.summary);
                 }
                 Some(false) => refuse_as(ask.call, receipts::Decision::RefusedByUser, "the user refused this change"),
@@ -1141,7 +1214,7 @@ impl Desk {
         }
         let mut runs = Vec::new();
         for ready in std::mem::take(&mut self.ready) {
-            match call_decision(&self.permissions, &ready.call) {
+            match self.decide_call(&ready.call) {
                 Decision::Refuse => ready.call.answer(Err(refused(PERMISSIONS_CHANGED))),
                 // not asked yet, and its class asks now
                 Decision::Ask if !ready.call.ask => self.ask(ready.call, ready.summary, now),
@@ -1170,6 +1243,7 @@ impl Desk {
             summary,
             deadline: now + ASK_TIMEOUT,
             decision: None,
+            for_session: false,
         });
     }
 

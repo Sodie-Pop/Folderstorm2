@@ -1,6 +1,7 @@
 //! Folderstorm: the local assistant's Ask dialog (folderstorm/plans/mcp.md,
 //! "Ask"). One request at a time, oldest first: which program asks, what
-//! it asks in plain words, Allow or Refuse. Escape, a click outside and the
+//! it asks in plain words, Allow or Refuse (a touch: Allow once, Allow for
+//! this object this session, or Refuse). Escape, a click outside and the
 //! end of the 60 seconds refuse. Neither button is the dialog's default:
 //! Enter, typed for something else when the dialog opens, allows nothing.
 
@@ -9,6 +10,14 @@ use crate::ui::widgets;
 use aurora_i18n::tr;
 use egui::{RichText, Vec2};
 use std::time::{Duration, Instant};
+
+/// The user's answer.
+enum Answer {
+    Allow,
+    /// Folderstorm: "Allow for this object this session" (a touch).
+    ForSession,
+    Refuse,
+}
 
 /// Draw the dialog of the oldest open request, if any.
 pub fn show(ctx: &egui::Context, p: &Palette) {
@@ -45,21 +54,49 @@ pub fn show(ctx: &egui::Context, p: &Palette) {
             );
         }
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            let size = Vec2::new(110.0, 26.0);
-            if widgets::action_button(ui, p, "check", tr!("fs-mcp-ask-allow"), widgets::ActionKind::Flat, size).clicked() {
-                answer = Some(true);
+        if question.per_object {
+            // Folderstorm: a touch, allowed once or for this object until
+            // the session ends (mcp-script-testing.md)
+            let size = Vec2::new(360.0, 26.0);
+            if widgets::action_button(ui, p, "check", tr!("fs-mcp-ask-allow-once"), widgets::ActionKind::Flat, size).clicked() {
+                answer = Some(Answer::Allow);
+            }
+            if widgets::action_button(
+                ui,
+                p,
+                "clock",
+                tr!("fs-mcp-ask-allow-object-session"),
+                widgets::ActionKind::Flat,
+                size,
+            )
+            .on_hover_text(tr!("fs-mcp-ask-allow-object-session-hint"))
+            .clicked()
+            {
+                answer = Some(Answer::ForSession);
             }
             if widgets::action_button(ui, p, "x", tr!("fs-mcp-ask-refuse"), widgets::ActionKind::Flat, size).clicked() {
-                answer = Some(false);
+                answer = Some(Answer::Refuse);
             }
-        });
+        } else {
+            ui.horizontal(|ui| {
+                let size = Vec2::new(110.0, 26.0);
+                if widgets::action_button(ui, p, "check", tr!("fs-mcp-ask-allow"), widgets::ActionKind::Flat, size).clicked() {
+                    answer = Some(Answer::Allow);
+                }
+                if widgets::action_button(ui, p, "x", tr!("fs-mcp-ask-refuse"), widgets::ActionKind::Flat, size).clicked() {
+                    answer = Some(Answer::Refuse);
+                }
+            });
+        }
     });
     if answer.is_none() && modal.should_close() {
-        answer = Some(false);
+        answer = Some(Answer::Refuse);
     }
-    if let Some(allow) = answer {
-        super::with(|rt| rt.desk.decide(question.number, allow));
+    match answer {
+        Some(Answer::Allow) => super::with(|rt| rt.desk.decide(question.number, true)),
+        Some(Answer::ForSession) => super::with(|rt| rt.desk.decide_for_session(question.number)),
+        Some(Answer::Refuse) => super::with(|rt| rt.desk.decide(question.number, false)),
+        None => {}
     }
     // the countdown, and the refusal at its end
     ctx.request_repaint_after(Duration::from_millis(250));

@@ -48,6 +48,15 @@ use uuid::Uuid;
 
 pub use folderstorm_mcp_bridge::protocol::script_testing::needs_client_request_id as is_change;
 
+/// The object an `object_touch` call names, for the Ask dialog's "Allow for
+/// this object this session" (the desk's grants). None for any other call.
+pub fn touched_object(tool: &str, args: &Value) -> Option<Uuid> {
+    if tool != TOUCH {
+        return None;
+    }
+    uuid_of(args.get("object_id"), "object_id").ok()
+}
+
 /// The key a frozen call carries its checked form under: the content
 /// saves' own, so that the Ask dialog lists its lines with no new hook.
 const FROZEN: &str = "frozen_content";

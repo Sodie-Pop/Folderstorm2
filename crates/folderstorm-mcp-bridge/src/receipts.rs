@@ -119,6 +119,9 @@ pub enum Decision {
     Allowed,
     /// The user clicked Allow.
     Approved,
+    /// Folderstorm: the user allowed this object's touches for the session
+    /// (mcp-script-testing.md), on this call's question or an earlier one.
+    ApprovedForSession,
     RefusedByUser,
     AskTimedOut,
     /// A class it needs went to Never, or access was turned off.
