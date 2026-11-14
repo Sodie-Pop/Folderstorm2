@@ -808,6 +808,7 @@ mod tests {
                 "enabled",
                 "in_mouselook",
                 "left",
+                "photo_whole_window",
                 "right",
                 "top"
             ]
