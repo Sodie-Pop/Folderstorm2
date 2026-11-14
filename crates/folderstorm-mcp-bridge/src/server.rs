@@ -16,6 +16,7 @@ use crate::discovery::{self, Discovery};
 use crate::http::{self, HttpError};
 use crate::policy::{Class, Decision, Permissions};
 use crate::protocol::{self, CallRequest, ErrorCode, Health, ToolError};
+use crate::receipts::{self, Ledger, Receipt, Tracked};
 use crate::token::Token;
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -55,6 +56,19 @@ pub struct Config {
     pub viewer_timeout: Duration,
 }
 
+/// Who the viewer is, for `/v1/health` (session routing,
+/// folderstorm/plans/mcp-routing.md): told by the frame thread.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Identity {
+    /// Its `--profile`; None for the main profile.
+    pub profile: Option<String>,
+    /// A session host manages it.
+    pub managed: bool,
+    /// The name it shows for its own avatar while logged in; health gives
+    /// it only while Read is Allow.
+    pub character: Option<String>,
+}
+
 /// A call waiting for the viewer's answer.
 pub struct Pending {
     pub tool: String,
@@ -68,6 +82,21 @@ pub struct Pending {
     /// sidecar, or nothing pinned yet). The frame thread refuses a bound
     /// tool pinned to another login than its own.
     pub session: Option<String>,
+    /// Folderstorm: a change's `operation_id`, made by the listener when it
+    /// arrived (receipts); None for a read, or a call made in the process
+    /// (the frame thread then makes one).
+    pub operation_id: Option<String>,
+    /// Folderstorm: its receipt, once the frame thread took it: its answer
+    /// ends the receipt ([`Pending::answer`]).
+    tracked: Option<Tracked>,
+    /// Folderstorm: the class `inventory_execute_plan` needs, decided by
+    /// the frame thread from its plan (plans); None for any other call.
+    pub plan_class: Option<Class>,
+    /// Folderstorm: it answers early, with its operation and state, as soon
+    /// as the frame thread took it (a long tool asked to, for a sidecar
+    /// that declares `operations`); its end then only updates its receipt.
+    pub early: bool,
+    early_sent: bool,
     reply: SyncSender<Result<Value, ToolError>>,
 }
 
@@ -83,15 +112,67 @@ impl Pending {
                 ask,
                 client: client.and_then(clean_client),
                 session: None,
+                operation_id: None,
+                tracked: None,
+                plan_class: None,
+                early: false,
+                early_sent: false,
                 reply,
             },
             answer,
         )
     }
 
-    /// Answer the call; an answer after the timeout is dropped.
+    /// Answer the call; an answer after the timeout is dropped. A call
+    /// with a receipt ends it, and its answer carries its `operation_id`
+    /// and `state`.
     pub fn answer(self, result: Result<Value, ToolError>) {
-        let _ = self.reply.try_send(result);
+        let result = match &self.tracked {
+            Some(tracked) => tracked.decorate(result),
+            None => result,
+        };
+        if !self.early_sent {
+            let _ = self.reply.try_send(result);
+        }
+    }
+
+    /// Folderstorm: an early call answers now, once, with its operation and
+    /// state (operations); the call itself goes on. Nothing for any other.
+    pub fn answer_early(&mut self) {
+        if !self.early || self.early_sent {
+            return;
+        }
+        let Some(tracked) = &self.tracked else { return };
+        let state = tracked.update(|r| r.state);
+        let answer = json!({
+            "operation_id": tracked.operation_id,
+            "state": state,
+            "early": true,
+            "next": "the change goes on in the viewer: poll assistant_operation_status with this operation_id (assistant_operation_cancel stops it before it is sent)",
+        });
+        let _ = self.reply.try_send(Ok(answer));
+        self.early_sent = true;
+    }
+
+    /// Folderstorm: the receipt of this call is kept in `ledger` (its
+    /// `operation_id` must be set).
+    pub fn track(&mut self, ledger: &Ledger) {
+        if let Some(operation_id) = &self.operation_id {
+            self.tracked = Some(Tracked {
+                ledger: ledger.clone(),
+                operation_id: operation_id.clone(),
+            });
+        }
+    }
+
+    /// Folderstorm: its receipt, if it has one.
+    pub fn tracked(&self) -> Option<&Tracked> {
+        self.tracked.as_ref()
+    }
+
+    /// Folderstorm: change its receipt (nothing for a call without one).
+    pub fn receipt<R>(&self, f: impl FnOnce(&mut Receipt) -> R) -> Option<R> {
+        self.tracked.as_ref().and_then(|t| t.update(f))
     }
 }
 
@@ -109,6 +190,8 @@ pub struct Activity {
     pub at: SystemTime,
     pub tool: String,
     pub outcome: Outcome,
+    /// Folderstorm: the change's operation, whose receipt Preferences shows.
+    pub operation_id: Option<String>,
 }
 
 struct Shared {
@@ -123,6 +206,8 @@ struct Shared {
     queue: SyncSender<Pending>,
     /// The login the frame thread is on, and its `viewer_session`.
     binding: Mutex<Binding>,
+    /// Session routing: the profile, managed or not, the character.
+    identity: Mutex<Identity>,
 }
 
 /// The running bridge. Dropping it stops the listener and deletes the
@@ -153,6 +238,7 @@ impl Bridge {
             activity: Mutex::new(VecDeque::new()),
             queue,
             binding: Mutex::new(Binding::default()),
+            identity: Mutex::new(Identity::default()),
         });
         let discovery = match &config.discovery_dir {
             Some(dir) => Some(discovery::write(dir, &Discovery::new(config.pid, port, &shared.token))?),
@@ -219,6 +305,16 @@ impl Bridge {
         self.shared.viewer_session()
     }
 
+    /// Who the viewer is (its profile, managed or not, its avatar's name),
+    /// from the frame thread; health gives the name only while Read is
+    /// Allow.
+    pub fn set_identity(&self, identity: Identity) {
+        let mut held = self.shared.identity.lock().unwrap_or_else(PoisonError::into_inner);
+        if *held != identity {
+            *held = identity;
+        }
+    }
+
     /// The recent calls, newest last.
     pub fn activity(&self) -> Vec<Activity> {
         self.shared
@@ -272,25 +368,47 @@ impl Shared {
     }
 }
 
-/// Decrements the connection count when a connection's thread ends.
-struct Slot(Arc<Shared>);
+/// What an accept loop serves: the bridge, or the host's MCP controller
+/// (`crate::controller`). Both share the bounds of [`accept_loop`].
+pub(crate) trait Served: Send + Sync + 'static {
+    fn stopping(&self) -> bool;
+    fn connections(&self) -> &AtomicUsize;
+    fn serve(&self, stream: &mut TcpStream);
+}
 
-impl Drop for Slot {
-    fn drop(&mut self) {
-        self.0.connections.fetch_sub(1, Ordering::SeqCst);
+impl Served for Shared {
+    fn stopping(&self) -> bool {
+        self.stopping.load(Ordering::SeqCst)
+    }
+
+    fn connections(&self) -> &AtomicUsize {
+        &self.connections
+    }
+
+    fn serve(&self, stream: &mut TcpStream) {
+        serve(stream, self);
     }
 }
 
-fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
+/// Decrements the connection count when a connection's thread ends.
+struct Slot<S: Served>(Arc<S>);
+
+impl<S: Served> Drop for Slot<S> {
+    fn drop(&mut self) {
+        self.0.connections().fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+pub(crate) fn accept_loop<S: Served>(listener: TcpListener, shared: Arc<S>) {
     for stream in listener.incoming() {
-        if shared.stopping.load(Ordering::SeqCst) {
+        if shared.stopping() {
             break;
         }
         let Ok(mut stream) = stream else { continue };
         let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
         let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-        if shared.connections.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-            shared.connections.fetch_sub(1, Ordering::SeqCst);
+        if shared.connections().fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
+            shared.connections().fetch_sub(1, Ordering::SeqCst);
             // take the request in first: closing on unread bytes resets the
             // connection before the client reads the answer
             let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
@@ -302,7 +420,7 @@ fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
         let slot = Slot(shared.clone());
         let spawned = std::thread::Builder::new().name("mcp-bridge-call".into()).spawn(move || {
             let slot = slot;
-            serve(&mut stream, &slot.0);
+            slot.0.serve(&mut stream);
         });
         if let Err(e) = spawned {
             log::warn!("local assistant bridge: no thread for a connection: {e}");
@@ -310,11 +428,11 @@ fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
     }
 }
 
-fn reply(stream: &mut TcpStream, status: u16, body: &Value) {
+pub(crate) fn reply(stream: &mut TcpStream, status: u16, body: &Value) {
     let _ = http::write_response(stream, status, body.to_string().as_bytes());
 }
 
-fn reply_error(stream: &mut TcpStream, error: &ToolError) {
+pub(crate) fn reply_error(stream: &mut TcpStream, error: &ToolError) {
     reply(stream, error.code.status(), &json!({"ok": false, "error": error}));
 }
 
@@ -325,19 +443,26 @@ fn serve(stream: &mut TcpStream, shared: &Shared) {
     }
 }
 
-fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
-    let (head, body) = http::read_message(stream, http::MAX_REQUEST_BODY).map_err(|e| match e {
+/// Read one request, bounded.
+pub(crate) fn read_request(stream: &mut TcpStream) -> Result<(http::Head, Vec<u8>), ToolError> {
+    http::read_message(stream, http::MAX_REQUEST_BODY).map_err(|e| match e {
         HttpError::TooLarge => ToolError::new(ErrorCode::TooLarge, "request too large"),
         HttpError::Malformed(what) => ToolError::new(ErrorCode::BadRequest, what),
         HttpError::Io(_) => ToolError::new(ErrorCode::BadRequest, "request not received"),
-    })?;
+    })
+}
+
+/// The checks every request passes before anything else, the bridge's and
+/// the host controller's: no web page (`Origin`), no DNS rebinding (the
+/// `Host` must be the loopback address and our port), the bearer token.
+pub(crate) fn check_head(head: &http::Head, port: u16, token: &Token) -> Result<(), ToolError> {
     // A browser page sends Origin: no web page may drive the bridge.
     if head.header("origin").is_some() {
         return Err(ToolError::new(ErrorCode::Forbidden, "requests from web pages are refused"));
     }
     // DNS rebinding: the Host must be the loopback address and our port.
     let host_ok = head.header("host").is_some_and(|host| {
-        let port = shared.port.to_string();
+        let port = port.to_string();
         host.rsplit_once(':')
             .is_some_and(|(name, p)| p == port && (name == "127.0.0.1" || name.eq_ignore_ascii_case("localhost")))
     });
@@ -347,10 +472,16 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
     let authorized = head
         .header("authorization")
         .and_then(|v| v.strip_prefix("Bearer "))
-        .is_some_and(|t| shared.token.matches(t.trim()));
+        .is_some_and(|t| token.matches(t.trim()));
     if !authorized {
         return Err(ToolError::new(ErrorCode::Unauthorized, "missing or wrong bearer token"));
     }
+    Ok(())
+}
+
+fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
+    let (head, body) = read_request(stream)?;
+    check_head(&head, shared.port, &shared.token)?;
     if shared.stopping.load(Ordering::SeqCst) {
         return Err(ToolError::new(ErrorCode::Unavailable, "the bridge is stopping"));
     }
@@ -361,13 +492,20 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
     match (method, path) {
         ("GET", "/v1/health") => {
             let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
+            let read_allowed = permissions.check(Class::Read).is_ok();
+            let viewer_session = shared.viewer_session();
+            let identity = shared.identity.lock().unwrap_or_else(PoisonError::into_inner).clone();
             let health = Health {
                 api: crate::API_VERSION,
                 product: folderstorm_brand::PRODUCT.to_owned(),
                 version: shared.version.clone(),
-                read_allowed: permissions.check(Class::Read).is_ok(),
+                read_allowed,
                 capabilities: Some(binding::capabilities()),
-                viewer_session: shared.viewer_session(),
+                // (a name only for a login, and only with Read)
+                character: identity.character.filter(|_| read_allowed && viewer_session.is_some()),
+                viewer_session,
+                profile: identity.profile,
+                managed: identity.managed,
             };
             serde_json::to_value(health).map_err(|_| ToolError::new(ErrorCode::Internal, "health not serialized"))
         }
@@ -386,7 +524,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<Value, ToolError> {
 }
 
 /// A client's name as the dialog may show it: printable, one line, short.
-fn clean_client(name: &str) -> Option<String> {
+pub(crate) fn clean_client(name: &str) -> Option<String> {
     let name: String = name.chars().filter(|c| !c.is_control()).take(CLIENT_NAME_MAX).collect();
     let name = name.trim();
     (!name.is_empty()).then(|| name.to_owned())
@@ -422,7 +560,15 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
         }
     }
     let permissions = *shared.permissions.lock().unwrap_or_else(PoisonError::into_inner);
-    let ask = match permissions.decide_all(spec.classes()) {
+    // Folderstorm: a plan's execute needs the plan's class, which only the
+    // frame thread knows: refused here only when every class it may need is
+    // on Never
+    let decided = if protocol::assistant::from_plan(spec) {
+        protocol::assistant::any_decision(&permissions, spec)
+    } else {
+        permissions.decide_all(spec.classes())
+    };
+    let ask = match decided {
         // a picture with the interface asks even on Allow
         Decision::Run => spec.class.is_some() && protocol::always_asks(&call.tool, &call.arguments),
         Decision::Ask => true,
@@ -433,10 +579,18 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
             ));
         }
     };
+    // Folderstorm: a change gets its operation now, so that even this
+    // thread's own timeout can name it (receipts)
+    let operation_id = spec.changes().then(receipts::new_operation_id).and_then(Result::ok);
     let (pending, answer) = Pending::detached(&call.tool, call.arguments.clone(), ask, None);
+    // Folderstorm: an early answer only for a sidecar that knows it
+    let early = protocol::assistant::answers_early(spec, &call.arguments)
+        && call.features.as_ref().is_some_and(|f| f.contains_key(binding::OPERATIONS));
     let pending = Pending {
         client,
         session: call.session.clone(),
+        operation_id: operation_id.clone(),
+        early,
         ..pending
     };
     match shared.queue.try_send(pending) {
@@ -444,12 +598,29 @@ fn call_tool(shared: &Shared, call: &CallRequest, client: Option<String>) -> Res
         Err(TrySendError::Full(_)) => return Err(ToolError::new(ErrorCode::Busy, "too many calls waiting for the viewer")),
         Err(TrySendError::Disconnected(_)) => return Err(ToolError::new(ErrorCode::Unavailable, "the bridge is stopping")),
     }
-    // the dialog's time, then the tool's own, on top of the usual wait
-    let wait = shared.viewer_timeout + spec.wait + if ask { protocol::ASK_TIMEOUT } else { Duration::ZERO };
+    // the dialog's time, then the tool's own, on top of the usual wait (a
+    // change may ask even when it arrived on Allow: the levels may change)
+    let asks = ask || spec.changes();
+    let wait = shared.viewer_timeout + spec.wait + if asks { protocol::ASK_TIMEOUT } else { Duration::ZERO };
     match answer.recv_timeout(wait) {
         Ok(result) => result,
-        Err(RecvTimeoutError::Timeout) => Err(ToolError::new(ErrorCode::Timeout, "the viewer did not answer in time")),
+        Err(RecvTimeoutError::Timeout) => Err(timed_out(operation_id)),
         Err(RecvTimeoutError::Disconnected) => Err(ToolError::new(ErrorCode::Unavailable, "the call was dropped")),
+    }
+}
+
+/// The viewer did not answer in time: a change names its operation, which
+/// may still run.
+fn timed_out(operation_id: Option<String>) -> ToolError {
+    match operation_id {
+        Some(operation_id) => ToolError {
+            operation_id: Some(operation_id),
+            ..ToolError::new(
+                ErrorCode::Timeout,
+                "the viewer did not answer in time; the change may still run: ask assistant_operation_status before retrying",
+            )
+        },
+        None => ToolError::new(ErrorCode::Timeout, "the viewer did not answer in time"),
     }
 }
 
@@ -459,6 +630,11 @@ fn record(shared: &Shared, tool: &str, result: &Result<Value, ToolError>) {
         Err(e) if e.code == ErrorCode::PermissionDenied => Outcome::Refused,
         Err(e) => Outcome::Failed(e.code),
     };
+    let operation_id = match result {
+        Ok(value) => value["operation_id"].as_str().map(str::to_owned),
+        Err(e) => e.operation_id.clone(),
+    }
+    .filter(|id| receipts::is_operation_id(id));
     // an unknown name is the client's text: keep it short and printable
     let tool: String = tool.chars().filter(|c| c.is_ascii_graphic()).take(48).collect();
     let mut activity = shared.activity.lock().unwrap_or_else(PoisonError::into_inner);
@@ -469,6 +645,7 @@ fn record(shared: &Shared, tool: &str, result: &Result<Value, ToolError>) {
         at: SystemTime::now(),
         tool,
         outcome,
+        operation_id,
     });
 }
 

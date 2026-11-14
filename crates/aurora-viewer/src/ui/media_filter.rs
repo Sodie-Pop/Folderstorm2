@@ -47,10 +47,11 @@ pub fn prompt(ctx: &egui::Context, p: &Palette, top: f32, q: &Question, first_us
         st.remember = Remember::Once;
     }
     let mut answer = None;
+    let bars = crate::folderstorm::viewport::bars_offset(ctx, egui::Align2::CENTER_TOP).x; // Folderstorm: world viewport
     egui::Area::new(egui::Id::unique("media_filter_question"))
         .fade_in(false)
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, top + GAP))
+        .anchor(egui::Align2::CENTER_TOP, egui::vec2(bars, top + GAP))
         .constrain(true)
         .show(ctx, |ui| {
             widgets::overlay(ui, p, egui::Margin::symmetric(12, 8), |ui| {

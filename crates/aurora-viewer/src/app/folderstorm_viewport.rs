@@ -5,15 +5,52 @@
 //! (`aurora_render::Renderer::set_world_rect`).
 
 use super::*;
+use crate::folderstorm::photo_viewport;
 use crate::folderstorm::viewport::{self, Overrides};
 
 impl App {
-    /// When the world fills the window whatever the viewport settings.
+    /// When the world fills the window whatever the viewport settings: a
+    /// photo or the full-frame photo view only when photo mode has the
+    /// whole window (by default it stays in the viewport,
+    /// `crate::folderstorm::photo_viewport`).
     fn viewport_overrides(&self) -> Overrides {
+        let photo =
+            self.settings.folderstorm_viewport.photo_whole_window && (self.snapshots.capturing.is_some() || self.photo_full_frame());
         Overrides {
             mouselook: self.camera.mouselook(),
-            full_frame: self.snapshots.capturing.is_some() || self.photo_full_frame() || !matches!(self.screen, Screen::World),
+            full_frame: photo || !matches!(self.screen, Screen::World),
         }
+    }
+
+    /// The rectangle photo mode works in this frame, in window pixels: the
+    /// world viewport the renderer draws, None for the whole window.
+    pub(super) fn photo_rect(&self, renderer: &Renderer) -> Option<[u32; 4]> {
+        photo_viewport::rect(renderer.world_rect(), self.settings.folderstorm_viewport.photo_whole_window)
+    }
+
+    /// The size photo mode's photos take as "the window": its "Window" size
+    /// and proportions, and the live view their focus and detail match.
+    pub(super) fn photo_window(&self, renderer: &Renderer) -> (u32, u32) {
+        photo_viewport::window_size(self.photo_rect(renderer), renderer.size())
+    }
+
+    /// Photo mode's rectangle in window pixels (the AF point's frame).
+    pub(super) fn photo_px(&self, renderer: &Renderer) -> [f32; 4] {
+        photo_viewport::px_rect(self.photo_rect(renderer), renderer.size())
+    }
+
+    /// Whether the pointer is where photo mode takes clicks and the wheel
+    /// (never in a margin of the viewport).
+    pub(super) fn photo_takes_pointer(&self) -> bool {
+        let rect = self.gfx.as_ref().and_then(|g| self.photo_rect(&g.renderer));
+        photo_viewport::takes_pointer(rect, self.cursor_pos)
+    }
+
+    /// Tells photo mode's overlay its rectangle for this frame, before the
+    /// interface is laid out.
+    pub(super) fn publish_photo_area(&self, renderer: &Renderer) {
+        let area = photo_viewport::points(self.photo_rect(renderer), self.egui_ctx.pixels_per_point());
+        photo_viewport::set_area(&self.egui_ctx, area);
     }
 
     /// The world's part of a window of `size` this frame, None for all of
@@ -59,6 +96,10 @@ impl App {
     /// `mouselook-full` drops it in mouselook,
     /// `inventory` keeps the right 40 % and opens Inventory in the left
     /// margin, half the window wide: wider than the world, and kept so.
+    /// `right-half` and `left-half` keep the right or the left half (the
+    /// world on one of two monitors, for photo mode in the viewport with
+    /// `AURORA_DEMO_SNAPSHOT=viewfinder`), `photo-window` the right half
+    /// with photo mode given the whole window.
     pub(super) fn viewport_demo(&mut self, size: (u32, u32)) {
         static APPLIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !self.demo || APPLIED.swap(true, std::sync::atomic::Ordering::Relaxed) {
@@ -66,15 +107,26 @@ impl App {
         }
         let Ok(mode) = std::env::var("AURORA_DEMO_VIEWPORT") else { return };
         let third = size.0 / 3;
+        let half = size.0 / 2;
         let s = &mut self.settings.folderstorm_viewport;
         *s = viewport::ViewportSettings {
             enabled: true,
-            left: if mode == "inventory" { size.0 / 5 * 3 } else { third },
-            right: if mode == "middle" { third } else { 0 },
+            left: match mode.as_str() {
+                "inventory" => size.0 / 5 * 3,
+                "right-half" | "photo-window" => half,
+                "left-half" => 0,
+                _ => third,
+            },
+            right: match mode.as_str() {
+                "middle" => third,
+                "left-half" => size.0 - half,
+                _ => 0,
+            },
             top: if mode == "bars-around" { size.1 / 8 } else { 0 },
             bottom: if mode == "bars-around" { size.1 / 8 } else { 0 },
             in_mouselook: mode != "mouselook-full",
             bars_in_viewport: mode != "bars-window",
+            photo_whole_window: mode == "photo-window",
             bars_around: mode == "bars-around",
         };
         if mode == "inventory" {

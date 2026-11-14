@@ -23,6 +23,14 @@
 //! `viewer_session` that the sidecar pins: a call pinned to another login is
 //! refused with `session_changed` (folderstorm/plans/mcp-receipts.md,
 //! section 2).
+//!
+//! Every change the desk takes gets a receipt (section 4): the desk keeps
+//! them for the login, Preferences shows them in Recent activity, and
+//! `assistant_operation_status` reads them back.
+//!
+//! Navigation (phase 3, part 4) is planned in [`navigation`]; the app starts
+//! the move or the teleport, and the desk's navigator follows it once per
+//! frame just before the autopilot runs ([`navigation_frame`]).
 
 pub mod ask;
 pub mod camera;
@@ -31,6 +39,9 @@ mod camera_tests;
 #[cfg(test)]
 mod change_tests;
 pub mod changes;
+pub mod content; // Folderstorm: content editing (mcp-content.md)
+#[cfg(test)]
+mod content_tests;
 pub mod desk;
 #[cfg(test)]
 mod gap_tests; // Folderstorm: phase 3, part 2 (inventory gaps)
@@ -39,7 +50,14 @@ pub mod inventory_reads;
 pub mod journal;
 pub mod landmark;
 pub mod login;
+pub mod navigation; // Folderstorm: phase 3, part 4 (navigation)
+#[cfg(test)]
+mod navigation_tests;
+pub mod objects; // Folderstorm: object inspection and lifecycle (mcp-objects.md)
+#[cfg(test)]
+mod objects_tests;
 pub mod picture;
+pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
 pub mod setup;
 pub mod studio;
 #[cfg(test)]
@@ -51,6 +69,8 @@ mod world_tests;
 
 use crate::world::World;
 pub use desk::Desk;
+use folderstorm_mcp_bridge::protocol::assistant as plans_tool;
+use folderstorm_mcp_bridge::receipts::Receipt;
 use folderstorm_mcp_bridge::server::{Activity, Config, Pending, VIEWER_TIMEOUT};
 use folderstorm_mcp_bridge::{Bridge, ErrorCode, LocalAssistant, Preset, ToolError};
 use std::collections::{HashMap, HashSet};
@@ -83,8 +103,17 @@ struct Runtime {
     started: bool,
     /// `AURORA_DEMO_MCP=ask|camera`: the demo's own requests were made.
     demo_asked: bool,
+    /// Folderstorm: `AURORA_DEMO_MCP=navigation`'s step: 0 walking, 1 the
+    /// walk answered (the teleport goes), 2 teleporting, 3 done.
+    demo_step: u8,
     /// The demo's requests waiting for their answer, logged when it comes.
     demo_answers: Vec<(&'static str, Receiver<Result<serde_json::Value, ToolError>>)>,
+    /// Folderstorm: `AURORA_DEMO_MCP=content`: the demo's reads, saved
+    /// once they answer.
+    demo_reads: Vec<Receiver<Result<serde_json::Value, ToolError>>>,
+    /// Folderstorm: `AURORA_DEMO_MCP=objects`: the demo's listing, which a
+    /// put follows once it answers.
+    demo_listing: Option<Receiver<Result<serde_json::Value, ToolError>>>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -138,6 +167,20 @@ pub struct Status {
     pub port: Option<u16>,
     pub failure: Option<String>,
     pub activity: Vec<Activity>,
+    /// Folderstorm: this login's receipts, oldest first.
+    pub receipts: Vec<ReceiptLine>,
+}
+
+/// Folderstorm: a receipt as Recent activity shows it.
+#[derive(Debug, Clone)]
+pub struct ReceiptLine {
+    pub operation_id: String,
+    pub tool: String,
+    pub summary: String,
+    pub state: folderstorm_mcp_bridge::receipts::State,
+    pub client: Option<String>,
+    /// When the call arrived on the frame thread.
+    pub asked: std::time::SystemTime,
 }
 
 pub fn status() -> Status {
@@ -145,6 +188,19 @@ pub fn status() -> Status {
         port: rt.running.as_ref().map(|r| r.bridge.port()),
         failure: rt.failure.clone(),
         activity: rt.running.as_ref().map(|r| r.bridge.activity()).unwrap_or_default(),
+        receipts: rt.desk.ledger().with(|store| {
+            store
+                .all()
+                .map(|r| ReceiptLine {
+                    operation_id: r.operation_id.clone(),
+                    tool: r.tool.clone(),
+                    summary: r.summary.clone(),
+                    state: r.state,
+                    client: r.client.clone(),
+                    asked: r.asked,
+                })
+                .collect()
+        }),
     })
 }
 
@@ -158,15 +214,45 @@ pub fn set_session(settings: Option<LocalAssistant>) {
     with(|rt| rt.session = settings);
 }
 
-/// Where the discovery file goes: the settings folder in use.
+/// Where the discovery file goes: the main profile's settings folder,
+/// whatever this process's profile, so that the sidecar finds every
+/// character's viewer in one place (session routing,
+/// folderstorm/plans/mcp-routing.md, section 1). The pid in the file's name
+/// keeps them apart.
 pub fn discovery_dir() -> std::path::PathBuf {
-    crate::settings::config_dir()
+    crate::folderstorm_characters::profile::main_config_dir()
 }
 
-/// `AURORA_DEMO_MCP=ask` (or `camera`): the session asks before every
-/// change, and the demo makes requests of its own so that the dialog shows.
+/// Who this viewer is, for the sidecar (session routing): its profile,
+/// managed by a session host or not, and its avatar's name while logged in
+/// (the bridge gives the name only while Read is Allow).
+fn identity(view: &View) -> folderstorm_mcp_bridge::server::Identity {
+    folderstorm_mcp_bridge::server::Identity {
+        profile: crate::folderstorm_characters::profile::current().map(|p| p.shown().to_owned()),
+        managed: crate::cli::get().managed,
+        character: view.logged_in().then(|| view.world.own_name()).filter(|n| !n.is_empty()),
+    }
+}
+
+/// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`, `navigation`, `content`,
+/// `objects`): the session asks before every change, and the demo makes
+/// requests of its own so that the dialog shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "ask" || v == "camera")
+    std::env::var("AURORA_DEMO_MCP")
+        .is_ok_and(|v| v == "ask" || v == "camera" || v == "plan" || v == "navigation" || v == "content" || v == "objects")
+}
+
+/// Folderstorm: `AURORA_DEMO_MCP=navigation`: the demo walks the avatar 8 m
+/// east, then teleports it back near where it started (both asked), then
+/// logs `navigation_status`.
+fn demo_navigation() -> bool {
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "navigation")
+}
+
+/// `AURORA_DEMO_MCP=plan`: the demo previews a 3-entry move and executes
+/// it, so that the dialog lists a plan's rows.
+fn demo_plan() -> bool {
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| v == "plan")
 }
 
 /// `AURORA_DEMO_MCP=camera`: the demo's requests frame the avatar and take
@@ -193,6 +279,12 @@ pub struct View<'a> {
     pub object_props: Vec<&'a HashMap<Uuid, aurora_net::build::ObjectProps>>,
     /// The Sound Explorer's history, for `world_audio_sources`.
     pub sounds: Option<&'a crate::scene::sounds::history::History>,
+    /// Folderstorm: what the viewer itself does with the avatar, for the
+    /// navigation tools.
+    pub navigation: navigation::Native,
+    /// Folderstorm: the items open in the notecard window or the script
+    /// editor, which content saves leave alone.
+    pub content_open: HashSet<Uuid>,
 }
 
 impl View<'_> {
@@ -216,6 +308,20 @@ impl View<'_> {
             outfit_points: world.outfit_attachment_points(),
             stage: self.stage,
             viewer_session: None,
+            identity: Default::default(),
+            nav: navigation::Stage {
+                world: Some(world),
+                in_world: self.stage.in_world,
+                native: self.navigation,
+            },
+            content: content::Limits {
+                open: self.content_open.clone(),
+                ..content::Limits::of(&world.rlva)
+            },
+            objects: objects::Scene {
+                world: Some(world),
+                props: &self.object_props,
+            },
         }
     }
 
@@ -304,6 +410,16 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         }
         // before any call: the desk decides again with what is in force
         running.bridge.set_login(generation, view.logged_in());
+        let me = identity(view);
+        running.bridge.set_identity(me.clone());
+        // (viewer_status names the character only while Read is Allow, as
+        // the health does)
+        let me = folderstorm_mcp_bridge::server::Identity {
+            character: me
+                .character
+                .filter(|_| wanted.permissions.check(folderstorm_mcp_bridge::Class::Read).is_ok()),
+            ..me
+        };
         let session = running.bridge.viewer_session();
         rt.desk.set_login(generation, session.clone());
         rt.desk.set_permissions(wanted.permissions);
@@ -312,6 +428,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         let mut cx = None;
         let context = || tools::Ctx {
             viewer_session: session.clone(),
+            identity: me.clone(),
             ..view.context()
         };
         // the studio's waiting calls follow the desk's rules too
@@ -331,7 +448,10 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             let cx = cx.get_or_insert_with(context);
             rt.desk.take(call, cx, now);
         }
-        let demo_ready = !view.world.inventory.root.is_nil() && (!demo_camera() || view.stage.in_world);
+        let demo_ready = !view.world.inventory.root.is_nil()
+            && (!(demo_camera() || demo_navigation()) || view.stage.in_world)
+            && (!content::demo::wanted() || view.world.inventory.items.contains_key(&content::demo::NOTES))
+            && (!objects::demo::wanted() || objects::demo::ready(view.world));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -342,6 +462,42 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                         serde_json::json!({"source": "world", "width": 512, "height": 512, "save": true}),
                     ),
                 ]
+            } else if demo_navigation() {
+                // Folderstorm: 8 m east, on the ground
+                let p = view.world.agent.position;
+                vec![(
+                    folderstorm_mcp_bridge::protocol::navigation::MOVE_TO,
+                    serde_json::json!({"position": [p.x + 8.0, p.y, p.z]}),
+                )]
+            } else if demo_plan() {
+                // Folderstorm: a plan, previewed now (a read answers at once)
+                let ids: Vec<String> = [8100u128, 8102, 8103].iter().map(|n| Uuid::from_u128(*n).to_string()).collect();
+                let (call, answer) = Pending::detached(
+                    plans_tool::PREVIEW_MOVE,
+                    serde_json::json!({"ids": ids, "folder_id": Uuid::from_u128(8001).to_string()}),
+                    false,
+                    Some("Demo assistant"),
+                );
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                let plan = answer.try_recv().ok().and_then(Result::ok);
+                log::info!("local assistant demo: plan previewed: {plan:?}");
+                let plan_id = plan.as_ref().and_then(|p| p["plan_id"].as_str()).unwrap_or_default().to_owned();
+                vec![(plans_tool::EXECUTE_PLAN, serde_json::json!({"plan_id": plan_id}))]
+            } else if content::demo::wanted() {
+                // Folderstorm: content editing: the reads now, each saved
+                // once it answers (below)
+                for (tool, arguments) in content::demo::reads() {
+                    let (call, answer) = Pending::detached(tool, arguments, false, Some("Demo assistant"));
+                    rt.desk.take(call, cx.get_or_insert_with(context), now);
+                    rt.demo_reads.push(answer);
+                }
+                Vec::new()
+            } else if objects::demo::wanted() {
+                // Folderstorm: the listing now, the put once it answers (below)
+                let (call, answer) = Pending::detached(objects::demo::LIST, objects::demo::list(), false, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                rt.demo_listing = Some(answer);
+                Vec::new()
             } else {
                 vec![("inventory_create_folder", serde_json::json!({"name": "Sorted by the assistant"}))]
             };
@@ -351,18 +507,125 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 rt.demo_answers.push((tool, answer));
             }
         }
+        let mut answered = Vec::new();
+        // Folderstorm: a content read answered: the demo saves an edit
+        for read in std::mem::take(&mut rt.demo_reads) {
+            match read.try_recv() {
+                Ok(result) => {
+                    // the text itself is never logged
+                    match &result {
+                        Ok(read) => log::info!(
+                            "local assistant demo: inventory_content_get answered {} bytes, editable {}",
+                            read["bytes"],
+                            read["editable"]
+                        ),
+                        Err(e) => log::info!("local assistant demo: inventory_content_get ended with {e}"),
+                    }
+                    if let Some((tool, arguments)) = result.ok().as_ref().and_then(content::demo::save_after) {
+                        let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_answers.push((tool, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_reads.push(read),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
+        // Folderstorm: the demo's listing answered: a put into the same prim
+        if let Some(listing) = rt.demo_listing.take() {
+            match listing.try_recv() {
+                Ok(result) => {
+                    match &result {
+                        Ok(page) => log::info!("local assistant demo: object_contents_list answered {} items", page["total"]),
+                        Err(e) => log::info!("local assistant demo: object_contents_list ended with {e}"),
+                    }
+                    if let Some((tool, arguments)) = result.ok().as_ref().and_then(objects::demo::put_after) {
+                        let (call, answer) = Pending::detached(tool, arguments, true, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_answers.push((tool, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_listing = Some(listing),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
         rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
             Ok(result) => {
                 log_demo_answer(tool, &result);
+                answered.push(*tool);
                 false
             }
             Err(TryRecvError::Empty) => true,
             Err(TryRecvError::Disconnected) => false,
         });
+        // Folderstorm: the navigation demo's next steps
+        if view.demo && demo_navigation() {
+            use folderstorm_mcp_bridge::protocol::navigation::{MOVE_TO, STATUS, TELEPORT};
+            let cx = cx.get_or_insert_with(context);
+            if rt.demo_step == 0 && answered.contains(&MOVE_TO) {
+                rt.demo_step = 1;
+                if let Some(here) = view.world.agent_global() {
+                    let to = here + glam::DVec3::new(-14.0, 10.0, 0.0);
+                    let arguments = serde_json::json!({"global_position": [to.x, to.y, to.z], "client_request_id": "demo-teleport-1"});
+                    let (call, answer) = Pending::detached(TELEPORT, arguments, true, Some("Demo assistant"));
+                    rt.desk.take(call, cx, now);
+                    rt.demo_answers.push((TELEPORT, answer));
+                    rt.demo_step = 2;
+                }
+            } else if rt.demo_step == 2 && answered.contains(&TELEPORT) {
+                rt.demo_step = 3;
+                let (call, answer) = Pending::detached(STATUS, serde_json::json!({}), false, Some("Demo assistant"));
+                rt.desk.take(call, cx, now);
+                if let Ok(result) = answer.try_recv() {
+                    log_demo_answer(STATUS, &result);
+                }
+            }
+        }
         rt.studio.tick(&view.camera, now);
         rt.desk.tick_reads(view.world, now);
         rt.desk.tick(&view.bake(), now)
     })
+}
+
+/// Folderstorm (session routing): the Ask dialog's open question, for a
+/// managed viewer's Attention list, so that the host's inbox shows it while
+/// this character is in the background: its number, the program's name and
+/// what it asks. None when nothing is asked.
+pub fn open_question() -> Option<desk::Question> {
+    with(|rt| rt.desk.question(Instant::now()))
+}
+
+/// Folderstorm: once per frame, just before the autopilot runs: the
+/// assistant's move or teleport under way is followed from what the frame
+/// shows; returns what the app does now (phase 3, part 4).
+pub fn navigation_frame(frame: &navigation::Frame) -> Vec<navigation::Act> {
+    with(|rt| rt.desk.navigate(frame, Instant::now()))
+}
+
+/// Folderstorm: the app started the assistant's move with autopilot `pilot`.
+pub fn navigation_moving(call: Pending, mv: navigation::Move, pilot: navigation::PilotId) {
+    with(|rt| rt.desk.start_move(call, mv, pilot, Instant::now()));
+}
+
+/// Folderstorm: the app submitted the assistant's teleport.
+pub fn navigation_teleporting(call: Pending, teleport: navigation::Teleport) {
+    with(|rt| rt.desk.start_teleport(call, teleport, Instant::now()));
+}
+
+/// Folderstorm: how long before the assistant may submit a teleport (None:
+/// one is under way).
+pub fn teleport_wait() -> Option<std::time::Duration> {
+    with(|rt| rt.desk.teleport_wait(Instant::now()))
+}
+
+/// Folderstorm: Preferences' Stop: the operation is cancelled if it was not
+/// sent yet (folderstorm/plans/mcp-receipts.md, section 5).
+pub fn cancel(operation_id: &str) {
+    with(|rt| {
+        if let Err(e) = rt.desk.cancel(operation_id, true) {
+            log::info!("local assistant: nothing to stop: {e}");
+        }
+    });
 }
 
 /// Folderstorm: whether `item` was just created by the local assistant
@@ -376,6 +639,51 @@ pub fn created_by_assistant(item: Uuid) -> bool {
         }
         None => false,
     })
+}
+
+/// Folderstorm: what the waiting content reads need fetched: the app sends
+/// a notecard's `PreviewInventoryItem` or a script's `LoadScript`.
+pub fn wanted_content() -> Vec<content::Fetch> {
+    with(|rt| rt.desk.wanted_content())
+}
+
+/// Folderstorm: the app's fetch `request` could not be sent.
+pub fn content_fetch_failed(request: Uuid, reason: String) {
+    with(|rt| rt.desk.content().fetch_failed(request, reason));
+}
+
+/// Folderstorm: a notecard's asset as the demo serves it (the demo's
+/// `PreviewInventoryItem` does not pass through [`observe`]).
+pub fn content_demo_notecard(item: Uuid, asset: Uuid, bytes: Vec<u8>) {
+    with(|rt| rt.desk.content().notecard_loaded(item, asset, &Ok(bytes)));
+}
+
+/// Folderstorm: the scripts the assistant saved (item, new asset), for the
+/// app's inventory.
+pub fn content_updates() -> Vec<(Uuid, Uuid)> {
+    with(|rt| rt.desk.content().take_updates())
+}
+
+/// Folderstorm: whether an assistant's save of `item` is under way.
+pub fn content_saving(item: Uuid) -> bool {
+    with(|rt| rt.desk.content_saving(item))
+}
+
+/// Folderstorm: what the object tools need sent now: an object's
+/// properties or its contents (mcp-objects.md).
+pub fn object_wants() -> Vec<objects::Want> {
+    with(|rt| rt.desk.objects().wanted())
+}
+
+/// Folderstorm: the app sends an object change now (`send`, planned with
+/// `reply`): the viewer watches for its outcome.
+pub fn object_sending(call: Pending, send: &objects::Send, reply: serde_json::Value, world: &World) {
+    with(|rt| rt.desk.objects().sending(call, send, reply, world, Instant::now()));
+}
+
+/// Folderstorm: an association of the object tools, recorded now.
+pub fn object_associate(call: Pending, reply: serde_json::Value) {
+    with(|rt| rt.desk.objects().associate(call, reply));
 }
 
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
@@ -402,14 +710,18 @@ pub fn image_finished(request: Uuid, error: Option<&str>) {
 /// dialog. None: the call was answered, or it went back to the dialog.
 pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)> {
     let cx = view.context();
-    let call = with(|rt| {
+    let (call, object_plan) = with(|rt| {
         let Some((generation, session)) = rt.rebind(view) else {
             call.answer(Err(ToolError::new(ErrorCode::PermissionDenied, desk::ACCESS_OFF)));
             return None;
         };
-        rt.desk.recheck(call, generation, session, &cx, Instant::now())
+        let call = rt.desk.recheck(call, generation, session, &cx, Instant::now())?;
+        // Folderstorm: an object change is planned again against its
+        // snapshot, the prim unchanged since (mcp-objects.md)
+        let planned = objects::handles(&call.tool).then(|| rt.desk.objects().plan(&call, &cx, Instant::now(), true));
+        Some((call, planned))
     })?;
-    match changes::plan(&call.tool, &call.arguments, &cx) {
+    match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
         Ok(planned) => Some((call, planned)),
         Err(e) => {
             call.answer(Err(e));
@@ -433,6 +745,18 @@ pub fn sent(request: Option<Uuid>, failure: Option<String>) {
 /// Every inventory and outfit answer of the server passes here first, so
 /// that a waiting change learns its outcome.
 pub fn observe(event: &aurora_net::NetEvent) {
+    // Folderstorm: the simulator's reason, for the assistant's teleport
+    if let aurora_net::NetEvent::TeleportFailed { reason } = event {
+        with(|rt| rt.desk.teleport_failed(reason));
+        return;
+    }
+    // Folderstorm: objects' properties and contents (mcp-objects.md)
+    if matches!(
+        event,
+        aurora_net::NetEvent::ObjectProperties(_) | aurora_net::NetEvent::TaskInventory { .. }
+    ) {
+        return with(|rt| rt.desk.objects().observe(event, Instant::now()));
+    }
     if let aurora_net::NetEvent::InventoryCreated(item) = event {
         with(|rt| {
             if rt.desk.created(item) {
@@ -441,6 +765,16 @@ pub fn observe(event: &aurora_net::NetEvent) {
             }
         });
         return;
+    }
+    // Folderstorm: a content read's text (mcp-content.md)
+    match event {
+        aurora_net::NetEvent::InventoryPreview { item, asset, result } => {
+            return with(|rt| rt.desk.content().notecard_loaded(*item, *asset, result));
+        }
+        aurora_net::NetEvent::ScriptLoaded { request, target, result } if target.object.is_nil() => {
+            return with(|rt| rt.desk.content().script_loaded(*request, result));
+        }
+        _ => {}
     }
     let Some(outcome) = desk::outcome(event) else { return };
     with(|rt| rt.desk.observe(outcome));
@@ -472,11 +806,13 @@ fn log_demo_answer(tool: &str, result: &Result<serde_json::Value, ToolError>) {
 /// A camera move was made: its call answers once the camera stops. Bound,
 /// as the calls below, to the login it was decided under (`replan`).
 pub fn wait_move(call: Pending, reply: serde_json::Value) {
+    call.receipt(Receipt::mark_sent); // Folderstorm: receipts
     with(|rt| rt.studio.wait_move(call, reply, rt.desk.login(), Instant::now()));
 }
 
 /// A picture to take once the camera stops.
 pub fn queue_photo(call: Pending, request: picture::Request) {
+    call.receipt(Receipt::mark_sent);
     with(|rt| rt.studio.queue_photo(call, request, rt.desk.login(), Instant::now()));
 }
 
@@ -504,6 +840,7 @@ pub fn photo_drawn(size: (u32, u32), pixels: Vec<u8>, folder: std::path::PathBuf
 
 /// A thumbnail of the assistant started through the gallery's snapshot.
 pub fn thumbnail_started(call: Pending, reply: serde_json::Value) {
+    call.receipt(Receipt::mark_sent);
     with(|rt| rt.studio.thumbnail_started(call, reply, rt.desk.login(), Instant::now()));
 }
 

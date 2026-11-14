@@ -100,10 +100,10 @@ impl App {
         }
         let eye = self.camera.position;
         let at = self.camera.target - self.camera.position;
-        let (w, h) = renderer.size();
         let pointer = if self.camera.mouselook() {
             // the crosshair
-            renderer.hover_pick(w as f32 * 0.5, h as f32 * 0.5)
+            let (x, y) = self.world_center(renderer.size()); // Folderstorm: the world viewport
+            renderer.hover_pick(x, y)
         } else if self.egui_ctx.is_pointer_over_egui() {
             None
         } else {
