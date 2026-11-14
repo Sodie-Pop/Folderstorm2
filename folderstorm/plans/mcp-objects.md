@@ -211,3 +211,37 @@ sidecar's listing; end to end over a real socket on the demo.
 
 Not testable here: the grid's real timing of listings, ObjectProperties
 of a deeded object, the dialog's look.
+
+## As built
+
+Branch `claude/mcp-objects`, on `claude/mcp-receipts` (PR #47, not merged).
+
+| Where | What |
+|---|---|
+| `folderstorm-mcp-bridge/src/protocol/objects.rs` (new) | the nine tools, `always_asks` (remove, take), `needs_client_request_id`, `destructive`; schema bounds |
+| `policy.rs` | `Class::Objects`, `Class::Take`, their levels, presets and migration from older settings |
+| `binding.rs` | `objects: 1` |
+| `protocol.rs` | `pub mod objects`, `all()`, `always_asks`, the required `client_request_id` in `input_schema` |
+| `receipts.rs` | an answer marked `unconfirmed: true` after a send ends `unconfirmed` (server `no_answer`), so a late listing can still settle it |
+| sidecar `jsonrpc.rs` | the instructions' objects paragraph; `destructiveHint` for remove and take |
+| viewer `mcp_bridge/objects.rs` (new) | `Scene` (the world in `Ctx`), `target` (ownership rules and RLVa), snapshots, listings (properties, then contents), `plan` for each change, `sending`, the listings' comparison, the take watch, late settles, facts, `object_operation_status`, `track_rez`, the demo |
+| `mcp_bridge/desk.rs` | hook lines: the required id, remove and take always ask, the two reads, the object plan, `clear` / `refuse_all` / `close`, `tick` |
+| `mcp_bridge.rs`, `changes.rs`, `tools.rs` | `Work::Object`, `Ctx::objects`, `replan`'s object branch, `observe` of properties and listings, `object_wants`, `object_sending`, `object_associate`, `AURORA_DEMO_MCP=objects` |
+| `app/local_assistant.rs` | sends the wants (RequestObjectProperties; the demo's own selection answers instead) and the planned command, RLVa checked just before |
+| Preferences page, catalogues | two rows; eight Ask sentences and four labels, en/fr/ja |
+
+Differences from the design above:
+
+- The properties are asked for only when no owner is known (no
+  ObjectProperties held, nil owner in the object update).
+- With no Objects folder in the inventory, a take goes to My Inventory.
+- A listing's page is given on the frame after the server's answer (the
+  names go through the RLVa filter, which needs the world).
+- A late watch (an unconfirmed change) settles on any later listing of the
+  prim the viewer receives (the Contents tab's, another list) and on the
+  inventory and world for a take, for 10 minutes; it asks the server for
+  nothing more.
+
+Tests (`mcp_bridge/objects_tests.rs`, bridge and sidecar crates): see the
+report of the PR; real-socket end to end: a listing then a put, allowed in
+the dialog, confirmed by the next listing.

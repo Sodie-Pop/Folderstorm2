@@ -701,6 +701,8 @@ impl Objects {
             match self.locate(scene, world, wait.object, None) {
                 Err(e) => wait.call.answer(Err(e)),
                 Ok(Found::Owner(t)) => {
+                    // the root's properties answer for a linked child
+                    wait.root = t.root;
                     if !wait.props_asked {
                         wait.props_asked = true;
                         let local_id = world.objects.get(t.root_idx).map_or(t.local_id, |r| r.key.local_id);
@@ -1168,7 +1170,10 @@ impl Objects {
                 && !inv.in_folder_type(folder, FT_MARKETPLACE)
                 && !cx.protected.iter().any(|p| actions::under(inv, folder, *p))
         };
-        let objects = actions::system(inv, FT_OBJECTS).filter(|f| usable(*f));
+        // the Objects folder, else My Inventory (a login without one)
+        let objects = actions::system(inv, FT_OBJECTS)
+            .filter(|f| usable(*f))
+            .or(Some(inv.root).filter(|r| usable(*r)));
         let folder = match args.get("folder_id") {
             Some(_) => {
                 let folder = uuid(args, "folder_id")?;
@@ -1187,7 +1192,7 @@ impl Objects {
                 .then(|| cx.objects.props(&object).map(|p| p.folder_id).filter(|f| usable(*f)))
                 .flatten()
                 .or(objects)
-                .ok_or_else(|| err(ErrorCode::NotReady, "the Objects folder is not loaded yet"))?,
+                .ok_or_else(|| err(ErrorCode::NotReady, "the inventory's folders are not loaded yet"))?,
         };
         let name = {
             let known = self.raw_name(&cx.objects, object);
@@ -1517,12 +1522,6 @@ impl Objects {
         self.refuse_all(refusal);
         self.unconfirm_sent("local assistant access was turned off");
         self.snapshots.clear();
-    }
-
-    /// Calls in each state, for the tests: listings, pages, changes sent.
-    #[cfg(test)]
-    pub fn counts(&self) -> (usize, usize, usize) {
-        (self.lists.len(), self.pages.len(), self.sent.len())
     }
 }
 

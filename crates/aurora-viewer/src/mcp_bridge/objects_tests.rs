@@ -796,7 +796,7 @@ fn take_always_asks_take_copy_follows_its_level_and_both_watch_the_outcome() {
         now,
     );
     assert!(desk.question(now).is_none());
-    let send = run(&mut desk, &mut world, &mut sim, now).expect("sent");
+    let send = run(&mut desk, &mut world, &mut sim, now).unwrap_or_else(|| panic!("not sent: {:?}", answer.try_recv()));
     assert!(matches!(
         send.command,
         Some(BuildCmd::DeRez {
@@ -1033,4 +1033,88 @@ fn an_unconfirmed_change_answers_so_and_settles_late() {
     let (c, answer) = call(STATUS, json!({"client_request_id": "u-1"}));
     desk.take(c, &ctx(&world), now);
     assert_eq!(answered(&answer).expect("status")["receipt"]["state"], "done");
+}
+
+/// The sidecar's MCP layer → a real 127.0.0.1 socket → the bridge (Ask
+/// before changes) → the desk, the dialog allowed → the simulator: a
+/// listing, then a put of the demo script, confirmed by the listing after.
+#[test]
+fn an_assistant_lists_and_puts_into_an_owned_prim_end_to_end() {
+    use folderstorm_mcp::connect::Viewer;
+    use folderstorm_mcp::jsonrpc::{Backend, Server};
+    use folderstorm_mcp_bridge::Bridge;
+    use folderstorm_mcp_bridge::server::Config;
+
+    struct Live(Viewer);
+    impl Backend for Live {
+        fn call(&mut self, tool: &str, arguments: Value) -> Result<Value, ToolError> {
+            self.0.call(tool, arguments)
+        }
+        fn client_name(&mut self, name: &str) {
+            self.0.set_client_name(name);
+        }
+    }
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (bridge, calls) = Bridge::start(Config {
+        discovery_dir: Some(dir.path().to_path_buf()),
+        pid: std::process::id(),
+        version: "test".into(),
+        permissions: Preset::AskBeforeChanges.permissions(),
+        viewer_timeout: Duration::from_secs(10),
+    })
+    .expect("bridge started");
+    let folder = dir.path().to_path_buf();
+    let object = prim_id(BOX_LOCAL);
+    let assistant = std::thread::spawn(move || {
+        let mut server = Server::new(Live(Viewer::new(Some(folder), None)));
+        let mut ask = |line: &str| -> Value { serde_json::from_str(&server.handle_line(line).expect("answer")).expect("json") };
+        ask(
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"Claude Code"}}}"#,
+        );
+        let listed = ask(&format!(
+            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"object_contents_list","arguments":{{"object_id":"{object}"}}}}}}"#
+        ));
+        let snapshot = listed["result"]["structuredContent"]["snapshot_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let put = ask(&format!(
+            r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"object_contents_put","arguments":{{"object_id":"{object}","snapshot_id":"{snapshot}","item_id":"{SCRIPT}","client_request_id":"e2e-1"}}}}}}"#
+        ));
+        (listed, put)
+    });
+    let mut world = plaza();
+    let mut sim = Sim::plaza();
+    let mut desk = desk_with(Preset::AskBeforeChanges.permissions());
+    let mut questions = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !assistant.is_finished() && Instant::now() < deadline {
+        let now = Instant::now();
+        while let Ok(pending) = calls.try_recv() {
+            desk.take(pending, &ctx(&world), now);
+        }
+        if let Some(q) = desk.question(now) {
+            questions.push(q.summary.clone());
+            desk.decide(q.number, true);
+        }
+        run(&mut desk, &mut world, &mut sim, now);
+        sim.serve(&mut desk, &world, now);
+        desk.tick_reads(&world, now);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let (listed, put) = assistant.join().expect("assistant");
+    assert_eq!(listed["result"]["isError"], false, "{listed}");
+    assert_eq!(listed["result"]["structuredContent"]["total"], 3);
+    assert_eq!(put["result"]["isError"], false, "{put}");
+    let reply = &put["result"]["structuredContent"];
+    assert_eq!(
+        (reply["done"].as_bool(), reply["running"].as_bool()),
+        (Some(true), Some(false)),
+        "{reply}"
+    );
+    assert_eq!(questions.len(), 1, "{questions:?}");
+    assert!(questions[0].contains("not running"), "{questions:?}");
+    assert_eq!(sim.contents[&object].1.len(), 4);
+    bridge.stop();
 }
