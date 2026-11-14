@@ -31,7 +31,11 @@ use std::time::Duration;
 /// Whether the tools of `group` belong to one login although they need no
 /// class ([`ToolSpec::bound`]).
 pub fn bound_group(group: &str) -> bool {
-    group == binding::RECEIPTS || group == binding::OPERATIONS || group == binding::NAVIGATION
+    group == binding::RECEIPTS
+        || group == binding::OPERATIONS
+        || group == binding::NAVIGATION
+        // Folderstorm: script_test_stop needs no class (mcp-script-testing.md)
+        || group == binding::SCRIPT_TESTING
 }
 
 pub const CANCEL: &str = "assistant_operation_cancel";

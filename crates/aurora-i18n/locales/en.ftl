@@ -937,6 +937,8 @@ fs-mcp-take = Take my objects
 fs-mcp-take-hint = Take objects you own and may modify into your inventory, or take a copy of them. Taking one out of the world always asks first.
 fs-mcp-scripts = Run my objects' scripts
 fs-mcp-scripts-hint = Start, stop and reset scripts inside objects you own and may modify, and leave a script running after the assistant saves it. A running script acts in the world as its code says. Never attachments, never someone else's objects.
+fs-mcp-interact = Touch and talk to my objects
+fs-mcp-interact-hint = Touch objects you own and may modify, answer the script dialogs they open, and speak on script channels near them, then run test recipes you approve. A touch, a channel line and a test always ask first. Never a dialog that mentions L$, never permission questions, payments, teleport or inventory offers, never someone else's objects.
 fs-mcp-changes-note = Asking opens a dialog in the viewer before each change; without an answer within 60 seconds, the change is refused. Permanent deletion and Empty Trash are never allowed.
 fs-mcp-status = Status
 fs-mcp-status-hint = Whether the connection is open. The access key is never shown.
@@ -1118,6 +1120,32 @@ fs-mcp-ask-task-script-save-run = Save and compile the script “{ $name }” in
 fs-mcp-ask-task-script-start = Start the script “{ $name }” in the object “{ $object }”
 fs-mcp-ask-task-script-stop = Stop the script “{ $name }” in the object “{ $object }”
 fs-mcp-ask-task-script-reset = Reset the script “{ $name }” in the object “{ $object }” (it starts over from the beginning)
+fs-mcp-ask-touch = Touch the object “{ $object }” once, as a click
+fs-mcp-ask-channel = Say “{ $text }” on channel { $channel } for the object “{ $object }”: every script listening on this channel within 20 m hears it, not only this object
+fs-mcp-ask-dialog-button = Answer “{ $button }” to the dialog of the object “{ $object }” (channel { $channel })
+fs-mcp-ask-dialog-text = Answer the text box of the object “{ $object }” (channel { $channel })
+fs-mcp-ask-dialog-message = Dialog: “{ $message }”
+fs-mcp-ask-dialog-typed = Answer: “{ $text }”
+fs-mcp-ask-script-test = Run a test of { $steps ->
+    [one] one step
+   *[other] { $steps } steps
+} on { $objects ->
+    [one] one of your objects
+   *[other] { $objects } of your objects
+} for at most { $seconds } s, without asking again for its steps
+fs-mcp-test-step-touch = { $n }. Touch “{ $object }”
+fs-mcp-test-step-channel = { $n }. Say “{ $text }” on channel { $channel } near “{ $object }” (heard by every listener)
+fs-mcp-test-step-reset = { $n }. Reset the script “{ $name }” in “{ $object }”
+fs-mcp-test-step-start = { $n }. Start the script “{ $name }” in “{ $object }”
+fs-mcp-test-step-stop = { $n }. Stop the script “{ $name }” in “{ $object }”
+fs-mcp-test-step-wait-output = { $n }. Wait up to { $seconds } s for “{ $text }” from “{ $object }”
+fs-mcp-test-step-wait-no-output = { $n }. Check for { $seconds } s that “{ $object }” does not say “{ $text }”
+fs-mcp-test-step-wait-dialog = { $n }. Wait up to { $seconds } s for a dialog from “{ $object }”
+fs-mcp-test-step-wait-no-dialog = { $n }. Check for { $seconds } s that “{ $object }” opens no dialog
+fs-mcp-test-step-assert-running = { $n }. Check that the script “{ $name }” in “{ $object }” runs
+fs-mcp-test-step-assert-stopped = { $n }. Check that the script “{ $name }” in “{ $object }” is stopped
+fs-mcp-test-step-delay = { $n }. Wait { $seconds } s
+fs-mcp-test-errors-allowed = Script errors do not fail this test.
 inventory-folder-jump-menu = Go to folder…
 inventory-folder-jump-menu-tip = Find a folder by its name or its parent's name and open it (Ctrl+J).
 inventory-folder-jump-title = Go to inventory folder

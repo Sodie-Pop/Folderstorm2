@@ -5673,7 +5673,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (always asked), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5856,6 +5856,26 @@ row "Run my objects' scripts". A real client can then call
 `object_script_status`, `object_script_set_running` and `script_debug_poll`
 (`start=now`, then its cursor). Capture the dialogs and the row in English,
 French and Japanese.
+
+`AURORA_DEMO_MCP=script-testing` (Folderstorm2,
+folderstorm/plans/mcp-script-testing.md: `src/mcp_bridge/script_testing.rs`):
+the same session settings ("Ask before changes"); once the plaza's cut box is
+loaded, the demo lists it, then asks, as "Demo assistant", to "Touch the
+object “Cut box” once, as a click" (a touch always asks). Allow: the box
+answers with an owner-say line and a "Door menu" dialog (Open, Close) on the
+screen; the demo lists it with `object_dialog_list` and asks to "Answer
+“Open” to the dialog of the object “Cut box” (channel -7001)", the dialog's
+message under the sentence. Allow: the dialog closes and the box says "Door:
+Open". The demo then begins a recipe: one Ask dialog, "Run a test of 5 steps
+on one of your objects for at most 60 s, without asking again for its
+steps", lists the steps (touch, wait for "Touched", wait for a dialog, reset
+the door script, check that it runs); with `AURORA_DEMO_POS=150,124` (within
+20 m of the box) it has 7, with a line said on channel 7, whose sentence says
+every listener hears it. Allow once: the steps run with no other dialog (a
+second "Door menu" opens), and the log reads `script testing step 6 answered
+{… "state":"passed" …}`. With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+the Custom levels show the new row "Touch and talk to my objects". Capture the
+dialogs and the row in English, French and Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and

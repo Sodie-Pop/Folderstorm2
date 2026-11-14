@@ -38,6 +38,7 @@ use super::content::{self, Content}; // Folderstorm: content editing
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::objects::{self, Objects}; // Folderstorm: object tools (mcp-objects.md)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
+use super::script_testing::{self, ScriptTesting}; // Folderstorm: script testing (mcp-script-testing.md)
 use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
@@ -45,6 +46,7 @@ use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
 use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
 use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: object tools
+use folderstorm_mcp_bridge::protocol::script_testing as test_tool; // Folderstorm: script testing
 use folderstorm_mcp_bridge::protocol::task_scripts as task_tool; // Folderstorm: task scripts
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
@@ -210,6 +212,8 @@ pub struct Desk {
     objects: Objects,
     /// Folderstorm: this login's task script reads, snapshots and changes.
     task_scripts: TaskScripts,
+    /// Folderstorm: this login's test runs and channel lines.
+    testing: ScriptTesting,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -297,7 +301,10 @@ pub fn call_decision(permissions: &Permissions, call: &Pending) -> Decision {
         None => {
             // Folderstorm: a task script save also needs Read, and Scripts
             // when it leaves the script running (mcp-task-scripts.md)
-            let extra = task_tool::extra_classes(&call.tool, &call.arguments);
+            let mut extra = task_tool::extra_classes(&call.tool, &call.arguments);
+            // Folderstorm: a test recipe reads, and touches or speaks
+            // (mcp-script-testing.md)
+            extra.extend(test_tool::extra_classes(&call.tool, &call.arguments));
             let base = decision(permissions, &call.tool);
             if extra.is_empty() || base == Decision::Refuse {
                 base
@@ -366,7 +373,9 @@ impl Desk {
         // (mcp-objects.md; decision 3 of mcp-receipts.md)
         // Folderstorm: and a task script change (mcp-task-scripts.md)
         if fresh
-            && (object_tool::needs_client_request_id(&call.tool) || task_tool::needs_client_request_id(&call.tool))
+            && (object_tool::needs_client_request_id(&call.tool)
+                || task_tool::needs_client_request_id(&call.tool)
+                || test_tool::needs_client_request_id(&call.tool))
             && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none()
         {
             return call.answer(Err(ToolError::new(
@@ -508,6 +517,20 @@ impl Desk {
             let result = super::script_feed::poll(&call.arguments, cx);
             return call.answer(result);
         }
+        // Folderstorm: the script testing tools' reads, and the stop that
+        // needs no class (mcp-script-testing.md)
+        if call.tool == test_tool::DIALOG_LIST {
+            let result = self.testing.dialogs(&call.arguments, &self.objects, cx);
+            return call.answer(result);
+        }
+        if call.tool == test_tool::STATUS {
+            let result = self.testing.status(&call.arguments, cx, now);
+            return call.answer(result);
+        }
+        if call.tool == test_tool::STOP {
+            let result = self.testing.stop(&call.arguments, now);
+            return call.answer(result);
+        }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
             call.answer(result);
@@ -528,11 +551,20 @@ impl Desk {
                 Err(e) => return call.answer(Err(e)),
             }
         }
+        // Folderstorm: a script testing change is checked and frozen, once
+        if fresh && script_testing::is_change(&call.tool) {
+            match self.testing.freeze(&call.tool, &call.arguments, &self.objects, cx, now) {
+                Ok(frozen) => call.arguments = frozen,
+                Err(e) => return call.answer(Err(e)),
+            }
+        }
         // Folderstorm: an object change is planned against its snapshot
         let planned = if objects::handles(&call.tool) {
             self.objects.plan(&call, cx, now, false)
         } else if task_scripts::is_change(&call.tool) {
             self.task_scripts.plan(&call, &self.objects, cx, now, false)
+        } else if script_testing::is_change(&call.tool) {
+            self.testing.plan(&call, &self.objects, cx, now, false)
         } else {
             changes::plan(&call.tool, &call.arguments, cx)
         };
@@ -899,6 +931,7 @@ impl Desk {
         self.content.clear(&refusal); // Folderstorm: content editing
         self.objects.clear(&refusal); // Folderstorm: object tools
         self.task_scripts.clear(&refusal); // Folderstorm: task scripts
+        self.testing.clear(); // Folderstorm: script testing
         super::script_feed::clear();
     }
 
@@ -947,6 +980,9 @@ impl Desk {
         // Folderstorm: the task script operations' facts stay, the snapshots go
         old.task_scripts.close(&refused(ACCESS_OFF));
         self.task_scripts = old.task_scripts;
+        // Folderstorm: a test run stops, its status stays
+        old.testing.close(now);
+        self.testing = old.testing;
         super::script_feed::set_capturing(false);
     }
 
@@ -1361,6 +1397,20 @@ impl Desk {
             self.objects.relist(handle, local_id, object);
             self.objects.touched(object);
         }
+        // Folderstorm: the test run under way moves on (mcp-script-testing.md)
+        self.testing.tick(&self.objects, world, &self.permissions, now);
+    }
+
+    /// Folderstorm: the script testing state (the runs' sends, the app's
+    /// answers).
+    pub fn testing(&mut self) -> &mut ScriptTesting {
+        &mut self.testing
+    }
+
+    /// Folderstorm: a script testing change planned again just before the
+    /// send (mcp-script-testing.md).
+    pub fn script_test_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
+        self.testing.plan(call, &self.objects, cx, now, true)
     }
 
     /// Folderstorm: the task script state (the app's fetch answers, sends

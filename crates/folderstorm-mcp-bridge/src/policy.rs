@@ -39,10 +39,14 @@ pub enum Class {
     /// leave a script running after a save
     /// (folderstorm/plans/mcp-task-scripts.md).
     Scripts,
+    /// Folderstorm: touch such objects, answer their script dialogs and
+    /// speak on script channels near them
+    /// (folderstorm/plans/mcp-script-testing.md).
+    Interact,
 }
 
 impl Class {
-    pub const ALL: [Class; 11] = [
+    pub const ALL: [Class; 12] = [
         Class::Read,
         Class::Edit,
         Class::Move,
@@ -53,7 +57,8 @@ impl Class {
         Class::Content,
         Class::Objects, // Folderstorm: mcp-objects.md
         Class::Take,
-        Class::Scripts, // Folderstorm: mcp-task-scripts.md
+        Class::Scripts,  // Folderstorm: mcp-task-scripts.md
+        Class::Interact, // Folderstorm: mcp-script-testing.md
     ];
 
     /// Whether the class can ask the user before each call (every class
@@ -79,7 +84,7 @@ pub enum Level {
 /// level missing from settings saved before it existed; so do the Objects
 /// and Take levels missing from settings saved before them, the camera,
 /// navigation and content included; and the Scripts level, objects and take
-/// included.
+/// included; and the Interact level, Scripts included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "Saved")]
 pub struct Permissions {
@@ -99,6 +104,8 @@ pub struct Permissions {
     pub take: Level,
     /// Folderstorm: running scripts inside objects (mcp-task-scripts.md).
     pub scripts: Level,
+    /// Folderstorm: interacting with objects (mcp-script-testing.md).
+    pub interact: Level,
 }
 
 /// [`Permissions`] as saved: Camera came with phase 3, Navigation and
@@ -118,6 +125,7 @@ struct Saved {
     objects: Option<Level>,
     take: Option<Level>,
     scripts: Option<Level>,
+    interact: Option<Level>,
 }
 
 impl Default for Saved {
@@ -135,6 +143,7 @@ impl Default for Saved {
             objects: None,
             take: None,
             scripts: None,
+            interact: None,
         }
     }
 }
@@ -167,6 +176,14 @@ impl From<Saved> for Permissions {
             } else {
                 Level::Never
             });
+        // Folderstorm: the same for interacting with objects, scripts included
+        let interact = s.interact.unwrap_or(
+            if later == Level::Ask && objects == Level::Ask && take == Level::Ask && scripts == Level::Ask {
+                Level::Ask
+            } else {
+                Level::Never
+            },
+        );
         Permissions {
             read: s.read,
             edit: s.edit,
@@ -179,6 +196,7 @@ impl From<Saved> for Permissions {
             objects,
             take,
             scripts,
+            interact,
         }
     }
 }
@@ -204,6 +222,7 @@ impl Permissions {
             Class::Objects => self.objects,
             Class::Take => self.take,
             Class::Scripts => self.scripts,
+            Class::Interact => self.interact,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -231,6 +250,7 @@ impl Permissions {
             Class::Objects => self.objects = level,
             Class::Take => self.take = level,
             Class::Scripts => self.scripts = level,
+            Class::Interact => self.interact = level,
         }
     }
 
@@ -315,6 +335,7 @@ impl Preset {
             objects: changes,
             take: changes,
             scripts: changes,
+            interact: changes,
         }
     }
 }
@@ -349,6 +370,7 @@ mod tests {
             Class::Objects,
             Class::Take,
             Class::Scripts,
+            Class::Interact,
         ] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
@@ -437,6 +459,33 @@ mod tests {
         assert_eq!(kept.level(Class::Scripts), Level::Allow);
         let json = serde_json::to_string(&kept).expect("serialized");
         assert!(json.contains(r#""scripts":"allow""#), "{json}");
+    }
+
+    /// Folderstorm: script testing (mcp-script-testing.md).
+    #[test]
+    fn interact_asks_in_ask_before_changes_and_keeps_older_presets() {
+        assert_eq!(Preset::AskBeforeChanges.permissions().level(Class::Interact), Level::Ask);
+        assert_eq!(Preset::ReadOnly.permissions().level(Class::Interact), Level::Never);
+        assert!(Class::Interact.can_ask());
+        // "Ask before changes" saved before it, with or without the later classes
+        for saved in [
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#,
+        ] {
+            let asked: Permissions = serde_json::from_str(saved).expect("parsed");
+            assert_eq!(asked.level(Class::Interact), Level::Ask, "{saved}");
+            assert_eq!(asked.preset(), Preset::AskBeforeChanges, "{saved}");
+        }
+        // running scripts allowed by hand: interacting is not
+        let custom: Permissions = serde_json::from_str(
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"allow"}"#,
+        )
+        .expect("parsed");
+        assert_eq!(custom.level(Class::Interact), Level::Never);
+        let kept: Permissions = serde_json::from_str(r#"{"interact":"allow"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Interact), Level::Allow);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""interact":"allow""#), "{json}");
     }
 
     #[test]
