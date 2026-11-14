@@ -180,6 +180,13 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-take-hint"),
                     field!(local_assistant.permissions.take),
                 ),
+                // Folderstorm: scripts inside objects (mcp-task-scripts.md)
+                (
+                    Class::Scripts,
+                    tr!("fs-mcp-scripts"),
+                    tr!("fs-mcp-scripts-hint"),
+                    field!(local_assistant.permissions.scripts),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

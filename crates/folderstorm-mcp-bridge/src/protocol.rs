@@ -36,6 +36,9 @@ pub mod content;
 // Folderstorm: object inspection and lifecycle (mcp-objects.md)
 pub mod objects;
 
+// Folderstorm: scripts inside objects (mcp-task-scripts.md)
+pub mod task_scripts;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -308,8 +311,9 @@ impl ToolSpec {
                 None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
             }
         }
-        // Folderstorm: the object tools' changes need their id (mcp-objects.md)
-        if objects::needs_client_request_id(self.name) {
+        // Folderstorm: the object tools' changes need their id (mcp-objects.md),
+        // and the task script tools' (mcp-task-scripts.md)
+        if objects::needs_client_request_id(self.name) || task_scripts::needs_client_request_id(self.name) {
             match schema["required"].as_array_mut() {
                 Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
                 None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
@@ -853,6 +857,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(navigation::NAVIGATION_TOOLS) // Folderstorm: navigation
         .chain(content::CONTENT_TOOLS) // Folderstorm: content editing
         .chain(objects::OBJECT_TOOLS) // Folderstorm: object inspection and lifecycle
+        .chain(task_scripts::TASK_SCRIPT_TOOLS) // Folderstorm: scripts inside objects
 }
 
 #[cfg(test)]

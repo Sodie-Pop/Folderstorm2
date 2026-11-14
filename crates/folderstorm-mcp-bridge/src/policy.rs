@@ -35,10 +35,14 @@ pub enum Class {
     /// Folderstorm: take such objects, or copies of them, into the
     /// inventory (taking one out of the world always asks).
     Take,
+    /// Folderstorm: start, stop and reset scripts inside such objects, and
+    /// leave a script running after a save
+    /// (folderstorm/plans/mcp-task-scripts.md).
+    Scripts,
 }
 
 impl Class {
-    pub const ALL: [Class; 10] = [
+    pub const ALL: [Class; 11] = [
         Class::Read,
         Class::Edit,
         Class::Move,
@@ -49,6 +53,7 @@ impl Class {
         Class::Content,
         Class::Objects, // Folderstorm: mcp-objects.md
         Class::Take,
+        Class::Scripts, // Folderstorm: mcp-task-scripts.md
     ];
 
     /// Whether the class can ask the user before each call (every class
@@ -73,7 +78,8 @@ pub enum Level {
 /// other changes all ask ([`Saved`]), and so does a Navigation (or Content)
 /// level missing from settings saved before it existed; so do the Objects
 /// and Take levels missing from settings saved before them, the camera,
-/// navigation and content included.
+/// navigation and content included; and the Scripts level, objects and take
+/// included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "Saved")]
 pub struct Permissions {
@@ -91,6 +97,8 @@ pub struct Permissions {
     pub objects: Level,
     /// Folderstorm: taking objects (mcp-objects.md).
     pub take: Level,
+    /// Folderstorm: running scripts inside objects (mcp-task-scripts.md).
+    pub scripts: Level,
 }
 
 /// [`Permissions`] as saved: Camera came with phase 3, Navigation and
@@ -109,6 +117,7 @@ struct Saved {
     content: Option<Level>,
     objects: Option<Level>,
     take: Option<Level>,
+    scripts: Option<Level>,
 }
 
 impl Default for Saved {
@@ -125,6 +134,7 @@ impl Default for Saved {
             content: None,
             objects: None,
             take: None,
+            scripts: None,
         }
     }
 }
@@ -147,6 +157,16 @@ impl From<Saved> for Permissions {
         // Folderstorm: the same for the object tools, the camera,
         // navigation and content included
         let later = if asked && content == Level::Ask { Level::Ask } else { Level::Never };
+        let objects = s.objects.unwrap_or(later);
+        let take = s.take.unwrap_or(later);
+        // Folderstorm: the same for running scripts, objects and take included
+        let scripts = s
+            .scripts
+            .unwrap_or(if later == Level::Ask && objects == Level::Ask && take == Level::Ask {
+                Level::Ask
+            } else {
+                Level::Never
+            });
         Permissions {
             read: s.read,
             edit: s.edit,
@@ -156,8 +176,9 @@ impl From<Saved> for Permissions {
             camera,
             navigation,
             content,
-            objects: s.objects.unwrap_or(later),
-            take: s.take.unwrap_or(later),
+            objects,
+            take,
+            scripts,
         }
     }
 }
@@ -182,6 +203,7 @@ impl Permissions {
             Class::Content => self.content,
             Class::Objects => self.objects,
             Class::Take => self.take,
+            Class::Scripts => self.scripts,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -208,6 +230,7 @@ impl Permissions {
             Class::Content => self.content = level,
             Class::Objects => self.objects = level,
             Class::Take => self.take = level,
+            Class::Scripts => self.scripts = level,
         }
     }
 
@@ -291,6 +314,7 @@ impl Preset {
             content: changes,
             objects: changes,
             take: changes,
+            scripts: changes,
         }
     }
 }
@@ -324,6 +348,7 @@ mod tests {
             Class::Content,
             Class::Objects,
             Class::Take,
+            Class::Scripts,
         ] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
@@ -386,6 +411,32 @@ mod tests {
         assert_eq!(kept.level(Class::Take), Level::Ask);
         let json = serde_json::to_string(&kept).expect("serialized");
         assert!(json.contains(r#""objects":"allow""#) && json.contains(r#""take":"ask""#), "{json}");
+    }
+
+    /// Folderstorm: scripts inside objects (mcp-task-scripts.md).
+    #[test]
+    fn scripts_ask_in_ask_before_changes_and_keep_older_presets() {
+        assert_eq!(Preset::AskBeforeChanges.permissions().level(Class::Scripts), Level::Ask);
+        assert_eq!(Preset::ReadOnly.permissions().level(Class::Scripts), Level::Never);
+        assert!(Class::Scripts.can_ask());
+        // "Ask before changes" saved before it, with or without the object classes
+        for saved in [
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#,
+        ] {
+            let asked: Permissions = serde_json::from_str(saved).expect("parsed");
+            assert_eq!(asked.level(Class::Scripts), Level::Ask, "{saved}");
+            assert_eq!(asked.preset(), Preset::AskBeforeChanges, "{saved}");
+        }
+        // the objects allowed by hand: running scripts is not
+        let custom: Permissions =
+            serde_json::from_str(r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"allow","take":"ask"}"#)
+                .expect("parsed");
+        assert_eq!(custom.level(Class::Scripts), Level::Never);
+        let kept: Permissions = serde_json::from_str(r#"{"scripts":"allow"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Scripts), Level::Allow);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""scripts":"allow""#), "{json}");
     }
 
     #[test]
