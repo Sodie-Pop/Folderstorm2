@@ -123,9 +123,10 @@ pub fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, media: &mut MediaMa
     }
     let can_control = m.may_control;
     let mut close = false;
+    let bars = crate::folderstorm::viewport::bars_offset(ctx, egui::Align2::CENTER_TOP).x; // Folderstorm: world viewport
     egui::Area::new(controls_id())
         .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, top + 6.0))
+        .anchor(egui::Align2::CENTER_TOP, Vec2::new(bars, top + 6.0))
         .show(ctx, |ui| {
             super::widgets::overlay(ui, p, egui::Margin::symmetric(8, 5), |ui| {
                 ui.horizontal(|ui| {
