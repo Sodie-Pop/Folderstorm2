@@ -41,7 +41,12 @@
 //! ([`bar::Request::Cycling`]). The monitors' own windows are the host's:
 //! nothing else changed on the link.
 //!
-//! Since protocol 6 (checkpoint 11) the host may ask a viewer to open a
+//! Since protocol 6 (session routing, folderstorm/plans/mcp-routing.md) a
+//! viewer's Attention list may carry its local assistant's open question
+//! ([`AttentionKind::Assistant`]), so that the host's inbox shows a
+//! question waiting in a background character's window.
+//!
+//! Since protocol 7 (checkpoint 11) the host may ask a viewer to open a
 //! conversation or a profile ([`ToViewer::Open`]), as the user would in
 //! that viewer's own window; the viewer decides (its RLVa rules, its
 //! groups) and answers ([`ToHost::Opened`]). Nothing is said to anyone by
@@ -75,7 +80,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 6;
+pub const PROTOCOL: u32 = 7;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -620,6 +625,9 @@ pub enum AttentionKind {
     Call,
     #[default]
     Other,
+    /// Protocol 6 (session routing): the viewer's local assistant asks the
+    /// user (its Ask dialog waits in that viewer's window).
+    Assistant,
 }
 
 /// One question waiting in a viewer. The host only shows it: the answer
@@ -1594,7 +1602,7 @@ mod tests {
             panic!("another command");
         };
         assert_eq!(volume, Volume::Normal);
-        // a line of before protocol 6 has no volume: normal
+        // a line of before protocol 7 has no volume: normal
         let old = r#"{"SendChat":{"id":1,"generation":1,"conversation":"Nearby","text":"hi"}}"#;
         assert!(matches!(
             serde_json::from_str::<ToViewer>(old).expect("reads"),

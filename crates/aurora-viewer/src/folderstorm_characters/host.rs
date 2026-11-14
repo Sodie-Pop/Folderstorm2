@@ -31,6 +31,11 @@
 //! conversations are chips, in those windows and in the shared chat
 //! ([`chips`]).
 //!
+//! Session routing (folderstorm/plans/mcp-routing.md): the host's MCP
+//! controller ([`controller`]), a separate authority from every viewer's
+//! local assistant, off by default; its settings and its Ask window are in
+//! `ui/controller.rs`.
+//!
 //! Checkpoint 11: conversations from the host. Each character's friends
 //! and groups, as its viewer tells them (`contacts::Book`, never saved),
 //! "New IM" and "Friends" in the shared chat and the monitors' chat
@@ -51,6 +56,7 @@ mod chat_ui;
 mod chips;
 mod comfort;
 mod contacts_ui;
+mod controller; // (session routing: the MCP controller)
 mod faces;
 mod hotkeys;
 mod monitors;
@@ -308,6 +314,8 @@ struct Host {
     /// Checkpoint 10, demo only: the settings' window opens on that
     /// section ([`DEMO_SETTINGS_VARIABLE`]).
     demo_settings: Option<::folderstorm_session::settings::Section>,
+    /// Session routing: the MCP controller.
+    controller: controller::Controller,
     /// Checkpoint 11, demo only: the shared chat opens with this sheet
     /// ([`DEMO_CONTACTS_VARIABLE`]).
     demo_contacts: Option<::folderstorm_session::contacts::Which>,
@@ -341,6 +349,7 @@ impl Host {
             bar_asked: Vec::new(),
             auto_read: Default::default(),
             demo_settings: None,
+            controller: Default::default(),
             demo_contacts: None,
         };
         if host.demo {
@@ -356,6 +365,9 @@ impl Host {
             host.demo_polish(demo_polish(&std::env::var(DEMO_POLISH_VARIABLE).unwrap_or_default()));
             if let Ok(value) = std::env::var(DEMO_BAR_VARIABLE) {
                 host.demo_bar(demo_bar(&value));
+            }
+            if let Ok(value) = std::env::var(controller::DEMO_VARIABLE) {
+                host.demo_controller(&value, Instant::now());
             }
             host.demo_settings = std::env::var(DEMO_SETTINGS_VARIABLE)
                 .ok()
@@ -535,6 +547,9 @@ impl Host {
                 self.viewers[slot] = None;
             }
         }
+        // (session routing) the MCP controller's calls, before the desk's
+        // effects are carried out
+        self.tick_controller(now);
         self.desk.tick(now);
         self.carry_out(now);
         self.tick_monitors(now);

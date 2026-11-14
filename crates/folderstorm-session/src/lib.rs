@@ -75,6 +75,10 @@
 //! - [`host`]: the monitors' settings, the swap on a switch, what the
 //!   cycling monitor asks.
 //!
+//! Session routing and the MCP controller (folderstorm/plans/mcp-routing.md):
+//! - [`controller`]: what the host's MCP controller may list and do, its
+//!   settings, its questions decided again while they wait.
+//!
 //! Checkpoint 11 (conversations from the host):
 //! - [`contacts`]: each character's friends and groups as its viewer
 //!   tells them, their order and search, and the conversations the host
@@ -88,6 +92,7 @@ pub mod behind;
 pub mod chat;
 pub mod chips;
 pub mod contacts;
+pub mod controller;
 pub mod copy;
 pub mod export;
 pub mod gpu;

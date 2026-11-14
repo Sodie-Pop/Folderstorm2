@@ -514,7 +514,7 @@ impl Viewfinder {
         panel.looks.hover = None;
         let before = s.clone();
         let light_before = panel.light;
-        let screen = ctx.content_rect();
+        let screen = crate::folderstorm::photo_viewport::screen(ctx); // Folderstorm: the world viewport
         let display = s.viewfinder.display;
         let full = display == Display::Full;
         let shows = display != Display::Hidden;

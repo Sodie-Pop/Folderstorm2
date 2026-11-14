@@ -2543,7 +2543,9 @@ May be two small PRs: 1a profiles, 1b behind policy.
     the alias and colour editor under a card (its palette button opens
     the Characters section).
   - **Not done:** a WAV of one's own and an alert volume (above); the
-    MCP controller's page (later).
+    MCP controller's page (later: built with the MCP session routing,
+    section "MCP controller" of the window, see
+    [mcp-routing.md](mcp-routing.md)).
   - **Demo:** `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>`
     (`docs/TESTING.md`); `AURORA_SESSION_HOST_CAPTURE` also writes the
     settings window (`<file>-settings.png`).
@@ -2622,7 +2624,7 @@ May be two small PRs: 1a profiles, 1b behind policy.
   question, the volume button, "… is typing"),
   `host/ui/monitor_windows.rs` (the monitor's chat part), `host.rs` (the
   book of contacts and its messages).
-  - **IPC, protocol 6** (a host and a viewer of different protocols
+  - **IPC, protocol 7** (a host and a viewer of different protocols
     refuse each other). **Number clash:** the MCP session routing branch
     (`claude/mcp-session-routing`, PR #45, not merged) also moves the
     link from 5 to 6, for the assistant's kind of Attention item. Two
@@ -2772,7 +2774,7 @@ May be two small PRs: 1a profiles, 1b behind policy.
     9. a web link in a line: a known site opens in the browser, another
        asks first, a `secondlife://` link brings the character forward;
     10. a host of checkpoint 10 against a viewer of checkpoint 11 (or
-        the other way round) refuse each other (protocol 6).
+        the other way round) refuse each other (protocol 7).
 
 ## 16. Verified in code vs inferred
 
@@ -2825,3 +2827,17 @@ exactly caused the past bug in the earlier port (section 17).
    real loss in one character never downgrades or closes the others.
 7. **Windows is the target platform**; Linux and macOS are nice to have
    (launcher, chat and monitors; switching best effort).
+
+## 18. Decisions (the human, 2026-11-13)
+
+After testing checkpoints 2 to 10:
+
+- **Dropped** (not to be built):
+  - session sets (launching several profiles together);
+  - a free colour picker for characters (the palette of checkpoint 7 stays);
+  - background sound limited to alerts ("alerts only", section 10);
+  - choosing which groups of settings a profile copy takes (section 13);
+  - the updater's "quit all and update" (section 5).
+- **Deferred to the end of the project:**
+  - the host taking over viewers that are already running (section 11);
+  - the bird's-eye switch effect (checkpoint 7's design note).

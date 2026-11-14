@@ -93,6 +93,7 @@ pub(super) fn section_name(section: Section) -> &'static str {
         Section::Monitors => tr!("folderstorm-settings-monitors"),
         Section::Hotkeys => tr!("folderstorm-settings-hotkeys"),
         Section::Advanced => tr!("folderstorm-settings-advanced"),
+        Section::Controller => tr!("folderstorm-settings-controller"),
         Section::Updates => tr!("folderstorm-settings-updates"),
     }
 }
@@ -106,6 +107,7 @@ fn section_intro(section: Section) -> &'static str {
         Section::Monitors => tr!("folderstorm-monitors-page-intro"),
         Section::Hotkeys => tr!("folderstorm-hotkeys-intro"),
         Section::Advanced => tr!("folderstorm-settings-advanced-intro"),
+        Section::Controller => tr!("folderstorm-settings-controller-intro"),
         Section::Updates => tr!("folderstorm-settings-updates-intro"),
     }
 }
@@ -119,23 +121,24 @@ pub(super) fn section_icon(section: Section) -> &'static str {
         Section::Monitors => "device-desktop-filled",
         Section::Hotkeys => "keyboard-filled",
         Section::Advanced => "adjustments-filled",
+        Section::Controller => "wand",
         Section::Updates => "download-filled",
     }
 }
 
 /// A group's heading inside a page.
-fn heading(ui: &mut egui::Ui, p: &Palette, text: &str) {
+pub(super) fn heading(ui: &mut egui::Ui, p: &Palette, text: &str) {
     ui.add_space(4.0);
     ui.label(RichText::new(text).strong().color(p.ink));
     ui.add_space(2.0);
 }
 
-fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
+pub(super) fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
     ui.label(RichText::new(text.into()).color(p.muted));
 }
 
 /// A row's name in a column of [`ROW_NAME`], then its choice.
-fn row(ui: &mut egui::Ui, p: &Palette, name: &str, choice: impl FnOnce(&mut egui::Ui)) {
+pub(super) fn row(ui: &mut egui::Ui, p: &Palette, name: &str, choice: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         let layout = egui::Layout::left_to_right(egui::Align::Center);
         let width = ROW_NAME.min(ui.available_width() * 0.4);
@@ -418,6 +421,7 @@ impl Window_ {
                                 acts.extend(asked.into_iter().map(HostAct::Comfort));
                             }
                             Section::Advanced => self.advanced_settings(ui, &p, acts),
+                            Section::Controller => self.controller_settings(ui, &p, acts),
                             Section::Updates => self.updates_settings(ui, &p),
                         }
                         ui.add_space(12.0);
