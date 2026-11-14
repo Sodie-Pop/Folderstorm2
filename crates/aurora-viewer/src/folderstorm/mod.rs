@@ -7,3 +7,4 @@ pub mod chat_upload;
 pub mod diagram;
 pub mod photo_viewport;
 pub mod viewport;
+pub mod workspaces;

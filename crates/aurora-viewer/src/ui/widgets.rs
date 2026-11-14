@@ -1072,6 +1072,10 @@ pub(crate) fn bare_window(
     if let Some(limits) = slot.limits {
         w = w.constrain_to(limits);
     }
+    // Folderstorm: a layout places it, as `place_floater` does a floater
+    if let Some(rect) = crate::folderstorm::workspaces::take_bare(ctx, window_id) {
+        w = w.fixed_size(rect.size()).current_pos(rect.min);
+    }
     let resized = drag.map(|drag| {
         on_pixels(
             ctx,

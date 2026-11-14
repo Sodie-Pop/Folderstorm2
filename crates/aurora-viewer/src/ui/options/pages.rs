@@ -14,6 +14,7 @@ pub mod controls;
 pub mod folderstorm_characters; // Folderstorm: other Folderstorm2 windows
 pub mod folderstorm_chat_upload; // Folderstorm: chat image upload
 pub mod folderstorm_viewport; // Folderstorm: world viewport
+pub mod folderstorm_workspaces; // Folderstorm: layouts
 pub mod fun;
 pub mod graphics;
 pub mod inventory;
@@ -85,6 +86,7 @@ pub fn tabs(page: Page) -> Vec<&'static str> {
             aurora_i18n::tr!("ui-options-tab-bars-and-windows"),
             aurora_i18n::tr!("ui-options-hover-tips"),
             aurora_i18n::tr!("ui-options-tab-startup"),
+            aurora_i18n::tr!("fs-layouts-tab"), // Folderstorm: layouts
         ],
         Page::Appearance => vec![
             aurora_i18n::tr!("ui-options-font"),

@@ -90,8 +90,10 @@ impl App {
     /// `AURORA_DEMO_VIEWPORT=<mode>`: the viewport turned on once, at the
     /// start of a demo run (in the demo's own settings): `1` keeps the
     /// right two thirds of the window, `bars-window` the same with the bars
-    /// over the whole window, `middle` the middle third (as the middle one
-    /// of three monitors), `mouselook-full` drops it in mouselook,
+    /// over the whole window, `bars-around` the same with an eighth of the
+    /// height left above and below and the bars around the world, `middle`
+    /// the middle third (as the middle one of three monitors),
+    /// `mouselook-full` drops it in mouselook,
     /// `inventory` keeps the right 40 % and opens Inventory in the left
     /// margin, half the window wide: wider than the world, and kept so.
     /// `right-half` and `left-half` keep the right or the left half (the
@@ -120,10 +122,12 @@ impl App {
                 "left-half" => size.0 - half,
                 _ => 0,
             },
+            top: if mode == "bars-around" { size.1 / 8 } else { 0 },
+            bottom: if mode == "bars-around" { size.1 / 8 } else { 0 },
             in_mouselook: mode != "mouselook-full",
             bars_in_viewport: mode != "bars-window",
             photo_whole_window: mode == "photo-window",
-            ..Default::default()
+            bars_around: mode == "bars-around",
         };
         if mode == "inventory" {
             let ppp = self.egui_ctx.pixels_per_point();

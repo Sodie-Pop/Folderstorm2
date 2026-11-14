@@ -1471,8 +1471,11 @@ folderstorm-viewport-monitor = Écran { $n } ({ $width }×{ $height })
 folderstorm-viewport-no-monitors = Aucun écran trouvé sous la fenêtre.
 folderstorm-viewport-mouselook = Garder la zone en vue subjective
 folderstorm-viewport-mouselook-help = Désactivé, la vue subjective utilise toute la fenêtre.
-folderstorm-viewport-bars = Garder les barres dans la zone
-folderstorm-viewport-bars-help = Les barres du haut, du bas et des côtés restent au-dessus du monde au lieu de s'étendre sur toute la fenêtre.
+folderstorm-viewport-bars = Barres
+folderstorm-viewport-bars-help = Où vont les barres du haut, du bas et des côtés. Dans le monde : par-dessus, comme avant. Autour du monde : chaque barre dans la marge à côté du monde quand cette marge a la place, dans le monde sinon. Sur toute la fenêtre : étendues sur la fenêtre, comme sans zone du monde.
+folderstorm-viewport-bars-inside = Dans le monde
+folderstorm-viewport-bars-around = Autour du monde
+folderstorm-viewport-bars-window = Sur toute la fenêtre
 folderstorm-viewport-photo = Le mode photo utilise toute la fenêtre
 folderstorm-viewport-photo-help = Désactivé, le mode photo reste dans la zone : son cadre et ses commandes, ses clics et sa molette, et ses photos (taille « Fenêtre » comprise) suivent le rectangle du monde. Activé, le mode photo occupe toute la fenêtre, comme sans zone personnalisée.
 folderstorm-viewport-diagram = Fenêtre et écrans
@@ -1483,6 +1486,75 @@ folderstorm-viewport-monitor-scaled = { $width }×{ $height } · { $percent } %
 folderstorm-viewport-not-under = Cet écran n'est pas sous la fenêtre du viewer.
 folderstorm-viewport-too-small = Une trop petite partie de cet écran est sous la fenêtre du viewer.
 folderstorm-viewport-set-aside = Ces marges laissent au monde moins d'un quart de la fenêtre : pour l'instant, le monde occupe toute la fenêtre.
+
+# Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
+fs-layouts-tab = Dispositions
+fs-layouts-group = Dispositions enregistrées
+fs-layouts-intro = Une disposition retient où vont les choses : la zone du monde avec les barres, et la position et la taille de vos fenêtres. Elle n'ouvre ni ne ferme jamais une fenêtre, et ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici.
+fs-layouts-list = Dispositions
+fs-layouts-list-help = Cliquez sur une disposition pour la sélectionner, puis sur Appliquer ; un double clic l'applique tout de suite. Appliquer remet le monde, les barres et les fenêtres là où la disposition les a. Les fenêtres déplacées ensuite ne sont enregistrées que si vous choisissez Mettre à jour.
+fs-layouts-empty = Aucune disposition enregistrée. Placez le monde et vos fenêtres comme vous les aimez, puis enregistrez l'arrangement ci-dessous.
+fs-layouts-unnamed = (sans nom)
+fs-layouts-active = En service
+fs-layouts-modified = En service · modifiée
+fs-layouts-newer = Créée par une version plus récente
+fs-layouts-invalid = Inutilisable
+fs-layouts-newer-help = Cette disposition a été créée par une version plus récente du viewer. Elle est conservée telle quelle et ne peut être ni appliquée ni modifiée ici ; elle peut seulement être supprimée.
+fs-layouts-invalid-help = Cette entrée du fichier de réglages n'est pas une disposition que cette version sait lire. Elle est conservée telle quelle et ne peut être ni appliquée ni modifiée ici ; elle peut seulement être supprimée.
+fs-layouts-apply = Appliquer
+fs-layouts-update = Mettre à jour
+fs-layouts-rename = Renommer
+fs-layouts-move-up = Monter
+fs-layouts-move-down = Descendre
+fs-layouts-ask-update = Remplacer « { $name } » par l'arrangement actuel ?
+fs-layouts-ask-delete = Supprimer la disposition « { $name } » ?
+fs-layouts-part-world = Zone du monde et barres
+fs-layouts-part-windows = Positions des fenêtres
+fs-layouts-holds-windows = { $count ->
+    [one] { $count } fenêtre
+   *[other] { $count } fenêtres
+    }
+fs-layouts-holds-monitors = { $count ->
+    [one] enregistrée sur { $count } écran
+   *[other] enregistrée sur { $count } écrans
+    }
+fs-layouts-applied = « { $name } » appliquée.
+fs-layouts-applied-windows = { $count ->
+    [one] « { $name } » appliquée : { $count } fenêtre placée.
+   *[other] « { $name } » appliquée : { $count } fenêtres placées.
+    }
+fs-layouts-applied-fitted = { $count ->
+    [one] { $count } ne tenait pas dans la fenêtre du viewer à sa place enregistrée et a été ajustée pour l'instant ; la disposition elle-même est inchangée.
+   *[other] { $count } ne tenaient pas dans la fenêtre du viewer à leur place enregistrée et ont été ajustées pour l'instant ; la disposition elle-même est inchangée.
+    }
+fs-layouts-applied-unknown = { $count ->
+    [one] { $count } fenêtre de cette disposition est inconnue de cette version et a été laissée telle quelle.
+   *[other] { $count } fenêtres de cette disposition sont inconnues de cette version et ont été laissées telles quelles.
+    }
+fs-layouts-waiting = { $count ->
+    [one] { $count } fenêtre fermée prendra sa place quand vous l'ouvrirez.
+   *[other] { $count } fenêtres fermées prendront leur place quand vous les ouvrirez.
+    }
+fs-layouts-previous-done = Retour à l'arrangement d'avant.
+fs-layouts-save-group = Enregistrer l'arrangement actuel
+fs-layouts-save-new = Enregistrer comme nouvelle disposition
+fs-layouts-save-new-help = Enregistre sous un nouveau nom où se trouvent les choses maintenant. Décochez une partie pour la laisser de côté : une disposition sans positions de fenêtres ne change que le monde et les barres, et inversement.
+fs-layouts-name-hint = Nom, par exemple 2 écrans
+fs-layouts-save = Enregistrer
+fs-layouts-error-empty = Donnez un nom à la disposition.
+fs-layouts-error-long = Un nom a au plus { $count } caractères.
+fs-layouts-error-control = Un nom ne peut pas contenir de retour à la ligne ni de tabulation.
+fs-layouts-error-taken = Une autre disposition porte déjà ce nom.
+fs-layouts-error-full = Il y a déjà { $count } dispositions : supprimez-en une d'abord.
+fs-layouts-error-parts = Choisissez au moins une partie à enregistrer.
+fs-layouts-error-invalid = L'arrangement actuel n'a pas pu être lu. Réessayez dans un instant.
+fs-layouts-arrangement = Arrangement
+fs-layouts-previous = Arrangement précédent
+fs-layouts-previous-help = Revient au monde, aux barres et aux positions des fenêtres en place avant la dernière disposition appliquée, ou avant « Réinitialiser les barres et le monde ». Un second appui y retourne. Retenu jusqu'à la fermeture du viewer.
+fs-layouts-previous-button = Revenir
+fs-layouts-reset = Réinitialiser les barres et le monde
+fs-layouts-reset-help = Désactive la zone du monde et remet les barres dans le monde, comme au premier démarrage. Les fenêtres restent où elles sont, et aucune disposition n'est modifiée ni supprimée.
+fs-layouts-reset-button = Réinitialiser
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
