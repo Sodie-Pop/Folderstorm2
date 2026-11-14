@@ -25,7 +25,7 @@ ObjectDeGrab, `NetCommand::Touch`), script dialogs
 
 | Tool | Class | Asks | What it does |
 |---|---|---|---|
-| `object_touch` | Interact | **always** | One touch (grab, release) of an owned prim within 64 m, as a click. `object_id`, `client_request_id` (required). Answers `sent`; a touch is never acknowledged: `handled_confirmed: false`. |
+| `object_touch` | Interact | level (on Ask: once, or for that object this session) | One touch (grab, release) of an owned prim within 64 m, as a click. `object_id`, `client_request_id` (required). Answers `sent`; a touch is never acknowledged: `handled_confirmed: false`. |
 | `object_dialog_list` | Read | – | The live llDialog / llTextBox windows a prim the user owns opened and that wait in the viewer: `dialog_id`, `kind`, `channel`, `message`, `buttons` (index, label), `answerable` and why not. Text from the grid: data. |
 | `object_dialog_reply` | Interact | level | Answer one listed dialog: `dialog_id`, then `button_index` (llDialog) or `text` (llTextBox, at most 250 bytes, may be empty); `client_request_id` (required). Answered as the user's click on that button: the dialog closes. |
 | `object_channel_send` | Interact | **always** | Say `text` (1–1023 bytes) on script channel `channel` (not 0, not DEBUG_CHANNEL) near a prim the user owns (`object_id`, within 20 m). At most 1 a second and 6 a minute per login. `client_request_id` (required). |
@@ -52,14 +52,27 @@ step instead.
   from `script_run`): an interaction makes the object's scripts react as
   they would to the user, and a channel line reaches every listener
   nearby, someone else's included.
-- **Always ask**: `object_touch` (the checklist's "asks": the user sees
-  each touch), `object_channel_send` (a broadcast: the dialog says that
-  every script listening on that channel within 20 m hears it, not only
-  the user's object), `script_test_begin` (the dialog lists the frozen
-  recipe; that one approval covers all its steps, as Folderstorm (C++)
-  decided). `object_dialog_reply` follows the Interact level: it answers
-  a window the user's own object opened on the user's screen, with a
-  button that script offered.
+- **Always ask**: `object_channel_send` (a broadcast: the dialog says
+  that every script listening on that channel within 20 m hears it, not
+  only the user's object), `script_test_begin` (the dialog lists the
+  frozen recipe; that one approval covers all its steps, touches
+  included, as Folderstorm (C++) decided). `object_dialog_reply` follows
+  the Interact level: it answers a window the user's own object opened on
+  the user's screen, with a button that script offered.
+- **A touch follows the Interact level** (the human's decision, review of
+  PR #58): Allow touches with no dialog, Never refuses. On Ask the dialog
+  names the object and offers **Allow once**, **Allow for this object
+  this session** and **Refuse**. "This session" is a grant in the desk
+  (`Desk::decide_for_session`, `touch_grants`), keyed by the object's id:
+  that object's next touches need no question, and touches of it already
+  waiting in the dialog's queue are allowed with it. It is never saved and
+  ends at a login change, when access is turned off and whenever the
+  Interact level changes (even Ask → Allow → Ask); a class on Never
+  refuses whatever the grant. Receipts say `approved` (Allow once) or
+  `approved_for_session`. The desk had no other per-call session grant
+  (Preferences' "this session only" copies the whole settings), so the
+  grant has no list in Preferences yet; changing the Interact level or
+  turning access off forgets it.
 - **A test needs Scripts** ("Run my objects' scripts": a test runs them),
   Read (its assertions read the script output feed and the running
   state) and Interact when it touches or speaks. A step checks its
@@ -179,7 +192,8 @@ Folderstorm list).
 ## Demo
 
 `AURORA_DEMO_MCP=script-testing`: Ask before changes; the demo lists the
-plaza's cut box, touches it (asked), the box answers with an owner-say
+plaza's cut box, touches it (asked: Allow once, Allow for this object
+this session, Refuse), the box answers with an owner-say
 line and a dialog, the demo lists the dialog and answers "Open" (asked),
 then begins a recipe (asked once, the dialog lists its steps): touch,
 wait for the line, wait for a dialog, send on channel 7, reset the door
@@ -188,7 +202,9 @@ script, check it runs; then reads the status until the run ends.
 ## Tests
 
 Catalogue (classes, required ids, always asks, bounds); policy (Interact
-presets and migration); prims (someone else's, too far, RLVa
+presets and migration); touch on Allow (no dialog) and on Ask (once, for
+the object this session, the grant ended by a level change, a login
+change and access off, Never refusing); prims (someone else's, too far, RLVa
 `@touchall`, `@sendchannel`); dialogs (owned only, L$ refused, channel
 0 refused, a replaced dialog stale, text box bounds, permission
 questions never listed); rate limit; recipe validation (scope, fields,

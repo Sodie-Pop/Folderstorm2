@@ -1,6 +1,7 @@
 //! Folderstorm: the script testing tools
 //! (folderstorm/plans/mcp-script-testing.md) on the demo plaza's cut box:
-//! touch (always asked, range, RLVa, owned only), the box's dialogs
+//! touch (the Interact level; on Ask, allowed once or for the object this
+//! session; range, RLVa, owned only), the box's dialogs
 //! (listed and answered, L$ and public chat refused, closed dialogs stale,
 //! permission questions never listed), channel lines (always asked, the
 //! rate limit, @sendchannel), recipes (shape and bounds, one approval) and
@@ -304,8 +305,21 @@ fn object() -> String {
     the_box().to_string()
 }
 
+/// A call as the listener passes it on when its class asks (marked to ask).
+fn take_asked(desk: &mut Desk, world: &World, tool: &str, args: Value, now: Instant) -> Receiver<Result<Value, ToolError>> {
+    let (c, answer) = Pending::detached(tool, args, true, Some("Claude Code"));
+    desk.take(c, &ctx(world), now);
+    answer
+}
+
+/// The `decision` of the receipt of request `id`.
+fn decision_of(desk: &mut Desk, world: &World, id: &str, now: Instant) -> Value {
+    let status = take(desk, world, "assistant_operation_status", json!({"client_request_id": id}), now);
+    answered(&status).expect("its receipt")["receipt"]["decision"].clone()
+}
+
 #[test]
-fn a_touch_always_asks_and_is_sent_once_as_a_click() {
+fn a_touch_follows_the_interact_level_and_is_sent_once_as_a_click() {
     let mut world = plaza();
     let sim = Sim::new();
     let now = Instant::now();
@@ -318,10 +332,9 @@ fn a_touch_always_asks_and_is_sent_once_as_a_click() {
         json!({"object_id": object(), "client_request_id": "touch-1"}),
         now,
     );
-    let q = desk.question(now).expect("a touch asks even on Allow");
-    assert!(q.summary.contains("Cut box"), "{}", q.summary);
-    desk.decide(q.number, true);
+    assert!(desk.question(now).is_none(), "Interact on Allow: no dialog");
     let (call, planned) = next_change(&mut desk, &world, now).expect("runs");
+    assert!(planned.summary.contains("Cut box"), "{}", planned.summary);
     let Work::Interact(interaction) = &planned.work else {
         panic!("an interaction")
     };
@@ -340,6 +353,92 @@ fn a_touch_always_asks_and_is_sent_once_as_a_click() {
     );
     assert_eq!(answered(&again).expect("receipt")["duplicate"], true);
     assert!(desk.question(now).is_none());
+    assert_eq!(decision_of(&mut desk, &world, "touch-1", now), "allowed");
+}
+
+#[test]
+fn on_ask_a_touch_is_allowed_once_or_for_its_object_this_session() {
+    let mut world = plaza();
+    let sim = Sim::new();
+    let now = Instant::now();
+    let mut ask = allow_all();
+    ask.set(Class::Interact, Level::Ask);
+    let mut desk = desk_with(ask);
+    snapshot(&mut desk, &world, &sim, now).expect("listed");
+    let touch = |n: u32| json!({"object_id": object(), "client_request_id": format!("touch-{n}")});
+    let send = |desk: &mut Desk, world: &mut World| {
+        let (call, planned) = next_change(desk, world, now).expect("runs");
+        app(desk, world, call, planned, now);
+    };
+    // Allow once: the object's next touch asks again
+    let first = take_asked(&mut desk, &world, TOUCH, touch(1), now);
+    let q = desk.question(now).expect("asks on Ask");
+    assert!(q.per_object && q.summary.contains("Cut box"), "{q:?}");
+    desk.decide(q.number, true);
+    send(&mut desk, &mut world);
+    assert_eq!(answered(&first).expect("sent")["sent"], true);
+    let second = take_asked(&mut desk, &world, TOUCH, touch(2), now);
+    let q = desk.question(now).expect("allowed once: the next touch asks");
+    // Allow for this object this session: its next touches do not ask
+    desk.decide_for_session(q.number);
+    send(&mut desk, &mut world);
+    assert_eq!(answered(&second).expect("sent")["sent"], true);
+    let third = take_asked(&mut desk, &world, TOUCH, touch(3), now);
+    assert!(desk.question(now).is_none(), "allowed for this session");
+    send(&mut desk, &mut world);
+    assert_eq!(answered(&third).expect("sent")["sent"], true);
+    assert_eq!(decision_of(&mut desk, &world, "touch-1", now), "approved");
+    assert_eq!(decision_of(&mut desk, &world, "touch-2", now), "approved_for_session");
+    assert_eq!(decision_of(&mut desk, &world, "touch-3", now), "approved_for_session");
+    // another question never offers it, and ignores it
+    let _ = take_asked(
+        &mut desk,
+        &world,
+        CHANNEL_SEND,
+        json!({"object_id": object(), "channel": 7, "text": "ping", "client_request_id": "line-1"}),
+        now,
+    );
+    let q = desk.question(now).expect("a channel line always asks");
+    assert!(!q.per_object, "{q:?}");
+    desk.decide_for_session(q.number);
+    assert_eq!(desk.question(now).map(|open| open.number), Some(q.number), "still open");
+    desk.decide(q.number, false);
+    assert!(desk.tick(&IDLE, now).is_empty());
+    // a level change ends the grant (Allow, then Ask again)
+    desk.set_permissions(allow_all());
+    desk.set_permissions(ask);
+    let _ = take_asked(&mut desk, &world, TOUCH, touch(4), now);
+    let q = desk.question(now).expect("asks again after a level change");
+    // touches already waiting for the same object go with the grant
+    let _ = take_asked(&mut desk, &world, TOUCH, touch(5), now);
+    desk.decide_for_session(q.number);
+    assert_eq!(desk.tick(&IDLE, now).len(), 2, "both touches allowed");
+    assert!(desk.question(now).is_none());
+    // a class on Never refuses even an allowed object
+    let mut never = ask;
+    never.set(Class::Interact, Level::Never);
+    desk.set_permissions(never);
+    let refused = take_asked(&mut desk, &world, TOUCH, touch(6), now);
+    assert_eq!(refused_code(&refused), ErrorCode::PermissionDenied);
+    // a login change ends it
+    desk.set_permissions(ask);
+    let _ = take_asked(&mut desk, &world, TOUCH, touch(7), now);
+    let q = desk.question(now).expect("asks");
+    desk.decide_for_session(q.number);
+    send(&mut desk, &mut world);
+    let login = desk.login() + 1;
+    desk.set_login(login, None);
+    snapshot(&mut desk, &world, &sim, now).expect("listed again");
+    let _ = take_asked(&mut desk, &world, TOUCH, touch(8), now);
+    let q = desk.question(now).expect("a new login asks again");
+    // and so does access turned off
+    desk.decide_for_session(q.number);
+    send(&mut desk, &mut world);
+    desk.close();
+    desk.set_permissions(ask);
+    snapshot(&mut desk, &world, &sim, now).expect("listed again");
+    let _ = take_asked(&mut desk, &world, TOUCH, touch(9), now);
+    assert!(desk.question(now).is_some_and(|q| q.per_object), "access turned off ends it");
 }
 
 #[test]
@@ -1107,8 +1206,7 @@ fn the_demo_touches_the_box_answers_its_dialog_and_passes_its_recipe() {
     let page = answered(&listing).expect("listed");
     let (tool, args) = demo::touch();
     let touched = take(&mut desk, &world, tool, args, now);
-    let q = desk.question(now).expect("asks");
-    desk.decide(q.number, true);
+    assert!(desk.question(now).is_none(), "a touch follows Interact: Allow");
     let (call, planned) = next_change(&mut desk, &world, now).expect("runs");
     app(&mut desk, &mut world, call, planned, now);
     assert!(answered(&touched).is_ok());

@@ -65,10 +65,13 @@ pub fn needs_client_request_id(tool: &str) -> bool {
     matches!(tool, TOUCH | DIALOG_REPLY | CHANNEL_SEND | BEGIN)
 }
 
-/// Calls that ask the user even on Allow: each touch, each channel line
-/// (a broadcast), and a recipe, whose one approval covers its steps.
+/// Calls that ask the user even on Allow: each channel line (a
+/// broadcast), and a recipe, whose one approval covers its steps. A touch
+/// follows the Interact level; on Ask, the viewer's dialog can allow it
+/// once or for that object until the session ends (decision of
+/// mcp-script-testing.md).
 pub fn always_asks(tool: &str) -> bool {
-    matches!(tool, TOUCH | CHANNEL_SEND | BEGIN)
+    matches!(tool, CHANNEL_SEND | BEGIN)
 }
 
 /// Whether a step action touches or speaks (it needs Interact).
@@ -197,7 +200,7 @@ const fn spec(name: &'static str, description: &'static str, class: Option<Class
 pub const SCRIPT_TESTING_TOOLS: &[ToolSpec] = &[
     spec(
         TOUCH,
-        "Touch a prim you own and may modify, within 64 m, once (as a click: grab then release). Always asks the user, needs the user's \"Touch and talk to my objects\" permission and a client_request_id. A touch is never acknowledged by the grid: sent is not handled; read script_debug_poll or object_dialog_list for what the script did.",
+        "Touch a prim you own and may modify, within 64 m, once (as a click: grab then release). Needs the user's \"Touch and talk to my objects\" permission and a client_request_id; when that permission asks, the user may allow this touch only, or every touch of this object until the session ends. A touch is never acknowledged by the grid: sent is not handled; read script_debug_poll or object_dialog_list for what the script did.",
         Some(Class::Interact),
         touch_schema,
         CHANGE_WAIT,
@@ -281,7 +284,7 @@ mod tests {
             }
             assert_eq!(
                 protocol::always_asks(t.name, &json!({})),
-                matches!(t.name, TOUCH | CHANNEL_SEND | BEGIN),
+                matches!(t.name, CHANNEL_SEND | BEGIN),
                 "{}",
                 t.name
             );
