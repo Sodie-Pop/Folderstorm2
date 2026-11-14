@@ -34,14 +34,14 @@
 //! out is cancelled.
 
 use super::changes::{self, Planned, Work};
-use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::content::{self, Content}; // Folderstorm: content editing
+use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
-use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
+use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
