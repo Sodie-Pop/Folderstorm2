@@ -1707,6 +1707,22 @@ fs-workspaces-invalid-help = Cette entrée du fichier de réglages n'est pas un 
 fs-workspaces-layout = Disposition appliquée avec lui
 fs-workspaces-layout-keep = Garder la disposition en service
 fs-workspaces-windows = Fenêtres qu'il ouvre (les autres sont fermées ; Conversations reste comme elle est) :
+fs-workspaces-remember-folders = Retenir les dossiers d'inventaire
+fs-workspaces-remember-folders-help = Garde aussi les fenêtres de dossier d'inventaire ouvertes maintenant (Ouvrir dans une nouvelle fenêtre) : le dossier de chacune et sa place, jusqu'à 16. Appliquer l'espace de travail les rouvre et ferme les autres fenêtres de dossier. Seulement pour le compte qui les a enregistrées ; jamais ce qu'un dossier contient.
+fs-workspaces-remember-folders-now = { $count ->
+    [one] Retenir les dossiers d'inventaire ({ $count } fenêtre de dossier ouverte maintenant)
+   *[other] Retenir les dossiers d'inventaire ({ $count } fenêtres de dossier ouvertes maintenant)
+    }
+fs-workspaces-holds-folders = { $count ->
+    [one] Retient { $count } fenêtre de dossier d'inventaire.
+   *[other] Retient { $count } fenêtres de dossier d'inventaire.
+    }
+fs-workspaces-folders-missing = { $count ->
+    [one] { $count } dossier d'inventaire de cet espace de travail est introuvable (supprimé, ou l'inventaire n'est pas encore chargé) et a été ignoré.
+   *[other] { $count } dossiers d'inventaire de cet espace de travail sont introuvables (supprimés, ou l'inventaire n'est pas encore chargé) et ont été ignorés.
+    }
+fs-workspaces-folders-blocked = L'inventaire est masqué par RLVa : ses fenêtres de dossier n'ont pas été ouvertes.
+fs-workspaces-folders-other-account = Ses dossiers d'inventaire ont été enregistrés par un autre compte et ont été ignorés.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message

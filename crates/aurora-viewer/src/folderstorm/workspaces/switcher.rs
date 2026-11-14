@@ -75,6 +75,8 @@ struct SaveForm {
     workspace: bool,
     /// The workspace names the layout in use.
     with_layout: bool,
+    /// *Remember Inventory folders*.
+    with_folders: bool,
     parts: Parts,
     /// The form was just opened: its field takes the keyboard.
     fresh: bool,
@@ -516,6 +518,8 @@ fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm,
                     form.with_layout = with;
                 }
             });
+            widgets::checkbox(ui, p, &mut form.with_folders, tr!("fs-workspaces-remember-folders"))
+                .on_hover_text(tr!("fs-workspaces-remember-folders-help"));
         });
         muted(ui, p, tr!("fs-workspaces-save-help"));
     } else {
@@ -541,7 +545,13 @@ fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm,
         form.refused = save_error(&shown.store, form, readable);
         if form.refused.is_none() {
             out.push(match form.workspace {
-                true => Request::SaveWorkspace(form.name.clone(), form.with_layout && shown.store.active().is_some()),
+                true => Request::SaveWorkspace(
+                    form.name.clone(),
+                    apply::Keep {
+                        layout: form.with_layout && shown.store.active().is_some(),
+                        folders: form.with_folders,
+                    },
+                ),
                 false => Request::SaveNew(form.name.clone(), form.parts),
             });
             close = true;
@@ -638,7 +648,6 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
                 fresh: true,
                 // (a workspace selected: another workspace, most likely)
                 workspace: matches!(selected, Some(Selected::Workspace(_))),
-                with_layout: false,
                 ..Default::default()
             });
         }

@@ -41,9 +41,10 @@ use super::switcher;
 use super::viewer;
 use super::window::{Command, Hold, Seen};
 use super::windows::{self, Kind, Window};
-use super::workspace::{self, Workspace};
+use super::workspace::{self, Folders, Workspace};
 use crate::folderstorm::viewport::ViewportSettings;
 use std::collections::{BTreeMap, BTreeSet};
+use uuid::Uuid;
 
 /// Frames an apply, a start or a change of the interface's size is given
 /// to settle before the windows are looked at again.
@@ -97,6 +98,29 @@ pub trait Shell {
     /// Closes `window`, which is open: a workspace's business (never a
     /// layout's).
     fn close(&mut self, ctx: &egui::Context, window: &Window);
+
+    // Inventory folder windows (*Remember Inventory folders*). A viewer
+    // without them (a test of the places alone) has no account and none.
+
+    /// The account logged in: folder ids mean something for it only.
+    fn account(&self) -> Option<Uuid> {
+        None
+    }
+    /// The open folder windows: each floater's id and its folder.
+    fn folder_windows(&self) -> Vec<(String, Uuid)> {
+        Vec::new()
+    }
+    /// Whether the Inventory has the folder now (not deleted, and loaded).
+    fn has_folder(&self, _folder: Uuid) -> bool {
+        false
+    }
+    /// Opens a window on `folder`: its floater's id, to place it. None
+    /// when it cannot be opened now (RLVa hides the Inventory).
+    fn open_folder(&mut self, _ctx: &egui::Context, _folder: Uuid) -> Option<String> {
+        None
+    }
+    /// Closes the folder window of that floater's id.
+    fn close_folder(&mut self, _window: &str) {}
 }
 
 /// A viewer that opens nothing and says every window is closed: the tests
@@ -153,8 +177,9 @@ struct Arrangement {
     active: Option<String>,
     modified: bool,
     /// The windows open then and the workspace in use then: kept only when
-    /// the apply this undoes is a workspace's (it opens and closes).
-    shown: Option<(BTreeSet<String>, Option<String>)>,
+    /// the apply this undoes is a workspace's (it opens and closes); and
+    /// the folder windows of then, when that workspace has its own.
+    shown: Option<(BTreeSet<String>, Option<String>, Option<Folders>)>,
 }
 
 /// What an apply did, for one line under the list.
@@ -170,6 +195,13 @@ pub struct Report {
     /// The workspace names a layout that cannot be used: the layout in use
     /// was kept.
     pub no_layout: bool,
+    /// Inventory folders of the workspace that are not in the Inventory
+    /// now (deleted, or not loaded yet): skipped.
+    pub folders_missing: usize,
+    /// Folder windows not opened: RLVa hides the Inventory.
+    pub folders_blocked: usize,
+    /// The workspace's folders were saved by another account: skipped.
+    pub folders_other_account: bool,
     /// Windows of the layout that were given a place.
     pub windows: usize,
     /// Of those, the ones whose saved place did not fit as it was.
@@ -227,6 +259,8 @@ struct Queued {
 #[derive(Clone, Debug)]
 struct QueuedOpen {
     open: BTreeSet<String>,
+    /// Its Inventory folder windows, when it remembers them.
+    folders: Option<Folders>,
     /// The frame the apply was asked in: done in a later one.
     frame: u64,
 }
@@ -498,15 +532,15 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
     };
     let mut before = arrangement(ctx, live, kept.window.is_some());
     // a workspace's apply is undone with its windows, and comes back with them
-    before.shown = kept
-        .shown
-        .is_some()
-        .then(|| (capture::open(ctx), live.store.active_workspace.clone()));
+    before.shown = kept.shown.as_ref().map(|(_, _, folders)| {
+        let folders = folders.as_ref().and_then(|_| capture::folders(ctx));
+        (capture::open(ctx), live.store.active_workspace.clone(), folders)
+    });
     let window = kept.window.as_ref().map(|(frame, monitors, _)| (frame, monitors.as_slice()));
     let (report, held) = start(ctx, live, window, Some(&kept.world), kept.windows.as_ref());
-    if let Some((open, workspace)) = kept.shown {
+    if let Some((open, workspace, folders)) = kept.shown {
         let frame = ctx.cumulative_frame_nr();
-        session(ctx, |s| s.queued_open = Some(QueuedOpen { open, frame }));
+        session(ctx, |s| s.queued_open = Some(QueuedOpen { open, folders, frame }));
         live.store.active_workspace = workspace.filter(|name| live.store.find_workspace(name).is_some());
     }
     // the marks of then, if that layout is still in the list
@@ -548,7 +582,9 @@ pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Re
         .and_then(|index| live.store.layout(index))
         .is_some_and(|layout| layout.window.is_some());
     let mut before = arrangement(ctx, live, moves_window);
-    before.shown = Some((capture::open(ctx), live.store.active_workspace.clone()));
+    // (its folder windows too, when the workspace changes them)
+    let folders_now = workspace.folders.as_ref().and_then(|_| capture::folders(ctx));
+    before.shown = Some((capture::open(ctx), live.store.active_workspace.clone(), folders_now));
     let applied = layout.and_then(|index| apply(ctx, live, index).ok());
     let mut report = Report {
         // (named, and not usable: a newer or damaged entry of the list)
@@ -561,6 +597,7 @@ pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Re
     session(ctx, |s| {
         s.queued_open = Some(QueuedOpen {
             open: workspace.open,
+            folders: workspace.folders,
             frame,
         });
         s.previous = Some(before);
@@ -570,21 +607,44 @@ pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Re
     Ok(report)
 }
 
+/// What *Save as a new workspace* keeps beside the open windows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Keep {
+    /// The layout in use, applied with the workspace.
+    pub layout: bool,
+    /// *Remember Inventory folders*: the folder windows open now.
+    pub folders: bool,
+}
+
 /// *Save as a new workspace*: the windows open now under `name`, with the
-/// layout in use when `with_layout`; it becomes the workspace in use.
-pub fn save_new_workspace(ctx: &egui::Context, live: &mut Live, name: &str, with_layout: bool) -> Result<usize, StoreError> {
-    let layout = live.store.active().filter(|_| with_layout).map(|layout| layout.name.clone());
+/// layout in use and the Inventory folder windows when `keep` says so; it
+/// becomes the workspace in use.
+pub fn save_new_workspace(ctx: &egui::Context, live: &mut Live, name: &str, keep: Keep) -> Result<usize, StoreError> {
+    let layout = live.store.active().filter(|_| keep.layout).map(|layout| layout.name.clone());
+    let folders = match keep.folders {
+        true => Some(capture::folders(ctx).ok_or(StoreError::Invalid)?),
+        false => None,
+    };
     let index = live
         .store
-        .add_workspace(Workspace::new(name, layout.as_deref(), capture::open(ctx)))?;
+        .add_workspace(Workspace::new(name, layout.as_deref(), capture::open(ctx)).with_folders(folders))?;
     session(ctx, |s| s.report = None);
     Ok(index)
 }
 
 /// *Update* of a workspace: the one at `index` takes the windows open now
-/// and becomes the workspace in use.
+/// (and the folder windows of now, when it remembers folders) and becomes
+/// the workspace in use.
 pub fn update_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<(), StoreError> {
+    let remembers = live.store.workspace(index).is_some_and(|workspace| workspace.folders.is_some());
+    let folders = match remembers {
+        true => Some(capture::folders(ctx).ok_or(StoreError::Invalid)?),
+        false => None,
+    };
     live.store.update_workspace(index, &capture::open(ctx))?;
+    if folders.is_some() {
+        live.store.set_workspace_folders(index, folders);
+    }
     session(ctx, |s| s.report = None);
     Ok(())
 }
@@ -594,6 +654,18 @@ pub fn update_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> R
 /// list. Worked out when asked; nothing is stored.
 pub fn workspace_modified(store: &Store, open: &BTreeSet<String>) -> bool {
     store.active_workspace().is_some_and(|workspace| !workspace.matches(open))
+}
+
+/// *Remember Inventory folders* of the workspace at `index`, turned on
+/// (the folder windows open now) or off. True when the store changed.
+pub fn remember_folders(ctx: &egui::Context, live: &mut Live, index: usize, on: bool) -> bool {
+    let folders = if on { capture::folders(ctx) } else { None };
+    (folders.is_some() == on) && live.store.set_workspace_folders(index, folders)
+}
+
+/// How many Inventory folder windows are open now.
+pub fn folder_windows_now(ctx: &egui::Context) -> usize {
+    capture::folders(ctx).map_or(0, |folders| folders.windows.len())
 }
 
 /// The windows open now that a workspace switches.
@@ -853,8 +925,8 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
                 outcome.save |= done.is_ok();
                 refused = done.err();
             }
-            Request::SaveWorkspace(name, with_layout) => {
-                let done = save_new_workspace(ctx, live, &name, with_layout);
+            Request::SaveWorkspace(name, keep) => {
+                let done = save_new_workspace(ctx, live, &name, keep);
                 outcome.save |= done.is_ok();
                 refused = done.err();
             }
@@ -874,6 +946,13 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     let mut outcome = Outcome::default();
     // (first: a layout saved in this frame reads which windows are open)
     capture::set_open(ctx, windows::all().iter().filter(|w| shell.is_open(w)).map(|w| w.id).collect());
+    capture::set_folders(
+        ctx,
+        capture::FolderView {
+            account: shell.account(),
+            windows: shell.folder_windows(),
+        },
+    );
     run_requests(ctx, live, &mut outcome);
     let now = ctx.cumulative_frame_nr();
     let mut s = session(ctx, std::mem::take);
@@ -924,6 +1003,56 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     outcome
 }
 
+#[derive(Default)]
+struct FolderCounts {
+    opened: usize,
+    closed: usize,
+    missing: usize,
+    blocked: usize,
+    other_account: bool,
+}
+
+/// Puts the Inventory folder windows as `folders` has them: skipped whole
+/// for another account; a folder the Inventory does not have is skipped
+/// and counted; a window already open on a folder is reused, another one
+/// opened (unless RLVa hides the Inventory); each takes its saved place,
+/// fitted to `room`; the folder windows left over are closed.
+fn folder_windows(ctx: &egui::Context, room: &Room, folders: &Folders, shell: &mut dyn Shell, counts: &mut FolderCounts) {
+    if shell.account() != Some(folders.account) {
+        counts.other_account = true;
+        return;
+    }
+    let mut open = shell.folder_windows();
+    for saved in &folders.windows {
+        if !shell.has_folder(saved.folder) {
+            counts.missing += 1;
+            continue;
+        }
+        let window = match open.iter().position(|(_, folder)| *folder == saved.folder) {
+            Some(at) => open.swap_remove(at).0,
+            None => match shell.open_folder(ctx, saved.folder) {
+                Some(window) => {
+                    counts.opened += 1;
+                    window
+                }
+                None => {
+                    counts.blocked += 1;
+                    continue;
+                }
+            },
+        };
+        let fitted = fit(&saved.place, &folders.frame, &room.frame);
+        crate::ui::widgets::place_floater(ctx, &window, room.origin + fitted.pos.to_vec2(), fitted.size);
+        if fitted.minimized {
+            crate::ui::widgets::minimize_floater(ctx, &window);
+        }
+    }
+    for (window, _) in open {
+        shell.close_folder(&window);
+        counts.closed += 1;
+    }
+}
+
 /// The windows' part of a frame, in the interface `room`. True when the
 /// store changed.
 fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &Room, shell: &mut dyn Shell) -> bool {
@@ -966,6 +1095,20 @@ fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &R
                         closed += 1;
                     }
                     _ => {}
+                }
+            }
+            // its Inventory folder windows: the ones it remembers are
+            // opened (one already open on the folder is reused) and
+            // placed, the other folder windows are closed
+            if let Some(folders) = &shown.folders {
+                let mut counts = FolderCounts::default();
+                folder_windows(ctx, room, folders, shell, &mut counts);
+                opened += counts.opened;
+                closed += counts.closed;
+                if let Some(report) = &mut s.report {
+                    report.folders_missing = counts.missing;
+                    report.folders_blocked = counts.blocked;
+                    report.folders_other_account = counts.other_account;
                 }
             }
         }

@@ -13,10 +13,13 @@
 //! by a newer version, or one that breaks a limit, is kept exactly as it
 //! was read, shown as such, never applied and written back unchanged.
 
-use super::store::{Favorite, Kept, MAX_WINDOWS, NameError, SCHEMA, Store, StoreError, Unusable, name_error, same_name, tidy};
+use super::store::{
+    Favorite, Frame, Kept, MAX_WINDOWS, NameError, Placement, SCHEMA, Store, StoreError, Unusable, name_error, same_name, tidy,
+};
 use super::windows::{self, Window};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use uuid::Uuid;
 
 /// At most this many workspaces.
 pub const MAX_WORKSPACES: usize = 32;
@@ -39,6 +42,53 @@ pub fn switchable() -> impl Iterator<Item = &'static Window> {
     windows::all().iter().filter(|window| window.id != LEFT_ALONE)
 }
 
+/// At most this many Inventory folder windows remembered in a workspace.
+pub const MAX_FOLDERS: usize = 16;
+
+/// An id as the file has it: its usual text.
+mod id_text {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use uuid::Uuid;
+
+    pub fn serialize<S: Serializer>(id: &Uuid, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&id.hyphenated())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Uuid, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Uuid::parse_str(&text).map_err(serde::de::Error::custom)
+    }
+}
+
+/// One Inventory folder window of a workspace: its folder (the user's own
+/// folder id, never what it contains) and where its window was.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FolderWindow {
+    #[serde(with = "id_text")]
+    pub folder: Uuid,
+    #[serde(flatten)]
+    pub place: Placement,
+}
+
+/// *Remember Inventory folders*: the folder windows open when the
+/// workspace was saved. Folder ids mean something for one account only:
+/// another account skips them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Folders {
+    /// The account they were saved by.
+    #[serde(with = "id_text")]
+    pub account: Uuid,
+    /// The interface their places count in.
+    pub frame: Frame,
+    pub windows: Vec<FolderWindow>,
+}
+
+impl Folders {
+    fn ok(&self) -> bool {
+        self.frame.ok() && self.windows.len() <= MAX_FOLDERS && self.windows.iter().all(|window| window.place.ok())
+    }
+}
+
 /// A named workspace: which windows are open, and the layout that goes
 /// with it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -54,6 +104,10 @@ pub struct Workspace {
     /// kept and ignored.
     #[serde(default)]
     pub open: BTreeSet<String>,
+    /// *Remember Inventory folders*: its folder windows. None: folder
+    /// windows are left alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folders: Option<Folders>,
     /// What this version does not know of the entry, kept as read.
     #[serde(flatten)]
     pub other: BTreeMap<String, serde_json::Value>,
@@ -68,8 +122,15 @@ impl Workspace {
             name: tidy(name).to_owned(),
             layout: layout.map(|layout| tidy(layout).to_owned()),
             open: open.into_iter().filter(|id| switched(id)).collect(),
+            folders: None,
             other: BTreeMap::new(),
         }
+    }
+
+    /// The same workspace with its folder windows.
+    pub fn with_folders(mut self, folders: Option<Folders>) -> Self {
+        self.folders = folders;
+        self
     }
 
     /// Whether every value is within the limits. A workspace that fails is
@@ -82,6 +143,7 @@ impl Workspace {
             && name_error(&self.name).is_none()
             && self.layout.as_deref().is_none_or(|layout| name_error(layout).is_none())
             && self.open.len() <= MAX_WINDOWS
+            && self.folders.as_ref().is_none_or(Folders::ok)
             && self
                 .open
                 .iter()
@@ -286,6 +348,21 @@ impl Store {
         let name = workspace.name.clone();
         self.active_workspace = Some(name);
         Ok(())
+    }
+
+    /// *Remember Inventory folders* of the workspace at `index`: these
+    /// folder windows, or none. True when it changed.
+    pub fn set_workspace_folders(&mut self, index: usize, folders: Option<Folders>) -> bool {
+        if folders.as_ref().is_some_and(|folders| !folders.ok()) {
+            return false;
+        }
+        match self.workspace_mut(index) {
+            Some(workspace) if workspace.folders != folders => {
+                workspace.folders = folders;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Chooses the layout applied with the workspace at `index`, or none.
@@ -621,6 +698,77 @@ mod tests {
         assert!(workspace.matches(&ids(&["inventory", ADDITIONAL_INVENTORY, "people", "conversations", "options"])));
         assert!(!workspace.matches(&ids(&["inventory", "people"])));
         assert!(!workspace.matches(&ids(&["inventory", ADDITIONAL_INVENTORY, "people", "worldmap"])));
+    }
+
+    fn folders(count: usize) -> Folders {
+        Folders {
+            account: Uuid::from_u128(7),
+            frame: Frame {
+                width: 1600.0,
+                height: 900.0,
+                pixels_per_point: 1.0,
+            },
+            windows: (0..count)
+                .map(|n| FolderWindow {
+                    folder: Uuid::from_u128(8000 + n as u128),
+                    place: Placement {
+                        x: 10.0 * n as f32,
+                        y: 50.0,
+                        width: 420.0,
+                        height: 440.0,
+                        minimized: false,
+                        open: true,
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn remembered_folders_survive_a_save_and_a_read_and_hold_ids_and_places_only() {
+        let mut store = store();
+        let before = saved(&store);
+        assert!(before["workspaces"][0].get("folders").is_none(), "absent until asked");
+        assert!(store.set_workspace_folders(0, Some(folders(2))));
+        assert!(!store.set_workspace_folders(0, Some(folders(2))), "no change");
+        let file = saved(&store);
+        assert_eq!(
+            file["workspaces"][0]["folders"],
+            json!({
+                "account": "00000000-0000-0000-0000-000000000007",
+                "frame": { "width": 1600.0, "height": 900.0, "pixels_per_point": 1.0 },
+                "windows": [
+                    { "folder": "00000000-0000-0000-0000-000000001f40", "x": 0.0, "y": 50.0, "width": 420.0, "height": 440.0,
+                      "minimized": false, "open": true },
+                    { "folder": "00000000-0000-0000-0000-000000001f41", "x": 10.0, "y": 50.0, "width": 420.0, "height": 440.0,
+                      "minimized": false, "open": true },
+                ],
+            })
+        );
+        assert_eq!(read(file), store);
+        // an update keeps them; taken away, the file is as before
+        store
+            .update_workspace(0, &ids(&["inventory", ADDITIONAL_INVENTORY, "people"]))
+            .expect("updated");
+        assert_eq!(store.workspace(0).expect("usable").folders, Some(folders(2)));
+        assert!(store.set_workspace_folders(0, None));
+        store.active_workspace = Some("Exploring".to_owned());
+        assert_eq!(saved(&store), before);
+    }
+
+    #[test]
+    fn folders_out_of_their_limits_make_the_workspace_unusable() {
+        let mut store = store();
+        assert!(!store.set_workspace_folders(0, Some(folders(MAX_FOLDERS + 1))), "at most 16");
+        assert!(store.set_workspace_folders(0, Some(folders(MAX_FOLDERS))));
+        let mut file = saved(&store);
+        file["workspaces"][0]["folders"]["windows"][0]["folder"] = json!("not an id");
+        assert!(read(file.clone()).workspace(0).is_none(), "kept as read, not usable");
+        file["workspaces"][0]["folders"]["windows"][0]["folder"] = json!("00000000-0000-0000-0000-000000001f40");
+        file["workspaces"][0]["folders"]["windows"][0]["width"] = json!(-4.0);
+        let store = read(file.clone());
+        assert!(store.workspace(0).is_none());
+        assert_eq!(saved(&store)["workspaces"][0], file["workspaces"][0]);
     }
 
     #[test]

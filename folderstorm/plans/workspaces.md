@@ -1707,10 +1707,8 @@ in the checkpoint's report.
 
 **Known limits, and what is left.**
 
-- **Part 2: Inventory folder windows** and *Remember Inventory folders*
-  (per account, at most 16, a deleted folder or another account skipped
-  with a note), with the hook in `ui/inventory.rs`. A workspace leaves
-  folder windows alone until then: it neither opens nor closes them.
+- **Part 2: Inventory folder windows** and *Remember Inventory folders*:
+  built on `claude/workspaces-cp6-folders`, below.
 - A window is closed by its flag, as its cross leaves it; a window that
   asks a question before closing would not ask it (none of the allowlist
   does today).
@@ -1726,6 +1724,92 @@ in the checkpoint's report.
 - Workspaces are never applied at login, and the card shown when the
   monitors change offers layouts only (sections 8.3, 8.5).
 - Checkpoint 5's other limits stand.
+
+#### Checkpoint 6, part 2: Inventory folder windows (branch `claude/workspaces-cp6-folders`, 2026-11-14)
+
+Stacked on part 1 (PR #62). Folderstorm (C++): "Enable Remember Inventory
+folders before saving … to include the folder root … of each single-folder
+Inventory window. … The choice belongs to that save. … Folder IDs stay in
+account-local settings … If a folder was deleted … the rest of the
+workspace still loads with a brief notice."
+
+**As built.**
+
+- **The record.** A workspace may hold `"folders"`, left out unless asked:
+
+  ```json
+  "folders": {
+    "account": "<the account's id>",
+    "frame": { "width": 1600.0, "height": 900.0, "pixels_per_point": 1.0 },
+    "windows": [ { "folder": "<folder id>", "x": 40.0, "y": 80.0,
+                   "width": 420.0, "height": 440.0, "minimized": false, "open": true } ]
+  }
+  ```
+
+  The user's own folder ids and each window's place, at most 16; never a
+  name, an item or what a folder contains. A folder window has a random id
+  each time it opens, so its place is kept here with its folder and not in
+  a layout: it is fitted to the interface of now as a layout's windows are.
+- **Saving.** *Remember Inventory folders* is a box of *Save new…* (the
+  switcher) and of *Save as a new workspace* (Preferences), off by
+  default: the choice belongs to that save. In Preferences the selected
+  workspace has the same box: ticked, it takes the folder windows open
+  now; unticked, it forgets them. *Update* takes the folder windows of now
+  for a workspace that remembers folders, and gives none to one that does
+  not.
+- **Applying** a workspace that remembers folders, with its other
+  windows: for the account that saved them, each folder still in the
+  Inventory gets its window (one already open on that folder is reused,
+  another is opened as *Open in a new window* does) at its saved place,
+  and **the other folder windows are closed** (C++: "hides extras absent
+  from that workspace"). A workspace that does not remember folders
+  leaves every folder window alone.
+- **Skipped, with a note in the report:** a folder that is not in the
+  Inventory (deleted, or not loaded yet: the workspace keeps it, apply
+  again once the Inventory is loaded); **another account** (all its
+  folders, and no folder window is closed); RLVa's `@showinv` (no folder
+  window is opened).
+- ***Previous arrangement*** after such a workspace also puts the folder
+  windows back.
+- **Demo.** `AURORA_DEMO_WORKSPACES=folders`.
+
+**Upstream hook** (one line, marked `// Folderstorm:`):
+`crates/aurora-viewer/src/ui/inventory.rs` line 48,
+`mod folderstorm_windows;`. Our file `ui/inventory/folderstorm_windows.rs`
+lists the open folder windows, opens one through
+`InventoryUi::open_folder_window` and tells its floater's id, and closes
+one. **`open_folder_window` itself is not changed**: section 10 planned to
+make it return the window's id, but a `mod` line conflicts less at a merge
+than a changed signature, and the child module reads the id of the window
+just pushed (decision to confirm).
+
+**Settings.** `"folders"` is absent unless asked, so a workspace saved by
+part 1 reads and writes as it was; an older build keeps the field (a
+workspace's unknown fields are kept) but part 1's build ignores it. No
+migration.
+
+**Tests.** Pure: `workspaces::workspace` (+2: the record, its limits).
+Frame tests with the pretend viewer and a pretend Inventory,
+`workspaces::tests::folders` (9): what is recorded, reopening at the
+places with reuse and closing of the others, a workspace without folders,
+a deleted folder, another account, RLVa, *Previous*, *Update* and the
+box, the limit of 16. `ui::inventory::folderstorm_windows` (1) and
+`app::folderstorm_workspaces` (+1) for the Inventory's side.
+
+**Known limits.**
+
+- The view of a folder window (list, gallery) and a folder selected in a
+  normal Inventory window are not remembered (C++ kept them): only each
+  folder window's folder and place.
+- A folder window is not asked for its position a second time when Aurora
+  stops it short of its place (the layouts' windows are).
+- The "modified" mark of a workspace does not look at folder windows.
+- A folder not found is told apart from "Inventory not loaded yet" only by
+  applying again later.
+- Not logged in to any account: *Remember Inventory folders* cannot be
+  saved (refused with "could not be saved").
+- The pictures of the switcher and of Preferences were not drawn again for
+  the new box in the sandbox beyond the tests of part 1.
 
 ## 14. Later (outline only)
 
