@@ -39,6 +39,9 @@ pub mod objects;
 // Folderstorm: scripts inside objects (mcp-task-scripts.md)
 pub mod task_scripts;
 
+// Folderstorm: script testing (mcp-script-testing.md)
+pub mod script_testing;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -313,7 +316,10 @@ impl ToolSpec {
         }
         // Folderstorm: the object tools' changes need their id (mcp-objects.md),
         // and the task script tools' (mcp-task-scripts.md)
-        if objects::needs_client_request_id(self.name) || task_scripts::needs_client_request_id(self.name) {
+        if objects::needs_client_request_id(self.name)
+            || task_scripts::needs_client_request_id(self.name)
+            || script_testing::needs_client_request_id(self.name)
+        {
             match schema["required"].as_array_mut() {
                 Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
                 None => schema["required"] = json!([crate::receipts::CLIENT_REQUEST_ID]),
@@ -339,6 +345,8 @@ pub fn always_asks(tool: &str, arguments: &Value) -> bool {
         || navigation::always_asks(tool)
         // Folderstorm: removing from an object, taking an object (mcp-objects.md)
         || objects::always_asks(tool)
+        // Folderstorm: a touch, a channel line, a test recipe (mcp-script-testing.md)
+        || script_testing::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -858,6 +866,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(content::CONTENT_TOOLS) // Folderstorm: content editing
         .chain(objects::OBJECT_TOOLS) // Folderstorm: object inspection and lifecycle
         .chain(task_scripts::TASK_SCRIPT_TOOLS) // Folderstorm: scripts inside objects
+        .chain(script_testing::SCRIPT_TESTING_TOOLS) // Folderstorm: script testing
 }
 
 #[cfg(test)]
