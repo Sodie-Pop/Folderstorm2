@@ -1543,6 +1543,14 @@ fs-layouts-applied-unknown = { $count ->
     [one] { $count } fenêtre de cette disposition est inconnue de cette version et a été laissée telle quelle.
    *[other] { $count } fenêtres de cette disposition sont inconnues de cette version et ont été laissées telles quelles.
     }
+fs-layouts-applied-opened = { $count ->
+    [one] { $count } fenêtre qui était ouverte dans cette disposition a été ouverte.
+   *[other] { $count } fenêtres qui étaient ouvertes dans cette disposition ont été ouvertes.
+    }
+fs-layouts-applied-blocked = { $count ->
+    [one] { $count } fenêtre de cette disposition ne peut pas être ouverte pour l'instant et est restée fermée.
+   *[other] { $count } fenêtres de cette disposition ne peuvent pas être ouvertes pour l'instant et sont restées fermées.
+    }
 fs-layouts-waiting = { $count ->
     [one] { $count } fenêtre fermée prendra sa place quand vous l'ouvrirez.
    *[other] { $count } fenêtres fermées prendront leur place quand vous les ouvrirez.

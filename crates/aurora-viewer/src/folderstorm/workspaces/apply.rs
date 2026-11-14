@@ -8,8 +8,12 @@
 //! drawn where the new settings put them and Aurora knows the room the
 //! windows move in: each window of the layout gets a placement request
 //! (`place_floater`; our own for the mini-map), fitted to the interface of
-//! now ([`fit`]). A closed window keeps its request until it opens; its id
-//! waits in `Store::pending` so that a restart asks again.
+//! now ([`fit`]). A window the layout was saved with open and that is
+//! closed now is opened first, the app's own way ([`Shell`]); one that
+//! cannot be opened now is left closed and counted in the report. Any
+//! other closed window keeps its request until it opens; its id waits in
+//! `Store::pending` so that a restart asks again. A layout never closes a
+//! window.
 //!
 //! Aurora keeps a window inside the interface with the size it had before
 //! the request: a window made smaller and moved towards an edge at once
@@ -80,6 +84,33 @@ impl<'a> Live<'a> {
     }
 }
 
+/// The viewer's windows as the app has them: which are open, and the app's
+/// own way of opening one (the path of its menu entry or toolbar button).
+/// A layout opens the windows it was saved with open, and never closes one.
+pub trait Shell {
+    fn is_open(&self, window: &Window) -> bool;
+    /// Opens `window`, which is closed. False when it cannot be opened now
+    /// (RLVa hides it, or the viewer's settings no longer have that
+    /// window): it is left closed and the apply says so.
+    fn open(&mut self, ctx: &egui::Context, window: &Window) -> bool;
+}
+
+/// A viewer that opens nothing and says every window is closed: the tests
+/// of the places alone.
+#[cfg(test)]
+pub struct NoShell;
+
+#[cfg(test)]
+impl Shell for NoShell {
+    fn is_open(&self, _: &Window) -> bool {
+        false
+    }
+
+    fn open(&mut self, _: &egui::Context, _: &Window) -> bool {
+        false
+    }
+}
+
 /// The parts of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Parts {
@@ -128,6 +159,10 @@ pub struct Report {
     pub fitted: usize,
     /// Windows of the layout this version does not know: left alone.
     pub unknown: usize,
+    /// Closed windows the layout was saved with open: opened.
+    pub opened: usize,
+    /// Of the same, the ones that could not be opened now: left closed.
+    pub blocked: usize,
     /// Monitors of the layout that are not there.
     pub missing: usize,
     /// The viewer window could not go where the layout has it: it stays
@@ -700,8 +735,10 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
 /// at the start for the windows still waiting from the last session, looks
 /// at the monitors, and twice a second looks at the windows for the
 /// "modified" mark.
-pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcome {
+pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &mut dyn Shell) -> Outcome {
     let mut outcome = Outcome::default();
+    // (first: a layout saved in this frame reads which windows are open)
+    capture::set_open(ctx, windows::all().iter().filter(|w| shell.is_open(w)).map(|w| w.id).collect());
     run_requests(ctx, live, &mut outcome);
     let now = ctx.cumulative_frame_nr();
     let mut s = session(ctx, std::mem::take);
@@ -729,7 +766,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcom
         s.settle = Some(now + RESIZED_AFTER + SETTLE);
     }
     if let Some(room) = capture::room(ctx) {
-        outcome.save |= windows_frame(ctx, live, &mut s, &room);
+        outcome.save |= windows_frame(ctx, live, &mut s, &room, shell);
     }
     let stamp = menu::stamp(live.store, s.previous.is_some());
     if stamp != std::mem::replace(&mut s.menu, stamp) {
@@ -754,7 +791,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcom
 
 /// The windows' part of a frame, in the interface `room`. True when the
 /// store changed.
-fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &Room) -> bool {
+fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &Room, shell: &mut dyn Shell) -> bool {
     let now = ctx.cumulative_frame_nr();
     let mut save = false;
     if !s.started {
@@ -774,9 +811,18 @@ fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &R
     let viewer_busy = s.viewer.busy();
     if let Some(queued) = s.queued.take_if(|queued| queued.frame < now && !viewer_busy) {
         s.targets.clear();
-        let mut fitted = 0;
+        let (mut fitted, mut opened, mut blocked) = (0, 0, 0);
         for (id, place) in &queued.windows.windows {
             if let Some(window) = windows::find(id) {
+                // open when the layout was saved, closed now: opened the
+                // app's way, before its place is asked (opening a window
+                // expands it; the request minimizes it again if saved so)
+                if place.open && !shell.is_open(window) {
+                    match shell.open(ctx, window) {
+                        true => opened += 1,
+                        false => blocked += 1,
+                    }
+                }
                 let place = fit(place, &queued.windows.frame, &room.frame);
                 fitted += usize::from(place.changed);
                 request(ctx, s, window, room, &place);
@@ -784,6 +830,8 @@ fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &R
         }
         if let Some(report) = &mut s.report {
             report.fitted = fitted;
+            report.opened = opened;
+            report.blocked = blocked;
         }
         s.settle = Some(now + SETTLE);
         s.baseline = None;

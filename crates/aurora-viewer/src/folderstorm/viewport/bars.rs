@@ -8,14 +8,26 @@
 //! 1.1's default), around it, or over the whole window as in Aurora.
 //!
 //! Aurora lays all its bars out in one rectangle (the window, or with row
-//! 1.1 the world). "Around the world" keeps that: the rectangle is the
-//! world grown on each side by that side's bars, when the margin between
-//! the world and the window has room for them ([`around`]). A side without
-//! room is not grown, so its bars stay inside. How thick a side's bars are
-//! is measured from the last frame ([`Thickness::between`]): the bars'
-//! area then, less the room it left for the windows.
+//! 1.1 the world). "Around the world" grows the world on each side by that
+//! side's bars, when the margin between the world and the window has room
+//! for them ([`around`]). A side without room is not grown, so its bars
+//! stay inside. How thick a side's bars are is measured from the last
+//! frame ([`Thickness::between`]): the bars' area then, less the room it
+//! left for the windows.
+//!
+//! The grown rectangle is not one area for every bar ([`Areas`]): the top
+//! and bottom bars keep the world's width, above and below it, and a side
+//! toolbar stands in its margin just outside the world's edge, along the
+//! world's own height (so centred on the world, not between the top and
+//! bottom bars). Laid out in the one grown rectangle, the top and bottom
+//! bars ran over the side toolbar's margin, and the toolbar stood between
+//! them (the human's report on PR #48). A side toolbar without room
+//! outside (the world at the window's edge, or a margin thinner than the
+//! toolbar) stays inside the world at that edge, between the top and
+//! bottom bars, as with *Inside the world*.
 
 use super::ViewportSettings;
+use crate::ui::toolbar::Bar;
 use egui::{Rect, pos2};
 
 /// Where the top, bottom and side bars are laid out while the world has a
@@ -120,13 +132,129 @@ pub fn around(world: Rect, window: Rect, bars: Thickness) -> Rect {
     )
 }
 
+/// Where the bars of *Around the world* are laid out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Areas {
+    /// The top and bottom bars: as wide as the world, above and below it
+    /// where they have room.
+    pub rows: Rect,
+    /// The side toolbars: `rows` reaching into the left and right margins
+    /// where they have room ([`around`]).
+    pub sides: Rect,
+}
+
+impl Areas {
+    pub fn around(world: Rect, window: Rect, bars: Thickness) -> Self {
+        let sides = around(world, window, bars);
+        Areas {
+            rows: Rect::from_x_y_ranges(world.x_range(), sides.y_range()),
+            sides,
+        }
+    }
+}
+
+/// The side toolbars' area of this frame, with the world it is around.
+#[derive(Clone, Copy, Debug)]
+struct Sides {
+    frame: u64,
+    world: Rect,
+    area: Rect,
+}
+
+impl Sides {
+    /// The toolbar of that side stands in its margin, outside the world.
+    fn outside(&self, bar: Bar) -> bool {
+        match bar {
+            Bar::Left => self.area.left() < self.world.left() - SLACK,
+            Bar::Right => self.area.right() > self.world.right() + SLACK,
+            Bar::Bottom => false,
+        }
+    }
+}
+
+fn sides_id() -> egui::Id {
+    egui::Id::unique("folderstorm_viewport_bars_sides")
+}
+
+/// Says where the side toolbars go this frame: `around` is the world and
+/// the area [`Areas::sides`] gives around it; None when the bars are not
+/// around the world (the side toolbars are then laid out with the others).
+pub fn set_sides(ctx: &egui::Context, around: Option<(Rect, Rect)>) {
+    let frame = ctx.cumulative_frame_nr();
+    let sides = around.map(|(world, area)| Sides { frame, world, area });
+    ctx.data_mut(|d| d.insert_temp::<Option<Sides>>(sides_id(), sides));
+}
+
+/// What [`set_sides`] said this frame or the last one (the hidden
+/// interface's edges are read before the bars are laid out).
+fn sides_set(ctx: &egui::Context) -> Option<Sides> {
+    let now = ctx.cumulative_frame_nr();
+    ctx.data(|d| d.get_temp::<Option<Sides>>(sides_id()))
+        .flatten()
+        .filter(|sides| sides.frame.saturating_add(1) >= now)
+}
+
+/// The rectangle the side toolbars are laid out in: the other bars'
+/// ([`super::bars_screen`]), reaching into the margins where the side
+/// toolbars stand outside the world.
+pub fn side_screen(ctx: &egui::Context) -> Rect {
+    let rows = super::bars_screen(ctx);
+    match sides_set(ctx) {
+        Some(sides) => Rect::from_x_y_ranges(sides.area.x_range(), rows.y_range()),
+        None => rows,
+    }
+}
+
+/// The hook of `ui::bars::side::bars`. Returns the side toolbars' screen
+/// ([`side_screen`]). Where a toolbar stands outside the world, `room`
+/// (the windows' room between the top and bottom bars) is made to reach
+/// its margin, so that what the toolbar then takes from it leaves the
+/// world's edge; and with Firestorm's bars (not `islands`), whose side
+/// toolbars are panels of the `Ui` they are given, a `Ui` over that wider
+/// room is returned for them.
+pub fn sides(ui: &mut egui::Ui, room: &mut Rect, islands: bool) -> (Rect, Option<egui::Ui>) {
+    let screen = side_screen(ui.ctx());
+    let Some(sides) = sides_set(ui.ctx()) else {
+        return (screen, None);
+    };
+    let (left, right) = (sides.outside(Bar::Left), sides.outside(Bar::Right));
+    if !left && !right {
+        return (screen, None);
+    }
+    if left {
+        room.min.x = room.min.x.min(sides.area.left());
+    }
+    if right {
+        room.max.x = room.max.x.max(sides.area.right());
+    }
+    let panels = (!islands).then(|| {
+        let rows = ui.available_rect_before_wrap();
+        ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_x_y_ranges(room.x_range(), rows.y_range())))
+    });
+    (screen, panels)
+}
+
+/// The hook of `ui::bars::side`'s island: the screen and the room the
+/// toolbar `bar` is placed in. `room` is the windows' room between the top
+/// and bottom bars; a toolbar outside the world has nothing to do with
+/// them, and stands along the world's own height.
+pub fn side(ctx: &egui::Context, bar: Bar, room: Rect) -> (Rect, Rect) {
+    let screen = side_screen(ctx);
+    match sides_set(ctx).filter(|sides| sides.outside(bar)) {
+        Some(sides) => (screen, Rect::from_x_y_ranges(room.x_range(), sides.world.y_range())),
+        None => (screen, room),
+    }
+}
+
 fn thickness_id() -> egui::Id {
     egui::Id::unique("folderstorm_viewport_bars_thickness")
 }
 
 /// How thick the bars were on each side in the last frame: `room` is the
 /// room they left for the windows then (Aurora's `Interface::last_room`),
-/// measured against the area they were laid out in ([`super::set_bars_area`]).
+/// measured against the area they were laid out in ([`super::set_bars_area`];
+/// the side toolbars' own, [`set_sides`], for the left and right). To be
+/// called before this frame's [`set_sides`].
 /// When the last frame drew no bars, or `room` is not one of that area (the
 /// bars were hidden while the world moved), the last measure stands.
 pub fn thickness(ctx: &egui::Context, room: Option<Rect>) -> Thickness {
@@ -134,7 +262,10 @@ pub fn thickness(ctx: &egui::Context, room: Option<Rect>) -> Thickness {
     let area = ctx
         .data(|d| d.get_temp::<super::BarsArea>(super::bars_frame_id()))
         .filter(|area| area.frame.saturating_add(1) >= now)
-        .map(|area| area.rect.unwrap_or_else(|| ctx.content_rect()));
+        .map(|area| match (area.rect, sides_set(ctx)) {
+            (Some(rows), Some(sides)) => Rect::from_x_y_ranges(sides.area.x_range(), rows.y_range()),
+            (rows, _) => rows.unwrap_or_else(|| ctx.content_rect()),
+        });
     let measured = area.zip(room).and_then(|(area, room)| Thickness::between(area, room));
     match measured {
         Some(bars) => {
@@ -324,5 +455,280 @@ mod tests {
         // a room that is not the area's (the world moved while the bars
         // were hidden) changes nothing either
         assert_eq!(run(Some(Some(world)), Some(rect(0.0, 80.0, 1000.0, 936.0))).top, 80.0);
+    }
+
+    #[test]
+    fn around_the_world_the_rows_keep_its_width_and_the_sides_reach_the_margins() {
+        let window = rect(0.0, 0.0, 3840.0, 1200.0);
+        let world = rect(1920.0, 100.0, 1920.0, 1000.0);
+        let areas = Areas::around(world, window, BARS);
+        // the top and bottom bars above and below the world, as wide as it
+        assert_eq!(areas.rows, Rect::from_min_max(pos2(1920.0, 20.0), pos2(3840.0, 1164.0)));
+        // the left toolbar's 56 points in the left margin
+        assert_eq!(areas.sides, Rect::from_min_max(pos2(1864.0, 20.0), pos2(3840.0, 1164.0)));
+        // no room outside: the two areas are the world
+        let tight = rect(40.0, 0.0, 3800.0, 1200.0);
+        assert_eq!(Areas::around(tight, window, BARS), Areas { rows: tight, sides: tight });
+    }
+
+    /// The real side toolbars (`ui::bars::side::bars`), laid out frame
+    /// after frame as `app.rs` does: the areas from the last frame's
+    /// measure, top and bottom bars of 80 and 64 points in the rows' area,
+    /// then the side toolbars in the room they leave.
+    struct Viewer {
+        ctx: egui::Context,
+        settings: crate::ui::toolbar::ToolbarSettings,
+        state: crate::ui::toolbar::ToolbarUi,
+        panels: crate::ui::Panels,
+        islands: bool,
+        last_room: Option<Rect>,
+        areas: Option<Areas>,
+    }
+
+    const TOP: f32 = 80.0;
+    const BOTTOM: f32 = 64.0;
+
+    fn button(command: &str) -> crate::ui::skin::ToolButton {
+        crate::ui::skin::ToolButton {
+            command: command.into(),
+            icon: "test-icon".into(),
+            tooltip: command.into(),
+        }
+    }
+
+    impl Viewer {
+        fn new(islands: bool, left: bool, right: bool) -> Self {
+            let buttons = |on: bool| {
+                if on {
+                    vec![button("inventory"), button("people")]
+                } else {
+                    Vec::new()
+                }
+            };
+            let ctx = egui::Context::default();
+            ctx.all_styles_mut(|s| s.animation_time = 0.0);
+            Viewer {
+                ctx,
+                settings: crate::ui::toolbar::ToolbarSettings {
+                    left: buttons(left),
+                    right: if right { vec![button("worldmap")] } else { Vec::new() },
+                    ..Default::default()
+                },
+                state: Default::default(),
+                panels: crate::ui::Panels::from_settings(&crate::settings::Settings::default()),
+                islands,
+                last_room: None,
+                areas: None,
+            }
+        }
+
+        /// One frame. `around`: the bars around the world, else inside it.
+        fn frame(&mut self, window: Rect, world: Rect, around: bool) {
+            use crate::ui::bars;
+            let p = crate::theme::Theme::default().palette();
+            let layout = crate::ui::skin::Layout::default();
+            let ctx = self.ctx.clone();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(window),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    // `App::folderstorm_bars_rect`
+                    let areas = if around {
+                        let areas = Areas::around(world, window, thickness(&ctx, self.last_room));
+                        set_sides(&ctx, Some((world, areas.sides)));
+                        areas
+                    } else {
+                        set_sides(&ctx, None);
+                        Areas { rows: world, sides: world }
+                    };
+                    super::super::set_bars_area(&ctx, Some(areas.rows));
+                    self.areas = Some(areas);
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(areas.rows));
+                    let room = if self.islands {
+                        Rect::from_min_max(
+                            pos2(areas.rows.left(), areas.rows.top() + TOP),
+                            pos2(areas.rows.right(), areas.rows.bottom() - BOTTOM),
+                        )
+                    } else {
+                        let frame = egui::Frame::new();
+                        egui::Panel::top("test_top")
+                            .frame(frame)
+                            .exact_size(TOP)
+                            .resizable(false)
+                            .show(&mut child, |_| {});
+                        egui::Panel::bottom("test_bottom")
+                            .frame(frame)
+                            .exact_size(BOTTOM)
+                            .resizable(false)
+                            .show(&mut child, |_| {});
+                        child.available_rect_before_wrap()
+                    };
+                    let favorites = bars::favorites::View::default();
+                    let row = bars::Row {
+                        unread: 0,
+                        latest_unread: None,
+                        flash: 0.0,
+                        flying: false,
+                        seated: false,
+                        mouselook: false,
+                        ao_active: false,
+                        locked: true,
+                        favorites: &favorites,
+                        bar: Bar::Left,
+                        style: Default::default(),
+                        editing: false,
+                    };
+                    let (room, _) = bars::side::bars(
+                        &mut child,
+                        &p,
+                        &crate::ui::icons::Icons::default(),
+                        &layout,
+                        &mut self.state,
+                        &self.settings,
+                        &mut self.panels,
+                        &mut bars::MicButton::default(),
+                        &row,
+                        room,
+                        self.islands,
+                        [true, true],
+                    );
+                    self.last_room = Some(room);
+                },
+            );
+            output.textures_delta.clear();
+        }
+
+        fn frames(&mut self, window: Rect, world: Rect, around: bool) {
+            for _ in 0..4 {
+                self.frame(window, world, around);
+            }
+        }
+
+        /// Where the buttons of a side toolbar are: the rectangle around them.
+        fn toolbar(&self, commands: &[&str]) -> Rect {
+            commands.iter().fold(Rect::NOTHING, |all, command| {
+                let button = self
+                    .ctx
+                    .read_response(crate::ui::bars::tool_button_id(command))
+                    .expect("a button drawn");
+                all.union(button.rect)
+            })
+        }
+
+        fn room(&self) -> Rect {
+            self.last_room.expect("a frame was run")
+        }
+    }
+
+    const LEFT: [&str; 2] = ["inventory", "people"];
+
+    /// The same rectangle, but for what the sums of a frame round off.
+    fn near(a: Rect, b: Rect) -> bool {
+        (a.min - b.min).abs().max_elem() <= 0.01 && (a.max - b.max).abs().max_elem() <= 0.01
+    }
+
+    /// The human's case on PR #48: the world on the right half of a window
+    /// over two monitors, as high as the window, a left toolbar.
+    #[test]
+    fn a_side_toolbar_stands_just_outside_the_world_centred_on_its_height() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        let world = rect(1920.0, 0.0, 1920.0, 1080.0);
+        for islands in [true, false] {
+            let mut v = Viewer::new(islands, true, false);
+            v.frames(window, world, true);
+            let toolbar = v.toolbar(&LEFT);
+            let areas = v.areas.expect("laid out");
+            // outside the world, against its left edge
+            assert!(toolbar.right() <= world.left(), "islands={islands}: {toolbar:?}");
+            assert!(toolbar.right() >= world.left() - 20.0, "islands={islands}: {toolbar:?}");
+            assert!(toolbar.left() >= areas.sides.left(), "islands={islands}: {toolbar:?} in {areas:?}");
+            // the top and bottom bars keep the world's width (no room above
+            // or below it here: they are inside)
+            assert_eq!(areas.rows, world, "islands={islands}");
+            // and the windows' room starts at the world's edge
+            assert!((v.room().left() - world.left()).abs() <= 0.01, "islands={islands}: {:?}", v.room());
+            assert_eq!(v.room().right(), world.right(), "islands={islands}");
+            if islands {
+                // centred on the world's height, not between the top and
+                // bottom bars (which are 80 and 64 points: 8 points higher)
+                assert!((toolbar.center().y - world.center().y).abs() <= 0.5, "{toolbar:?}");
+            }
+            // steady: the next frames lay it out at the same place
+            v.frames(window, world, true);
+            assert!(near(v.toolbar(&LEFT), toolbar), "islands={islands}");
+        }
+    }
+
+    #[test]
+    fn a_world_with_margins_all_round_has_each_toolbar_in_its_margin() {
+        let window = rect(0.0, 0.0, 3840.0, 1200.0);
+        let world = rect(960.0, 100.0, 1920.0, 1000.0);
+        for islands in [true, false] {
+            let mut v = Viewer::new(islands, true, true);
+            v.frames(window, world, true);
+            let (left, right) = (v.toolbar(&LEFT), v.toolbar(&["worldmap"]));
+            assert!(left.right() <= world.left() && left.right() >= world.left() - 20.0, "{left:?}");
+            assert!(right.left() >= world.right() && right.left() <= world.right() + 20.0, "{right:?}");
+            let areas = v.areas.expect("laid out");
+            // the top and bottom bars above and below the world, as wide
+            let rows = Rect::from_min_max(pos2(960.0, 100.0 - TOP), pos2(2880.0, 1100.0 + BOTTOM));
+            assert!(near(areas.rows, rows), "islands={islands}: {areas:?}");
+            // the windows' room is the world itself
+            assert!(near(v.room(), world), "islands={islands}: {:?}", v.room());
+            if islands {
+                for toolbar in [left, right] {
+                    assert!((toolbar.center().y - world.center().y).abs() <= 0.5, "{toolbar:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_toolbar_without_room_outside_stays_inside_the_world_at_its_edge() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        // the world on the right half: a right toolbar has the window's
+        // edge behind it; and a left margin of 20 points is too thin
+        for (world, islands) in [
+            (rect(1920.0, 0.0, 1920.0, 1080.0), true),
+            (rect(1920.0, 0.0, 1920.0, 1080.0), false),
+            (rect(20.0, 0.0, 3820.0, 1080.0), true),
+            (rect(20.0, 0.0, 3820.0, 1080.0), false),
+        ] {
+            let mut v = Viewer::new(islands, true, true);
+            v.frames(window, world, true);
+            let right = v.toolbar(&["worldmap"]);
+            assert!(right.right() <= world.right() && right.left() >= world.right() - 80.0, "{right:?}");
+            // between the top and bottom bars, as inside the world
+            assert!(right.top() >= TOP && right.bottom() <= 1080.0 - BOTTOM, "{right:?}");
+            assert!(v.room().right() <= right.left(), "the windows keep clear of it");
+            let left = v.toolbar(&LEFT);
+            if world.left() < 100.0 {
+                assert!(left.left() >= world.left() && left.right() <= world.left() + 80.0, "{left:?}");
+                assert!(v.room().left() >= left.right());
+                // exactly as with the bars inside the world
+                let mut inside = Viewer::new(islands, true, true);
+                inside.frames(window, world, false);
+                assert!(near(inside.toolbar(&LEFT), left), "islands={islands}");
+                assert!(near(inside.room(), v.room()), "islands={islands}");
+            } else {
+                assert!(left.right() <= world.left(), "{left:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn leaving_around_the_world_brings_the_toolbars_back_inside() {
+        let window = rect(0.0, 0.0, 3840.0, 1080.0);
+        let world = rect(1920.0, 0.0, 1920.0, 1080.0);
+        let mut v = Viewer::new(true, true, false);
+        v.frames(window, world, true);
+        assert!(v.toolbar(&LEFT).right() <= world.left());
+        v.frames(window, world, false);
+        let toolbar = v.toolbar(&LEFT);
+        assert!(toolbar.left() >= world.left(), "{toolbar:?}");
+        assert_eq!(side_screen(&v.ctx), world);
     }
 }

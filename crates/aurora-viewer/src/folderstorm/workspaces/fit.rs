@@ -126,6 +126,7 @@ mod tests {
             width,
             height,
             minimized: false,
+            open: false,
         }
     }
 

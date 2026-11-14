@@ -515,9 +515,10 @@ fn the_bars_are_drawn_where_the_settings_lay_them_out() {
     assert_eq!(
         strips(BarsPlace::Around),
         [
-            (Edge::Top, Rect::from_min_max(pos2(1860.0, 30.0), pos2(3840.0, 110.0))),
-            (Edge::Bottom, Rect::from_min_max(pos2(1860.0, 1016.0), pos2(3840.0, 1080.0))),
-            (Edge::Left, Rect::from_min_max(pos2(1860.0, 110.0), pos2(1920.0, 1016.0))),
+            (Edge::Top, Rect::from_min_max(pos2(1920.0, 30.0), pos2(3840.0, 110.0))),
+            (Edge::Bottom, Rect::from_min_max(pos2(1920.0, 1016.0), pos2(3840.0, 1080.0))),
+            // (outside the world, along its whole height)
+            (Edge::Left, Rect::from_min_max(pos2(1860.0, 30.0), pos2(1920.0, 1080.0))),
         ]
     );
     // margins all round: every bar in its margin, none over the world

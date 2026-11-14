@@ -289,18 +289,33 @@ pub const NOMINAL_BARS: Thickness = Thickness {
 /// side's bars are, in window pixels. Inside the world, over the whole
 /// window, or around the world: then each side's bars are in the margin
 /// when it has room for them and inside otherwise, as the viewer lays
-/// them out (`viewport::bars::around`).
+/// them out (`viewport::bars::Areas`): the top and bottom bars as wide as
+/// the world, a side toolbar outside it along the world's height.
 pub fn bars_strips(window: Rect, world: Rect, place: BarsPlace, bars: Thickness) -> Vec<(Edge, Rect)> {
-    let area = match place {
-        BarsPlace::Window => window,
-        BarsPlace::Inside => world,
-        BarsPlace::Around => viewport::bars::around(world, window, bars),
+    let (area, sides) = match place {
+        BarsPlace::Window => (window, window),
+        BarsPlace::Inside => (world, world),
+        BarsPlace::Around => {
+            let areas = viewport::bars::Areas::around(world, window, bars);
+            (areas.rows, areas.sides)
+        }
     };
     let across = |side: f32, span: f32| side.clamp(0.0, span / 2.0);
     let (top, bottom) = (across(bars.top, area.height()), across(bars.bottom, area.height()));
     let (left, right) = (across(bars.left, area.width()), across(bars.right, area.width()));
-    // (the side bars stand between the top and bottom ones)
+    // (the side bars stand between the top and bottom ones, or outside the
+    // world along its height)
     let middle = Rect::from_min_max(pos2(area.left(), area.top() + top), pos2(area.right(), area.bottom() - bottom));
+    let left_strip = if sides.left() < area.left() {
+        Rect::from_min_max(pos2(sides.left(), world.top()), pos2(area.left(), world.bottom()))
+    } else {
+        Rect::from_min_max(middle.min, pos2(middle.left() + left, middle.bottom()))
+    };
+    let right_strip = if sides.right() > area.right() {
+        Rect::from_min_max(pos2(area.right(), world.top()), pos2(sides.right(), world.bottom()))
+    } else {
+        Rect::from_min_max(pos2(middle.right() - right, middle.top()), middle.max)
+    };
     [
         (Edge::Top, top, Rect::from_min_max(area.min, pos2(area.right(), area.top() + top))),
         (
@@ -308,16 +323,8 @@ pub fn bars_strips(window: Rect, world: Rect, place: BarsPlace, bars: Thickness)
             bottom,
             Rect::from_min_max(pos2(area.left(), area.bottom() - bottom), area.max),
         ),
-        (
-            Edge::Left,
-            left,
-            Rect::from_min_max(middle.min, pos2(middle.left() + left, middle.bottom())),
-        ),
-        (
-            Edge::Right,
-            right,
-            Rect::from_min_max(pos2(middle.right() - right, middle.top()), middle.max),
-        ),
+        (Edge::Left, left, left_strip),
+        (Edge::Right, right, right_strip),
     ]
     .into_iter()
     .filter(|(_, thick, _)| *thick > 0.0)

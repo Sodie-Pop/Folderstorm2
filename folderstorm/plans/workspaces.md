@@ -172,7 +172,7 @@ reachable (`layout::keep_title_in`). Section 8.5 gives the rule for each part.
 | World viewport (margins, mouselook switch) | Yes (optional part) | Through its layout |
 | Bars: inside the world, around it, or over the whole window | Yes (with the viewport) | Through its layout |
 | Position, size, minimized state of each allowlisted window, open or closed | Yes (optional part) | — |
-| Which windows are open | Never changed | Yes |
+| Which windows are open | Opens the windows it was saved with open; closes none (fixes of 2026-11-14, below checkpoint 5) | Yes: opens and closes |
 | Additional Inventory window, folder windows | Placement only | Opens them; folder roots optional |
 | Contents, chat, selections, filters | Never | Never |
 | Stored | Per profile | Per profile; folder references per account |
@@ -300,8 +300,9 @@ newer schema is listed read-only ("made by a newer version").
   size* box goes with it.
 - Window positions: every allowlisted window the viewer knows, open or
   closed. Open windows from their live rectangle, closed ones from their
-  last remembered rectangle, minimized ones with their expanded size. A
-  window never opened has no entry and is left alone later.
+  last remembered rectangle, minimized ones with their expanded size, each
+  with whether it is open. A window never opened has no entry and is left
+  alone later.
 - **Update** overwrites the active layout or workspace with the current
   state, after a confirmation naming it.
 - Saving a workspace records the open allowlisted windows, the additional
@@ -321,7 +322,9 @@ One action, in steps. Each step waits for the previous one to settle.
    next frame.
 5. **Windows.** On the next frame (bars drawn, work area known), place each
    window: open ones at once, closed ones when they next open
-   (`move_floater` + `size_floater`; the minimized state is kept).
+   (`move_floater` + `size_floater`; the minimized state is kept). A window
+   saved open and closed now is opened first, through the same `Panels`
+   flags as the menus; no window is closed.
 6. **Workspace only.** Open the windows in its list and close the other
    allowlisted ones, through the same `Panels` flags as the menus. Open the
    additional Inventory window and the folder windows.
@@ -617,7 +620,9 @@ build does not know is kept on a layout when it is saved again.
   older file has no `bars_around` and reads as before. A three-way enum in
   the file would have changed every reader of `bars_in_viewport` (the
   session host's docked bar, the diagram) and the lines PR #41 edits.
-- The rule is pure (`folderstorm/viewport/bars.rs`): the bars' area is still
+- (Changed by the fixes of 2026-11-14, below checkpoint 5: the top and
+  bottom bars and the side toolbars now have each their area.) The rule
+  is pure (`folderstorm/viewport/bars.rs`): the bars' area is still
   **one rectangle**, the world grown on each side by that side's bars when
   the margin between the world and the window has room for them; a side
   without room keeps its bars inside (the Folderstorm (C++) rule). So no
@@ -675,8 +680,9 @@ build does not know is kept on a layout when it is saved again.
 
 **3. What a layout captures, and what it never does.** Per allowlisted
 window (`folderstorm/workspaces/windows.rs`, section 7.3): its position,
-size and whether it is minimized. Nothing else: no open/closed state (a
-layout never opens or closes a window), no contents, messages,
+size and whether it is minimized (and, since the fixes of 2026-11-14 below
+checkpoint 5, whether it is open: a layout opens the windows it was saved
+with open, and closes none). Nothing else: no contents, messages,
 conversations, Inventory folders, filters or selections. The capture reads
 egui's rectangle for the window id and Aurora's "minimized" and "expanded
 size" entries for it, and nothing from the world state: there is no path
@@ -1383,9 +1389,90 @@ scenario. The human's list is in the checkpoint's report.
   and export / import: not ported (section 3).
 - Checkpoint 4's other limits stand, but the card in mouselook.
 
+#### Fixes after the human's tests (2026-11-14)
+
+Two reports from the human's tests of checkpoints 3 and 4 on Windows, fixed
+on `claude/workspaces-fixes`.
+
+**1. *Around the world*: the side toolbars (PR #48).** The bars were laid
+out in one rectangle, the world grown on every side that had room. With a
+left toolbar in its margin, that rectangle was wider than the world: the
+top and bottom bars ran over the toolbar's margin, and the toolbar stood
+between them instead of along the world. Now (`viewport::bars::Areas`):
+
+- the **top and bottom bars** keep the world's width, above and below it
+  where they have room (inside otherwise, as before);
+- a **side toolbar** stands in its margin just outside the world's edge
+  (Aurora's 8 points from it with the islands, against it with the Legacy
+  bars), placed along the **world's own height**: centred on the world
+  with the toolbar's default alignment, at its top or bottom with the
+  other two (the toolbar's own setting still decides). With the Legacy
+  bars the panel is as high as the room between the top and bottom bars;
+- **no room outside** (the world at the window's edge, or a margin thinner
+  than the toolbar, measured as before from the last frame): that toolbar
+  stays **inside the world at that edge**, between the top and bottom
+  bars, exactly as with *Inside the world*. Each side decides for itself.
+  A margin with room for part of a toolbar is not used: a toolbar is never
+  drawn across the world's edge;
+- the windows' room, the diagram of the world viewport and the hidden
+  interface's edges follow: the diagram draws a side toolbar outside the
+  world along its height.
+
+Hooks: the three existing `// Folderstorm:` lines of `ui/bars/side.rs` now
+call `viewport::bars::{sides, side_screen, side}`, and one line is added
+after the first (the `Ui` of the Legacy side panels when they stand
+outside). `app.rs` is unchanged: `App::folderstorm_bars_rect` (ours)
+returns the top and bottom bars' area and says where the sides go.
+
+**2. Applying a layout opens the windows it was saved with open (PR #50).**
+A layout placed the open windows and left the closed ones closed, their
+places waiting. Decision changed (section 6): each saved window now also
+records whether it was **open** (`"open"` beside `"minimized"`), and an
+apply opens those that are closed now, at their saved place and size (and
+minimized, if saved so). It still **closes nothing**: closing the others
+is a workspace's business (checkpoint 6).
+
+- Opening goes through the app (`apply::Shell`, implemented in
+  `app/folderstorm_workspaces.rs`, no upstream line): the `Panels` flag
+  with `ui::widgets::open_floater`, as `ui::bars::run_command` does;
+  `InventoryUi::open_additional_window`; `ui::controls::request` for
+  Aurora's Controls window (on its Camera tab); the flag alone for the
+  mini-map. Only windows of the allowlist: a stored id never opens
+  anything else.
+- **Cannot be opened now: skipped, and said.** Inventory and the
+  additional Inventory window under RLVa's `@showinv`, the mini-map under
+  `@showminimap`, the world map under `@showworldmap`; the Contacts window
+  while Contacts is a tab of Conversations; the Controls window of the
+  other look (Aurora's one window, or Legacy's two). They stay closed,
+  keep their place for when they open, and the apply's line says "N
+  windows of this layout cannot be opened right now and were left
+  closed". Opened ones are counted too ("N windows that were open in this
+  layout were opened").
+- **Layouts saved before this fix have no `"open"`**: they read as "all
+  closed" and open nothing, as before. *Update* them once (with the
+  windows wanted open) to record it. No migration, no schema change: an
+  older build ignores the field and keeps it.
+- *Previous arrangement* opens the windows that were open before the
+  apply and were closed since; it does not close the ones the apply
+  opened.
+- Opening or closing a window does not mark the layout modified (only a
+  move, a resize or minimizing does, as before).
+- With the interface hidden or in mouselook, the windows are opened and
+  show when the interface is back.
+
+Tests: `viewport::bars::tests` (the real `ui::bars::side::bars`, islands
+and Legacy, frame after frame as `app.rs` lays the bars out: the human's
+case, margins all round, no room outside, leaving *Around the world*);
+`diagram::tests`; `workspaces::tests` (a window saved open is opened at
+its place, one saved closed waits, one that cannot be opened is counted
+and waits, minimized, Previous, an older layout); `app::folderstorm_workspaces::tests`
+(every allowlisted window has its way of being opened; RLVa and the
+settings). **Not checked here** (no graphics device): the viewer itself.
+
 ### Checkpoint 6: workspaces (row 1.4)
 
-- Open / close allowlisted windows, additional Inventory window, folder
+- Open / close allowlisted windows (a layout already opens the ones it was
+  saved with open; a workspace also closes the others), additional Inventory window, folder
   windows with *Remember Inventory folders* (per account), Conversations
   geometry only, restore report.
 - **Human checks:** "Sorting" and "Exploring" on both layouts; RLVa
