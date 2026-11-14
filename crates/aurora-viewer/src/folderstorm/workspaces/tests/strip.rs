@@ -62,6 +62,9 @@ impl Viewer {
 /// under a top bar without a favourites' row.
 fn with_strip() -> Viewer {
     let mut v = two_layouts();
+    // "Sorting" lists Inventory and People
+    v.open = BTreeSet::from([INVENTORY, PEOPLE]);
+    v.frames(3);
     let ctx = v.ctx.clone();
     let keep = apply::Keep {
         layout: false,
@@ -185,13 +188,19 @@ fn the_one_in_use_says_when_it_is_no_longer_as_saved() {
         let view = v.strip_view();
         view.favorites.iter().filter(|f| f.modified).map(|f| f.name.clone()).collect()
     };
-    assert!(modified(&v).is_empty());
+    // "Single", then "Sorting" (with no layout of its own) applied again:
+    // both as saved
+    v.ask(Request::Apply("Single".to_owned()));
+    v.settle();
+    v.ask(Request::ApplyWorkspace("Sorting".to_owned()));
+    v.settle();
+    assert!(modified(&v).is_empty(), "{:?}", v.strip_view().favorites);
     // the world of "Single" changed: the layout in use is modified
     v.world.enabled = true;
     v.frames(3);
     assert_eq!(modified(&v), ["Single"]);
     // a window of "Sorting" closed: the workspace as well
-    assert!(v.open.remove(MAP));
+    assert!(v.open.remove(PEOPLE));
     v.frames(3);
     assert_eq!(modified(&v), ["Sorting", "Single"]);
     // (worked out only while the strip is shown)

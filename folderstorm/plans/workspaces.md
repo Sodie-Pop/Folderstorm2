@@ -1941,7 +1941,7 @@ As planned above, with these differences and details:
 - **Demo.** `AURORA_DEMO_STRIP=1|row|many` (`docs/TESTING.md`), in
   `app/folderstorm_workspaces.rs` with the other layouts demos. `row`
   sets Interface › Favourites access to the row (unfolded).
-- **Tests.** `workspaces::tests::strip` (15): what fits (pure), names cut,
+- **Tests.** `workspaces::tests::strip` (14): what fits (pure), names cut,
   the file, its own island and its order, mouselook, a click applies and
   lights, the "modified" mark, overflow in *More…* and applying from it,
   *More…*'s three entries, *More…* alone without favorites, on the
