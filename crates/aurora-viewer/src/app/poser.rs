@@ -299,9 +299,10 @@ impl App {
             on_top.push(modal.response.layer_id);
         }
         if !consent.granted_to.is_empty() || consent.notice.is_some() {
+            let bars = crate::folderstorm::viewport::bars_offset(ctx, egui::Align2::CENTER_TOP); // Folderstorm: world viewport
             let reminder = egui::Area::new(egui::Id::unique("poser-consent-reminder"))
                 .order(egui::Order::Foreground)
-                .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 52.0))
+                .anchor(egui::Align2::CENTER_TOP, bars + egui::vec2(0.0, 52.0))
                 .show(ctx, |ui| {
                     widgets::overlay(ui, p, egui::Margin::same(10), |ui| {
                         let peers: Vec<_> = consent.granted_to.keys().copied().collect();
