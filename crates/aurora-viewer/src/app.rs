@@ -4991,6 +4991,7 @@ impl App {
             Action::EnvSunrise | Action::EnvMidday | Action::EnvSunset | Action::EnvMidnight | Action::EnvShared => {
                 self.env_shortcut(action)
             }
+            Action::Folderstorm(key) => self.folderstorm_key(key), // Folderstorm: the fork's own actions
             // held actions are read every frame
             _ => {}
         }

@@ -7,16 +7,16 @@
 //! Update, Rename, Delete, Move up and down) and its viewer window (mode,
 //! monitors, lock), *Save as a new layout* with its parts, *Previous
 //! arrangement*, *Unlock the viewer window*, *When the monitors change*
-//! and *Reset bars and world*. Like the rest of Preferences, everything
+//! and *Reset bars and world*; a layout's star, and the two layouts of the
+//! toolbar's toggle (*Quick switch*). Like the rest of Preferences, everything
 //! applies at once; Update and Delete ask first, in the page. The rows
 //! edit no tracked setting: "Reset this page" never deletes a layout.
 
 use super::super::cx::{Cx, Nothing};
-use crate::folderstorm::workspaces::apply::{self, Live, Parts, Report};
-use crate::folderstorm::workspaces::store::{
-    Layout, MAX_LAYOUTS, MAX_NAME, Monitor, MonitorPolicy, NameError, Record, Store, StoreError, Unusable, WindowFrame,
-};
-use crate::folderstorm::workspaces::{monitors, windows};
+use crate::folderstorm::workspaces::apply::{self, Live, Parts};
+use crate::folderstorm::workspaces::monitors;
+use crate::folderstorm::workspaces::store::{Layout, MAX_NAME, Monitor, MonitorPolicy, Record, Store, StoreError, Unusable, WindowFrame};
+use crate::folderstorm::workspaces::words::{self, refusal, report_text};
 use crate::settings::Settings;
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
@@ -35,6 +35,8 @@ const ICON_UP: &str = "arrow-up";
 const ICON_DOWN: &str = "arrow-down";
 const ICON_LOCK: &str = "lock-filled";
 const ICON_UNLOCK: &str = "lock-open";
+const ICON_STAR: &str = "star-filled";
+const ICON_NO_STAR: &str = "star";
 
 const ROW_H: f32 = 28.0;
 const BUTTON_H: f32 = 26.0;
@@ -171,6 +173,37 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 clicked && apply::reset_world(ui.ctx(), &mut Live::of(s))
             });
     });
+    cx.group(tr!("fs-layouts-quick"), |cx| {
+        cx.note(tr!("fs-layouts-quick-intro"));
+        for (place, label) in [(0, tr!("fs-layouts-toggle-first")), (1, tr!("fs-layouts-toggle-second"))] {
+            cx.keywords("layout toggle switch toolbar button dual monitor two monitors shortcut keyboard")
+                .row(label, tr!("fs-layouts-toggle-help"), &Nothing, |ui, s| toggle_picker(ui, s, place));
+        }
+    });
+}
+
+/// One of the two layouts of the toolbar's toggle: a list of the usable
+/// layouts, and "not chosen". True when the choice changed.
+fn toggle_picker(ui: &mut egui::Ui, s: &mut Settings, place: usize) -> bool {
+    let store = &mut s.folderstorm_workspaces;
+    let mut choices: Vec<(Option<usize>, &str)> = vec![(None, tr!("fs-layouts-toggle-none"))];
+    choices.extend(
+        store
+            .layouts
+            .iter()
+            .enumerate()
+            .filter_map(|(index, record)| Some((Some(index), record.layout()?.name.as_str()))),
+    );
+    let chosen = store.toggle[place]
+        .as_deref()
+        .and_then(|name| store.find(name))
+        .map(|(index, _)| index);
+    let mut pick = chosen;
+    if !super::super::combo(ui, &mut pick, &choices) || pick == chosen {
+        return false;
+    }
+    let name = pick.and_then(|index| store.layout(index)).map(|layout| layout.name.clone());
+    store.set_toggle(place, name.as_deref())
 }
 
 fn rename_id() -> egui::Id {
@@ -193,18 +226,6 @@ fn active_index(store: &Store) -> Option<usize> {
     (0..store.layouts.len()).find(|index| store.is_active(*index))
 }
 
-/// The text of a refusal.
-fn refusal(error: StoreError) -> String {
-    match error {
-        StoreError::Name(NameError::Empty) => tr!("fs-layouts-error-empty").to_owned(),
-        StoreError::Name(NameError::TooLong) => tr!("fs-layouts-error-long", count = MAX_NAME),
-        StoreError::Name(NameError::Control) => tr!("fs-layouts-error-control").to_owned(),
-        StoreError::Name(NameError::Taken) => tr!("fs-layouts-error-taken").to_owned(),
-        StoreError::Full => tr!("fs-layouts-error-full", count = MAX_LAYOUTS),
-        StoreError::Invalid | StoreError::Missing => tr!("fs-layouts-error-invalid").to_owned(),
-    }
-}
-
 fn muted(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
     ui.add(egui::Label::new(egui::RichText::new(text).size(11.5).color(p.muted)).wrap());
 }
@@ -224,6 +245,7 @@ fn entry(
     active: bool,
     usable: bool,
     locked: bool,
+    favorite: bool,
     note: &str,
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
@@ -259,6 +281,17 @@ fn entry(
         );
         note_w += 8.0;
     }
+    // a favorite: its star, before the lock and the note
+    if favorite && let Some(icon) = crate::ui::icons::global(ICON_STAR) {
+        note_w += 20.0;
+        ui.painter().image(
+            icon.id(),
+            egui::Rect::from_center_size(pos2(rect.right() - note_w, rect.center().y), Vec2::splat(13.0)),
+            egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            p.warn,
+        );
+        note_w += 8.0;
+    }
     let name_left = rect.left() + 30.0;
     let ink = if usable { p.ink } else { p.muted };
     widgets::paint_elided(
@@ -277,7 +310,8 @@ fn entry(
         ui.painter().galley(at, note_galley, note_ink);
     }
     let lock = if locked { tr!("fs-layouts-locked") } else { "" };
-    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{name} {lock} {note}")));
+    let star = if favorite { tr!("fs-layouts-favorite") } else { "" };
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{name} {star} {lock} {note}")));
     response
 }
 
@@ -292,78 +326,6 @@ fn note(store: &Store, world: &crate::folderstorm::viewport::ViewportSettings, i
         Record::Layout(_) if apply::modified(store, world) => tr!("fs-layouts-modified"),
         Record::Layout(_) => tr!("fs-layouts-active"),
     }
-}
-
-/// What the last apply did, in a sentence or two.
-fn report_text(report: &Report, waiting: usize) -> String {
-    let mut text = match &report.name {
-        Some(name) if report.windows > 0 => tr!("fs-layouts-applied-windows", name = name.as_str(), count = report.windows),
-        Some(name) => tr!("fs-layouts-applied", name = name.as_str()),
-        None => tr!("fs-layouts-previous-done").to_owned(),
-    };
-    let mut add = |more: String| {
-        text.push(' ');
-        text.push_str(&more);
-    };
-    if report.fitted > 0 {
-        add(tr!("fs-layouts-applied-fitted", count = report.fitted));
-    }
-    if report.unknown > 0 {
-        add(tr!("fs-layouts-applied-unknown", count = report.unknown));
-    }
-    if waiting > 0 {
-        add(tr!("fs-layouts-waiting", count = waiting));
-    }
-    if report.missing > 0 {
-        add(tr!("fs-layouts-applied-missing", count = report.missing));
-    }
-    if report.left {
-        add(tr!("fs-layouts-applied-left").to_owned());
-    }
-    if report.unlocked {
-        add(tr!("fs-layouts-applied-unlocked").to_owned());
-    }
-    if report.no_window {
-        add(tr!("fs-layouts-applied-no-window").to_owned());
-    }
-    text
-}
-
-/// A layout's viewer window, in a few words.
-fn window_words(frame: &WindowFrame) -> String {
-    let mut words = match frame {
-        WindowFrame::Normal { maximized: true, .. } => tr!("fs-layouts-holds-window-maximized").to_owned(),
-        WindowFrame::Normal { width, height, .. } => tr!("fs-layouts-holds-window", width = *width, height = *height),
-        WindowFrame::Fullscreen { monitor } => tr!("fs-layouts-holds-window-fullscreen", n = usize::from(*monitor) + 1),
-        WindowFrame::Borderless { monitors, .. } => tr!("fs-layouts-holds-window-borderless", count = monitors.len()),
-    };
-    if frame.locked() {
-        words.push_str(", ");
-        words.push_str(tr!("fs-layouts-holds-locked"));
-    }
-    words
-}
-
-/// What a layout holds, in a line.
-fn holds(record: &Record) -> String {
-    let Record::Layout(layout) = record else {
-        return String::new();
-    };
-    let mut parts = Vec::new();
-    if let Some(frame) = &layout.window {
-        parts.push(window_words(frame));
-    }
-    if layout.world.is_some() {
-        parts.push(tr!("fs-layouts-part-world").to_owned());
-    }
-    if let Some(saved) = &layout.windows {
-        let known = saved.windows.keys().filter(|id| windows::find(id).is_some()).count();
-        parts.push(tr!("fs-layouts-holds-windows", count = known));
-    }
-    if !layout.monitors.is_empty() {
-        parts.push(tr!("fs-layouts-holds-monitors", count = layout.monitors.len()));
-    }
-    parts.join(" · ")
 }
 
 /// The list and the selected layout's actions. True when the settings
@@ -404,6 +366,7 @@ fn list(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
                     .layout()
                     .and_then(|layout| layout.window.as_ref())
                     .is_some_and(WindowFrame::locked),
+                record.layout().is_some_and(|layout| store.is_favorite(&layout.name)),
                 note(store, &s.folderstorm_viewport, index, record),
             );
             if line.clicked() && !selected {
@@ -472,7 +435,7 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
     let count = s.folderstorm_workspaces.layouts.len();
     let mut changed = false;
     match &record {
-        Record::Layout(_) => muted(ui, p, holds(&record)),
+        Record::Layout(layout) => muted(ui, p, words::holds(layout)),
         Record::Kept(kept) => muted(
             ui,
             p,
@@ -585,6 +548,18 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             }
             if widgets::action_button(ui, p, ICON_DELETE, tr!("common-delete"), ActionKind::FlatDanger, size).clicked() {
                 tab.ask = Some(Ask::Delete);
+            }
+            // first in the switcher, in World › Layouts, and in the keyboard's round
+            let favorite = usable && s.folderstorm_workspaces.is_favorite(&name);
+            let (star, star_tip) = match favorite {
+                true => (ICON_STAR, tr!("fs-switcher-unstar")),
+                false => (ICON_NO_STAR, tr!("fs-switcher-star")),
+            };
+            if widgets::action_button_if(ui, p, star, tr!("fs-layouts-favorite"), ActionKind::Flat, size, usable)
+                .on_hover_text(star_tip)
+                .clicked()
+            {
+                changed |= s.folderstorm_workspaces.set_favorite(&name, !favorite);
             }
             if widgets::icon_button(ui, p, ICON_UP, tr!("fs-layouts-move-up"), index > 0)
                 && let Some(to) = s.folderstorm_workspaces.shift(index, true)
@@ -855,6 +830,7 @@ fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::folderstorm::workspaces::apply::Report;
     use crate::folderstorm::workspaces::window::{Command, Pretend};
     use crate::ui::options::{OptionsUi, Page, show};
     use crate::ui::widgets::Floater;
@@ -1527,6 +1503,65 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_tab_gives_a_layout_its_star() {
+        let mut w = Window::new();
+        w.save_as("Wide");
+        w.changed = false;
+        w.click(tr!("fs-layouts-favorite"));
+        assert!(w.store().is_favorite("Wide"));
+        assert!(w.changed, "the settings are saved");
+        w.click(tr!("fs-layouts-favorite"));
+        assert!(!w.store().is_favorite("Wide"));
+    }
+
+    #[test]
+    fn the_two_layouts_of_the_toggle_are_chosen_in_the_tab() {
+        let mut w = Window::new();
+        w.save_as("Wide");
+        w.save_as("Single");
+        // the group is the last of the page: scrolled to
+        let over = w.rect_of(tr!("fs-layouts-list")).expect("the page").center();
+        for _ in 0..8 {
+            w.run(vec![
+                egui::Event::PointerMoved(over),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, -300.0),
+                    phase: egui::TouchPhase::Move,
+                    source: egui::MouseWheelSource::Unknown,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]);
+        }
+        assert!(w.shows(tr!("fs-layouts-toggle-first")) && w.shows(tr!("fs-layouts-toggle-second")));
+        let all = |w: &mut Window, label: &str| -> Vec<Rect> {
+            w.run(Vec::new()).iter().filter(|t| t.source == label).map(|t| t.rect).collect()
+        };
+        let unset = all(&mut w, tr!("fs-layouts-toggle-none"));
+        assert_eq!(unset.len(), 2, "neither is chosen at first");
+        // the first picker: its list opens over the page, "Wide" is in it
+        w.click_at(unset[0].center());
+        let wide = *all(&mut w, "Wide").last().expect("offered");
+        w.changed = false;
+        w.click_at(wide.center());
+        assert_eq!(w.store().toggle, [Some("Wide".to_owned()), None]);
+        assert!(w.changed, "the settings are saved");
+        // the second one
+        let unset = all(&mut w, tr!("fs-layouts-toggle-none"));
+        assert_eq!(unset.len(), 1);
+        w.click_at(unset[0].center());
+        let single = *all(&mut w, "Single").last().expect("offered");
+        w.click_at(single.center());
+        assert_eq!(w.store().toggle, [Some("Wide".to_owned()), Some("Single".to_owned())]);
+        // and back to none
+        let first = *all(&mut w, "Wide").last().expect("the first picker shows it");
+        w.click_at(first.center());
+        let none = *all(&mut w, tr!("fs-layouts-toggle-none")).last().expect("offered");
+        w.click_at(none.center());
+        assert_eq!(w.store().toggle, [None, Some("Single".to_owned())]);
+    }
+
     /// Draws Preferences on `tab` of the Layout page for a few frames with
     /// the software painter; the texts of the last frame.
     /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the picture as
@@ -1620,6 +1655,8 @@ mod tests {
             ICON_RESET,
             ICON_UP,
             ICON_DOWN,
+            ICON_STAR,
+            ICON_NO_STAR,
         ] {
             assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
         }

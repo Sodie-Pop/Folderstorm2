@@ -6,6 +6,7 @@ use super::*;
 use crate::folderstorm::workspaces::apply::Notice;
 use crate::folderstorm::workspaces::menu::{self, Request};
 use crate::folderstorm::workspaces::store::{MonitorPolicy, WindowFrame};
+use crate::folderstorm::workspaces::switcher;
 use crate::folderstorm::workspaces::window::{Command, Pretend};
 
 const LEFT: [i32; 4] = [0, 0, 1920, 1080];
@@ -798,9 +799,13 @@ fn the_world_menu_lists_the_layouts_and_what_can_be_done() {
     v.click(tr!("fs-layouts-previous"));
     v.settle();
     assert_eq!(v.store.active_layout.as_deref(), Some("Single"));
+    // *Layouts…* opens the switcher (checkpoint 5), not Preferences
     v.click(tr!("fs-layouts-menu-open"));
     v.frames(2);
-    assert!(v.preferences);
+    assert!(switcher::is_open(&v.ctx) && !v.preferences);
+    menu::ask(&v.ctx, Request::Switcher);
+    v.frames(2);
+    assert!(!switcher::is_open(&v.ctx));
     // a renamed layout is listed under its new name
     let (index, _) = v.store.find("Wide").expect("in the list");
     v.store.rename(index, "Both screens").expect("renamed");

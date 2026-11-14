@@ -1484,6 +1484,45 @@ fs-layouts-monitors-offer-unlocked = モニターが変わり、ビューアの�
 fs-layouts-monitors-applied = モニターが変わったため、レイアウト「{ $name }」を適用しました。
 fs-layouts-monitors-unlocked = モニターが変わったため、ビューアのウィンドウのロックを解除しました。
 fs-layouts-monitors-later = 今はしない
+fs-layouts-favorite = お気に入り
+fs-layouts-quick = クイック切り替え
+fs-layouts-quick-intro = 初期設定を開かずにレイアウトを切り替える方法は３つあります。「レイアウト」ウィンドウ（ワールド › レイアウト › レイアウト…）：名前の一部を入力して Enter を押します。ツールバーのボタン２つ（「ツールバーのボタン…」にあります）：「レイアウト」はそのウィンドウを開き、「レイアウトを切り替え」は下で選んだ２つのレイアウトをワンクリックで行き来します。そしてショートカット５つ：キーは自分で割り当てるまで未設定で、初期設定 › ショートカット › その他 › レイアウト にあります。お気に入りはウィンドウと「ワールド › レイアウト」で先頭に並び、「次のお気に入りレイアウト」「前のお気に入りレイアウト」のショートカットはお気に入りを順に巡ります。
+fs-layouts-toggle-first = １つ目のレイアウト
+fs-layouts-toggle-second = ２つ目のレイアウト
+fs-layouts-toggle-help = ツールバーの「レイアウトを切り替え」ボタンとそのショートカットが行き来する２つのレイアウトです（例：「モニター２台」と「モニター１台」）。１つ目が使用中なら２つ目へ、それ以外は１つ目へ切り替えます。
+fs-layouts-toggle-none = 未選択
+
+# Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
+fs-switcher-title = レイアウト
+fs-switcher-help = レイアウト名の一部を入力すると、それを含むレイアウトだけが、お気に入りを先頭にして残ります。上下キーで選び、Enter で選んだレイアウトを適用してこのウィンドウを閉じ、Esc で閉じます。星をクリックするとお気に入りになります。図は、選んだレイアウトを今接続されているモニターに適用した結果を示します。「更新」は現在の配置を使用中のレイアウトに保存し、「新規保存…」は別の名前で保存します。
+fs-switcher-hint = レイアウト名を入力して Enter
+fs-switcher-favorites = お気に入り
+fs-switcher-layouts = その他のレイアウト
+fs-switcher-star = お気に入りに追加
+fs-switcher-unstar = お気に入りから外す
+fs-switcher-empty = 保存したレイアウトはまだありません。ワールドとウィンドウを好みの配置にしてから「新規保存…」を選んでください。
+fs-switcher-no-match = この文字を名前に含むレイアウトはありません。
+fs-switcher-picture-help = このレイアウトを今接続されているモニターに適用した結果です：ビューアのウィンドウ（枠線）、ワールド（明るい部分）、レイアウトが配置するウィンドウ。接続されていないレイアウトのモニターは破線で示します。
+fs-switcher-note-missing = このレイアウトのモニター { $count } 台が接続されていません。
+fs-switcher-note-no-window = ここではビューアのウィンドウを動かせません：そのままになります。
+fs-switcher-note-left = ビューアのウィンドウは今の位置のままになります。
+fs-switcher-note-unlocked = ウィンドウはロックされません。
+fs-switcher-note-set-aside = この余白ではワールドがウィンドウの４分の１未満になるため、ワールドはウィンドウ全体に表示されます。
+fs-switcher-note-fitted = ウィンドウ { $count } 個は空いている場所に合わせて調整されます。
+fs-switcher-update = 「{ $name }」を更新
+fs-switcher-update-help = 現在の配置を、使用中のレイアウトが持つ部分について保存します。先に確認します。
+fs-switcher-save-new = 新規保存…
+fs-switcher-preferences-help = レイアウトの名前変更、削除、並べ替え、レイアウトのビューアのウィンドウの編集、「レイアウトを切り替え」ボタンの２つのレイアウトの選択は、初期設定 › レイアウト › レイアウト で行います。
+fs-switcher-keys = 上下キーで選択、Enter で適用して閉じる、Esc で閉じる。
+fs-switcher-command = レイアウト
+fs-switcher-toggle-command = レイアウトを切り替え
+fs-switcher-toggle-to = レイアウト「{ $name }」に切り替え
+fs-switcher-toggle-unset = ２つのレイアウトを 初期設定 › レイアウト › レイアウト で選んでください（クリックで開きます）。
+fs-keys-section = レイアウト
+fs-keys-layout-switcher = 「レイアウト」ウィンドウ
+fs-keys-layout-toggle = ２つのレイアウトを切り替え
+fs-keys-next-favorite = 次のお気に入りレイアウト
+fs-keys-previous-favorite = 前のお気に入りレイアウト
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります

@@ -31,7 +31,9 @@ use super::capture::{self, Room};
 use super::fit::{Fitted, fit};
 use super::menu::{self, Request};
 use super::monitors;
+use super::pick;
 use super::store::{Layout, Monitor, MonitorPolicy, Placement, Placements, Store, StoreError, WindowFrame};
+use super::switcher;
 use super::viewer;
 use super::window::{Command, Hold, Seen};
 use super::windows::{self, Kind, Window};
@@ -197,6 +199,11 @@ struct Session {
     notice_at: f64,
     /// What the menu's view was made from ([`menu::stamp`]).
     menu: u64,
+    /// Why the switcher's last *Save new* or *Update* was refused.
+    refused: Option<StoreError>,
+    /// The card is not drawn: the interface is hidden, or in mouselook
+    /// ([`set_notice_hidden`]).
+    notice_hidden: bool,
 }
 
 fn session_id() -> egui::Id {
@@ -294,7 +301,7 @@ fn waiting(ctx: &egui::Context, window: &Window) -> bool {
 }
 
 /// The viewer window as the app last saw it.
-fn seen(ctx: &egui::Context) -> Option<Seen> {
+pub(super) fn seen(ctx: &egui::Context) -> Option<Seen> {
     session(ctx, |s| s.viewer.seen().copied())
 }
 
@@ -597,6 +604,19 @@ pub fn notice(ctx: &egui::Context) -> Option<Notice> {
     session(ctx, |s| s.notice.clone())
 }
 
+/// Tells whether the card can be drawn this frame. Hidden (the interface
+/// put away, mouselook: it could not be clicked), it waits: a card that
+/// only tells counts its time from when it shows again.
+pub fn set_notice_hidden(ctx: &egui::Context, hidden: bool) {
+    session(ctx, |s| s.notice_hidden = hidden);
+}
+
+/// Why the switcher's last *Save new* or *Update* was refused, until
+/// something it asks is done.
+pub fn refused(ctx: &egui::Context) -> Option<StoreError> {
+    session(ctx, |s| s.refused)
+}
+
 /// What the monitors' change asks for, by the user's choice: nothing, a
 /// card, or (the second value) a layout to apply at once.
 fn on_setup(store: &Store, setup: &[Monitor], unlocked: bool) -> (Option<Notice>, Option<usize>) {
@@ -617,23 +637,59 @@ fn on_setup(store: &Store, setup: &[Monitor], unlocked: bool) -> (Option<Notice>
     }
 }
 
-/// Runs what the menu and the card asked since the last frame.
+/// Applies the layout at `index` for a request: true when it was applied.
+fn apply_asked(ctx: &egui::Context, live: &mut Live, index: Option<usize>) -> bool {
+    index.is_some_and(|index| apply(ctx, live, index).is_ok())
+}
+
+/// Runs what the menu, the card, the switcher, the toolbar's buttons and
+/// the keyboard asked since the last frame.
 fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
     for request in menu::take(ctx) {
+        // what the switcher was last refused is said until it asks again
+        let mut refused = None;
         match request {
             Request::Apply(name) => {
-                if let Some((index, _)) = live.store.find(&name)
-                    && apply(ctx, live, index).is_ok()
-                {
-                    outcome.save = true;
-                }
+                let index = live.store.find(&name).map(|(index, _)| index);
+                outcome.save |= apply_asked(ctx, live, index);
             }
             Request::Previous => outcome.save |= previous(ctx, live),
             Request::Unlock => outcome.save |= unlock(live.store),
             Request::Preferences => outcome.preferences = true,
             // (an apply and a way back take the card away themselves)
-            Request::Dismiss => session(ctx, |s| s.notice = None),
+            Request::Dismiss => {
+                session(ctx, |s| s.notice = None);
+                continue;
+            }
+            Request::Switcher => {
+                switcher::toggle(ctx);
+                continue;
+            }
+            Request::Toggle => match pick::toggle_target(live.store) {
+                Ok(index) => outcome.save |= apply_asked(ctx, live, Some(index)),
+                // its two layouts are chosen in Preferences
+                Err(_) => outcome.preferences = true,
+            },
+            Request::Favorite(forward) => {
+                let index = pick::next_favorite(live.store, forward);
+                outcome.save |= apply_asked(ctx, live, index);
+            }
+            Request::Star(name, on) => outcome.save |= live.store.set_favorite(&name, on),
+            Request::Update(name) => {
+                let done = match live.store.find(&name).map(|(index, _)| index) {
+                    Some(index) => update(ctx, live, index),
+                    None => Err(StoreError::Missing),
+                };
+                outcome.save |= done.is_ok();
+                refused = done.err();
+            }
+            Request::SaveNew(name, parts) => {
+                let done = save_new(ctx, live, &name, parts);
+                outcome.save |= done.is_ok();
+                refused = done.err();
+            }
         }
+        session(ctx, |s| s.refused = refused);
     }
 }
 
@@ -657,6 +713,10 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcom
         (s.notice, apply_now) = on_setup(live.store, setup, found.unlocked);
         s.notice_at = t;
     }
+    // a card that is not drawn has not been read yet
+    if s.notice_hidden {
+        s.notice_at = t;
+    }
     // a card that only tells goes away by itself; one that asks waits
     if matches!(s.notice, Some(Notice::Applied { .. } | Notice::Unlocked)) && t - s.notice_at > TOLD_FOR {
         s.notice = None;
@@ -676,6 +736,8 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>) -> Outcom
         menu::publish(ctx, live.store, s.previous.is_some());
     }
     session(ctx, |slot| *slot = s);
+    // the switcher draws a copy of the store, kept up while it is open
+    switcher::publish(ctx, live.store, live.world);
     // (with the session back in its place: an apply reads and writes it)
     if let Some(index) = apply_now
         && apply(ctx, live, index).is_ok()

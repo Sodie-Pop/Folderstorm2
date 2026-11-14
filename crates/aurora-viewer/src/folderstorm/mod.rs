@@ -4,5 +4,6 @@
 
 pub mod chat_upload;
 pub mod diagram;
+pub mod keys;
 pub mod viewport;
 pub mod workspaces;

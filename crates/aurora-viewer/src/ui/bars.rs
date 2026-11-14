@@ -2464,6 +2464,7 @@ pub fn run_command(ctx: &egui::Context, cmd: &str, panels: &mut Panels) -> BarAc
         "stop_animations" => return BarAction::StopAnimations,
         "resync_animations" => return BarAction::ResyncAnimations,
         "immersive" => return BarAction::ToggleImmersive,
+        "workspaces" | "layout_toggle" => crate::folderstorm::workspaces::toolbar::run(ctx, cmd), // Folderstorm: the layouts' buttons
         _ => {}
     }
     BarAction::None
@@ -3287,6 +3288,8 @@ pub(crate) fn toolbar_row(
         } else {
             tip
         };
+        // Folderstorm: the layouts' two buttons, lit, dimmed and named by their module
+        let (active, usable, tip) = crate::folderstorm::workspaces::toolbar::look(ui.ctx(), &b.command, active, usable, tip);
         // the Favorites button: its grid of favourites opens upwards
         let grid_id = egui::Id::unique("bars_favorites_grid_open");
         let active = active || (b.command == "favorites" && ui.ctx().data(|d| d.get_temp::<bool>(grid_id)).unwrap_or(false));

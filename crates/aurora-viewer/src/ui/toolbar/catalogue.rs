@@ -112,6 +112,9 @@ pub const COMMANDS: &[Command] = commands![
     "omnifilter", "filter-filled", "toolbar-command-omnifilter", false;
     "avatar_align", "user-scan", "toolbar-command-avatar-align", false;
     "face_nearest_avatar", "user-search", "toolbar-command-face-nearest", false;
+    // Folderstorm: the layouts' switcher and the two-layout toggle (folderstorm/workspaces/toolbar.rs)
+    "workspaces", "layout-dashboard-filled", "fs-switcher-command", true;
+    "layout_toggle", "arrows-exchange", "fs-switcher-toggle-command", true;
 ];
 
 impl Command {

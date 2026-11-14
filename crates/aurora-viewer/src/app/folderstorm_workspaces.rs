@@ -1,6 +1,6 @@
 //! Folderstorm: layouts in the app (the rules are in
 //! `crate::folderstorm::workspaces` and `crate::folderstorm::viewport::bars`;
-//! folderstorm/plans/workspaces.md, checkpoints 3 and 4).
+//! folderstorm/plans/workspaces.md, checkpoints 3 to 5).
 //!
 //! The only place where a layout meets winit: each frame the viewer
 //! window is described to the layouts ([`Seen`]) and what they ask of it
@@ -28,7 +28,8 @@ impl App {
         for command in &outcome.commands {
             self.folderstorm_viewer_command(window, *command);
         }
-        if outcome.preferences {
+        // (not in mouselook, where a key may have asked: no window shows)
+        if outcome.preferences && !self.camera.mouselook() {
             // as the Me menu's Preferences does, on our tab
             ui::widgets::open_floater(&self.egui_ctx, "options", &mut self.panels.settings);
             self.options_ui.open(ui::options::Page::Layout, 3);
@@ -38,11 +39,24 @@ impl App {
         }
     }
 
-    /// The card shown when the monitors changed, in the interface's pass
-    /// (`crate::folderstorm::workspaces::notice`).
+    /// In the interface's pass: the card shown when the monitors changed
+    /// (`crate::folderstorm::workspaces::notice`) and the switcher
+    /// (`crate::folderstorm::workspaces::switcher`). The card is not drawn
+    /// where it could not be clicked: in mouselook, or with the interface
+    /// put away; it waits for the interface to be back.
     pub(super) fn folderstorm_workspaces_notice(&self, ctx: &egui::Context, p: &crate::theme::Palette) {
         if matches!(self.screen, Screen::World) {
-            crate::folderstorm::workspaces::notice::show(ctx, p);
+            let hidden = self.camera.mouselook() || ui::widgets::interface_hidden(ctx);
+            crate::folderstorm::workspaces::interface(ctx, p, hidden);
+        }
+    }
+
+    /// One of the layouts' keyboard actions (Preferences › Shortcuts; the
+    /// arm of `on_input`): a request the next frame runs, as the menu's.
+    pub(super) fn folderstorm_key(&mut self, key: crate::folderstorm::keys::Key) {
+        use crate::folderstorm::workspaces::menu;
+        if let Some(request) = menu::key_request(key, self.camera.mouselook()) {
+            menu::ask(&self.egui_ctx, request);
         }
     }
 
@@ -118,6 +132,12 @@ impl App {
     /// pretend monitors (`AURORA_DEMO_MONITORS`), saves "Wide" on all of
     /// them and "Single" on all but the last, applies "Wide", and takes
     /// the last monitor away at frame 600: the card offers "Single".
+    ///
+    /// `AURORA_DEMO_SWITCHER=1` (checkpoint 5) seeds the same two layouts,
+    /// makes both favorites and the two layouts of the toolbar's toggle,
+    /// and opens the switcher instead of Preferences; `=toggle` also gives
+    /// them the viewer window as `AURORA_DEMO_LAYOUTS=toggle` does, and
+    /// asks for the toggle every 300 frames, as its toolbar button would.
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
@@ -125,7 +145,15 @@ impl App {
         if !self.demo {
             return;
         }
-        let Ok(mode) = std::env::var("AURORA_DEMO_LAYOUTS") else { return };
+        let mode = match (std::env::var("AURORA_DEMO_LAYOUTS"), std::env::var("AURORA_DEMO_SWITCHER")) {
+            (Ok(mode), _) => mode,
+            (_, Ok(switcher)) if switcher == "toggle" => "switcher-toggle".to_owned(),
+            (_, Ok(_)) => "switcher".to_owned(),
+            _ => return,
+        };
+        let switcher = mode.starts_with("switcher");
+        // the modes that flip the viewer window between the two layouts
+        let flips = matches!(mode.as_str(), "toggle" | "switcher-toggle");
         let ctx = self.egui_ctx.clone();
         let Some(room) = capture::room(&ctx) else { return };
         if !SEEDED.swap(true, std::sync::atomic::Ordering::Relaxed) {
@@ -139,11 +167,11 @@ impl App {
             };
             let monitors = capture::monitors(&ctx);
             let frame = seen
-                .filter(|_| matches!(mode.as_str(), "toggle" | "lock"))
+                .filter(|_| flips || mode == "lock")
                 .and_then(|seen| capture::viewer_window(seen, &monitors));
             // "Single": the left half of the window, never under its minimum
             let half_frame = match (&frame, seen) {
-                (Some(WindowFrame::Normal { x, y, width, height, .. }), Some(seen)) if mode == "toggle" => Some(WindowFrame::Normal {
+                (Some(WindowFrame::Normal { x, y, width, height, .. }), Some(seen)) if flips => Some(WindowFrame::Normal {
                     x: *x,
                     y: *y,
                     width: (*width / 2).max((800.0 * seen.scale).ceil() as u32),
@@ -212,8 +240,16 @@ impl App {
             self.panels.inventory = true;
             self.panels.world_map = true;
             self.panels.people = true;
-            self.panels.settings = true;
-            self.options_ui.open(ui::options::Page::Layout, 3);
+            if switcher {
+                for (place, name) in ["Wide", "Single"].into_iter().enumerate() {
+                    store.set_favorite(name, true);
+                    store.set_toggle(place, Some(name));
+                }
+                crate::folderstorm::workspaces::switcher::open(&ctx);
+            } else {
+                self.panels.settings = true;
+                self.options_ui.open(ui::options::Page::Layout, 3);
+            }
         }
         let apply_at = |index: usize, frame: u64, app: &mut Self| {
             if app.frame_count == frame
@@ -231,6 +267,10 @@ impl App {
             "toggle" if self.frame_count >= 180 && (self.frame_count - 180).is_multiple_of(300) => {
                 let index = ((self.frame_count - 180) / 300 % 2) as usize;
                 apply_at(index, self.frame_count, self);
+            }
+            // as a click on the toolbar's toggle: "Wide", then "Single", …
+            "switcher-toggle" if self.frame_count >= 180 && (self.frame_count - 180).is_multiple_of(300) => {
+                crate::folderstorm::workspaces::menu::ask(&ctx, crate::folderstorm::workspaces::menu::Request::Toggle);
             }
             "unplug" => {
                 apply_at(0, 180, self);
