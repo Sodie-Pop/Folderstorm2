@@ -450,6 +450,27 @@ impl App {
         self.send(command);
     }
 
+    /// Folderstorm: a building change, sent as the build tools send it
+    /// (MultipleObjectUpdate, ObjectImage, ModifyMaterialParams, ObjectAdd,
+    /// RezObject), checked for RLVa just before (mcp-building.md). Sent
+    /// once: never again automatically.
+    fn local_assistant_build(&mut self, call: Pending, reply: serde_json::Value, send: mcp_bridge::building::Send) {
+        let command = NetCommand::Build(send.command.clone());
+        if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+            return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this change")));
+        }
+        // watched from before the send: the demo answers inside it
+        mcp_bridge::build_sending(call, &send, reply, &self.world);
+        if matches!(
+            send.command,
+            aurora_net::build::BuildCmd::Add(_) | aurora_net::build::BuildCmd::RezInventory(_)
+        ) {
+            self.world.ui_sounds.push(crate::ui_sound::UiSound::ObjectCreate);
+        }
+        log::info!("local assistant building change: {}", send.tool);
+        self.send(command);
+    }
+
     fn local_assistant_run(&mut self, call: Pending) {
         // decided again with the permissions and the login in force
         let Some((call, planned)) = mcp_bridge::replan(call, &self.local_assistant_view()) else {
@@ -514,6 +535,7 @@ impl App {
                 mcp_bridge::interaction_sent(call, &interaction, planned.reply, result);
             }
             Work::ScriptTest(recipe) => mcp_bridge::script_test_start(call, *recipe),
+            Work::Build(send) => self.local_assistant_build(call, planned.reply, *send), // Folderstorm: mcp-building.md
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));

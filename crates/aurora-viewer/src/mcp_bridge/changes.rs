@@ -67,6 +67,9 @@ pub enum Work {
     Interact(Box<super::script_testing::Interaction>),
     /// Folderstorm: a frozen test recipe the desk then drives.
     ScriptTest(Box<super::script_testing::Recipe>),
+    /// Folderstorm: an object moved, turned, resized or repainted, or a
+    /// new one rezzed, as the build tools send it (mcp-building.md).
+    Build(Box<super::building::Send>),
 }
 
 #[derive(Debug, Clone)]
