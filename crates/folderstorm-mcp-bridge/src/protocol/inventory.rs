@@ -325,13 +325,13 @@ mod tests {
             assert_eq!(t.wait, CHANGE_WAIT);
         }
         // never a way to uploads or to L$; the next owner's rights only
-        // through the building group, which always asks (mcp-building.md)
+        // through the building group, under their own class (mcp-building.md)
         for absent in ["inventory_snapshot_upload", "inventory_upload_execute"] {
             assert!(tool(absent).is_none(), "{absent}");
         }
         let next_owner = tool("inventory_next_owner_set").expect("next owner");
         assert_eq!(next_owner.group, crate::binding::BUILDING);
-        assert!(super::super::always_asks(next_owner.name, &serde_json::json!({})));
+        assert_eq!(next_owner.class, Some(Class::NextOwner));
     }
 
     #[test]

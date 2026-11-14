@@ -356,7 +356,7 @@ pub fn always_asks(tool: &str, arguments: &Value) -> bool {
         || navigation::always_asks(tool)
         // Folderstorm: removing from an object, taking an object (mcp-objects.md)
         || objects::always_asks(tool)
-        // Folderstorm: a touch, a channel line, a test recipe (mcp-script-testing.md)
+        // Folderstorm: a channel line, a test recipe (mcp-script-testing.md)
         || script_testing::always_asks(tool)
         // Folderstorm: a pose file saved (mcp-gestures.md)
         || posing::always_asks(tool)
