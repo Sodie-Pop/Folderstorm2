@@ -33,6 +33,7 @@
 //! been sent ([`Desk::cancel`]); just before the send, a call whose time ran
 //! out is cancelled.
 
+use super::building::{self, Building}; // Folderstorm: building (mcp-building.md)
 use super::changes::{self, Planned, Work};
 use super::content::{self, Content}; // Folderstorm: content editing
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
@@ -43,6 +44,7 @@ use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
+use folderstorm_mcp_bridge::protocol::building as build_tool; // Folderstorm: building
 use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
 use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: object tools
@@ -214,6 +216,8 @@ pub struct Desk {
     task_scripts: TaskScripts,
     /// Folderstorm: this login's test runs and channel lines.
     testing: ScriptTesting,
+    /// Folderstorm: this login's object revisions, edits and rezzes.
+    building: Building,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -375,7 +379,8 @@ impl Desk {
         if fresh
             && (object_tool::needs_client_request_id(&call.tool)
                 || task_tool::needs_client_request_id(&call.tool)
-                || test_tool::needs_client_request_id(&call.tool))
+                || test_tool::needs_client_request_id(&call.tool)
+                || build_tool::needs_client_request_id(&call.tool))
             && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none()
         {
             return call.answer(Err(ToolError::new(
@@ -531,6 +536,15 @@ impl Desk {
             let result = self.testing.stop(&call.arguments, now);
             return call.answer(result);
         }
+        // Folderstorm: the building tools' reads (mcp-building.md)
+        if call.tool == build_tool::OBJECT_GET {
+            self.building.start_get(call, &mut self.objects, cx, now);
+            return;
+        }
+        if call.tool == build_tool::PERMISSIONS_GET {
+            let result = self.building.permissions(&call.arguments, cx);
+            return call.answer(result);
+        }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
             call.answer(result);
@@ -565,6 +579,8 @@ impl Desk {
             self.task_scripts.plan(&call, &self.objects, cx, now, false)
         } else if script_testing::is_change(&call.tool) {
             self.testing.plan(&call, &self.objects, cx, now, false)
+        } else if building::is_change(&call.tool) {
+            self.building.plan(&call, &self.objects, cx, now, false)
         } else {
             changes::plan(&call.tool, &call.arguments, cx)
         };
@@ -932,6 +948,7 @@ impl Desk {
         self.objects.clear(&refusal); // Folderstorm: object tools
         self.task_scripts.clear(&refusal); // Folderstorm: task scripts
         self.testing.clear(); // Folderstorm: script testing
+        self.building.clear(&refusal); // Folderstorm: building
         super::script_feed::clear();
     }
 
@@ -950,6 +967,7 @@ impl Desk {
         self.content.refuse_all(refusal); // Folderstorm: content reads
         self.objects.refuse_all(refusal); // Folderstorm: object listings
         self.task_scripts.refuse_all(refusal); // Folderstorm: task script reads
+        self.building.refuse_all(refusal); // Folderstorm: building reads
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -983,6 +1001,9 @@ impl Desk {
         // Folderstorm: a test run stops, its status stays
         old.testing.close(now);
         self.testing = old.testing;
+        // Folderstorm: the building watches end, the revisions go
+        old.building.close(&refused(ACCESS_OFF));
+        self.building = old.building;
         super::script_feed::set_capturing(false);
     }
 
@@ -1399,6 +1420,19 @@ impl Desk {
         }
         // Folderstorm: the test run under way moves on (mcp-script-testing.md)
         self.testing.tick(&self.objects, world, &self.permissions, now);
+        // Folderstorm: the building reads, watches and rezzes (mcp-building.md)
+        self.building.tick(&mut self.objects, world, now);
+    }
+
+    /// Folderstorm: a building change planned again just before the send
+    /// (mcp-building.md).
+    pub fn building_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
+        self.building.plan(call, &self.objects, cx, now, true)
+    }
+
+    /// Folderstorm: the app sends a building change now.
+    pub fn build_sending(&mut self, call: Pending, send: &building::Send, reply: Value, world: &crate::world::World, now: Instant) {
+        self.building.sending(call, send, reply, &mut self.objects, world, now);
     }
 
     /// Folderstorm: the script testing state (the runs' sends, the app's

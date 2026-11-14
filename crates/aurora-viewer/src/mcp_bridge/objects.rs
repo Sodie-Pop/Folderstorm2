@@ -234,6 +234,9 @@ pub struct Objects {
     /// Listings answered, their page given on the next frame: (call,
     /// snapshot, offset, limit).
     pages: Vec<(Pending, String, usize, usize)>,
+    /// Folderstorm: the roots whose owner the building group's reads asked
+    /// for (mcp-building.md).
+    owner_asks: HashSet<Uuid>,
 }
 
 /// One prim the tools may act on.
@@ -777,7 +780,8 @@ impl Objects {
                         self.serials.insert(p.object_id, p.inventory_serial);
                     }
                     let followed = self.lists.iter().any(|w| w.object == p.object_id || w.root == p.object_id)
-                        || self.owners.contains_key(&p.object_id);
+                        || self.owners.contains_key(&p.object_id)
+                        || self.owner_asks.contains(&p.object_id);
                     if !p.owner_id.is_nil() && followed {
                         self.owners.insert(p.object_id, (p.owner_id, p.name.clone()));
                     }
@@ -1295,7 +1299,7 @@ impl Objects {
         let facts = self.facts(operation).filter(|f| f.rez_baseline.is_some()).ok_or_else(|| {
             err(
                 ErrorCode::NotFound,
-                "no rez operation with this operation_id on this login (this viewer has no rez tool yet)",
+                "no rez operation with this operation_id on this login (build_rez_primitive and build_rez_inventory make them)",
             )
         })?;
         if facts.rezzed.is_some() {
@@ -1423,7 +1427,6 @@ impl Objects {
     /// Folderstorm: the building group's rez tools call this when a rez is
     /// sent, with the owned roots present before it, so that
     /// `object_rez_identify` can be used on it.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn track_rez(&mut self, operation: &str, before: HashSet<Uuid>, now: Instant) {
         self.keep_facts(
             operation.to_owned(),
@@ -1457,6 +1460,8 @@ impl Objects {
             .filter(|r| {
                 (handles(&r.tool) && r.tool != LIST && r.tool != STATUS)
                     || folderstorm_mcp_bridge::protocol::task_scripts::needs_client_request_id(&r.tool)
+                    // Folderstorm: and the building tools' (mcp-building.md)
+                    || folderstorm_mcp_bridge::protocol::building::is_change(&r.tool)
             })
             .ok_or_else(|| err(ErrorCode::NotFound, "no object operation with this id on this login"))?;
         let mut answer = json!({"receipt": receipt.to_json(names)});
@@ -1495,6 +1500,29 @@ impl Objects {
     /// owner must be known by now.
     pub(super) fn prim(&self, scene: &Scene, world: &World, object: Uuid) -> Result<Target, ToolError> {
         self.owned(scene, world, object, None)
+    }
+
+    /// Folderstorm: the prim `object` for the building group's read
+    /// (mcp-building.md): the same rules as every object tool; None while
+    /// its owner is unknown, the root's properties then asked for once.
+    pub(super) fn prim_or_ask(&mut self, scene: &Scene, world: &World, object: Uuid) -> Result<Option<Target>, ToolError> {
+        match self.locate(scene, world, object, None)? {
+            Found::Ok(t) => Ok(Some(t)),
+            Found::Owner(t) => {
+                if self.owner_asks.len() > 256 {
+                    self.owner_asks.clear();
+                }
+                if self.owner_asks.insert(t.root) {
+                    let local_id = world.objects.get(t.root_idx).map_or(t.local_id, |r| r.key.local_id);
+                    self.wants.push(Want::Properties {
+                        handle: t.handle,
+                        local_id,
+                        object: t.root,
+                    });
+                }
+                Ok(None)
+            }
+        }
     }
 
     /// Folderstorm: the raw name of task item `item` in the newest
