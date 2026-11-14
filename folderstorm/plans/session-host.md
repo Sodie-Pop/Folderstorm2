@@ -2624,7 +2624,7 @@ May be two small PRs: 1a profiles, 1b behind policy.
   question, the volume button, "… is typing"),
   `host/ui/monitor_windows.rs` (the monitor's chat part), `host.rs` (the
   book of contacts and its messages).
-  - **IPC, protocol 6** (a host and a viewer of different protocols
+  - **IPC, protocol 7** (a host and a viewer of different protocols
     refuse each other). **Number clash:** the MCP session routing branch
     (`claude/mcp-session-routing`, PR #45, not merged) also moves the
     link from 5 to 6, for the assistant's kind of Attention item. Two
@@ -2774,7 +2774,7 @@ May be two small PRs: 1a profiles, 1b behind policy.
     9. a web link in a line: a known site opens in the browser, another
        asks first, a `secondlife://` link brings the character forward;
     10. a host of checkpoint 10 against a viewer of checkpoint 11 (or
-        the other way round) refuse each other (protocol 6).
+        the other way round) refuse each other (protocol 7).
 
 ## 16. Verified in code vs inferred
 

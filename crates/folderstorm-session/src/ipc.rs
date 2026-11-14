@@ -46,7 +46,7 @@
 //! ([`AttentionKind::Assistant`]), so that the host's inbox shows a
 //! question waiting in a background character's window.
 //!
-//! Since protocol 6 (checkpoint 11) the host may ask a viewer to open a
+//! Since protocol 7 (checkpoint 11) the host may ask a viewer to open a
 //! conversation or a profile ([`ToViewer::Open`]), as the user would in
 //! that viewer's own window; the viewer decides (its RLVa rules, its
 //! groups) and answers ([`ToHost::Opened`]). Nothing is said to anyone by
@@ -80,7 +80,7 @@ use std::io::{self, Read, Write};
 use std::time::Duration;
 
 /// Both sides refuse another number.
-pub const PROTOCOL: u32 = 6;
+pub const PROTOCOL: u32 = 7;
 
 /// The largest frame, either way.
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -1602,7 +1602,7 @@ mod tests {
             panic!("another command");
         };
         assert_eq!(volume, Volume::Normal);
-        // a line of before protocol 6 has no volume: normal
+        // a line of before protocol 7 has no volume: normal
         let old = r#"{"SendChat":{"id":1,"generation":1,"conversation":"Nearby","text":"hi"}}"#;
         assert!(matches!(
             serde_json::from_str::<ToViewer>(old).expect("reads"),
