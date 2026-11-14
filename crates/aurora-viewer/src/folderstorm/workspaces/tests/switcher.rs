@@ -508,7 +508,8 @@ fn the_card_waits_while_the_interface_is_hidden() {
 /// The switcher drawn with the software painter over a viewer on the
 /// left one of two monitors, "2 monitors" selected: its picture shows the
 /// window over both. `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the
-/// pictures as `<folder>/switcher.png` and `<folder>/switcher-save.png`.
+/// pictures as `<folder>/switcher.png`, `switcher-missing.png` and
+/// `switcher-save.png`.
 #[test]
 fn the_switcher_is_drawn() {
     use crate::folderstorm::diagram::{self, Desktop, Monitor};
@@ -596,6 +597,8 @@ fn the_switcher_is_drawn() {
     let mut texts: Vec<(String, Rect)> = Vec::new();
     let mut events: Vec<egui::Event> = Vec::new();
     let mut time = 0.0;
+    // the second monitor is taken away for one of the pictures
+    let unplugged = std::cell::Cell::new(false);
     let mut draw = |name: &str, frames: usize, events: &mut Vec<egui::Event>, store: &mut Store, texts: &mut Vec<(String, Rect)>| {
         for n in 0..frames {
             diagram::set_desktop(
@@ -605,6 +608,7 @@ fn the_switcher_is_drawn() {
                     position: window.seen.outer,
                     monitors: [[0, 0, 1920, 1080], [1920, 0, 1920, 1080]]
                         .iter()
+                        .take(if unplugged.get() { 1 } else { 2 })
                         .map(|rect| Monitor { rect: *rect, scale: 1.0 })
                         .collect(),
                 },
@@ -699,6 +703,18 @@ fn the_switcher_is_drawn() {
     ] {
         assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
     }
+    // the same with the second monitor unplugged: it is drawn dashed, and
+    // what will not be as saved is said (`switcher-missing.png`)
+    unplugged.set(true);
+    draw("switcher-missing", 6, &mut events, &mut store, &mut texts);
+    for expected in [
+        tr!("fs-switcher-note-missing", count = 1),
+        tr!("fs-switcher-note-unlocked").to_owned(),
+        tr!("fs-switcher-note-set-aside").to_owned(),
+    ] {
+        assert!(shown(&texts, &expected), "“{expected}” is drawn");
+    }
+    unplugged.set(false);
     // *Save new…*, with a name typed
     let at = texts
         .iter()

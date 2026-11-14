@@ -204,7 +204,7 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, picture: &Picture) -> egui::Response
     let painter = ui.painter().with_clip_rect(rect.shrink(1.0));
     let none = egui::CornerRadius::ZERO;
     let bold = egui::FontId::new(11.0, crate::ui::fonts::semibold(ui.ctx()));
-    for (n, (monitor, there)) in picture.monitors.iter().enumerate() {
+    for (monitor, there) in &picture.monitors {
         let d = mapping.rect_to_diagram(*monitor);
         if *there {
             painter.rect_filled(d, none, p.raised);
@@ -212,16 +212,6 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, picture: &Picture) -> egui::Response
         } else {
             let corners = [d.left_top(), d.right_top(), d.right_bottom(), d.left_bottom(), d.left_top()];
             painter.extend(egui::Shape::dashed_line(&corners, Stroke::new(1.0, p.warn), 4.0, 3.0));
-        }
-        if d.width() >= 16.0 && d.height() >= 16.0 {
-            let ink = if *there { p.muted } else { p.warn };
-            painter.text(
-                d.right_top() + vec2(-5.0, 3.0),
-                egui::Align2::RIGHT_TOP,
-                (n + 1).to_string(),
-                bold.clone(),
-                ink,
-            );
         }
     }
     let window = mapping.rect_to_diagram(picture.window);
@@ -239,6 +229,24 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, picture: &Picture) -> egui::Response
         }
     }
     painter.rect_stroke(window, none, Stroke::new(1.5, p.ink), StrokeKind::Outside);
+    // the monitors' borders and numbers again, over the window that covers
+    // them: where one monitor ends and the next begins
+    for (n, (monitor, there)) in picture.monitors.iter().enumerate() {
+        let d = mapping.rect_to_diagram(*monitor);
+        if *there && d.intersects(window) {
+            painter.rect_stroke(d, none, Stroke::new(1.0, p.ink.gamma_multiply(0.25)), StrokeKind::Inside);
+        }
+        if d.width() >= 16.0 && d.height() >= 16.0 {
+            let ink = if *there { p.ink.gamma_multiply(0.7) } else { p.warn };
+            painter.text(
+                d.left_bottom() + vec2(4.0, -2.0),
+                egui::Align2::LEFT_BOTTOM,
+                (n + 1).to_string(),
+                bold.clone(),
+                ink,
+            );
+        }
+    }
     response
 }
 
@@ -463,10 +471,11 @@ mod tests {
         let mut here = now(&both, Some(seen(0, 0, 3840, 1040)), &world);
         here.pixels_per_point = 2.0;
         let picture = picture(&layout, &here);
-        // saved at 10, 50 points of one pixel: still 10, 50 pixels from the
-        // corner; its size in points, twice the pixels, cut to the height
+        // saved 10 points of one pixel from the left: still 10 pixels from
+        // it; its size in points, twice the pixels, cut to the height it
+        // then fills from the top
         let inventory = picture.windows[0];
-        assert_eq!(inventory.left_top(), pos2(10.0, 50.0));
+        assert_eq!(inventory.left_top(), pos2(10.0, 0.0));
         assert_eq!(inventory.size(), vec2(1800.0, 1040.0));
         assert_eq!(picture.notes.fitted, 1);
     }

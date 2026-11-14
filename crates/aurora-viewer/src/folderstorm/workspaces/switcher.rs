@@ -49,7 +49,7 @@ const ROW_H: f32 = 26.0;
 const BUTTON_H: f32 = 26.0;
 /// The list's width, in points; the picture takes the rest.
 const LIST_W: f32 = 250.0;
-const SIZE: Vec2 = vec2(640.0, 400.0);
+const SIZE: Vec2 = vec2(640.0, 460.0);
 /// A button's label shows at most this many characters of a name.
 const SHORT_NAME: usize = 18;
 
@@ -635,7 +635,12 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
         });
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 4.0;
-            side(ui, p, shown, selected);
+            // (scrolled when the window is made small: its last lines say
+            // what will not be as saved)
+            egui::ScrollArea::vertical()
+                .id_salt("fs-switcher-side")
+                .auto_shrink([false, false])
+                .show(ui, |ui| side(ui, p, shown, selected));
         });
     });
     if let Some(name) = clicked {

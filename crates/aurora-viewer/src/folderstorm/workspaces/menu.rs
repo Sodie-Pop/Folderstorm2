@@ -54,13 +54,14 @@ pub enum Request {
     SaveNew(String, Parts),
 }
 
-/// What a keyboard action asks (`crate::folderstorm::keys`). In mouselook
-/// the switcher's key asks nothing: its window could not be used; the
-/// others apply as anywhere (section 8.7).
-pub fn key_request(key: crate::folderstorm::keys::Key, mouselook: bool) -> Option<Request> {
+/// What a keyboard action asks (`crate::folderstorm::keys`). `hidden`: in
+/// mouselook, or with the interface put away; the switcher's key then asks
+/// nothing, its window could not be used. The others apply as anywhere
+/// (section 8.7).
+pub fn key_request(key: crate::folderstorm::keys::Key, hidden: bool) -> Option<Request> {
     use crate::folderstorm::keys::Key;
     match key {
-        Key::LayoutSwitcher if mouselook => None,
+        Key::LayoutSwitcher if hidden => None,
         Key::LayoutSwitcher => Some(Request::Switcher),
         Key::LayoutToggle => Some(Request::Toggle),
         Key::PreviousArrangement => Some(Request::Previous),

@@ -23,7 +23,9 @@ pub const SWITCHER: &str = "workspaces";
 /// The command that switches between the two chosen layouts.
 pub const TOGGLE: &str = "layout_toggle";
 
-/// Whether `command` is one of ours.
+/// Whether `command` is one of ours (the catalogue's test leaves them to
+/// ours).
+#[cfg(test)]
 pub fn own(command: &str) -> bool {
     matches!(command, SWITCHER | TOGGLE)
 }

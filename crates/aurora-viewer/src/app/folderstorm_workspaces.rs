@@ -28,8 +28,9 @@ impl App {
         for command in &outcome.commands {
             self.folderstorm_viewer_command(window, *command);
         }
-        // (not in mouselook, where a key may have asked: no window shows)
-        if outcome.preferences && !self.camera.mouselook() {
+        // (not in mouselook or with the interface put away, where a key may
+        // have asked: no window shows)
+        if outcome.preferences && !self.camera.mouselook() && !ui::widgets::interface_hidden(&self.egui_ctx) {
             // as the Me menu's Preferences does, on our tab
             ui::widgets::open_floater(&self.egui_ctx, "options", &mut self.panels.settings);
             self.options_ui.open(ui::options::Page::Layout, 3);
@@ -55,7 +56,8 @@ impl App {
     /// arm of `on_input`): a request the next frame runs, as the menu's.
     pub(super) fn folderstorm_key(&mut self, key: crate::folderstorm::keys::Key) {
         use crate::folderstorm::workspaces::menu;
-        if let Some(request) = menu::key_request(key, self.camera.mouselook()) {
+        let hidden = self.camera.mouselook() || ui::widgets::interface_hidden(&self.egui_ctx);
+        if let Some(request) = menu::key_request(key, hidden) {
             menu::ask(&self.egui_ctx, request);
         }
     }

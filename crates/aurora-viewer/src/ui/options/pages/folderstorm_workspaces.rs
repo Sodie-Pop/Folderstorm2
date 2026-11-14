@@ -36,11 +36,12 @@ const ICON_DOWN: &str = "arrow-down";
 const ICON_LOCK: &str = "lock-filled";
 const ICON_UNLOCK: &str = "lock-open";
 const ICON_STAR: &str = "star-filled";
-const ICON_NO_STAR: &str = "star";
 
 const ROW_H: f32 = 28.0;
 const BUTTON_H: f32 = 26.0;
 const LIST_W: f32 = 560.0;
+/// The width of a list of layouts to pick from.
+const PICKER_W: f32 = 220.0;
 
 /// A question asked in the page before a change that loses something.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,7 +177,7 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-layouts-quick"), |cx| {
         cx.note(tr!("fs-layouts-quick-intro"));
         for (place, label) in [(0, tr!("fs-layouts-toggle-first")), (1, tr!("fs-layouts-toggle-second"))] {
-            cx.keywords("layout toggle switch toolbar button dual monitor two monitors shortcut keyboard")
+            cx.keywords("layout toggle switch switcher workspace toolbar button dual monitor two monitors shortcut keyboard favorite")
                 .row(label, tr!("fs-layouts-toggle-help"), &Nothing, |ui, s| toggle_picker(ui, s, place));
         }
     });
@@ -199,7 +200,18 @@ fn toggle_picker(ui: &mut egui::Ui, s: &mut Settings, place: usize) -> bool {
         .and_then(|name| store.find(name))
         .map(|(index, _)| index);
     let mut pick = chosen;
-    if !super::super::combo(ui, &mut pick, &choices) || pick == chosen {
+    let shown = choices.iter().find(|(value, _)| *value == chosen).map_or("", |(_, label)| *label);
+    // (two lists in one group: each its own id)
+    egui::ComboBox::from_id_salt(("folderstorm-layouts-toggle", place))
+        .width(PICKER_W)
+        .selected_text(shown)
+        .truncate()
+        .show_ui(ui, |ui| {
+            for (value, label) in &choices {
+                ui.selectable_value(&mut pick, *value, *label);
+            }
+        });
+    if pick == chosen {
         return false;
     }
     let name = pick.and_then(|index| store.layout(index)).map(|layout| layout.name.clone());
@@ -549,18 +561,6 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             if widgets::action_button(ui, p, ICON_DELETE, tr!("common-delete"), ActionKind::FlatDanger, size).clicked() {
                 tab.ask = Some(Ask::Delete);
             }
-            // first in the switcher, in World › Layouts, and in the keyboard's round
-            let favorite = usable && s.folderstorm_workspaces.is_favorite(&name);
-            let (star, star_tip) = match favorite {
-                true => (ICON_STAR, tr!("fs-switcher-unstar")),
-                false => (ICON_NO_STAR, tr!("fs-switcher-star")),
-            };
-            if widgets::action_button_if(ui, p, star, tr!("fs-layouts-favorite"), ActionKind::Flat, size, usable)
-                .on_hover_text(star_tip)
-                .clicked()
-            {
-                changed |= s.folderstorm_workspaces.set_favorite(&name, !favorite);
-            }
             if widgets::icon_button(ui, p, ICON_UP, tr!("fs-layouts-move-up"), index > 0)
                 && let Some(to) = s.folderstorm_workspaces.shift(index, true)
             {
@@ -572,6 +572,16 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             {
                 tab.selected = Some(to);
                 changed = true;
+            }
+            // a favorite: first in the switcher, in World › Layouts, and in
+            // the keyboard's round
+            let favorite = usable && s.folderstorm_workspaces.is_favorite(&name);
+            let star_tip = match favorite {
+                true => tr!("fs-switcher-unstar"),
+                false => tr!("fs-switcher-star"),
+            };
+            if usable && widgets::icon_toggle(ui, p, ICON_STAR, star_tip, favorite) {
+                changed |= s.folderstorm_workspaces.set_favorite(&name, !favorite);
             }
         });
     }
@@ -1508,10 +1518,13 @@ mod tests {
         let mut w = Window::new();
         w.save_as("Wide");
         w.changed = false;
-        w.click(tr!("fs-layouts-favorite"));
+        // the star is the last of the selected layout's buttons, after the
+        // two arrows
+        let star = w.rect_of(tr!("common-delete")).expect("the actions").right_center() + vec2(85.0, 0.0);
+        w.click_at(star);
         assert!(w.store().is_favorite("Wide"));
         assert!(w.changed, "the settings are saved");
-        w.click(tr!("fs-layouts-favorite"));
+        w.click_at(star);
         assert!(!w.store().is_favorite("Wide"));
     }
 
@@ -1534,14 +1547,16 @@ mod tests {
                 },
             ]);
         }
+        // (the wheel's scroll is smoothed over the frames that follow)
+        w.settle();
         assert!(w.shows(tr!("fs-layouts-toggle-first")) && w.shows(tr!("fs-layouts-toggle-second")));
-        let all = |w: &mut Window, label: &str| -> Vec<Rect> {
-            w.run(Vec::new()).iter().filter(|t| t.source == label).map(|t| t.rect).collect()
-        };
+        let all =
+            |w: &mut Window, label: &str| -> Vec<Rect> { w.run(Vec::new()).iter().filter(|t| t.source == label).map(|t| t.rect).collect() };
         let unset = all(&mut w, tr!("fs-layouts-toggle-none"));
         assert_eq!(unset.len(), 2, "neither is chosen at first");
         // the first picker: its list opens over the page, "Wide" is in it
         w.click_at(unset[0].center());
+        assert_eq!(all(&mut w, tr!("fs-layouts-toggle-none")).len(), 3, "the list is open");
         let wide = *all(&mut w, "Wide").last().expect("offered");
         w.changed = false;
         w.click_at(wide.center());
@@ -1656,7 +1671,6 @@ mod tests {
             ICON_UP,
             ICON_DOWN,
             ICON_STAR,
-            ICON_NO_STAR,
         ] {
             assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
         }

@@ -188,7 +188,7 @@ mod tests {
         let read = crate::tolerant::from_value::<Vec<(Theirs, [Option<Binding>; 2])>>(saved, "test").expect("read");
         let actions: Vec<_> = read.value.iter().map(|(action, _)| action).collect();
         assert_eq!(actions, [&Theirs::Fly, &Theirs::Mouselook]);
-        assert_eq!(read.dropped.len(), 1);
+        assert!(read.repaired(), "our line was left out, and said so");
     }
 
     /// Each action is listed once in the Shortcuts page, with a label in
