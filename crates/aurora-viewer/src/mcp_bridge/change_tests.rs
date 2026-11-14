@@ -78,6 +78,7 @@ pub(super) fn ctx(inv: &Inventory) -> Ctx<'_> {
         viewer_session: None,
         identity: Default::default(),
         nav: Default::default(),
+        content: Default::default(),
     }
 }
 
@@ -106,6 +107,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
         Work::Camera(_) | Work::Snapshot(_) | Work::Thumbnail(_) => panic!("not an inventory change"),
         Work::Create(_) | Work::Image { .. } => panic!("not run here (gap_tests)"),
         Work::Navigate(_) => panic!("not an inventory change"),
+        Work::Content(_) => panic!("not run here (content_tests)"),
     }
 }
 

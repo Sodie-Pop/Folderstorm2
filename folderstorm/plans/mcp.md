@@ -758,3 +758,11 @@ Differences from the design above:
   (`unconfirmed`).
 - Take-off and landing answer at once (the flight flag is the viewer's).
 - Not built: running (the autopilot walks), a separate teleport class.
+
+## Next: content editing
+
+Notecard and script reads, previews, saves and compiles (step 7 of the
+parity order) are planned and built in [mcp-content.md](mcp-content.md), on
+`claude/mcp-content` (stacked on `claude/mcp-receipts`): a new **Content**
+class (Never in "Read only", Ask in "Ask before changes"), capability
+`content: 1`, and a bridge request body raised to 512 KiB.

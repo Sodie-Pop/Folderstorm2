@@ -292,6 +292,7 @@ mod tests {
             names.len(),
             TOOLS.len() + INVENTORY_TOOLS.len() + super::super::world::WORLD_TOOLS.len() + super::super::assistant::ASSISTANT_TOOLS.len() // Folderstorm: receipts, plans, operations
                 + super::super::navigation::NAVIGATION_TOOLS.len() // Folderstorm: navigation
+                + super::super::content::CONTENT_TOOLS.len() // Folderstorm: content editing
         );
         for read in [
             "inventory_get_many",

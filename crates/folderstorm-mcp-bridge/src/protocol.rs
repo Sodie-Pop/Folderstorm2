@@ -30,6 +30,9 @@ pub mod assistant;
 // Folderstorm: phase 3, part 4 (navigation), its own catalogue
 pub mod navigation;
 
+// Folderstorm: content editing (mcp-content.md)
+pub mod content;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -836,6 +839,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(world::WORLD_TOOLS) // Folderstorm: phase 3 groups
         .chain(assistant::ASSISTANT_TOOLS) // Folderstorm: receipts, plans, operations
         .chain(navigation::NAVIGATION_TOOLS) // Folderstorm: navigation
+        .chain(content::CONTENT_TOOLS) // Folderstorm: content editing
 }
 
 #[cfg(test)]

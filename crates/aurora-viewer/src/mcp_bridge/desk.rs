@@ -34,11 +34,13 @@
 //! out is cancelled.
 
 use super::changes::{self, Planned, Work};
+use super::content::{self, Content}; // Folderstorm: content editing
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
+use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
 use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
@@ -86,6 +88,8 @@ struct BakeWait {
 /// the server's answer to update its receipt (receipts).
 struct LateWait {
     tracked: Tracked,
+    /// Folderstorm: a notecard or script save (content editing).
+    content: bool,
     outfit: bool,
     request: Option<Uuid>,
     expect: Option<(Uuid, i32, Option<String>)>,
@@ -107,6 +111,9 @@ pub enum Outcome {
     /// The new item arrived (phase 3).
     Created(Uuid),
     Failed(String),
+    /// Folderstorm: a notecard or script save's answer (content editing):
+    /// saved (a script's compile result with it), or why not.
+    Content(Result<content::Saved, String>),
 }
 
 /// Where the last outfit change stands.
@@ -193,6 +200,8 @@ pub struct Desk {
     /// Folderstorm: the assistant's move or teleport under way (phase 3,
     /// part 4).
     nav: Navigator,
+    /// Folderstorm: this login's content snapshots, reads and saves.
+    content: Content,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -293,6 +302,9 @@ impl Desk {
     /// A new call: a read is answered now; a change is checked, then asks
     /// the user or waits to run; `wait_for_bake` waits.
     pub fn take(&mut self, mut call: Pending, cx: &Ctx, now: Instant) {
+        // Folderstorm: a call seen for the first time (not back from the
+        // dialog's checks), for the content saves' checks below
+        let fresh = call.tracked().is_none();
         let Some(spec) = protocol::tool(&call.tool) else {
             call.answer(Err(ToolError::new(ErrorCode::UnknownTool, "unknown tool")));
             return;
@@ -318,6 +330,14 @@ impl Desk {
                     "this plan was executed and its receipt is gone",
                 )),
             });
+        }
+        // Folderstorm: a content save needs its client_request_id (decision
+        // 3 of mcp-receipts.md: an upload cannot be looked at afterwards)
+        if fresh && content::requires_request_id(&call.tool) && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none() {
+            return call.answer(Err(ToolError::new(
+                ErrorCode::InvalidArguments,
+                "`client_request_id` is required for a save: choose a new one for each save, and send the same one again only to ask for the same save's receipt",
+            )));
         }
         // Folderstorm: a change gets its receipt (once: a call that comes
         // back from the dialog's checks has it already)
@@ -402,10 +422,32 @@ impl Desk {
             let result = plans::preview(&mut self.plans, &call.tool, &call.arguments, cx, execution, now);
             return call.answer(result);
         }
+        // Folderstorm: content editing's reads (mcp-content.md)
+        if call.tool == content_tool::GET {
+            self.content.start_get(call, cx, now);
+            return;
+        }
+        if call.tool == content_tool::PREVIEW {
+            let save = decision(&self.permissions, content_tool::UPDATE_NOTECARD);
+            let result = self.content.preview(&call.arguments, cx, save, now);
+            return call.answer(result);
+        }
+        if call.tool == content_tool::STATUS {
+            let result = self.content_status(&call.arguments, cx);
+            return call.answer(result);
+        }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
             call.answer(result);
             return;
+        }
+        // Folderstorm: a content save is checked against its snapshot and
+        // frozen, once
+        if fresh && content::is_save(&call.tool) {
+            match self.content.freeze(&call.tool, &call.arguments, cx, now) {
+                Ok(frozen) => call.arguments = frozen,
+                Err(e) => return call.answer(Err(e)),
+            }
         }
         match changes::plan(&call.tool, &call.arguments, cx) {
             Err(e) => call.answer(Err(e)),
@@ -658,6 +700,35 @@ impl Desk {
         })
     }
 
+    /// Folderstorm: `inventory_content_operation_status`, on this login only.
+    fn content_status(&self, args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
+        let invalid = |m: &str| ToolError::new(ErrorCode::InvalidArguments, m);
+        let Some(args) = args.as_object() else {
+            return Err(invalid("unknown argument"));
+        };
+        if args.keys().any(|k| k != "operation_id" && k != receipts::CLIENT_REQUEST_ID) {
+            return Err(invalid("unknown argument"));
+        }
+        let session = self.session.as_deref();
+        let receipt = self
+            .receipts
+            .with(|store| match (args.get("operation_id"), args.get(receipts::CLIENT_REQUEST_ID)) {
+                (Some(id), None) => id
+                    .as_str()
+                    .map(|id| store.find(session, id).cloned())
+                    .ok_or("`operation_id` is a string"),
+                (None, Some(id)) => id
+                    .as_str()
+                    .map(|id| store.find_request(session, id).cloned())
+                    .ok_or("`client_request_id` is a string"),
+                _ => Err("give `operation_id` or `client_request_id`"),
+            });
+        let receipt = receipt
+            .map_err(invalid)?
+            .ok_or_else(|| ToolError::new(ErrorCode::NotFound, "no such operation on this login"))?;
+        self.content.status(&receipt, cx)
+    }
+
     /// Folderstorm: this login's receipts (Preferences).
     pub fn ledger(&self) -> &Ledger {
         &self.receipts
@@ -738,6 +809,7 @@ impl Desk {
         self.plans = Plans::default();
         self.late.clear();
         self.receipts.with(receipts::Store::clear);
+        self.content.clear(&refusal); // Folderstorm: content editing
     }
 
     fn refuse_waiting(&mut self, refusal: &ToolError) {
@@ -752,6 +824,7 @@ impl Desk {
         }
         // Folderstorm: phase 3's landmark reads wait too
         landmark::refuse_all(&mut self.landmarks, refusal);
+        self.content.refuse_all(refusal); // Folderstorm: content reads
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -773,12 +846,19 @@ impl Desk {
         self.receipts = old.receipts;
         self.late = old.late;
         self.login = old.login;
+        // Folderstorm: the content saves' outcomes stay too, the snapshots go
+        old.content.close(&refused(ACCESS_OFF));
+        self.content = old.content;
     }
 
     /// Folderstorm: `flight` answers that it may still land, and listens on
     /// for the server's answer to update its receipt.
     fn listen_late(&mut self, flight: InFlight, now: Instant) {
         let tracked = flight.call.tracked().cloned();
+        let is_content = content::is_save(&flight.call.tool);
+        if is_content {
+            self.content.unconfirmed(&flight.call);
+        }
         flight.call.answer(Err(ToolError::new(
             ErrorCode::Timeout,
             "the change was sent but the server did not confirm it in time; it may still land: ask assistant_operation_status or look again before retrying",
@@ -789,6 +869,7 @@ impl Desk {
             }
             self.late.push(LateWait {
                 tracked,
+                content: is_content,
                 outfit: flight.outfit,
                 request: flight.request,
                 expect: flight.expect,
@@ -834,7 +915,14 @@ impl Desk {
             summary: first.summary.clone(),
             seconds_left: first.deadline.saturating_duration_since(now).as_secs_f32().ceil() as u64,
             waiting: open.len() - 1,
-            detail: plans::dialog_lines(&first.call.arguments),
+            detail: {
+                let detail = plans::dialog_lines(&first.call.arguments);
+                if detail.is_empty() {
+                    content::dialog_lines(&first.call.arguments) // Folderstorm: content saves
+                } else {
+                    detail
+                }
+            },
         })
     }
 
@@ -962,7 +1050,7 @@ impl Desk {
 
     fn sent_one(&mut self, mut flight: InFlight, request: Option<Uuid>, failure: Option<String>) {
         if let Some(outcome) = flight.outcome.take() {
-            finish(flight, outcome);
+            self.finish(flight, outcome);
             return;
         }
         flight.request = flight.request.or(request);
@@ -979,11 +1067,14 @@ impl Desk {
     /// The server's answer to an inventory (`outfit` false) or outfit
     /// change.
     pub fn observe(&mut self, (request, outfit, outcome): (Uuid, bool, Outcome)) {
-        if let Some(flight) = self
-            .sending
-            .as_mut()
-            .filter(|f| f.outfit == outfit && f.expect.is_none() && f.request.is_none_or(|r| r == request))
-        {
+        // Folderstorm: a content save's answer only for a content save
+        let is_content = matches!(outcome, Outcome::Content(_));
+        if let Some(flight) = self.sending.as_mut().filter(|f| {
+            f.outfit == outfit
+                && f.expect.is_none()
+                && f.request.is_none_or(|r| r == request)
+                && content::is_save(&f.call.tool) == is_content
+        }) {
             flight.request = Some(request);
             if outcome != Outcome::Copying {
                 flight.outcome = Some(outcome);
@@ -993,17 +1084,25 @@ impl Desk {
         if outcome == Outcome::Copying {
             return;
         }
-        if let Some(index) = self.sent.iter().position(|f| f.outfit == outfit && f.request == Some(request)) {
-            finish(self.sent.swap_remove(index), outcome);
+        if let Some(index) = self
+            .sent
+            .iter()
+            .position(|f| f.outfit == outfit && f.request == Some(request) && content::is_save(&f.call.tool) == is_content)
+        {
+            let flight = self.sent.swap_remove(index);
+            self.finish(flight, outcome);
         } else if let Some(index) = self
             .late
             .iter()
-            .position(|l| l.outfit == outfit && l.expect.is_none() && l.request == Some(request))
+            .position(|l| l.outfit == outfit && l.expect.is_none() && l.request == Some(request) && l.content == is_content)
         {
             // Folderstorm: the answer of a change that answered `unconfirmed`
             let late = self.late.swap_remove(index);
+            if let Outcome::Content(result) = &outcome {
+                self.content.settle(&late.tracked.operation_id, result);
+            }
             late.tracked.settle(match outcome {
-                Outcome::Failed(reason) => Late::Refused(reason),
+                Outcome::Failed(reason) | Outcome::Content(Err(reason)) => Late::Refused(reason),
                 Outcome::Queued => Late::Queued,
                 _ => Late::Confirmed,
             });
@@ -1149,6 +1248,41 @@ impl Desk {
     pub fn tick_reads(&mut self, world: &crate::world::World, now: Instant) {
         self.journal.follow(&world.inventory, now);
         landmark::tick(&mut self.landmarks, world, now);
+        // Folderstorm: content reads, checked again with what is in force
+        let read = decision(&self.permissions, content_tool::GET);
+        let limits = content::Limits::of(&world.rlva);
+        self.content
+            .tick(&world.inventory, &limits, read, &refused(PERMISSIONS_CHANGED), now);
+    }
+
+    /// Folderstorm: what the waiting content reads need fetched (each once).
+    pub fn wanted_content(&mut self) -> Vec<content::Fetch> {
+        self.content.wanted()
+    }
+
+    /// Folderstorm: the content state (the app's fetch answers and the
+    /// scripts saved).
+    pub fn content(&mut self) -> &mut Content {
+        &mut self.content
+    }
+
+    /// Folderstorm: whether a content save of `item` is under way.
+    pub fn content_saving(&self, item: Uuid) -> bool {
+        self.sending
+            .iter()
+            .chain(&self.sent)
+            .any(|f| content::is_save(&f.call.tool) && content::saved_item(&f.call.arguments) == Some(item))
+    }
+
+    /// Folderstorm: a change's end: a content save's through its record.
+    fn finish(&mut self, flight: InFlight, outcome: Outcome) {
+        match outcome {
+            Outcome::Content(result) => {
+                let answer = self.content.saved(&flight.call, flight.reply.clone(), result, Instant::now());
+                flight.call.answer(answer);
+            }
+            outcome => finish(flight, outcome),
+        }
     }
 
     /// Folderstorm: the landmark assets the waiting calls need.
@@ -1197,7 +1331,7 @@ fn finish(flight: InFlight, outcome: Outcome) {
             reply["next"] = json!("the grid accepted the moves for later: look again in a moment before relying on them");
             flight.call.answer(Ok(reply));
         }
-        Outcome::Copying => flight
+        Outcome::Copying | Outcome::Content(_) => flight
             .call
             .answer(Err(ToolError::new(ErrorCode::Internal, "the change did not end"))),
     }
@@ -1241,6 +1375,22 @@ pub fn outcome(event: &aurora_net::NetEvent) -> Option<(Uuid, bool, Outcome)> {
                 Ok(_) => Outcome::Done(HashMap::new()),
                 Err(reason) => Outcome::Failed(reason.clone()),
             },
+        )),
+        // Folderstorm: content saves (mcp-content.md)
+        NetEvent::InventoryContentSaved { request, result, .. } => Some((
+            *request,
+            false,
+            Outcome::Content(result.as_ref().map(content::Saved::notecard).map_err(Clone::clone)),
+        )),
+        NetEvent::ScriptSaved { request, target, result } if target.object.is_nil() => Some((
+            *request,
+            false,
+            Outcome::Content(
+                result
+                    .as_ref()
+                    .map(|saved| content::Saved::script(target.item, saved))
+                    .map_err(Clone::clone),
+            ),
         )),
         _ => None,
     }

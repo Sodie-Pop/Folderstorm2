@@ -52,6 +52,9 @@ pub enum Work {
     /// Folderstorm: a move, a take-off or landing, a teleport (phase 3,
     /// part 4).
     Navigate(super::navigation::Work),
+    /// Folderstorm: a notecard's text or a script's source saved, through
+    /// the editors' uploads (content editing).
+    Content(super::content::Save),
 }
 
 #[derive(Debug, Clone)]
@@ -176,6 +179,8 @@ pub fn plan(tool: &str, args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
         "items_wear" | "items_take_off" => items(tool, args, cx),
         // Folderstorm: a plan's execute, planned again (mcp-receipts.md, section 6)
         "inventory_execute_plan" => super::plans::plan(args, cx),
+        // Folderstorm: a frozen content save, planned again (mcp-content.md)
+        tool if super::content::is_save(tool) => super::content::plan(tool, args, cx),
         // Folderstorm: phase 3, part 2 (inventory gaps)
         _ => super::inventory_edits::plan(tool, args, cx).unwrap_or_else(|| Err(err(ErrorCode::UnknownTool, "unknown tool"))),
     }

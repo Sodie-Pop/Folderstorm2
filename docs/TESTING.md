@@ -5585,7 +5585,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5694,6 +5694,39 @@ always asks). Allow: the avatar teleports locally and the log reads
 the Custom levels show the new row "Move my avatar", and Recent activity
 shows the walk and the teleport with their sentences. Capture the dialogs
 and the row in English, French and Japanese.
+
+`AURORA_DEMO_MCP=content` (Folderstorm2, folderstorm/plans/mcp-content.md:
+`src/mcp_bridge/content.rs`, `content/diff.rs`, `desk.rs`,
+`src/app/local_assistant.rs`): the same session settings ("Ask before
+changes", Content on Ask), and a folder "Assistant content tests" in My
+Inventory: "Assistant notes", "Notes with items" (a texture and a landmark
+embedded), "Notes (no modify)", "Notes (no copy)", "Greeter script",
+"Greeter script (no modify)" and "Script that will not compile". The demo,
+as "Demo assistant", reads "Assistant notes" and "Script that will not
+compile" (`inventory_content_get`; the log gives the bytes and whether the
+item is editable, never the text), then asks to save each: the dialog says
+"Save the notecard “Assistant notes” (one line added, 0 removed)" with the
+added line under it (`+ …`), then "Save and compile the script “Script that
+will not compile” (2 lines added, one removed)" with `− ` and `+ ` lines.
+Allow the notecard: the log reads `inventory_update_notecard answered {…
+"source_saved":true,… "state":"done"…}`, and opening the notecard shows the
+added line. Allow the script: `inventory_save_compile_script answered {…
+"source_saved":true,"compiled":false,"errors":[{"line":6,"column":10,…
+"Syntax error"…}]…}`; the script editor opened on it shows the saved source.
+Refuse: nothing is saved (`permission_denied`). With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the row "Edit
+notecards and scripts" (Allow / Ask / Never), and Recent activity the two
+saves' sentences. A real client can then read the other items: "Notes (no
+copy)" and "Greeter script (no modify)" are refused (`not_allowed`), "Notes
+(no modify)" is read with `editable: false`; "Notes with items" lists its
+two embedded items (names and types, never an id) and refuses a save that
+drops or moves their markers; `inventory_content_preview` gives the counts
+and a unified diff; a save with an old `snapshot_hash` answers `stale`; a
+save of a notecard open in the inventory's preview answers `busy`; the same
+`client_request_id` sent again answers `"duplicate":true`;
+`inventory_content_operation_status` gives `source_saved` and the compile
+errors. Capture the dialog and the Preferences row in English, French and
+Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and

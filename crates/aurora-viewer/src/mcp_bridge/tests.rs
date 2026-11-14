@@ -66,6 +66,7 @@ fn ctx(inv: &Inventory) -> Ctx<'_> {
         viewer_session: None,
         identity: Default::default(),
         nav: Default::default(),
+        content: Default::default(),
     }
 }
 
