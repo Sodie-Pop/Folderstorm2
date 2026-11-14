@@ -56,6 +56,9 @@ pub const CONTENT: &str = "content";
 /// Folderstorm: object inspection and lifecycle (mcp-objects.md): the
 /// `object_*` tools and the `objects` and `take` classes.
 pub const OBJECTS: &str = "objects";
+/// Folderstorm: scripts inside objects (mcp-task-scripts.md): the
+/// `object_script_*` tools, `script_debug_poll` and the `scripts` class.
+pub const TASK_SCRIPTS: &str = "task_scripts";
 
 /// What this build implements. Later groups add theirs.
 pub const CAPABILITIES: &[(&str, u32)] = &[
@@ -71,6 +74,7 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (NAVIGATION, 1), // Folderstorm: navigation (phase 3, part 4)
     (CONTENT, 1),    // Folderstorm: content editing (mcp-content.md)
     (OBJECTS, 1),    // Folderstorm: object inspection and lifecycle (mcp-objects.md)
+    (TASK_SCRIPTS, 1), // Folderstorm: scripts inside objects (mcp-task-scripts.md)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -263,7 +267,8 @@ mod tests {
                 OPERATIONS,
                 NAVIGATION,
                 CONTENT,
-                OBJECTS
+                OBJECTS,
+                TASK_SCRIPTS
             ]
         );
         // a newer viewer: a later version and a group this build lacks
