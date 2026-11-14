@@ -192,10 +192,7 @@ mod tests {
     }
 
     fn names(store: &Store, lines: &[Entry]) -> Vec<String> {
-        lines
-            .iter()
-            .map(|line| line.name(store).expect("usable").to_owned())
-            .collect()
+        lines.iter().map(|line| line.name(store).expect("usable").to_owned()).collect()
     }
 
     #[test]

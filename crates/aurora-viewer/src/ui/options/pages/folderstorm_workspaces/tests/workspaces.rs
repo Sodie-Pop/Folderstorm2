@@ -9,7 +9,7 @@ use crate::folderstorm::workspaces::words::workspace_holds;
 fn searched() -> Window {
     let mut w = Window::new();
     w.save_as("Wide");
-    w.st.query = "workspaces".into();
+    w.st.query = "workspace".into();
     w.settle();
     w
 }
@@ -122,9 +122,8 @@ fn the_workspaces_group_is_drawn() {
         ..Default::default()
     };
     let sorting = s.folderstorm_workspaces.workspace(0).expect("read").clone();
-    let texts = drawn_found("preferences-workspaces", 3, s, false, "workspaces");
+    let texts = drawn_found("preferences-workspaces", 3, s, false, "workspace");
     for expected in [
-        tr!("fs-workspaces-group").to_owned(),
         tr!("fs-workspaces-list").to_owned(),
         "Sorting".to_owned(),
         "Exploring".to_owned(),

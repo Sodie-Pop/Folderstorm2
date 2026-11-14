@@ -216,7 +216,11 @@ impl Serialize for Favorite {
         match self {
             Favorite::Layout(name) | Favorite::Workspace(name) => {
                 use serde::ser::SerializeMap;
-                let kind = if matches!(self, Favorite::Layout(_)) { "layout" } else { "workspace" };
+                let kind = if matches!(self, Favorite::Layout(_)) {
+                    "layout"
+                } else {
+                    "workspace"
+                };
                 let mut map = serializer.serialize_map(Some(1))?;
                 map.serialize_entry(kind, name)?;
                 map.end()
@@ -232,7 +236,11 @@ impl Favorite {
     /// is not an entry at all.
     fn read(raw: serde_json::Value) -> Option<Self> {
         let entry = raw.as_object()?;
-        let named = |name: &serde_json::Value| name.as_str().filter(|name| name_error(name).is_none()).map(|name| tidy(name).to_owned());
+        let named = |name: &serde_json::Value| {
+            name.as_str()
+                .filter(|name| name_error(name).is_none())
+                .map(|name| tidy(name).to_owned())
+        };
         match (entry.get("layout"), entry.get("workspace")) {
             (Some(name), None) if entry.len() == 1 => named(name).map(Favorite::Layout),
             (None, Some(name)) if entry.len() == 1 => named(name).map(Favorite::Workspace),

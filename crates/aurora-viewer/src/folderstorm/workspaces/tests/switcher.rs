@@ -597,7 +597,11 @@ fn the_switcher_is_drawn() {
     {
         use crate::folderstorm::workspaces::workspace::Workspace;
         let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
-        let sorting = Workspace::new("Sorting", Some("2 monitors"), ids(&[INVENTORY, windows::ADDITIONAL_INVENTORY, PEOPLE]));
+        let sorting = Workspace::new(
+            "Sorting",
+            Some("2 monitors"),
+            ids(&[INVENTORY, windows::ADDITIONAL_INVENTORY, PEOPLE]),
+        );
         store.add_workspace(sorting).expect("added");
         store
             .add_workspace(Workspace::new("Exploring", None, ids(&[MINIMAP, MAP, "places"])))

@@ -82,7 +82,11 @@ fn a_workspace_opens_its_windows_and_closes_the_others() {
     let places = [v.rect(INVENTORY), v.rect(PEOPLE)];
     v.apply_workspace("Exploring");
     v.settle();
-    assert_eq!(v.open_now(), [CONVERSATIONS, MINIMAP, PLACES, MAP], "Conversations is left as it is");
+    assert_eq!(
+        v.open_now(),
+        [CONVERSATIONS, MINIMAP, PLACES, MAP],
+        "Conversations is left as it is"
+    );
     assert!(v.open.contains(PREFERENCES), "not a window a workspace switches");
     let done = report(&v);
     assert_eq!((done.opened, done.closed, done.blocked), (2, 2, 0));

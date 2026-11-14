@@ -472,7 +472,10 @@ fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm,
     let readable = apply::has_viewer_window(ui.ctx());
     ui.horizontal(|ui| {
         let mut kind = usize::from(form.workspace);
-        let kinds = [(tr!("fs-workspaces-save-layout"), true), (tr!("fs-workspaces-save-workspace"), true)];
+        let kinds = [
+            (tr!("fs-workspaces-save-layout"), true),
+            (tr!("fs-workspaces-save-workspace"), true),
+        ];
         if widgets::segmented(ui, p, &mut kind, &kinds) {
             form.workspace = kind == 1;
             form.refused = None;

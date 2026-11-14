@@ -420,11 +420,7 @@ mod tests {
     }
 
     fn sorting() -> Workspace {
-        Workspace::new(
-            "Sorting",
-            Some("1 monitor"),
-            ids(&["inventory", ADDITIONAL_INVENTORY, "people"]),
-        )
+        Workspace::new("Sorting", Some("1 monitor"), ids(&["inventory", ADDITIONAL_INVENTORY, "people"]))
     }
 
     fn store() -> Store {
@@ -463,7 +459,10 @@ mod tests {
                 "open": ["inventory", ADDITIONAL_INVENTORY, "people"],
             })
         );
-        assert_eq!(file["workspaces"][1], json!({ "schema": 1, "name": "Exploring", "open": ["minimap", "worldmap"] }));
+        assert_eq!(
+            file["workspaces"][1],
+            json!({ "schema": 1, "name": "Exploring", "open": ["minimap", "worldmap"] })
+        );
         assert_eq!(file["active_workspace"], "Exploring");
         assert_eq!(file["favorites"], json!([{ "workspace": "Sorting" }, { "layout": "2 monitors" }]));
         assert_eq!(read(file), store);
@@ -579,7 +578,11 @@ mod tests {
         store.rename(index, "Laptop").expect("renamed");
         assert_eq!(store.workspace(0).expect("usable").layout.as_deref(), Some("Laptop"));
         assert!(store.remove(index));
-        assert_eq!(store.workspace(0).expect("usable").layout, None, "the layout in use is kept from now on");
+        assert_eq!(
+            store.workspace(0).expect("usable").layout,
+            None,
+            "the layout in use is kept from now on"
+        );
     }
 
     #[test]

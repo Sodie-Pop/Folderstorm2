@@ -50,11 +50,7 @@ pub fn workspace_holds(workspace: &Workspace) -> String {
 /// What the last apply did, in a sentence or two.
 pub fn report_text(report: &Report, waiting: usize) -> String {
     let layout = match &report.name {
-        Some(name) if report.windows > 0 => Some(tr!(
-            "fs-layouts-applied-windows",
-            name = name.as_str(),
-            count = report.windows
-        )),
+        Some(name) if report.windows > 0 => Some(tr!("fs-layouts-applied-windows", name = name.as_str(), count = report.windows)),
         Some(name) => Some(tr!("fs-layouts-applied", name = name.as_str())),
         None => None,
     };

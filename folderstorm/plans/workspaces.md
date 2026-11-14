@@ -172,7 +172,7 @@ reachable (`layout::keep_title_in`). Section 8.5 gives the rule for each part.
 | World viewport (margins, mouselook switch) | Yes (optional part) | Through its layout |
 | Bars: inside the world, around it, or over the whole window | Yes (with the viewport) | Through its layout |
 | Position, size, minimized state of each allowlisted window, open or closed | Yes (optional part) | — |
-| Which windows are open | Opens the windows it was saved with open; closes none (fixes of 2026-11-14, below checkpoint 5) | Yes: opens and closes |
+| Which windows are open | Opens the windows it was saved with open; closes none (fixes of 2026-11-14, below checkpoint 5) | Yes: opens and closes, but Conversations (checkpoint 6) |
 | Additional Inventory window, folder windows | Placement only | Opens them; folder roots optional |
 | Contents, chat, selections, filters | Never | Never |
 | Stored | Per profile | Per profile; folder references per account |
@@ -535,7 +535,7 @@ All in the demo's own settings; nothing reaches the user's.
 | `AURORA_DEMO_LAYOUTS=1` | Seeds "Wide" (world on the right half, Inventory and map on the left) and "Single" (viewport off, windows on one screen); opens the Layouts tab. Try with `AURORA_WINDOW_SIZE=3840,1080` | 3 |
 | `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide"; `=unplug` takes the last pretend monitor away after 10 s (the card offers "Single") | 4 |
 | `AURORA_DEMO_SWITCHER=1` | Opens the switcher on the seeded entries | 5 |
-| `AURORA_DEMO_WORKSPACES=1` | Seeds "Sorting" and "Exploring" on the demo inventory; `=folders` adds folder windows | 6 |
+| `AURORA_DEMO_WORKSPACES=1` | Seeds the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" and "Exploring", in the switcher; `=apply` applies them in turn (`=folders`, with folder windows, comes with part 2) | 6 |
 
 ## 12. Tests
 
@@ -1632,6 +1632,100 @@ Folderstorm (C++):
    (point 8); Folderstorm (C++)'s favorites round went through both.
 4. A workspace and a layout may share a name (point 1).
 5. Folder windows wait for part 2.
+
+#### Checkpoint 6 as built: part 1 (branch `claude/workspaces-cp6`, 2026-11-14)
+
+Part 1 is built as detailed above, stacked on the fixes of PR #57. What
+the build added or changed on the way:
+
+- **The groups of Preferences come after *Arrangement***, before *Quick
+  switch*: *Saved workspaces* holds the list, the selected workspace's
+  actions, its layout, a box per window, and *Save as a new workspace*.
+- **In the switcher, *Update* follows the selection**: with a workspace
+  selected it is for the workspace in use, otherwise for the layout in
+  use; its label names which. *Save new…* opens on *Workspace* when a
+  workspace is selected, on *Layout* otherwise.
+- **With workspaces in the list, the first choice of the switcher** (open,
+  Enter) is the first entry that is not in use, in the list's order:
+  favorites, then workspaces, then layouts. Star the two layouts to keep
+  "open, Enter: the other layout".
+- **A workspace applied without a layout does not interrupt a layout still
+  being applied**: its windows are opened and closed in the frame the
+  layout's are placed.
+- **The report of *Previous*** after a workspace counts the windows it
+  opened and closed.
+- **`fs-layouts-intro`** no longer says a layout never opens a window
+  (stale since the fixes of 2026-11-14).
+
+**Settings format.** `folderstorm_workspaces` may hold `"workspaces"` and
+`"active_workspace"`, and `"favorites"` entries `{ "workspace": name }`, as
+in "1. Store" above. All are left out while there is no workspace: a store
+that has none is written exactly as checkpoint 5 wrote it, and a file from
+before reads with none (tests: `workspaces_survive_a_save_and_a_read`,
+`a_store_without_workspaces_is_written_as_before`,
+`newer_and_damaged_entries_are_kept_as_read_and_not_usable`,
+`unknown_fields_and_window_ids_are_kept_through_an_update`,
+`a_stale_favorite_workspace_is_dropped_and_none_is_twice`). No migration,
+no schema change. **Going back to a build from before this checkpoint
+loses the workspaces at its first save** (it keeps their favorites, which
+it does not show).
+
+**Upstream hooks.** None new: no upstream source file is touched. The
+windows are opened and closed in `app/folderstorm_workspaces.rs`
+(`Shell::close`: the `Panels` flag, `InventoryUi::close_additional_window`,
+both flags of Aurora's Controls window), the switcher and the menu are
+drawn from the calls of checkpoints 4 and 5. Changed beside our files:
+
+| File | Change |
+|---|---|
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 14 `fs-layouts-*`, `fs-switcher-*` and `fs-keys-*` texts reworded for both kinds (the tab, the window, its toolbar command and its key are *Layouts & workspaces*), and a section of 36 `fs-workspaces-*` keys and `fs-switcher-workspaces` |
+| `docs/TESTING.md` | one paragraph, one table row |
+
+**New files:** `folderstorm/workspaces/workspace.rs`,
+`folderstorm/workspaces/tests/workspace.rs`,
+`ui/options/pages/folderstorm_workspaces/workspaces_group.rs`,
+`ui/options/pages/folderstorm_workspaces/tests/workspaces.rs`.
+
+**Tests.** Pure: `workspaces::workspace` (12: the store's workspaces),
+`workspaces::pick` (+1: both kinds). Frame tests with the pretend viewer,
+`workspaces::tests::workspace` (13): what a workspace records, opening and
+closing, Conversations left alone, a blocked window, with a layout (its
+list winning), a layout alone, *Previous*, the modified mark and *Update*,
+a layout that cannot be used, the requests, the switcher (sections, Enter,
+the filter, the star, *Update*, *Save new* as a workspace and its
+refusal), World › Layouts. The tab's group (4, one a picture). The app's
+`Shell::close` for every allowlisted window
+(`app::folderstorm_workspaces::tests`). Drawn with the software painter
+(`FOLDERSTORM_TEST_CAPTURE_DIR`): `switcher.png` (now with workspaces),
+`switcher-workspace.png`, `switcher-save-workspace.png`,
+`preferences-workspaces.png`.
+
+**Not checked here** (no graphics device, no window system in the
+sandbox): the viewer itself: real windows opened and closed (each window's
+own opening and closing code), RLVa, the demo scenario. The human's list is
+in the checkpoint's report.
+
+**Known limits, and what is left.**
+
+- **Part 2: Inventory folder windows** and *Remember Inventory folders*
+  (per account, at most 16, a deleted folder or another account skipped
+  with a note), with the hook in `ui/inventory.rs`. A workspace leaves
+  folder windows alone until then: it neither opens nor closes them.
+- A window is closed by its flag, as its cross leaves it; a window that
+  asks a question before closing would not ask it (none of the allowlist
+  does today).
+- A window a workspace opens and no layout places opens where Aurora last
+  had it.
+- The favorites' round of the keyboard and the toolbar's toggle are
+  layouts only (decision 3 above).
+- The picture of a workspace is its layout's: it does not show which
+  windows the workspace opens (the words under it do).
+- The switcher says a refused *Update* or *Save new* of a workspace with
+  the layouts' sentence when the refusal comes from the frame's call and
+  not from the form (a rare race: the list changed in between).
+- Workspaces are never applied at login, and the card shown when the
+  monitors change offers layouts only (sections 8.3, 8.5).
+- Checkpoint 5's other limits stand.
 
 ## 14. Later (outline only)
 

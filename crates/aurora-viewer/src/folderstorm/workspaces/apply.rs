@@ -539,7 +539,11 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
 pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Result<Report, StoreError> {
     let workspace: Workspace = live.store.workspace(index).ok_or(StoreError::Missing)?.clone();
     workspace.check().map_err(|_| StoreError::Invalid)?;
-    let layout = workspace.layout.as_deref().and_then(|name| live.store.find(name)).map(|(index, _)| index);
+    let layout = workspace
+        .layout
+        .as_deref()
+        .and_then(|name| live.store.find(name))
+        .map(|(index, _)| index);
     let moves_window = layout
         .and_then(|index| live.store.layout(index))
         .is_some_and(|layout| layout.window.is_some());

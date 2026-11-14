@@ -12,8 +12,8 @@
 
 use super::super::super::cx::{Cx, Nothing};
 use super::{
-    Ask, BUTTON_H, ICON_CANCEL, ICON_CHECK, ICON_DELETE, ICON_DOWN, ICON_RENAME, ICON_SAVE, ICON_STAR, ICON_UP, LIST_W, PICKER_W, entry, muted,
-    warning,
+    Ask, BUTTON_H, ICON_CANCEL, ICON_CHECK, ICON_DELETE, ICON_DOWN, ICON_RENAME, ICON_SAVE, ICON_STAR, ICON_UP, LIST_W, PICKER_W, entry,
+    muted, warning,
 };
 use crate::folderstorm::workspaces::apply::{self, Live};
 use crate::folderstorm::workspaces::store::{MAX_NAME, StoreError, Unusable};
@@ -406,7 +406,15 @@ fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
                     .hint_text(tr!("fs-workspaces-name-hint")),
             );
             save |= field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            save |= widgets::action_button(ui, p, ICON_SAVE, tr!("fs-workspaces-save"), ActionKind::Primary, vec2(0.0, BUTTON_H)).clicked();
+            save |= widgets::action_button(
+                ui,
+                p,
+                ICON_SAVE,
+                tr!("fs-workspaces-save"),
+                ActionKind::Primary,
+                vec2(0.0, BUTTON_H),
+            )
+            .clicked();
         });
         let layout = s.folderstorm_workspaces.active().map(|layout| layout.name.clone());
         ui.add_enabled_ui(layout.is_some(), |ui| {
