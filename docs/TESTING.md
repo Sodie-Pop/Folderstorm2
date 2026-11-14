@@ -188,6 +188,41 @@ margin, half the window wide: wider than the world, it keeps its size (it is
 no longer shrunk to the world's width). Make the viewer window narrower and
 wider again: Inventory keeps its size unless it is wider than the whole window,
 and comes back to its place.
+Dialogs centre in the world, not on the window: with
+`AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_MCP=ask AURORA_WINDOW_SIZE=3840,1080` the
+local assistant's Ask dialog opens in the middle of the right two thirds, as
+every modal dialog does (the Quit dialog, for one), and the friendship and
+region message prompts and the region restart alert. Floating windows that
+open on the window's centre (pay, buy land, a profile, a group, the script
+editor, the environment editors, report abuse…) open centred in the world
+the first time they are shown; one moved by hand or restored from the saved
+layout stays where it was. The notification toasts,
+the chat lines, the media bar and the banners under the top bar follow the
+bars: inside the world, or over the whole window with `bars-window`.
+
+**Photo mode in the world viewport (Folderstorm2).** `right-half` and
+`left-half` keep the right or the left half of the window for the world, as on
+one of two monitors; `photo-window` is `right-half` with Preferences' "Photo
+mode uses the whole window" on. With `AURORA_DEMO_SNAPSHOT=viewfinder` (photo
+mode at frame 600):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=right-half AURORA_DEMO_SNAPSHOT=viewfinder \
+  AURORA_WINDOW_SIZE=3840,1080 AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test photo viewport"
+```
+
+Check that the guide, the AF brackets, the lens ring, the readouts, the
+shortcuts at the top left, the AF chips at the bottom left, the size strip at
+the top right, the tool column and shutter at the right and the camera pad
+stay in the world's rectangle, the left column at its left edge; that a click
+there moves the AF point and the wheel (alone, with Alt, Alt + Shift, Alt +
+Ctrl) works there, while a click or a notch in the margin does nothing; and
+that a photo has the world's proportions and shows what it shows
+(`viewfinder-shoot` saves one at the default 4K with the window's
+proportions: the log gives `photo: 3840 x 2160 drawn`, against `3840 x 1080`
+with `photo-window`; the "Window" size gives the world's own 1920 x 1080).
+With `photo-window` photo mode fills the window as before.
 
 **Chat image upload (Folderstorm2).** `AURORA_DEMO_CHAT_UPLOAD=1` turns the
 uploads on for the run with an uploader inside the viewer: nothing leaves the
@@ -5608,7 +5643,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5670,6 +5705,107 @@ front, back, left, right), `camera_shot`, `camera_reset`, `camera_snapshot`
 demo outfit (the Outfit Gallery shows the new picture). A picture with
 `interface: true` asks even with Camera on Allow. Capture the dialogs in
 English, French and Japanese.
+
+`AURORA_DEMO_MCP=plan` (Folderstorm2, folderstorm/plans/mcp-receipts.md
+checkpoints 3 to 5: `src/mcp_bridge/plans.rs`, `desk.rs`,
+`src/folderstorm/bulk_plan.rs`): the same session settings ("Ask before
+changes"), and once the demo inventory is there the demo previews moving
+the demo object, the demo script and the instructions notecard into the
+demo subfolder, then asks, as "Demo assistant", to execute that plan: the
+Ask dialog says "Move 3 entries to “…”:" and lists the three names under it
+(a longer plan lists five, then "…and N more", and the number left out).
+The log reads `local assistant demo: plan previewed: …` with the rows.
+Allow: the three entries move in one change (the inventory window shows them
+in the subfolder), and the log reads `inventory_execute_plan answered {…
+"state":"done"…}`. Refuse: nothing moves (`… "permission_denied" …
+(operation_id op-…)`). With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+Recent activity shows the plan's line as its sentence and its state ("…
+· done", "… · refused"), the program's name in the line's tooltip, and a
+Stop button on a line still waiting (in the dialog or for its turn): Stop
+closes the dialog and the line reads "… · cancelled". A real client can
+then call `inventory_preview_batch_rename` (`items` with explicit names,
+or `ids` with a pattern such as `Sorted {n} - {name}`) and
+`inventory_preview_batch_move`, run the plan with `inventory_execute_plan`
+(`wait: false` answers at once with `"state":"asking"`; poll
+`assistant_operation_status`), stop it with `assistant_operation_cancel`,
+and retry a change with the same `client_request_id` (the second call
+answers `"duplicate":true` and runs nothing). Rename an entry of a plan
+between the preview and the execute: the execute answers `stale` and
+nothing moves. Capture the dialog and the activity lines in English, French
+and Japanese.
+
+`AURORA_DEMO_MCP=navigation` (Folderstorm2, folderstorm/plans/mcp.md "Phase
+3, part 4": `src/mcp_bridge/navigation.rs`, `src/app/local_assistant.rs`):
+"Ask before changes" for the session, and once the world shows, "Demo
+assistant" asks to walk the avatar 8 m east ("Walk to (x, y, z) in
+“Aurora Plaza”, 8 m away"). Allow: the avatar walks there through the
+viewer's own autopilot (the walk mark shows), and the log reads
+`navigation_move_to answered {"arrived":true,…,"state":"done"}`. Press a
+movement key during the walk instead: it stops at once and the log reads
+`… cancelled: stopped: the user took control of the avatar …`. Then the
+demo asks to teleport 14 m west and 10 m north of where it stands ("Teleport
+to …"); the dialog shows even though the demo asked on its own (a teleport
+always asks). Allow: the avatar teleports locally and the log reads
+`navigation_teleport answered {"arrived":true,"at_target":true,…}`, then
+`navigation_status answered {…,"last":{"reason":"arrived",…}}`. Refuse:
+`… permission_denied …`. With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+the Custom levels show the new row "Move my avatar", and Recent activity
+shows the walk and the teleport with their sentences. Capture the dialogs
+and the row in English, French and Japanese.
+
+`AURORA_DEMO_MCP=content` (Folderstorm2, folderstorm/plans/mcp-content.md:
+`src/mcp_bridge/content.rs`, `content/diff.rs`, `desk.rs`,
+`src/app/local_assistant.rs`): the same session settings ("Ask before
+changes", Content on Ask), and a folder "Assistant content tests" in My
+Inventory: "Assistant notes", "Notes with items" (a texture and a landmark
+embedded), "Notes (no modify)", "Notes (no copy)", "Greeter script",
+"Greeter script (no modify)" and "Script that will not compile". The demo,
+as "Demo assistant", reads "Assistant notes" and "Script that will not
+compile" (`inventory_content_get`; the log gives the bytes and whether the
+item is editable, never the text), then asks to save each: the dialog says
+"Save the notecard “Assistant notes” (one line added, 0 removed)" with the
+added line under it (`+ …`), then "Save and compile the script “Script that
+will not compile” (2 lines added, one removed)" with `− ` and `+ ` lines.
+Allow the notecard: the log reads `inventory_update_notecard answered {…
+"source_saved":true,… "state":"done"…}`, and opening the notecard shows the
+added line. Allow the script: `inventory_save_compile_script answered {…
+"source_saved":true,"compiled":false,"errors":[{"line":6,"column":10,…
+"Syntax error"…}]…}`; the script editor opened on it shows the saved source.
+Refuse: nothing is saved (`permission_denied`). With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the row "Edit
+notecards and scripts" (Allow / Ask / Never), and Recent activity the two
+saves' sentences. A real client can then read the other items: "Notes (no
+copy)" and "Greeter script (no modify)" are refused (`not_allowed`), "Notes
+(no modify)" is read with `editable: false`; "Notes with items" lists its
+two embedded items (names and types, never an id) and refuses a save that
+drops or moves their markers; `inventory_content_preview` gives the counts
+and a unified diff; a save with an old `snapshot_hash` answers `stale`; a
+save of a notecard open in the inventory's preview answers `busy`; the same
+`client_request_id` sent again answers `"duplicate":true`;
+`inventory_content_operation_status` gives `source_saved` and the compile
+errors. Capture the dialog and the Preferences row in English, French and
+Japanese.
+
+`AURORA_DEMO_MCP=objects` (Folderstorm2, folderstorm/plans/mcp-objects.md:
+`src/mcp_bridge/objects.rs`): the same session settings ("Ask before
+changes"); once the plaza's cut box (local id 118, the agent's in the demo)
+and the demo inventory are loaded, the demo lists the box's contents (the
+log reads `local assistant demo: object_contents_list answered 4 items`),
+then asks, as "Demo assistant", to put a copy of the demo script into it:
+the Ask dialog says "Put a copy of the script “…” into the object “…”, not
+running". Allow: the box's Contents tab (Build › Edit, Contents) lists the
+copy, not running, and the log reads `object_contents_put answered {…
+"done":true … "asset_identity_verified":true …}`; the script stays in the
+inventory. Refuse: nothing is added. With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the
+two new rows, "My objects' contents" and "Take my objects". A real client
+can then call `object_contents_rename`, `object_contents_remove` (it asks
+even on Allow), `object_take_copy` and `object_take` (it asks even on
+Allow; the box leaves the world and an object item named after it arrives
+in the folder), each with the snapshot of a fresh `object_contents_list`
+and a `client_request_id`; reusing an old snapshot answers `stale`.
+Capture the dialogs and the two Preferences rows in English, French and
+Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and
@@ -5942,7 +6078,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MAP=1`, `mini` or words among `search:<text>`, `drawer:<tab>`, `landmarks`, `friend`, `legacy`, `switch`, `show-on-map`, `show-link`, `coordinates`, `beacon[-click|-offscreen]` | Maps, search, drawer, landmarks, followed friend, side panel layout, layout switched with the map open, Show on map, coordinate entry and clickable 3D beacon |
 | `AURORA_DEMO_NOTIF=1`, `AURORA_DEMO_STATUSMENU=1` or `invisible`, `AURORA_DEMO_MICMENU=1`, `AURORA_DEMO_NAVEDIT=1` | Notification list, status menu, microphone panel, location field |
 | `AURORA_DEMO_PARCEL_NAME=<text>` | Any parcel name in the place island (odd names, line breaks) |
-| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world) |
+| `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory\|right-half\|left-half\|photo-window` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world; `right-half`, `left-half`: the world on one of two monitors, for photo mode in it with `AURORA_DEMO_SNAPSHOT=viewfinder`; `photo-window`: photo mode given the whole window); dialogs centred in the world |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
@@ -5951,7 +6087,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `updates`), the host's settings window opens on that section |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7724,6 +7860,77 @@ failure. Grid validation and any paid upload are performed by the human.
     are in `session-host.json` (`chat_shown`, `reading`, `attention`,
     `settings_window`; per character `attention` and `alerts`). A file of
     checkpoint 9 reads with nothing lost.
+  - **session routing and the MCP controller**
+    (folderstorm/plans/mcp-routing.md).
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_MCP=1 AURORA_DEMO_SESSION_HOST_CONTROLLER=ask AURORA_DEMO_SESSION_HOST_SETTINGS=controller cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - the **MCP controller** section of the settings: "Enable controller
+      MCP" (on in this demo) with "On: listening on 127.0.0.1:…", "Allow
+      profile and monitor metadata", the seven classes with Ask / Allow /
+      Never, a box per character ("Allow controller access"); turned off,
+      the line says "Off: nothing listens" and the file
+      `folderstorm2-controller-<pid>.json` leaves the demo's settings
+      folder (`config\demo`);
+    - the **Ask window** ("MCP controller request"), in front and centred
+      on the host's window: "“Demo assistant” asks to:", "Minimise
+      “demo-2” (character 2) while it waits (Economy)", the countdown,
+      Allow and Refuse. Allow sets demo-2 to Economy (its card says so);
+      Refuse, Escape, closing the window or 60 s change nothing; Enter
+      alone does nothing. With the bar docked
+      (`AURORA_DEMO_SESSION_HOST_BAR=docked`, the host's window hidden)
+      the window still comes forward;
+    - **a sidecar against the demo**: build it (`cargo build -p
+      folderstorm-mcp`), then talk MCP to `folderstorm-mcp --discovery
+      <demo settings folder>` (one JSON line per request on its standard
+      input): `tools/call` of `viewer_list` lists the three
+      demo viewers `demo-1`, `demo-2`, `demo-3`, each with its
+      `viewer_session`; `worn_items` answers `target_required`;
+      `viewer_select` `{"profile": "demo-2"}`, then `worn_items` answers
+      from demo-2; close demo-2 from the host: the next call answers
+      `unavailable`, never demo-1's inventory; `host_characters` lists the
+      three (names only with metadata on); `host_activate`
+      `{"profile": "demo-3"}` opens the Ask window, Allow brings demo-3
+      forward; with the class on Never it is refused at once;
+    - a background character's local-assistant question (Ask before
+      changes in its viewer) shows in the host's inbox as "Local
+      assistant", whatever the Attention kinds ticked; "Switch to answer"
+      brings that character forward with its own dialog.
+    Outside the demo, the controller's settings are in `session-host.json`
+    (`controller`; per character `controller`), all off by default.
+  - **conversations from the host** (checkpoint 11).
+    `AURORA_DEMO_SESSION_HOST_CONTACTS=friends|new-im` (with
+    `AURORA_DEMO_SESSION_HOST`) opens the shared chat on the first
+    character with its "Friends" or "New IM" sheet; the demo viewers tell
+    their own friends and groups (the demo's buddy list and its three
+    groups):
+    `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=2 AURORA_DEMO_SESSION_HOST_CONTACTS=new-im cargo run -p aurora-viewer -- --title "Test host"`.
+    What to look at:
+    - the two buttons at the end of a character's chips, in the shared
+      chat and in each monitor's chat part ("New IM", "Friends"): each
+      opens its sheet in the lines' place, a second click closes it;
+    - **Friends**: online first, then offline, searched by name; a row's
+      message button opens an instant message in that character's viewer
+      (its Conversations window, ready to type in there too) and the
+      conversation shows in the host, chosen, with nothing sent; the
+      person button opens the profile in that viewer and brings the
+      character forward;
+    - **New IM**: the character's groups, then its friends; a click on a
+      row opens that conversation (a group's chat is joined as when it is
+      opened in the viewer);
+    - a refusal (in a demo viewer, RLVa `@startim=n` from an attachment;
+      or a viewer closed while asked) is a line in amber above the lines
+      of the window that asked, with a cross;
+    - the nearby chat's volume button beside Send (say, shout, whisper;
+      Ctrl+Enter shouts and Shift+Enter whispers one line): the demo
+      viewer's own nearby chat shows the line at that volume;
+    - who types (on the grid: the demo has no resident who types): while
+      the resident of an IM types, "<name> is typing…" above the shared
+      chat's box, a pencil before a monitor's box;
+    - a line's web address underlined: a well-known site opens in the
+      system's browser at once, another after "Open this address in your
+      browser?" (with the reason in red for one that looks dangerous);
+      a `secondlife://` link is never followed by the host: a click
+      brings the character forward.
   The host's log is `aurora-demo-session-host-test-host.log`.
   `AURORA_SESSION_HOST_CAPTURE=<file.png>` (demo only) writes the host
   window's picture at each of its frames, and each panel's own window to

@@ -446,3 +446,190 @@ fn a_picture_with_the_interface_asks_even_on_allow() {
     );
     assert!(calls.try_recv().is_err());
 }
+
+#[test]
+fn health_says_who_the_viewer_is_and_its_name_only_with_read() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    // the main profile, unmanaged, nothing told yet
+    let health = client.health().expect("health");
+    assert_eq!(
+        (health.profile.clone(), health.managed, health.character.clone()),
+        (None, false, None)
+    );
+    let wire = client.get("/v1/health").expect("health");
+    assert!(wire.get("profile").is_none() && wire.get("managed").is_none() && wire.get("character").is_none());
+    bridge.set_identity(Identity {
+        profile: Some("Alt1".into()),
+        managed: true,
+        character: Some("Sodie Resident".into()),
+    });
+    // logged out: no name
+    let health = client.health().expect("health");
+    assert_eq!((health.profile.as_deref(), health.managed), (Some("Alt1"), true));
+    assert_eq!(health.character, None, "no login, no name");
+    bridge.set_login(1, true);
+    assert_eq!(client.health().expect("health").character.as_deref(), Some("Sodie Resident"));
+    // Read on Never: no name
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Read, Level::Never);
+    bridge.set_permissions(permissions);
+    let health = client.health().expect("health");
+    assert_eq!((health.character, health.profile.as_deref()), (None, Some("Alt1")));
+    drop(calls);
+}
+
+/// Folderstorm: receipts (mcp-receipts.md, section 4): a change gets its
+/// `operation_id` when it arrives, its listener's timeout names it, and the
+/// activity line keeps it; a read gets none.
+#[test]
+fn a_change_gets_its_operation_id_when_it_arrives() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Edit, Level::Allow);
+    bridge.set_permissions(permissions);
+    let viewer = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        while let Ok(call) = calls.recv() {
+            seen.push(call.operation_id.clone());
+            let answer = json!({"operation_id": call.operation_id});
+            call.answer(Ok(answer));
+        }
+        seen
+    });
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let renamed = client.call("inventory_rename", json!({"id": "x", "name": "y"})).expect("answered");
+    let operation = renamed["operation_id"].as_str().expect("an operation").to_owned();
+    assert!(receipts::is_operation_id(&operation), "{operation}");
+    client.call("worn_items", json!({})).expect("answered");
+    let activity = bridge.activity();
+    assert_eq!(activity[0].operation_id.as_deref(), Some(operation.as_str()));
+    assert_eq!(activity[1].operation_id, None);
+    bridge.stop();
+    let seen = viewer.join().expect("viewer");
+    assert_eq!(seen, vec![Some(operation), None], "a read has no operation");
+    // the listener's own timeout names the operation
+    let e = timed_out(Some("op-0123456789abcdef0123456789abcdef".into()));
+    assert_eq!(e.code, ErrorCode::Timeout);
+    assert!(e.to_string().contains("assistant_operation_status"), "{e}");
+    assert!(e.to_string().ends_with("(operation_id op-0123456789abcdef0123456789abcdef)"), "{e}");
+    assert_eq!(timed_out(None).operation_id, None);
+    // an older sidecar ignores the field; a newer one reads it
+    let wire = serde_json::to_value(&e).expect("json");
+    assert_eq!(wire["operation_id"], "op-0123456789abcdef0123456789abcdef");
+    let back: ToolError = serde_json::from_value(wire).expect("read back");
+    assert_eq!(back, e);
+}
+
+#[test]
+fn a_conflict_reaches_only_a_sidecar_that_declares_receipts() {
+    let conflict = ToolError::new(ErrorCode::Conflict, "used");
+    assert_eq!(conflict.clone().for_sidecar(None).code, ErrorCode::InvalidArguments);
+    let mut login_only = crate::binding::assumed();
+    login_only.insert(crate::binding::LOGIN_BINDING.into(), 1);
+    assert_eq!(conflict.clone().for_sidecar(Some(&login_only)).code, ErrorCode::InvalidArguments);
+    assert_eq!(
+        conflict.for_sidecar(Some(&crate::binding::capabilities())).code,
+        ErrorCode::Conflict
+    );
+}
+
+/// Folderstorm: plans (mcp-receipts.md, section 6): the listener cannot
+/// know a plan's class; it refuses an execute only when Edit and Move are
+/// both on Never, and the frame thread decides from the plan.
+#[test]
+fn a_plans_execute_is_refused_here_only_when_both_classes_are_never() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let viewer = responder(calls);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let execute = || client.call("inventory_execute_plan", json!({"plan_id": "pl-x"}));
+    assert_eq!(code(execute().expect_err("both Never")), ErrorCode::PermissionDenied);
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Move, Level::Allow);
+    bridge.set_permissions(permissions);
+    assert_eq!(execute().expect("reaches the viewer")["tool"], "inventory_execute_plan");
+    bridge.stop();
+    assert_eq!(viewer.join().expect("responder"), 1);
+}
+
+/// Folderstorm: operations (mcp-receipts.md, section 5): an early answer
+/// only for a sidecar that declares `operations`.
+#[test]
+fn an_early_answer_only_for_a_sidecar_that_declares_operations() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let mut permissions = Permissions::default();
+    permissions.set(Class::Move, Level::Allow);
+    bridge.set_permissions(permissions);
+    let viewer = std::thread::spawn(move || {
+        let mut early = Vec::new();
+        while let Ok(call) = calls.recv() {
+            early.push(call.early);
+            call.answer(Ok(json!({})));
+        }
+        early
+    });
+    let body = |features: Option<crate::binding::Capabilities>| json!({"tool": "inventory_execute_plan", "arguments": {"plan_id": "p", "wait": false}, "features": features});
+    post(&bridge, &body(Some(crate::binding::capabilities())));
+    post(&bridge, &body(None));
+    let mut older = crate::binding::capabilities();
+    older.remove(crate::binding::OPERATIONS);
+    post(&bridge, &body(Some(older)));
+    bridge.stop();
+    assert_eq!(viewer.join().expect("viewer"), vec![true, false, false]);
+}
+
+/// Folderstorm: navigation (phase 3, part 4): a teleport asks even on
+/// Allow and answers early for a sidecar that declares `operations`; Never
+/// refuses it before the viewer; `navigation_stop` needs no class.
+#[test]
+fn a_teleport_asks_even_on_allow_and_stop_needs_no_class() {
+    let (bridge, calls) = start(VIEWER_TIMEOUT, None);
+    let client = Client::new(bridge.port(), bridge.token().clone());
+    let mut p = Preset::ReadOnly.permissions();
+    p.set(Class::Navigation, Level::Allow);
+    bridge.set_permissions(p);
+    let viewer = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            let call = calls.recv().expect("a call");
+            seen.push((call.tool.clone(), call.ask, call.early, call.operation_id.is_some()));
+            call.answer(Ok(json!({})));
+        }
+        (seen, calls)
+    });
+    let at = json!({"global_position": [256100.0, 256100.0, 30.0], "client_request_id": "tp-1"});
+    client
+        .call("navigation_move_to", json!({"position": [1.0, 2.0, 3.0]}))
+        .expect("taken");
+    client.call("navigation_teleport", at.clone()).expect("taken");
+    client.call("navigation_stop", json!({"operation_id": "op-x"})).expect("taken");
+    let (seen, calls) = viewer.join().expect("viewer");
+    let features = seen
+        .iter()
+        .map(|(tool, ask, early, op)| (tool.as_str(), *ask, *early, *op))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        features,
+        vec![
+            // the client declares this build's capabilities, `operations` included
+            ("navigation_move_to", false, true, true),
+            ("navigation_teleport", true, true, true),
+            ("navigation_stop", false, false, false),
+        ]
+    );
+    // Never refuses the change, never the stop
+    p.set(Class::Navigation, Level::Never);
+    p.set(Class::Read, Level::Never);
+    bridge.set_permissions(p);
+    assert_eq!(
+        code(client.call("navigation_teleport", at).expect_err("refused")),
+        ErrorCode::PermissionDenied
+    );
+    assert!(calls.try_recv().is_err(), "refused before the viewer");
+    let viewer = std::thread::spawn(move || {
+        let call = calls.recv().expect("a call");
+        call.answer(Ok(json!({"stopped": true})));
+    });
+    client.call("navigation_stop", json!({"operation_id": "op-x"})).expect("passes");
+    viewer.join().expect("viewer");
+}

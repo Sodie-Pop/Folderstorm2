@@ -48,6 +48,24 @@ fn a_call_pinned_to_another_login_is_refused_when_taken() {
     let status = answered(&answer).expect("status");
     assert_eq!(status["viewer_session"], S1);
     assert_eq!(status["capabilities"], json!(binding::capabilities()));
+    // session routing: which character (the main profile, no name given)
+    assert_eq!(
+        (status["profile"].clone(), status["managed"].clone()),
+        (json!("main"), json!(false))
+    );
+    assert_eq!(status["character"], Value::Null);
+    cx.identity = folderstorm_mcp_bridge::server::Identity {
+        profile: Some("Alt1".into()),
+        managed: true,
+        character: Some("Alt Resident".into()),
+    };
+    let (e2, answer) = pinned("viewer_status", json!({}), None);
+    desk.take(e2, &cx, now);
+    let status = answered(&answer).expect("status");
+    assert_eq!(
+        (status["profile"].clone(), status["managed"].clone(), status["character"].clone()),
+        (json!("Alt1"), json!(true), json!("Alt Resident"))
+    );
     // logged out: no session, and every pinned bound call is refused
     desk.set_login(2, None);
     cx.viewer_session = None;

@@ -44,10 +44,17 @@
 //! - **Several windows show the chat** (checkpoint 9: the shared chat and
 //!   each monitor's): what any of them shows while it has the keyboard is
 //!   read ([`Chat::look_from`]).
+//! - **A conversation opened from the host** (checkpoint 11) is the
+//!   viewer's: it is shown once that viewer says it opened it
+//!   ([`Chat::opened`]), for that login only, and nothing is said in it
+//!   until the user types a line.
+//! - **The volume** of a line of the nearby chat is chosen per character
+//!   in the host (whisper, say, shout; not saved) and travels with the
+//!   line; the viewer's rules (RLVa's among them) decide what is said.
 
 use crate::ipc::{
     AttentionItem, AttentionList, ChatBatch, ChatLine, Conversation, LineKind, MAX_SEND, MAX_SLOTS, SendOutcome, SendRefusal, SessionKind,
-    ToViewer, clean_text,
+    ToViewer, Volume, clean_text,
 };
 use crate::settings::ChatShown;
 use std::collections::{BTreeMap, VecDeque};
@@ -116,6 +123,8 @@ pub struct Thread {
     closed: bool,
     /// Checkpoint 9: pinned in the host, before the other conversations.
     pinned: bool,
+    /// Checkpoint 11: its resident types to the character now.
+    pub typing: bool,
 }
 
 impl Thread {
@@ -136,6 +145,7 @@ impl Thread {
             order: 0,
             closed: false,
             pinned: false,
+            typing: false,
         }
     }
 
@@ -240,6 +250,8 @@ struct Character {
     threads: Vec<Thread>,
     attention: Vec<AttentionItem>,
     attention_more: u32,
+    /// Checkpoint 11: the volume its nearby chat's lines are said at.
+    volume: Volume,
 }
 
 impl Character {
@@ -399,6 +411,7 @@ impl Chat {
         c.generation = generation;
         for t in &mut c.threads {
             t.earlier_login = true;
+            t.typing = false;
             t.viewer_unread = 0;
             t.read_asked = false;
             // (a pin is for one login: the next one's conversations are
@@ -547,6 +560,8 @@ impl Chat {
         t.order = order;
         t.kind = batch.kind;
         t.title = batch.title;
+        // (checkpoint 11: only a resident's conversation has a typist)
+        t.typing = batch.typing && batch.kind == SessionKind::Resident;
         // the viewer had unread lines and has none now: read there
         let read_there = t.viewer_unread > 0 && batch.unread == 0 && !batch.restart;
         t.viewer_unread = batch.unread;
@@ -803,11 +818,20 @@ impl Chat {
     /// Sends the draft of that conversation as that character: handed to
     /// its viewer once, with the login it was typed for.
     pub fn submit(&mut self, slot: usize, conversation: Conversation, now: Instant) -> Result<u64, Blocked> {
+        let volume = self.volume(slot);
+        self.submit_at(slot, conversation, now, volume)
+    }
+
+    /// Checkpoint 11: the same at a volume for this line only (the chat
+    /// bar's Ctrl+Enter shouts and Shift+Enter whispers, whatever is
+    /// chosen); a conversation's lines are said normally whatever is asked.
+    pub fn submit_at(&mut self, slot: usize, conversation: Conversation, now: Instant, volume: Volume) -> Result<u64, Blocked> {
         self.can_send(slot, conversation)?;
         let (Some(draft), Some((launch, generation))) = (self.drafts.remove(&(slot, conversation)), self.characters[slot].login()) else {
             return Err(Blocked::Empty);
         };
         let text = clean_text(&draft.text, MAX_SEND);
+        let volume = volume.in_conversation(conversation);
         let id = self.next_id;
         self.next_id += 1;
         self.pending.push(Pending {
@@ -827,9 +851,87 @@ impl Chat {
                 generation,
                 conversation,
                 text,
+                volume,
             },
         });
         Ok(id)
+    }
+
+    /// Checkpoint 11: the volume the character's nearby chat says its
+    /// lines at, chosen in the host.
+    pub fn volume(&self, slot: usize) -> Volume {
+        self.characters.get(slot).map_or_else(Volume::default, |c| c.volume)
+    }
+
+    pub fn set_volume(&mut self, slot: usize, volume: Volume) {
+        if let Some(c) = self.characters.get_mut(slot) {
+            c.volume = volume;
+        }
+    }
+
+    /// Checkpoint 11: that launch's viewer opened `conversation` at the
+    /// host's request, for its login `generation`. The conversation is
+    /// shown at once (its first lines follow as any other's): made if the
+    /// host had none, brought back if it was closed here, emptied of what
+    /// an earlier login told of it. False, and nothing changes, for
+    /// another launch or login, or the nearby chat.
+    pub fn opened(
+        &mut self,
+        slot: usize,
+        launch: u32,
+        generation: u32,
+        conversation: Conversation,
+        kind: SessionKind,
+        title: &str,
+    ) -> bool {
+        if conversation == Conversation::Nearby
+            || kind == SessionKind::Nearby
+            || !self.current(slot, launch)
+            || self.characters[slot].generation != Some(generation)
+        {
+            return false;
+        }
+        self.order += 1;
+        let order = self.order;
+        if self.thread(slot, conversation).is_none() {
+            if self.threads(slot).len() >= MAX_THREADS {
+                // the one heard of longest ago leaves, never the nearby chat
+                // or one on screen
+                let oldest = self
+                    .threads(slot)
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, t)| t.conversation != Conversation::Nearby && !self.on_screen(slot, t.conversation))
+                    .min_by_key(|(_, t)| t.order)
+                    .map(|(i, _)| i);
+                let Some(oldest) = oldest else {
+                    return false;
+                };
+                let gone = self.characters[slot].threads.remove(oldest).conversation;
+                self.drafts.remove(&(slot, gone));
+            }
+            let mut thread = Thread::new(conversation, kind);
+            thread.title = crate::ipc::clean(title, crate::ipc::MAX_TITLE);
+            self.characters[slot].threads.push(thread);
+        }
+        let Some(t) = self.thread_mut(slot, conversation) else {
+            return false;
+        };
+        let earlier = std::mem::take(&mut t.earlier_login);
+        if earlier {
+            // (what an earlier login told names other lines)
+            t.clear();
+        }
+        t.order = order;
+        t.closed = false;
+        if t.title.is_empty() {
+            t.title = crate::ipc::clean(title, crate::ipc::MAX_TITLE);
+        }
+        if earlier {
+            self.feed
+                .retain(|f| !(f.slot == slot && f.conversation == conversation && !matches!(f.entry, Entry::Note(_))));
+        }
+        true
     }
 
     /// Checkpoint 9: closes a conversation in the host. Its chip goes,
@@ -1337,7 +1439,8 @@ mod tests {
                     id,
                     generation: 1,
                     conversation: JANE,
-                    text: "typed as Sam to Jane".into()
+                    text: "typed as Sam to Jane".into(),
+                    volume: Volume::Normal,
                 }
             )]
         );
@@ -1706,5 +1809,87 @@ mod tests {
         // what a viewer sends is cleaned before it is kept
         c.batch(0, 1, batch(1, JANE, vec![said(1, "a\u{7}b\u{0}")]));
         assert_eq!(texts(&c, 0, JANE), ["ab"]);
+    }
+
+    #[test]
+    fn a_nearby_line_goes_at_the_character_s_volume_and_a_conversation_s_normally() {
+        let (mut c, now) = chat(2);
+        c.batch(0, 1, batch(1, Conversation::Nearby, vec![said(1, "hi")]));
+        c.batch(0, 1, batch(1, JANE, vec![said(1, "hi")]));
+        c.batch(1, 1, batch(1, Conversation::Nearby, vec![said(1, "hi")]));
+        assert_eq!(c.volume(0), Volume::Normal);
+        c.set_volume(0, Volume::Shout);
+        assert_eq!((c.volume(0), c.volume(1)), (Volume::Shout, Volume::Normal), "per character");
+        let volume_of = |c: &mut Chat| match sends(c).pop() {
+            Some((_, _, ToViewer::SendChat { volume, .. })) => volume,
+            other => panic!("not a line: {other:?}"),
+        };
+        for (slot, conversation, expected) in [
+            (0, Conversation::Nearby, Volume::Shout),
+            (0, JANE, Volume::Normal),
+            (1, Conversation::Nearby, Volume::Normal),
+        ] {
+            assert!(c.set_draft(slot, conversation, "a line"));
+            c.submit(slot, conversation, now).expect("sent");
+            assert_eq!(volume_of(&mut c), expected, "{slot} {conversation:?}");
+        }
+        // a line of its own volume (Shift+Enter) leaves the choice as it was
+        assert!(c.set_draft(0, Conversation::Nearby, "psst"));
+        c.submit_at(0, Conversation::Nearby, now, Volume::Whisper).expect("sent");
+        assert_eq!(volume_of(&mut c), Volume::Whisper);
+        assert!(c.set_draft(0, JANE, "psst"));
+        c.submit_at(0, JANE, now, Volume::Shout).expect("sent");
+        assert_eq!(volume_of(&mut c), Volume::Normal, "never in a conversation");
+        // it stays chosen for the next line, and goes with the character
+        assert_eq!(c.volume(0), Volume::Shout);
+        c.forget(0);
+        assert_eq!(c.volume(0), Volume::Normal);
+    }
+
+    #[test]
+    fn who_types_is_a_resident_s_conversation_s_until_it_stops_or_the_login_ends() {
+        let (mut c, _) = chat(1);
+        let typing = |conversation, on| ChatBatch {
+            typing: on,
+            ..batch(1, conversation, Vec::new())
+        };
+        c.batch(0, 1, typing(JANE, true));
+        assert!(c.thread(0, JANE).is_some_and(|t| t.typing));
+        c.batch(0, 1, typing(JANE, false));
+        assert!(c.thread(0, JANE).is_some_and(|t| !t.typing));
+        // a group's chat has no typist, whatever it says
+        c.batch(0, 1, typing(GROUP, true));
+        assert!(c.thread(0, GROUP).is_some_and(|t| !t.typing));
+        c.batch(0, 1, typing(JANE, true));
+        c.status(0, 1, 2, true);
+        assert!(c.thread(0, JANE).is_some_and(|t| !t.typing), "another login");
+    }
+
+    #[test]
+    fn only_the_login_that_opened_a_conversation_shows_it() {
+        let (mut c, _) = chat(2);
+        assert!(!c.opened(0, 1, 2, JANE, SessionKind::Resident, "Jane"), "another login");
+        assert!(!c.opened(0, 0, 1, JANE, SessionKind::Resident, "Jane"), "an earlier launch");
+        assert!(
+            !c.opened(0, 1, 1, Conversation::Nearby, SessionKind::Nearby, ""),
+            "never the nearby chat"
+        );
+        assert!(c.threads(0).is_empty());
+        assert!(c.opened(0, 1, 1, JANE, SessionKind::Resident, "Jane\u{7} Doe"));
+        assert_eq!(c.thread(0, JANE).map(|t| t.title.as_str()), Some("Jane Doe"));
+        assert!(c.threads(1).is_empty(), "the other character's own");
+        // its first lines then come as any other's
+        c.batch(0, 1, batch(1, JANE, vec![said(1, "hello")]));
+        assert_eq!(texts(&c, 0, JANE), ["hello"]);
+        // a full list: the one heard of longest ago leaves, never the nearby chat
+        c.batch(0, 1, batch(1, Conversation::Nearby, vec![said(1, "hi")]));
+        for n in 0..MAX_THREADS as u64 {
+            c.batch(0, 1, batch(1, Conversation::Session(9, n), vec![said(1, "hi")]));
+        }
+        assert_eq!(c.threads(0).len(), MAX_THREADS);
+        assert!(c.opened(0, 1, 1, Conversation::Session(8, 1), SessionKind::Resident, "New"));
+        assert_eq!(c.threads(0).len(), MAX_THREADS);
+        assert!(c.thread(0, Conversation::Nearby).is_some());
+        assert!(c.thread(0, Conversation::Session(8, 1)).is_some());
     }
 }

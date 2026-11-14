@@ -27,6 +27,10 @@ pub fn show(ctx: &egui::Context, p: &Palette) {
         ui.label(RichText::new(who).color(p.ink)).on_hover_text(tr!("fs-mcp-ask-who-hint"));
         ui.add_space(4.0);
         ui.label(RichText::new(&question.summary).strong().color(p.ink));
+        // Folderstorm: a plan's rows (mcp-receipts.md, section 6)
+        for line in &question.detail {
+            ui.label(RichText::new(line).size(12.5).color(p.ink));
+        }
         ui.add_space(8.0);
         ui.label(
             RichText::new(tr!("fs-mcp-ask-countdown", seconds = question.seconds_left))

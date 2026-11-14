@@ -76,6 +76,10 @@ pub(super) fn ctx(inv: &Inventory) -> Ctx<'_> {
         outfit_points: HashMap::new(),
         stage: Default::default(),
         viewer_session: None,
+        identity: Default::default(),
+        nav: Default::default(),
+        content: Default::default(),
+        objects: Default::default(),
     }
 }
 
@@ -103,6 +107,9 @@ fn apply(inv: &mut Inventory, planned: Planned) {
         }
         Work::Camera(_) | Work::Snapshot(_) | Work::Thumbnail(_) => panic!("not an inventory change"),
         Work::Create(_) | Work::Image { .. } => panic!("not run here (gap_tests)"),
+        Work::Navigate(_) => panic!("not an inventory change"),
+        Work::Content(_) => panic!("not run here (content_tests)"),
+        Work::Object(_) => panic!("not run here (objects_tests)"),
     }
 }
 
@@ -817,3 +824,12 @@ mod recheck;
 
 /// Calls bound to one login (`viewer_session`) and capability versions.
 mod binding;
+
+/// Receipts and client request ids.
+mod receipts;
+
+/// Batch plans: preview, then execute.
+mod plans;
+
+/// Guarded operations: early answers, cancel, bounds.
+mod operations;

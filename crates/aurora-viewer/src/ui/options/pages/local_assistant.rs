@@ -154,6 +154,32 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-camera-hint"),
                     field!(local_assistant.permissions.camera),
                 ),
+                // Folderstorm: phase 3, part 4 (navigation)
+                (
+                    Class::Navigation,
+                    tr!("fs-mcp-navigation"),
+                    tr!("fs-mcp-navigation-hint"),
+                    field!(local_assistant.permissions.navigation),
+                ),
+                (
+                    Class::Content,
+                    tr!("fs-mcp-content"),
+                    tr!("fs-mcp-content-hint"),
+                    field!(local_assistant.permissions.content),
+                ),
+                // Folderstorm: object inspection and lifecycle (mcp-objects.md)
+                (
+                    Class::Objects,
+                    tr!("fs-mcp-objects"),
+                    tr!("fs-mcp-objects-hint"),
+                    field!(local_assistant.permissions.objects),
+                ),
+                (
+                    Class::Take,
+                    tr!("fs-mcp-take"),
+                    tr!("fs-mcp-take-hint"),
+                    field!(local_assistant.permissions.take),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];
@@ -192,22 +218,61 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             .row(tr!("fs-mcp-activity"), tr!("fs-mcp-activity-hint"), &Nothing, |ui, _| {
                 ui.vertical(|ui| {
                     ui.set_width(ui.available_width());
-                    if status.activity.is_empty() {
+                    // Folderstorm: a change still under way has no activity
+                    // line until its call answers, nor has a change the
+                    // viewer itself asked for (the demo): shown first, the
+                    // live ones with Stop (mcp-receipts.md, sections 4, 5).
+                    // A receipt older than the oldest line kept had its line
+                    // once, and stays out.
+                    let oldest = status.activity.first().map(|a| a.at);
+                    let unlisted: Vec<&mcp_bridge::ReceiptLine> = status
+                        .receipts
+                        .iter()
+                        .filter(|r| {
+                            !status
+                                .activity
+                                .iter()
+                                .any(|a| a.operation_id.as_deref() == Some(r.operation_id.as_str()))
+                        })
+                        .collect();
+                    let finished = unlisted
+                        .iter()
+                        .rev()
+                        .filter(|r| !r.state.live() && oldest.is_none_or(|at| r.asked >= at))
+                        .take(SHOWN_ACTIVITY);
+                    let under_way: Vec<&mcp_bridge::ReceiptLine> =
+                        unlisted.iter().rev().filter(|r| r.state.live()).chain(finished).copied().collect();
+                    if status.activity.is_empty() && under_way.is_empty() {
                         ui.label(egui::RichText::new(tr!("fs-mcp-activity-none")).size(12.0).color(p.muted));
                     }
                     let now = std::time::SystemTime::now();
+                    let ago = |at: std::time::SystemTime| {
+                        let seconds = now.duration_since(at).map_or(0, |d| d.as_secs());
+                        if seconds < 60 {
+                            tr!("fs-mcp-ago-seconds", count = seconds)
+                        } else {
+                            tr!("fs-mcp-ago-minutes", count = seconds / 60)
+                        }
+                    };
+                    for receipt in under_way {
+                        receipt_line(ui, &p, receipt, ago(receipt.asked));
+                    }
                     for entry in status.activity.iter().rev().take(SHOWN_ACTIVITY) {
                         let outcome = match entry.outcome {
                             Outcome::Done => tr!("fs-mcp-outcome-done"),
                             Outcome::Refused => tr!("fs-mcp-outcome-refused"),
                             Outcome::Failed(_) => tr!("fs-mcp-outcome-failed"),
                         };
-                        let seconds = now.duration_since(entry.at).map_or(0, |d| d.as_secs());
-                        let ago = if seconds < 60 {
-                            tr!("fs-mcp-ago-seconds", count = seconds)
-                        } else {
-                            tr!("fs-mcp-ago-minutes", count = seconds / 60)
-                        };
+                        let ago = ago(entry.at);
+                        // Folderstorm: a change's line shows its receipt
+                        let receipt = entry
+                            .operation_id
+                            .as_ref()
+                            .and_then(|id| status.receipts.iter().find(|r| &r.operation_id == id));
+                        if let Some(receipt) = receipt {
+                            receipt_line(ui, &p, receipt, ago);
+                            continue;
+                        }
                         let line = tr!(
                             "fs-mcp-activity-entry",
                             tool = entry.tool.clone(),
@@ -310,5 +375,55 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
         if !running {
             setup::forget_check();
         }
+    });
+}
+
+/// Folderstorm: a change's Recent activity line from its receipt: what the
+/// dialog said and where it stands; the program's name in its tooltip
+/// (folderstorm/plans/mcp-receipts.md, section 4).
+fn receipt_line(ui: &mut egui::Ui, p: &crate::theme::Palette, receipt: &mcp_bridge::ReceiptLine, ago: String) {
+    use aurora_i18n::tr;
+    use folderstorm_mcp_bridge::receipts::State;
+    let state = match receipt.state {
+        State::Waiting => tr!("fs-mcp-state-waiting"),
+        State::Asking => tr!("fs-mcp-state-asking"),
+        State::Queued => tr!("fs-mcp-state-queued"),
+        State::Running => tr!("fs-mcp-state-running"),
+        State::Done => tr!("fs-mcp-state-done"),
+        State::Failed => tr!("fs-mcp-state-failed"),
+        State::Refused => tr!("fs-mcp-state-refused"),
+        State::Cancelled => tr!("fs-mcp-state-cancelled"),
+        State::Stopped => tr!("fs-mcp-state-stopped"),
+        State::Stale => tr!("fs-mcp-state-stale"),
+        State::Unconfirmed => tr!("fs-mcp-state-unconfirmed"),
+    };
+    let summary = if receipt.summary.is_empty() {
+        receipt.tool.clone()
+    } else {
+        receipt.summary.clone()
+    };
+    let line = tr!("fs-mcp-activity-receipt", summary = summary, state = state.to_owned(), ago = ago);
+    let who = match &receipt.client {
+        Some(client) => tr!("fs-mcp-activity-program", client = client.clone()),
+        None => tr!("fs-mcp-activity-program-unnamed").to_owned(),
+    };
+    ui.horizontal(|ui| {
+        // Stop: what has not been sent is not sent (section 5)
+        if receipt.state.live()
+            && crate::ui::widgets::action_button(
+                ui,
+                p,
+                "hand-stop",
+                tr!("fs-mcp-activity-stop"),
+                crate::ui::widgets::ActionKind::Flat,
+                egui::vec2(70.0, 20.0),
+            )
+            .on_hover_text(tr!("fs-mcp-activity-stop-hint"))
+            .clicked()
+        {
+            mcp_bridge::cancel(&receipt.operation_id);
+        }
+        ui.add(egui::Label::new(egui::RichText::new(line).size(12.0).color(p.ink)).truncate())
+            .on_hover_text(who);
     });
 }
