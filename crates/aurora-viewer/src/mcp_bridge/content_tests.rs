@@ -35,7 +35,11 @@ const IDLE: Bake = Bake {
 struct Fixture {
     world: World,
     documents: HashMap<Uuid, Vec<u8>>,
+    /// The scripts' sources as seeded, by item.
     sources: HashMap<Uuid, String>,
+    /// The sources saved since, by asset: the simulator sends the source
+    /// of the asset `LoadScript` names (the item's asset in the inventory).
+    saved_sources: HashMap<Uuid, String>,
 }
 
 fn fixture() -> Fixture {
@@ -46,6 +50,7 @@ fn fixture() -> Fixture {
         world,
         documents: documents.into_iter().collect(),
         sources: sources.into_iter().collect(),
+        saved_sources: HashMap::new(),
     }
 }
 
@@ -82,7 +87,12 @@ fn serve(desk: &mut Desk, f: &Fixture) {
                 desk.content().notecard_loaded(item.id, item.asset_id, &Ok(bytes));
             }
             content::Kind::Script => {
-                let source = f.sources.get(&fetch.item).cloned().unwrap_or_default();
+                let source = f
+                    .saved_sources
+                    .get(&item.asset_id)
+                    .or_else(|| f.sources.get(&fetch.item))
+                    .cloned()
+                    .unwrap_or_default();
                 desk.content().script_loaded(fetch.request, &Ok(source));
             }
         }
@@ -139,21 +149,26 @@ fn save(
         let request = Uuid::new_v4();
         desk.sent(Some(request), None);
         let result = server(&work);
-        if let Ok(saved) = &result
-            && let Some(it) = f.world.inventory.items.get_mut(&work.item)
-        {
-            it.asset_id = saved.asset;
+        if let Ok(saved) = &result {
             match work.kind {
+                // the app files the item the notecard's save read back
                 content::Kind::Notecard => {
+                    if let Some(it) = f.world.inventory.items.get_mut(&work.item) {
+                        it.asset_id = saved.asset;
+                    }
                     f.documents.insert(work.item, work.data.clone());
                 }
+                // a script's item gets its new asset from the bridge (below)
                 content::Kind::Script => {
-                    f.sources.insert(work.item, String::from_utf8(work.data.clone()).expect("utf-8"));
+                    f.saved_sources
+                        .insert(saved.asset, String::from_utf8(work.data.clone()).expect("utf-8"));
                 }
             }
         }
         desk.observe((request, false, Outcome::Content(result)));
     }
+    // the app's frame (`local_assistant_frame`), before the next calls
+    desk.content().hold(&mut f.world.inventory);
     answered(&answer)
 }
 
@@ -728,8 +743,8 @@ fn a_script_s_compile_result_is_reported_apart_from_its_source_save() {
     assert_eq!(r["errors"][0]["message"], "Syntax error");
     assert_eq!(r["errors"][1]["line"], Value::Null);
     assert!(r["snapshot_hash"].is_string(), "a new snapshot of the saved source");
-    // the app sets the new asset on the inventory
-    assert_eq!(desk.content().take_updates(), vec![(demo::SCRIPT_BROKEN, Uuid::from_u128(777))]);
+    // the inventory carries the new asset
+    assert_eq!(f.world.inventory.items[&demo::SCRIPT_BROKEN].asset_id, Uuid::from_u128(777));
     // the status tool says the same, by operation or request id
     for args in [json!({"operation_id": operation}), json!({"client_request_id": "c1"})] {
         let (c, answer) = call(STATUS, args, false);
@@ -785,6 +800,78 @@ fn a_script_s_compile_result_is_reported_apart_from_its_source_save() {
     let s = answered(&answer).expect("status");
     assert_eq!(s["source_saved"], Value::Null);
     assert_eq!(s["state"], "unconfirmed");
+}
+
+/// A script saved twice in a row reads back each saved source with the
+/// snapshot its save gave, even when an inventory record that still
+/// carries an asset a save replaced comes after it (a stale item read):
+/// the source is read by the item's asset.
+#[test]
+fn a_saved_script_reads_back_its_new_source_after_each_save() {
+    let mut f = fixture();
+    let mut desk = desk_with(allow_all());
+    let mut assets = vec![f.world.inventory.items[&demo::SCRIPT].asset_id];
+    let (mut hash, original) = snapshot(&mut desk, &f, demo::SCRIPT);
+    let mut hashes = vec![hash.clone()];
+    for (n, greeting) in ["Hello from the first save!", "Hello from the second save!"].iter().enumerate() {
+        let text = original.replace("Hello, Avatar!", greeting);
+        let r = save(
+            &mut desk,
+            &mut f,
+            SAVE_SCRIPT,
+            edit(demo::SCRIPT, &hash, &text, &format!("readback-{n}")),
+            saved_ok,
+        )
+        .expect("saved");
+        let saved = r["snapshot_hash"].as_str().expect("a new snapshot").to_owned();
+        assert!(!hashes.contains(&saved), "save {n}: a new snapshot_hash");
+        // the item read after the save comes back with an older asset
+        for old in &assets {
+            let mut stale = f.world.inventory.items[&demo::SCRIPT].clone();
+            stale.asset_id = *old;
+            f.world.inventory.add_items(vec![stale]);
+            desk.content().hold(&mut f.world.inventory);
+        }
+        let back = read(&mut desk, &f, demo::SCRIPT).expect("read back");
+        assert_eq!(back["text"], text.as_str(), "save {n}: the saved source, not the original");
+        assert_eq!(back["snapshot_hash"], saved.as_str(), "save {n}: the snapshot the save gave");
+        assets.push(f.world.inventory.items[&demo::SCRIPT].asset_id);
+        hashes.push(saved.clone());
+        hash = saved;
+    }
+    // saved elsewhere since (the viewer's editor): the hold ends
+    let elsewhere = Uuid::from_u128(4242);
+    if let Some(it) = f.world.inventory.items.get_mut(&demo::SCRIPT) {
+        it.asset_id = elsewhere;
+    }
+    desk.content().hold(&mut f.world.inventory);
+    if let Some(it) = f.world.inventory.items.get_mut(&demo::SCRIPT) {
+        it.asset_id = assets[0];
+    }
+    desk.content().hold(&mut f.world.inventory);
+    assert_eq!(f.world.inventory.items[&demo::SCRIPT].asset_id, assets[0], "no longer held");
+}
+
+/// The control: a notecard's save reads back its new text too.
+#[test]
+fn a_saved_notecard_reads_back_its_new_text() {
+    let mut f = fixture();
+    let mut desk = desk_with(allow_all());
+    let (hash, text) = snapshot(&mut desk, &f, demo::NOTES);
+    let text = format!("{text}one more line\n");
+    let r = save(
+        &mut desk,
+        &mut f,
+        UPDATE_NOTECARD,
+        edit(demo::NOTES, &hash, &text, "note-readback"),
+        saved_ok,
+    )
+    .expect("saved");
+    let saved = r["snapshot_hash"].as_str().expect("a new snapshot");
+    assert_ne!(saved, hash);
+    let back = read(&mut desk, &f, demo::NOTES).expect("read back");
+    assert_eq!(back["text"], text.as_str());
+    assert_eq!(back["snapshot_hash"], saved);
 }
 
 #[test]

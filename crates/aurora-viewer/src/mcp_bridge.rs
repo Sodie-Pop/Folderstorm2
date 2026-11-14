@@ -658,10 +658,10 @@ pub fn content_demo_notecard(item: Uuid, asset: Uuid, bytes: Vec<u8>) {
     with(|rt| rt.desk.content().notecard_loaded(item, asset, &Ok(bytes)));
 }
 
-/// Folderstorm: the scripts the assistant saved (item, new asset), for the
-/// app's inventory.
-pub fn content_updates() -> Vec<(Uuid, Uuid)> {
-    with(|rt| rt.desk.content().take_updates())
+/// Folderstorm: the scripts the assistant saved keep their new asset on
+/// the app's inventory (`Content::hold`), before the frame's calls.
+pub fn content_hold(inventory: &mut crate::world::inventory::Inventory) {
+    with(|rt| rt.desk.content().hold(inventory));
 }
 
 /// Folderstorm: whether an assistant's save of `item` is under way.
