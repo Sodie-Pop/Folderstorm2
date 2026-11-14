@@ -2343,6 +2343,32 @@ May be two small PRs: 1a profiles, 1b behind policy.
     reached from the bar's menu only); the options as a real menu in a
     window of its own; New IM and Friends once the link can start a
     conversation; pins kept beyond a login.
+  - **Follow-up after a Windows test (2026-11-14, branch
+    `claude/monitor-window-fixes`):**
+    - *The room the picture does not use goes to the chat part.* With the
+      chat part shown, the picture sits at the top of the window, as tall
+      as its proportions make it at the window's width (never under the
+      least picture's 90 points), and the chat part takes all the rest:
+      a tall window no longer shows bands above and under a wide
+      picture with its chat squeezed at the bottom. Without a picture
+      (the character in front, a viewer not answering, waiting), the
+      reason keeps the least picture's room and the chat part the rest;
+      the cycling monitor with nobody behind has no chat part. With the
+      chat part hidden, the picture stays centred in the whole window.
+      A window wider than the picture keeps its bands at the sides and
+      the chat under the picture, by decision: a chat beside it would be
+      a narrow column of lines, and the window's size already follows a
+      chat part under the picture (`natural_size`, `toggled_height`).
+      (`monitor_windows::split`.)
+    - *A link's question is seen whole.* "Open this address in your
+      browser?" (checkpoint 11) is measured before the lines are laid
+      out, and the lines leave it its whole room; in a window too low
+      for that, it is drawn at the window's bottom over the chips and
+      the picture, never past the header. Its title and buttons wrap in
+      a narrow window. The box (and its "held draft" prompt) is measured
+      the same way, and the shared chat leaves the question its room
+      above the box. A question asked by a click is drawn from the next
+      frame, which the click asks for.
 
 ### Checkpoint 10: the host's settings in one window
 
