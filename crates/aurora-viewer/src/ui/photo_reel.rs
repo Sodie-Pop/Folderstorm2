@@ -439,7 +439,7 @@ impl QuickView {
         let photo = &view.photos[cursor];
         let len = view.photos.len();
         let now = ctx.input(|i| i.time);
-        let screen = ctx.content_rect();
+        let screen = crate::folderstorm::photo_viewport::screen(ctx); // Folderstorm: the world viewport
 
         // the keys are the quick view's while it shows (the viewfinder's
         // and the camera's wait); not under the confirmation

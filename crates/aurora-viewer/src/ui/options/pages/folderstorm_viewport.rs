@@ -67,6 +67,11 @@ pub(super) fn group(cx: &mut Cx) {
                 tr!("folderstorm-viewport-bars-help"),
                 &field!(folderstorm_viewport.bars_in_viewport),
             );
+            cx.toggle(
+                tr!("folderstorm-viewport-photo"),
+                tr!("folderstorm-viewport-photo-help"),
+                &field!(folderstorm_viewport.photo_whole_window),
+            );
         });
         // the diagram shows as soon as the viewport is on, without opening
         // the cog (the sliders and switches stay behind it)
