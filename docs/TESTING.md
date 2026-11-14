@@ -330,6 +330,36 @@ small picture, the lock box. The world viewport's diagram draws the bars where
 they are: with *Around the world*, each side's bars in the margin when it has
 room for them, inside the world otherwise.
 
+**The layouts' switcher (Folderstorm2).** `AURORA_DEMO_SWITCHER=1` seeds the
+same two layouts, makes both favorites and the two layouts of the toolbar's
+toggle, and opens the switcher (World › Layouts › *Layouts…*) instead of
+Preferences. `toggle` also asks for the toggle every five seconds, as its
+toolbar button would; run it without `AURORA_WINDOW_SIZE` and the viewer window
+follows (whole, then its left half):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_SWITCHER=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
+  cargo run -p aurora-viewer -- --title "Test switcher"
+AURORA_DEMO=1 AURORA_DEMO_SWITCHER=toggle cargo run -p aurora-viewer -- --title "Test switcher toggle"
+```
+
+Check that the field has the keyboard when the window opens; that typing
+keeps the layouts with those letters, favorites first; that Up and Down
+choose, Enter applies the chosen layout and closes the window, and Esc closes
+it; that with nothing typed Enter goes to the layout that is not in use; that
+a star makes a favorite (first in the list and in World › Layouts); that the
+picture shows the chosen layout on the monitors of now (a missing monitor
+dashed, with a line saying so); that *Update* asks before it replaces the
+layout in use; that *Save new…* takes a name and its parts in the window and
+refuses a taken name; and that the arrows walk nobody while the field has the
+keyboard. In the Toolbar buttons window, add *Layouts* and *Switch layout* to a
+bar: the first is lit while the switcher is open, the second names the layout
+it goes to (dimmed, and opening Preferences, until its two layouts are chosen
+under Preferences › Layout › Layouts › Quick switch). In Preferences ›
+Shortcuts › Other, give the five *Layouts* actions a key each: none has one by
+default.
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
@@ -6061,6 +6091,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
+| `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |

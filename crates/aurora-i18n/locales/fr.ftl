@@ -1594,6 +1594,51 @@ fs-layouts-monitors-offer-unlocked = Vos écrans ont changé et la fenêtre du v
 fs-layouts-monitors-applied = Vos écrans ont changé : la disposition « { $name } » a été appliquée.
 fs-layouts-monitors-unlocked = Vos écrans ont changé : la fenêtre du viewer a été déverrouillée.
 fs-layouts-monitors-later = Pas maintenant
+fs-layouts-favorite = Favorite
+fs-layouts-quick = Changement rapide
+fs-layouts-quick-intro = Trois façons de changer de disposition sans ouvrir les Préférences. La fenêtre Dispositions (Monde › Dispositions › Dispositions…) : tapez une partie d'un nom et appuyez sur Entrée. Deux boutons de barre, à trouver dans Boutons de la barre… : « Dispositions » ouvre cette fenêtre, « Changer de disposition » passe en un clic de l'une des deux dispositions choisies ci-dessous à l'autre. Et cinq raccourcis sans touche tant que vous ne leur en donnez pas, dans Préférences › Raccourcis › Autres › Dispositions. Les favorites viennent en premier dans la fenêtre et dans Monde › Dispositions, et ce sont elles que parcourent les raccourcis Disposition favorite suivante et précédente.
+fs-layouts-toggle-first = Première disposition
+fs-layouts-toggle-second = Seconde disposition
+fs-layouts-toggle-help = Les deux dispositions entre lesquelles passent le bouton de barre « Changer de disposition » et son raccourci, par exemple « 2 écrans » et « 1 écran » : la seconde quand la première est en service, la première sinon.
+fs-layouts-toggle-none = Non choisie
+
+# Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
+fs-switcher-title = Dispositions
+fs-switcher-help = Tapez une partie du nom d'une disposition : la liste garde celles qui la contiennent, les favorites en premier. Haut et Bas choisissent, Entrée applique la disposition choisie et ferme cette fenêtre, Échap la ferme. Un clic sur une étoile fait d'une disposition une favorite. L'image montre ce que donnerait la disposition choisie sur les écrans branchés maintenant. Mettre à jour enregistre l'arrangement actuel dans la disposition en service ; Enregistrer une nouvelle… le garde sous un autre nom.
+fs-switcher-hint = Tapez le nom d'une disposition, puis Entrée
+fs-switcher-favorites = Favorites
+fs-switcher-layouts = Autres dispositions
+fs-switcher-star = Ajouter aux favorites
+fs-switcher-unstar = Retirer des favorites
+fs-switcher-empty = Aucune disposition enregistrée. Arrangez le monde et vos fenêtres comme vous les aimez, puis choisissez Enregistrer une nouvelle….
+fs-switcher-no-match = Aucune disposition n'a cela dans son nom.
+fs-switcher-picture-help = Ce que donnerait cette disposition sur les écrans branchés maintenant : la fenêtre du viewer (encadrée), le monde (éclairé) et les fenêtres que la disposition place. Un écran de la disposition qui n'est pas branché est en pointillés.
+fs-switcher-note-missing = { $count ->
+    [one] { $count } écran de cette disposition n'est pas branché.
+   *[other] { $count } écrans de cette disposition ne sont pas branchés.
+    }
+fs-switcher-note-no-window = La fenêtre du viewer ne peut pas être déplacée ici : elle serait laissée telle quelle.
+fs-switcher-note-left = La fenêtre du viewer resterait où elle est.
+fs-switcher-note-unlocked = La fenêtre ne serait pas verrouillée.
+fs-switcher-note-set-aside = Ses marges laisseraient au monde moins d'un quart de la fenêtre : le monde remplirait la fenêtre.
+fs-switcher-note-fitted = { $count ->
+    [one] { $count } fenêtre serait ajustée à la place disponible.
+   *[other] { $count } fenêtres seraient ajustées à la place disponible.
+    }
+fs-switcher-update = Mettre à jour « { $name } »
+fs-switcher-update-help = Enregistre l'arrangement actuel dans la disposition en service, pour les parties qu'elle contient. Demande d'abord.
+fs-switcher-save-new = Enregistrer une nouvelle…
+fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions, modifier la fenêtre du viewer d'une disposition, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Disposition › Dispositions.
+fs-switcher-keys = Haut et Bas choisissent, Entrée applique et ferme, Échap ferme.
+fs-switcher-command = Dispositions
+fs-switcher-toggle-command = Changer de disposition
+fs-switcher-toggle-to = Passer à la disposition « { $name } »
+fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions (un clic l'ouvre).
+fs-keys-section = Dispositions
+fs-keys-layout-switcher = Fenêtre Dispositions
+fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
+fs-keys-next-favorite = Disposition favorite suivante
+fs-keys-previous-favorite = Disposition favorite précédente
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message

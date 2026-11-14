@@ -10,6 +10,7 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod switcher;
 mod viewer;
 
 const INVENTORY: &str = "inventory";
@@ -39,6 +40,8 @@ struct Viewer {
     preferences: bool,
     /// World › Layouts is drawn open, at the top left.
     menu: bool,
+    /// The interface is put away, or the camera is in mouselook.
+    hidden: bool,
     /// What the pointer does in the next frame.
     events: Vec<egui::Event>,
     /// The texts of the last frame and where they were.
@@ -61,6 +64,7 @@ impl Viewer {
             monitors: Vec::new(),
             preferences: false,
             menu: false,
+            hidden: false,
             events: Vec::new(),
             texts: Vec::new(),
         }
@@ -125,6 +129,7 @@ impl Viewer {
         let screen = Rect::from_min_size(Pos2::ZERO, self.size);
         let open = self.open.clone();
         let menu = self.menu;
+        let hidden = self.hidden;
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
@@ -137,8 +142,9 @@ impl Viewer {
                 let p = crate::theme::Theme::default().palette();
                 crate::ui::layout::set_work_area(ctx, screen);
                 crate::ui::layout::set_move_area(ctx, screen);
-                // as the interface's pass does: the card, and the menu when open
-                super::notice::show(ctx, &p);
+                // as the interface's pass does: the card and the switcher,
+                // and the menu when open
+                super::interface(ctx, &p, hidden);
                 if menu {
                     egui::Area::new(egui::Id::unique("test-world-menu"))
                         .order(egui::Order::Foreground)
