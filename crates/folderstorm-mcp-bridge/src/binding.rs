@@ -65,6 +65,12 @@ pub const SCRIPT_TESTING: &str = "script_testing";
 /// Folderstorm: building (mcp-building.md): the `build_*` tools, the
 /// inventory permission tools and the `build` class.
 pub const BUILDING: &str = "building";
+/// Folderstorm: gestures (mcp-gestures.md): the `gesture_*` tools and the
+/// `gestures` class.
+pub const GESTURES: &str = "gestures";
+/// Folderstorm: own posing (mcp-gestures.md): the `pose_*` tools and the
+/// `pose` class.
+pub const POSING: &str = "posing";
 
 /// What this build implements. Later groups add theirs.
 pub const CAPABILITIES: &[(&str, u32)] = &[
@@ -83,6 +89,8 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (TASK_SCRIPTS, 1),   // Folderstorm: scripts inside objects (mcp-task-scripts.md)
     (SCRIPT_TESTING, 1), // Folderstorm: script testing (mcp-script-testing.md)
     (BUILDING, 1),       // Folderstorm: building (mcp-building.md)
+    (GESTURES, 1),       // Folderstorm: gestures (mcp-gestures.md)
+    (POSING, 1),         // Folderstorm: own posing (mcp-gestures.md)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -278,7 +286,9 @@ mod tests {
                 OBJECTS,
                 TASK_SCRIPTS,
                 SCRIPT_TESTING,
-                BUILDING
+                BUILDING,
+                GESTURES,
+                POSING
             ]
         );
         // a newer viewer: a later version and a group this build lacks

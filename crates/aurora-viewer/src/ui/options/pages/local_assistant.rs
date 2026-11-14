@@ -201,6 +201,19 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-build-hint"),
                     field!(local_assistant.permissions.build),
                 ),
+                // Folderstorm: gestures and own posing (mcp-gestures.md)
+                (
+                    Class::Gestures,
+                    tr!("fs-mcp-gestures"),
+                    tr!("fs-mcp-gestures-hint"),
+                    field!(local_assistant.permissions.gestures),
+                ),
+                (
+                    Class::Pose,
+                    tr!("fs-mcp-pose"),
+                    tr!("fs-mcp-pose-hint"),
+                    field!(local_assistant.permissions.pose),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

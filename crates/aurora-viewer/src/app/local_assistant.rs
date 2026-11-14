@@ -49,6 +49,13 @@ impl App {
                 blocks_walk: self.native_anchor.blocks_walk(self.world.agent.seated, self.world.agent.ground_sit),
             },
             content_open: self.local_assistant_open_documents(),
+            // Folderstorm: the gestures and the pose library (mcp-gestures.md)
+            avatar: mcp_bridge::gestures::Avatar {
+                gestures: Some(&self.gesture_state.manager),
+                failures: Some(self.assistant_gesture_failures()),
+                chat_commands: Some(&self.settings.chat_commands),
+                poses: (!self.world.agent_id.is_nil()).then(|| crate::settings::account_dir(&self.world.agent_id).join("poses")),
+            },
         }
     }
 
@@ -117,6 +124,51 @@ impl App {
         for (token, send) in mcp_bridge::script_test_sends() {
             let result = self.local_assistant_interaction(&send).map_err(|e| e.message);
             mcp_bridge::script_test_sent(token, result);
+        }
+        // Folderstorm: the gestures to load, the playbacks to stop
+        // (mcp-gestures.md), even with access turned off
+        for item in mcp_bridge::gesture_loads() {
+            self.assistant_gesture_load(item);
+        }
+        for key in mcp_bridge::gesture_stops() {
+            log::info!("local assistant gesture playback stopped by the viewer");
+            self.assistant_gesture_stop(key);
+        }
+    }
+
+    /// Folderstorm: once per frame, just after the viewer's poser gave its
+    /// layers: the assistant's pose session of the user's own avatar, shown
+    /// on this screen only, unless the viewer's poser poses the user
+    /// (mcp-gestures.md).
+    pub(super) fn local_assistant_pose(&mut self) {
+        let me = self.world.agent_id;
+        let native = self.scene.poser.contains_key(&me);
+        if let Some(pose) = mcp_bridge::pose_layer(native)
+            && pose.valid(&self.world.avatar_lib.rig)
+        {
+            self.scene.poser.insert(me, pose);
+        }
+    }
+
+    /// Folderstorm: a gesture played under the assistant's own key, or its
+    /// playback stopped, through the Gestures window's paths
+    /// (mcp-gestures.md). Played once: never again automatically.
+    fn local_assistant_gesture(&mut self, call: Pending, reply: serde_json::Value, work: mcp_bridge::gestures::Work) {
+        use mcp_bridge::gestures::Work as Gesture;
+        match work {
+            Gesture::Play { key, item, definition } => {
+                // LLGestureMgr::playGesture under RlvActions::canPlayGestures
+                if self.world.rlva.has("sendgesture") {
+                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks gestures")));
+                }
+                log::info!("local assistant gesture played ({} steps)", definition.steps.len());
+                self.assistant_gesture_play(key, definition);
+                mcp_bridge::gesture_started(call, key, item, reply);
+            }
+            Gesture::Stop { key } => {
+                self.assistant_gesture_stop(key);
+                mcp_bridge::gesture_stopped(call, key, reply);
+            }
         }
     }
 
@@ -536,6 +588,9 @@ impl App {
             }
             Work::ScriptTest(recipe) => mcp_bridge::script_test_start(call, *recipe),
             Work::Build(send) => self.local_assistant_build(call, planned.reply, *send), // Folderstorm: mcp-building.md
+            // Folderstorm: mcp-gestures.md
+            Work::Gesture(work) => self.local_assistant_gesture(call, planned.reply, *work),
+            Work::Pose(work) => mcp_bridge::pose_run(call, *work, planned.reply, &self.world),
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));

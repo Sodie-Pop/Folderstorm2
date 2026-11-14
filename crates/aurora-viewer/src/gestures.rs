@@ -2,6 +2,7 @@
 //! (Firestorm indra/newview/llgesturemgr.cpp, originally LGPL 2.1).
 
 pub mod builtins;
+mod folderstorm; // Folderstorm: the local assistant's playback (mcp-gestures.md)
 pub mod keys;
 #[cfg(test)]
 mod tests;

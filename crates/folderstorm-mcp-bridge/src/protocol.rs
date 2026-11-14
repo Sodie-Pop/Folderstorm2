@@ -45,6 +45,10 @@ pub mod script_testing;
 // Folderstorm: building (mcp-building.md)
 pub mod building;
 
+// Folderstorm: gestures and own posing (mcp-gestures.md)
+pub mod gestures;
+pub mod posing;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -337,6 +341,9 @@ impl ToolSpec {
     /// decision 3), so that a retry after a lost answer is never sent twice.
     pub fn needs_client_request_id(&self) -> bool {
         navigation::needs_client_request_id(self.name)
+            // Folderstorm: a gesture played, a pose file saved (mcp-gestures.md)
+            || gestures::needs_client_request_id(self.name)
+            || posing::needs_client_request_id(self.name)
     }
 }
 
@@ -353,6 +360,8 @@ pub fn always_asks(tool: &str, arguments: &Value) -> bool {
         || script_testing::always_asks(tool)
         // Folderstorm: a change of next owner rights (mcp-building.md)
         || building::always_asks(tool)
+        // Folderstorm: a pose file saved (mcp-gestures.md)
+        || posing::always_asks(tool)
 }
 
 /// Result caps the viewer applies (and the schemas advertise).
@@ -874,6 +883,8 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(task_scripts::TASK_SCRIPT_TOOLS) // Folderstorm: scripts inside objects
         .chain(script_testing::SCRIPT_TESTING_TOOLS) // Folderstorm: script testing
         .chain(building::BUILDING_TOOLS) // Folderstorm: building
+        .chain(gestures::GESTURE_TOOLS) // Folderstorm: gestures
+        .chain(posing::POSE_TOOLS) // Folderstorm: own posing
 }
 
 #[cfg(test)]

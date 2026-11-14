@@ -36,9 +36,11 @@
 use super::building::{self, Building}; // Folderstorm: building (mcp-building.md)
 use super::changes::{self, Planned, Work};
 use super::content::{self, Content}; // Folderstorm: content editing
+use super::gestures::{self, Gestures}; // Folderstorm: gestures (mcp-gestures.md)
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::objects::{self, Objects}; // Folderstorm: object tools (mcp-objects.md)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
+use super::posing::{self, Posing}; // Folderstorm: own posing (mcp-gestures.md)
 use super::script_testing::{self, ScriptTesting}; // Folderstorm: script testing (mcp-script-testing.md)
 use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::tools::{self, Ctx};
@@ -46,8 +48,10 @@ use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
 use folderstorm_mcp_bridge::protocol::building as build_tool; // Folderstorm: building
 use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
+use folderstorm_mcp_bridge::protocol::gestures as gesture_tool; // Folderstorm: gestures
 use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: object tools
+use folderstorm_mcp_bridge::protocol::posing as pose_tool; // Folderstorm: own posing
 use folderstorm_mcp_bridge::protocol::script_testing as test_tool; // Folderstorm: script testing
 use folderstorm_mcp_bridge::protocol::task_scripts as task_tool; // Folderstorm: task scripts
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
@@ -218,6 +222,10 @@ pub struct Desk {
     testing: ScriptTesting,
     /// Folderstorm: this login's object revisions, edits and rezzes.
     building: Building,
+    /// Folderstorm: this login's gesture reads and the assistant's playback.
+    gestures: Gestures,
+    /// Folderstorm: the assistant's pose session, presets and saves.
+    posing: Posing,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -545,6 +553,27 @@ impl Desk {
             let result = self.building.permissions(&call.arguments, cx);
             return call.answer(result);
         }
+        // Folderstorm: the gesture and pose tools' reads (mcp-gestures.md)
+        if call.tool == gesture_tool::LIST {
+            let result = self.gestures.list(&call.arguments, cx);
+            return call.answer(result);
+        }
+        if call.tool == gesture_tool::STATUS {
+            self.gestures.start_status(call, cx, now);
+            return;
+        }
+        if call.tool == pose_tool::STATUS {
+            let result = self.posing.status(&call.arguments, cx);
+            return call.answer(result);
+        }
+        if call.tool == pose_tool::JOINTS {
+            let result = self.posing.joints(&call.arguments, cx);
+            return call.answer(result);
+        }
+        if call.tool == pose_tool::PRESETS {
+            self.posing.start_presets(call, cx, now);
+            return;
+        }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
             call.answer(result);
@@ -581,6 +610,10 @@ impl Desk {
             self.testing.plan(&call, &self.objects, cx, now, false)
         } else if building::is_change(&call.tool) {
             self.building.plan(&call, &self.objects, cx, now, false)
+        } else if gestures::is_change(&call.tool) {
+            self.gestures.plan(&call, cx) // Folderstorm: mcp-gestures.md
+        } else if posing::is_change(&call.tool) {
+            self.posing.plan(&call, cx)
         } else {
             changes::plan(&call.tool, &call.arguments, cx)
         };
@@ -592,6 +625,11 @@ impl Desk {
                 ..
             }) => call.answer(Ok(reply)),
             Ok(planned) => {
+                // Folderstorm: a gesture that says something always asks
+                // (mcp-gestures.md)
+                if matches!(&planned.work, Work::Gesture(w) if w.says()) {
+                    call.ask = true;
+                }
                 call.receipt(|r| {
                     r.set_summary(&planned.summary);
                     if r.targets.is_empty() {
@@ -949,6 +987,8 @@ impl Desk {
         self.task_scripts.clear(&refusal); // Folderstorm: task scripts
         self.testing.clear(); // Folderstorm: script testing
         self.building.clear(&refusal); // Folderstorm: building
+        self.gestures.clear(&refusal); // Folderstorm: gestures
+        self.posing.clear(&refusal, "login_changed"); // Folderstorm: own posing
         super::script_feed::clear();
     }
 
@@ -968,6 +1008,8 @@ impl Desk {
         self.objects.refuse_all(refusal); // Folderstorm: object listings
         self.task_scripts.refuse_all(refusal); // Folderstorm: task script reads
         self.building.refuse_all(refusal); // Folderstorm: building reads
+        self.gestures.refuse_all(refusal); // Folderstorm: gesture reads
+        self.posing.refuse_all(refusal); // Folderstorm: pose reads
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -1004,6 +1046,12 @@ impl Desk {
         // Folderstorm: the building watches end, the revisions go
         old.building.close(&refused(ACCESS_OFF));
         self.building = old.building;
+        // Folderstorm: the playback stops and the pose session ends; the
+        // stops for the app and a save under way stay
+        old.gestures.clear(&refused(ACCESS_OFF));
+        self.gestures = old.gestures;
+        old.posing.clear(&refused(ACCESS_OFF), "access_off");
+        self.posing = old.posing;
         super::script_feed::set_capturing(false);
     }
 
@@ -1428,6 +1476,40 @@ impl Desk {
     /// (mcp-building.md).
     pub fn building_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
         self.building.plan(call, &self.objects, cx, now, true)
+    }
+
+    /// Folderstorm: once per frame, the gesture and pose tools' waits, the
+    /// playback and the session (mcp-gestures.md).
+    pub fn tick_avatar(&mut self, cx: &Ctx, now: Instant) {
+        self.gestures.tick(cx, &self.permissions, now);
+        self.posing.tick(cx, &self.permissions, now);
+    }
+
+    /// Folderstorm: whether the gesture or pose tools wait for something
+    /// (their tick then needs the frame's context).
+    pub fn avatar_busy(&self) -> bool {
+        self.gestures.busy() || self.posing.busy()
+    }
+
+    /// Folderstorm: a gesture or pose change planned again just before it
+    /// runs.
+    pub fn avatar_plan(&self, call: &Pending, cx: &Ctx) -> Result<Planned, ToolError> {
+        if gestures::is_change(&call.tool) {
+            self.gestures.plan(call, cx)
+        } else {
+            self.posing.plan(call, cx)
+        }
+    }
+
+    /// Folderstorm: the gesture tools' state (the app's loads, plays and
+    /// stops).
+    pub fn gestures(&mut self) -> &mut Gestures {
+        &mut self.gestures
+    }
+
+    /// Folderstorm: the pose tools' state (the app's layer and runs).
+    pub fn posing(&mut self) -> &mut Posing {
+        &mut self.posing
     }
 
     /// Folderstorm: the app sends a building change now.

@@ -27,6 +27,7 @@ mod ui;
 mod world_hints;
 pub use compact::COMPACT_SIZE;
 pub(crate) use data::Pose as SubjectPose;
+pub(crate) use document::folderstorm as assistant; // Folderstorm: mcp-gestures.md
 #[cfg(test)]
 mod tests;
 

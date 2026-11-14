@@ -64,6 +64,8 @@ pub struct Ctx<'a> {
     pub content: super::content::Limits,
     /// Folderstorm: the world the object tools read (mcp-objects.md).
     pub objects: super::objects::Scene<'a>,
+    /// Folderstorm: what the gesture and pose tools read (mcp-gestures.md).
+    pub avatar: super::gestures::Avatar<'a>,
 }
 
 pub(super) fn err(code: ErrorCode, message: impl Into<String>) -> ToolError {

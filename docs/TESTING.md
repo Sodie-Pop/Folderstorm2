@@ -5673,7 +5673,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing\|building` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (always asked), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). `building`: Ask before changes, the cut box read, moved up 0.5 m (asked), a cube rezzed 2 m east of the avatar (asked: the answer gives a candidate, never a confirmed id), then the demo notecard's permissions read and its next owner set to copy and modify (always asked). |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing\|building\|gestures` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (always asked), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). `building`: Ask before changes, the cut box read, moved up 0.5 m (asked), a cube rezzed 2 m east of the avatar (asked: the answer gives a candidate, never a confirmed id), then the demo notecard's permissions read and its next owner set to copy and modify (always asked). `gestures` (with `AURORA_DEMO_GESTURES=mcp`, which seeds the demo gesture): Ask before changes, the demo gesture inspected then played (always asked: it says two lines, listed in the dialog), then a pose session of the avatar started (asked), its head turned (asked), the presets listed, the "Pointing" hand preset loaded (asked), the pose saved as a new file (always asked), and `pose_status` in the log. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -5892,6 +5892,28 @@ the next owner of “…” may do: copy ✓, modify ✓, transfer ✗". With
 `AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
 row "Build with my objects". Capture the dialogs and the row in English,
 French and Japanese.
+
+`AURORA_DEMO_MCP=gestures` (Folderstorm2, folderstorm/plans/mcp-gestures.md:
+`src/mcp_bridge/gestures.rs`, `src/mcp_bridge/posing.rs`), with
+`AURORA_DEMO_GESTURES=mcp` so that the demo gesture exists: the same session
+settings ("Ask before changes"); once the avatar is in the world, the demo
+inspects the demo gesture with `gesture_status` (no dialog: a read), then
+asks, as "Demo assistant", to "Play the gesture “…” on your avatar; everyone
+nearby sees and hears it, and it says in your name:" with its two lines (the
+nearby line and "T4" on channel 28574) listed under it: a gesture that says
+something always asks. Allow: the lines appear in the nearby chat and the log
+reads `gestures step 1 answered {… "started":true …}`. The demo then asks to
+"Hold your avatar's pose on this screen…" (Allow: the avatar stops moving),
+to "Turn 1 joints of your avatar on this screen: mHead" (the head turns), lists
+the presets, asks to "Pose your avatar on this screen as “Hands: Pointing”"
+(the fingers point), then (always, whatever the level) to "Save your avatar's
+pose as a new pose file “Demo-assistant-…”" (the file appears in the poser's
+Library), and logs `pose_status`. Open the poser (the toolbar's Poser): the
+assistant's session ends (`superseded_by_viewer_poser` in the next
+`pose_status`) and the poser's own pose shows. With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+rows "Play gestures on my avatar" and "Pose my avatar". Capture the dialogs and
+the rows in English, French and Japanese.
 
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and

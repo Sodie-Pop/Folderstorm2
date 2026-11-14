@@ -129,6 +129,7 @@ fn ctx(world: &World) -> Ctx<'_> {
             world: Some(world),
             props: &[],
         },
+        avatar: Default::default(),
     }
 }
 

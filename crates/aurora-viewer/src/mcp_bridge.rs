@@ -48,6 +48,9 @@ mod content_tests;
 pub mod desk;
 #[cfg(test)]
 mod gap_tests; // Folderstorm: phase 3, part 2 (inventory gaps)
+#[cfg(test)]
+mod gesture_tests;
+pub mod gestures; // Folderstorm: gestures and own posing (mcp-gestures.md)
 pub mod inventory_edits;
 pub mod inventory_reads;
 pub mod journal;
@@ -61,6 +64,7 @@ pub mod objects; // Folderstorm: object inspection and lifecycle (mcp-objects.md
 mod objects_tests;
 pub mod picture;
 pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
+pub mod posing; // Folderstorm: own posing (mcp-gestures.md)
 pub mod script_feed; // Folderstorm: script output feed (mcp-task-scripts.md)
 pub mod script_testing; // Folderstorm: script testing (mcp-script-testing.md)
 #[cfg(test)]
@@ -134,6 +138,10 @@ struct Runtime {
     /// Folderstorm: `AURORA_DEMO_MCP=building`: the demo's step and the
     /// answer it waits for.
     demo_build: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
+    /// Folderstorm: `AURORA_DEMO_MCP=gestures`: the demo's step, the answer
+    /// it waits for, and the pose session with its revision.
+    demo_gesture: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
+    demo_pose: Option<(String, u64)>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -269,6 +277,7 @@ fn demo_asks() -> bool {
             || v == "task-scripts"
             || v == "script-testing"
             || v == "building" // Folderstorm: mcp-building.md
+            || v == "gestures" // Folderstorm: mcp-gestures.md
     })
 }
 
@@ -315,6 +324,8 @@ pub struct View<'a> {
     /// Folderstorm: the items open in the notecard window or the script
     /// editor, which content saves leave alone.
     pub content_open: HashSet<Uuid>,
+    /// Folderstorm: what the gesture and pose tools read (mcp-gestures.md).
+    pub avatar: gestures::Avatar<'a>,
 }
 
 impl View<'_> {
@@ -352,6 +363,7 @@ impl View<'_> {
                 world: Some(world),
                 props: &self.object_props,
             },
+            avatar: self.avatar.clone(),
         }
     }
 
@@ -487,7 +499,8 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             && (!objects::demo::wanted() || objects::demo::ready(view.world))
             && (!task_scripts::demo::wanted() || task_scripts::demo::ready(view.world))
             && (!script_testing::demo::wanted() || script_testing::demo::ready(view.world))
-            && (!building::demo::wanted() || (view.stage.in_world && building::demo::ready(view.world)));
+            && (!building::demo::wanted() || (view.stage.in_world && building::demo::ready(view.world)))
+            && (!gestures::demo::wanted() || (view.stage.in_world && posing::demo::ready(view.world)));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -527,6 +540,18 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     rt.desk.take(call, cx.get_or_insert_with(context), now);
                     rt.demo_reads.push(answer);
                 }
+                Vec::new()
+            } else if gestures::demo::wanted() {
+                // Folderstorm: the demo gesture read now (if seeded), else
+                // the pose session first
+                let (step, (tool, arguments)) = if view.world.inventory.items.contains_key(&gestures::demo::GESTURE) {
+                    (0, gestures::demo::status())
+                } else {
+                    (2, posing::demo::start())
+                };
+                let (call, answer) = Pending::detached(tool, arguments, step != 0, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                rt.demo_gesture = Some((step, answer));
                 Vec::new()
             } else if building::demo::wanted() {
                 // Folderstorm: the read now, then a move, a rez and a next owner change
@@ -688,6 +713,43 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 Err(TryRecvError::Disconnected) => {}
             }
         }
+        // Folderstorm: the gesture and posing demo's next step
+        if let Some((step, answer)) = rt.demo_gesture.take() {
+            match answer.try_recv() {
+                Ok(result) => {
+                    log_demo_gesture(step, &result);
+                    let pose = rt.demo_pose.clone();
+                    let next = result.ok().and_then(|value| match step {
+                        0 => gestures::demo::play_after(&value).map(|n| (1, n)),
+                        1 => Some((2, posing::demo::start())),
+                        2 => {
+                            rt.demo_pose = value["pose_session"].as_str().map(|s| (s.to_owned(), 0));
+                            posing::demo::turn_after(&value).map(|n| (3, n))
+                        }
+                        3 => {
+                            rt.demo_pose = pose.map(|(s, _)| (s, value["revision"].as_u64().unwrap_or_default()));
+                            Some((4, posing::demo::presets()))
+                        }
+                        4 => pose.and_then(|(s, r)| posing::demo::load_after(&value, &s, r)).map(|n| (5, n)),
+                        5 => {
+                            let revision = value["revision"].as_u64().unwrap_or_default();
+                            let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+                            pose.map(|(s, _)| (6, posing::demo::save(&s, revision, &stamp)))
+                        }
+                        6 => Some((7, posing::demo::status())),
+                        _ => None,
+                    });
+                    if let Some((step, (tool, arguments))) = next {
+                        let ask = !matches!(step, 4 | 7);
+                        let (call, answer) = Pending::detached(tool, arguments, ask, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_gesture = Some((step, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_gesture = Some((step, answer)),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
         rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
             Ok(result) => {
                 log_demo_answer(tool, &result);
@@ -722,6 +784,10 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         }
         rt.studio.tick(&view.camera, now);
         rt.desk.tick_reads(view.world, now);
+        // Folderstorm: the gesture and pose tools' waits, playback and session
+        if rt.desk.avatar_busy() {
+            rt.desk.tick_avatar(cx.get_or_insert_with(context), now);
+        }
         rt.desk.tick(&view.bake(), now)
     })
 }
@@ -884,6 +950,39 @@ pub fn build_sending(call: Pending, send: &building::Send, reply: serde_json::Va
     with(|rt| rt.desk.build_sending(call, send, reply, world, Instant::now()));
 }
 
+/// Folderstorm: the gestures the gesture tools want loaded now (the app
+/// loads them as the Gestures window does, never activating them).
+pub fn gesture_loads() -> Vec<Uuid> {
+    with(|rt| rt.desk.gestures().take_loads())
+}
+
+/// Folderstorm: the assistant's playbacks the app stops now (a
+/// revocation, a login change, access off, a teleport, 120 s).
+pub fn gesture_stops() -> Vec<Uuid> {
+    with(|rt| rt.desk.gestures().take_stops())
+}
+
+/// Folderstorm: the app started the planned play under `key`.
+pub fn gesture_started(call: Pending, key: Uuid, item: Uuid, reply: serde_json::Value) {
+    with(|rt| rt.desk.gestures().started(call, key, item, reply, Instant::now()));
+}
+
+/// Folderstorm: the app stopped the playback under `key`.
+pub fn gesture_stopped(call: Pending, key: Uuid, reply: serde_json::Value) {
+    with(|rt| rt.desk.gestures().stopped(call, key, reply));
+}
+
+/// Folderstorm: the assistant's pose of the user's avatar for this frame
+/// (`native`: the viewer's poser poses the user, and wins).
+pub fn pose_layer(native: bool) -> Option<std::sync::Arc<crate::ik_edit::poser::SubjectPose>> {
+    with(|rt| rt.desk.posing().layer(native))
+}
+
+/// Folderstorm: run a planned pose change now.
+pub fn pose_run(call: Pending, work: posing::Work, reply: serde_json::Value, world: &World) {
+    with(|rt| rt.desk.posing().run(call, work, reply, world, Instant::now()));
+}
+
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
 /// asks the landmark cache for them, phase 3).
 pub fn wanted_landmarks() -> Vec<Uuid> {
@@ -924,6 +1023,9 @@ pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)>
             planned.or_else(|| script_testing::is_change(&call.tool).then(|| rt.desk.script_test_plan(&call, &cx, Instant::now())));
         // Folderstorm: and a building change (mcp-building.md)
         let planned = planned.or_else(|| building::is_change(&call.tool).then(|| rt.desk.building_plan(&call, &cx, Instant::now())));
+        // Folderstorm: and a gesture or pose change (mcp-gestures.md)
+        let planned =
+            planned.or_else(|| (gestures::is_change(&call.tool) || posing::is_change(&call.tool)).then(|| rt.desk.avatar_plan(&call, &cx)));
         Some((call, planned))
     })?;
     match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
@@ -1062,6 +1164,23 @@ fn log_demo_build(step: u8, result: &Result<serde_json::Value, ToolError>) {
             log::info!("local assistant demo: building step {step} answered {value}");
         }
         Err(e) => log::info!("local assistant demo: building step {step} ended with {e}"),
+    }
+}
+
+/// Folderstorm: the gesture and posing demo's step answered: what it did,
+/// never the gesture's text nor the joints.
+fn log_demo_gesture(step: u8, result: &Result<serde_json::Value, ToolError>) {
+    match result {
+        Ok(value) => {
+            let mut value = value.clone();
+            if let Some(object) = value.as_object_mut() {
+                for key in ["steps", "name", "trigger", "replacement", "note", "presets", "joints"] {
+                    object.remove(key);
+                }
+            }
+            log::info!("local assistant demo: gestures step {step} answered {value}");
+        }
+        Err(e) => log::info!("local assistant demo: gestures step {step} ended with {e}"),
     }
 }
 
