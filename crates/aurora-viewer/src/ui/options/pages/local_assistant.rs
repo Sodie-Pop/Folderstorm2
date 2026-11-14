@@ -201,6 +201,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-build-hint"),
                     field!(local_assistant.permissions.build),
                 ),
+                (
+                    Class::NextOwner,
+                    tr!("fs-mcp-next-owner"),
+                    tr!("fs-mcp-next-owner-hint"),
+                    field!(local_assistant.permissions.next_owner),
+                ),
                 // Folderstorm: gestures and own posing (mcp-gestures.md)
                 (
                     Class::Gestures,

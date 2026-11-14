@@ -53,7 +53,7 @@ login) and no `target`: these tools only ever act on the user's own avatar.
   viewer's poser and the outfit portrait); nothing is sent.
 - Both Ask in "Ask before changes", Never in "Read only". Settings saved
   before them: Gestures follows "Ask before changes" when every other
-  change asks (Build included), else Never; Pose the same, Gestures
+  change asks (Build and NextOwner included), else Never; Pose the same, Gestures
   included.
 - The reads use **Read**: they read the user's own inventory and avatar,
   nothing of anyone else. RLVa `@showinv` refuses the gesture reads, as

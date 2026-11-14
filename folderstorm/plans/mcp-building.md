@@ -31,7 +31,7 @@ packs it, `Cap` = ModifyMaterialParams as `build/materials.rs` posts it),
 | `build_rez_primitive` | Build (+ Read) | level | Rez a cube, sphere, cylinder or cone with explicit `position`, `rotation`, `scale`. |
 | `build_rez_inventory` | Build (+ Read) | level | Rez a copy of one of the user's copyable inventory objects (`item_id`) at `position`; the item stays in the inventory. |
 | `inventory_permissions_get` | Read | – | An item's masks (base, owner, group, everyone, next owner) as copy / modify / transfer, whether the next owner's rights may be changed and why not, and a `revision`. |
-| `inventory_next_owner_set` | Edit (+ Read) | **always** | Set the next owner's `copy`, `modify`, `transfer` of one item at its revision, with the Properties window's rules. |
+| `inventory_next_owner_set` | NextOwner (+ Read) | level | Set the next owner's `copy`, `modify`, `transfer` of one item at its revision, with the Properties window's rules. |
 
 Every change needs a `client_request_id` (a rez can never be looked at
 reliably afterwards; decision 3 of mcp-receipts.md). Same names as
@@ -50,10 +50,17 @@ revisions are `revision`, not `expected_revision`.
   sees them; one row is enough control, the dialog shows each change.
 - Every building change also needs **Read** (`ToolSpec::also`), as
   Folderstorm (C++) needed World read: the revision comes from a read.
-- **`inventory_next_owner_set` uses Edit and always asks**, even on
-  Allow: it changes what the next owner may do with the creator's work.
-  Kept in Edit (the inventory's own edits) rather than a class of its own:
-  the dialog shows every change, and Never on Edit still refuses it.
+- **New class NextOwner for `inventory_next_owner_set`** (the human's
+  decision, review of PR #61: "next owner changes can get their own
+  permission setting"), saved as `next_owner`, Preferences row "Set what
+  next owners may do". Ask in "Ask before changes", Never in "Read only";
+  settings saved before it follow "Ask before changes" when every other
+  change asks (Build included), else Never. It **follows its own level**:
+  Allow changes next owners' rights with no dialog, Ask asks each time,
+  Never refuses (it no longer always asks, and Edit no longer counts for
+  it). The user chose to give it its own setting so that it can be set
+  apart from inventory edits; a user who wants to see each change keeps it
+  on Ask, which both presets that change anything do.
 - Rezzing does not always ask (Folderstorm (C++) decided the same): it
   is bounded to buildable land within 64 m and asks through the Build
   level.
@@ -130,9 +137,14 @@ avatar (and of `@fartouch`'s limit). Scales: the region's prim limits
   review).** The Legacy Viewer (LLSidepanelItemInfo) and Folderstorm (C++)
   set the object's `II_FLAGS_OBJECT_SLAM_PERM` flag when an object item's
   next owner rights change, so that a rezzed copy takes them; Aurora's
-  Properties window sends no flag. Until that is settled upstream, the tool
-  refuses object items rather than guess which rule applies; the user
-  changes them in Properties.
+  Properties window sends no flag. Until that is settled, the tool refuses
+  object items rather than guess which rule applies; the user changes them
+  in Properties.
+  **TODO after #63 merges** (branch `claude/object-slam-perm`, which adds
+  `folderstorm::rez_overrides` and makes `confirmed()` compare `flags`):
+  add `rez_overrides::flags(..)` to the patch and accept object items
+  (tests: the slam flag set on an object item, the confirmation comparing
+  flags, objects no longer refused).
 
 ## Revisions and stale checks
 
@@ -166,9 +178,9 @@ message (`Transform`, `SetTextures`, `Add`, `RezInventory`, `Cap`,
 
 | Where | What |
 |---|---|
-| `folderstorm-mcp-bridge/src/protocol/building.rs` (new) | the catalogue, bounds, `needs_client_request_id`, `always_asks` |
-| `policy.rs` | `Class::Build`, presets and migration |
-| `binding.rs`, `protocol.rs`, `protocol/inventory.rs` | `building: 1`; `pub mod`, `all()`, required id, always asks; the catalogue count |
+| `folderstorm-mcp-bridge/src/protocol/building.rs` (new) | the catalogue, bounds, `needs_client_request_id` |
+| `policy.rs` | `Class::Build`, `Class::NextOwner`, presets and migration |
+| `binding.rs`, `protocol.rs`, `protocol/inventory.rs` | `building: 1`; `pub mod`, `all()`, required id; the catalogue count |
 | sidecar `jsonrpc.rs` | the instructions' paragraph |
 | viewer `mcp_bridge/building.rs` (new) | checks, revisions, plans, watches, candidates, the demo |
 | `mcp_bridge/objects.rs` | a root lookup that asks for the owner; rez receipts in `object_operation_status` |
@@ -181,7 +193,7 @@ Folderstorm list).
 
 ## Demo
 
-`AURORA_DEMO_MCP=building`: Ask before changes; the demo reads the plaza's
+`AURORA_DEMO_MCP=building`: Ask before changes (NextOwner on Ask too); the demo reads the plaza's
 cut box, moves it up 0.5 m (asked; the demo region echoes it: `done`),
 rezzes a cube 2 m from the avatar (asked; the demo answers with a new
 object: a candidate), then reads the demo notecard's permissions and asks
@@ -189,7 +201,7 @@ to make its next owner copy and modify only.
 
 ## Tests
 
-Catalogue (classes, required ids, always asks, bounds); policy (Build
+Catalogue (classes, required ids, always asks, bounds); policy (Build and NextOwner
 presets and migration); objects (someone else's, group, no modify, no
 move, physical, a child, worn, RLVa `@edit`, `@rez`, `@interact`);
 vectors (non-finite, quaternion not normalised, scale limits, 64 m,
@@ -198,8 +210,8 @@ region); parcel (not buildable, another parcel, unknown); revisions
 (not full rights, link, Library, wrong type, PBR face refused); rez
 inventory (no copy, not an object, worn); next owner (rules matrix, base
 and owner bounds, no-copy needs transfer, settings, objects refused,
-stale revision, always asks even on Allow, the patch keeps the other
-bits); outcomes (transform confirmed, timeout unconfirmed then late,
+stale revision, NextOwner's levels (Allow: no dialog, Ask, Never; Edit
+on Never does not refuse it), the patch keeps the other bits); outcomes (transform confirmed, timeout unconfirmed then late,
 candidates, `object_rez_identify` on a rez receipt); no asset id in any
 answer; end to end over a real socket on the demo.
 
@@ -210,7 +222,9 @@ the server's handling of next owner rights, the dialog's look.
 
 - PBR overrides (Folderstorm (C++) left them to native Build too).
 - Resizing a linkset (its children's transforms reviewed together).
-- Next owner rights of objects (the slam flag question above).
+- Next owner rights of objects: after #63 merges, add
+  `rez_overrides::flags(..)` to the patch and accept object items (see
+  "Creators' permissions").
 
 ## As built
 
@@ -218,15 +232,15 @@ Branch `claude/mcp-building`, on `claude/mcp-script-testing`.
 
 | Where | What |
 |---|---|
-| `folderstorm-mcp-bridge/src/protocol/building.rs` (new) | the eight tools, bounds, `is_change`, `needs_client_request_id`, `always_asks` (next owner) |
-| `policy.rs` | `Class::Build` (`build`), presets and migration |
-| `binding.rs`, `protocol.rs`, `protocol/inventory.rs` | `building: 1`; `pub mod`, `all()`, the required id, always asks; the catalogue count, and the inventory group's "no next owner tool" check now pointing at this group |
+| `folderstorm-mcp-bridge/src/protocol/building.rs` (new) | the eight tools, bounds, `is_change`, `needs_client_request_id` (no tool always asks since the NextOwner class) |
+| `policy.rs` | `Class::Build` (`build`), `Class::NextOwner` (`next_owner`), presets and migration |
+| `binding.rs`, `protocol.rs`, `protocol/inventory.rs` | `building: 1`; `pub mod`, `all()`, the required id; the catalogue count, and the inventory group's "no next owner tool" check now pointing at this group |
 | sidecar `jsonrpc.rs` | `BUILDING_HINT`; the inventory test's "next owner absent" check inverted |
 | viewer `mcp_bridge/building.rs` (new) | revisions, the reads, plans, watches, rez candidates, item revisions, the demo |
 | `mcp_bridge/objects.rs` | `prim_or_ask` (a root whose owner is asked once), `track_rez` used, building receipts in `object_operation_status` |
 | `mcp_bridge/desk.rs`, `changes.rs`, `mcp_bridge.rs` | `Work::Build`; the reads, plan, required id; tick, clear, close; `building_plan`, `build_sending`; replan; the demo |
 | `app/local_assistant.rs` | `local_assistant_build`: RLVa at the send, the build tools' messages, the create sound |
-| Preferences page, catalogues | the Build row; ten Ask sentences and labels, en/fr/ja |
+| Preferences page, catalogues | the Build and NextOwner rows; ten Ask sentences and labels, en/fr/ja |
 
 Differences from the design above:
 

@@ -46,12 +46,6 @@ pub fn is_change(tool: &str) -> bool {
     handles(tool) && tool != OBJECT_GET && tool != PERMISSIONS_GET
 }
 
-/// The call that asks the user even on Allow: a change of what the next
-/// owner may do with the creator's work.
-pub fn always_asks(tool: &str) -> bool {
-    tool == NEXT_OWNER_SET
-}
-
 /// Every change of this group needs its `client_request_id`: a rez cannot
 /// be looked at reliably afterwards (mcp-receipts.md, decision 3), and the
 /// edits follow the object tools.
@@ -282,8 +276,8 @@ pub const BUILDING_TOOLS: &[ToolSpec] = &[
     ),
     change(
         NEXT_OWNER_SET,
-        "Set what the next owner of one item of your inventory may do (copy, modify, transfer), at the revision inventory_permissions_get gave, with the viewer's Properties rules: only rights you have yourself, no-copy needs transfer, everything else of the item unchanged. Objects are refused for now (change them in the viewer's Properties). Always asks the user. Needs a client_request_id.",
-        Class::Edit,
+        "Set what the next owner of one item of your inventory may do (copy, modify, transfer), at the revision inventory_permissions_get gave, with the viewer's Properties rules: only rights you have yourself, no-copy needs transfer, everything else of the item unchanged. Objects are refused for now (change them in the viewer's Properties). Needs the user's \"Set what next owners may do\" permission and a client_request_id.",
+        Class::NextOwner,
         next_owner_set_schema,
     ),
 ];
@@ -307,7 +301,7 @@ mod tests {
                     assert!(!t.changes() && !needs_client_request_id(t.name) && !is_change(t.name));
                 }
                 NEXT_OWNER_SET => {
-                    assert_eq!(t.class, Some(Class::Edit));
+                    assert_eq!(t.class, Some(Class::NextOwner));
                     assert_eq!(t.also, Some(Class::Read));
                 }
                 _ => {
@@ -334,11 +328,12 @@ mod tests {
         assert_eq!(transform_schema()["properties"]["rotation"]["minItems"], 4);
     }
 
+    /// The next owner change follows its own class's level (the human's
+    /// decision, review of PR #61): no building tool asks on Allow.
     #[test]
-    fn only_the_next_owner_change_always_asks() {
-        assert!(always_asks(NEXT_OWNER_SET));
-        assert!(super::super::always_asks(NEXT_OWNER_SET, &json!({})));
+    fn no_building_tool_always_asks() {
         for tool in [
+            NEXT_OWNER_SET,
             OBJECT_GET,
             TRANSFORM,
             SURFACE,
