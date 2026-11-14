@@ -155,7 +155,7 @@ impl State {
 
     /// Starts a folder upload into `destination` once the caller checked it
     /// takes new items: remembers the routing and sets Folderstorm's. The
-    /// caller then opens the uploader and gets the folder ([`pick`]).
+    /// caller then gets the folder ([`pick`]) and opens the uploader on [`Effect::Load`].
     pub fn begin(&mut self, destination: Uuid, agent: Uuid, uploader_idle: bool, prefs: &mut Preferences) -> Result<(), Refusal> {
         if self.run.is_some() || !uploader_idle {
             return Err(Refusal::Busy);

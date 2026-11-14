@@ -245,7 +245,8 @@ writes a small `Creator Kit` folder below `.scratch/folder-upload-demo/`
 animation, `Notes/Readme.txt`, an empty folder and a `Thumbs.db`), puts an
 inventory folder of the same name in the root, and at frame 200 runs
 Inventory › + › *Upload a folder here…* on the root without the dialog. The
-uploader opens on Folder preview, routed as a mirror into the root.
+uploader opens on Folder preview once the folder is chosen, routed as a
+mirror into the root.
 `confirm` then opens the confirmation: under the uploader's total, the
 Folderstorm block names the folder and the destination, counts the files by
 type and the new folders, lists `Notes/Readme.txt` as not uploaded, says two

@@ -18,8 +18,6 @@ impl App {
                 .system_notice(refusal.message(), crate::world::notice_topics::Topic::Warning);
             return;
         }
-        self.imports.open(crate::imports::Choice::Bulk);
-        self.imports.tab = crate::imports::ui::Tab::Folder;
         let tx = self.folderstorm_folder_upload.sender();
         self.scene.jobs.execute(move || upload::pick(source, tx));
     }
@@ -49,6 +47,10 @@ impl App {
             for effect in effects {
                 match effect {
                     Effect::Load(path) => {
+                        // The uploader opens once a folder is chosen, on its
+                        // inventory preview (Cancel in the dialog shows nothing).
+                        self.imports.open(crate::imports::Choice::Bulk);
+                        self.imports.tab = crate::imports::ui::Tab::Folder;
                         self.imports
                             .add_folder_path(path, &self.scene.jobs, ctx, self.settings.imports.texture());
                         let started = self.imports.pending_files.is_some();
