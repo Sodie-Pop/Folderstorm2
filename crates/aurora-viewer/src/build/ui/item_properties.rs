@@ -121,6 +121,7 @@ impl BuildTool {
         if !editable(self, world, state.object, &item) {
             return false;
         }
+        let before = item.clone(); // Folderstorm: object rez overrides (SLAM_PERM…)
         let name = if state.edit.name == item.name {
             item.name.clone()
         } else {
@@ -161,6 +162,7 @@ impl BuildTool {
             };
             item.sale_price = state.edit.price.max(0);
         }
+        crate::folderstorm::rez_overrides::apply_to_task_item(&before, &mut item); // Folderstorm: object rez overrides
         let (handle, local_id) = (object.key.region, object.key.local_id);
         if let Some(current) = self
             .contents

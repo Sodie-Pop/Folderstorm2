@@ -63,9 +63,10 @@ pub(super) fn show(
         } else {
             rules::clean_name(&edit.name).unwrap_or_else(|_| it.name.clone())
         };
-        let body = llsd_map! { "name" => name, "desc" => edit.desc.clone(),
+        let mut body = llsd_map! { "name" => name, "desc" => edit.desc.clone(),
         "permissions" => llsd_map! { "next_owner_mask" => edit.next as i32, "group_mask" => edit.group as i32, "everyone_mask" => edit.everyone as i32 },
         "sale_info" => llsd_map! { "sale_type" => i32::from(edit.sale_type), "sale_price" => edit.price } };
+        crate::folderstorm::rez_overrides::add_to_patch(it, &edit, &mut body); // Folderstorm: object rez overrides (SLAM_PERM…)
         match rules::patch(inv, id, body) {
             Ok(change) => {
                 actions.push(InvAction::Edit(change));
