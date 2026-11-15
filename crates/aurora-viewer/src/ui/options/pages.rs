@@ -13,6 +13,7 @@ pub mod confirmations;
 pub mod controls;
 pub mod folderstorm_characters; // Folderstorm: other Folderstorm2 windows
 pub mod folderstorm_chat_upload; // Folderstorm: chat image upload
+pub mod folderstorm_search; // Folderstorm: settings search keywords
 pub mod folderstorm_viewport; // Folderstorm: world viewport
 pub mod folderstorm_workspaces; // Folderstorm: layouts
 pub mod fun;

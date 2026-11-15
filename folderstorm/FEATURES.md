@@ -40,7 +40,7 @@ Needed before shipping any build. They also keep merges simple.
 | 1.6 | Workspace favorites strip | Optional row under the navigation / landmark bars with favorite workspaces and layouts, overflow in More…; hidden in mouselook. | – | `doc/help.md` | P2 | ⬜ |
 | 1.7 | Workspace context | A workspace can also carry chosen graphics / camera settings and a set of worn HUDs (by inventory id); recovers when a monitor is missing. | – | `doc/plans/workspace-context-and-snapshot.md` | P2 | ⬜ |
 | 1.8 | Workspace backgrounds | When the window is stretched over several monitors, show a chosen wallpaper in the area outside the world viewport instead of black (Preferences → Move & View → Backgrounds). Optional. | – | branch `feat/native-workspace-backgrounds` | P3 | ⬜ |
-| 1.9 | Settings search keywords | Preferences search finds "MCP", "dual monitor", "workspace", "undo". | check (Aurora has a settings search) | `doc/help.md` | P3 | ⬜ |
+| 1.9 | Settings search keywords | Preferences search finds "MCP", "dual monitor", "workspace", "undo". | check (Aurora has a settings search) | `doc/help.md` | P3 | 🔧 branch `claude/settings-search-keywords`: translated search words (`fs-search-*`, en / fr / ja, English found in every language) on the local assistant, world viewport, layouts and their shortcuts, other windows of the viewer, image uploads and outfit safety rows; "undo" finds *Previous arrangement* ([plan](plans/settings-search.md)) |
 
 ## 2. Inventory management (P1: the other reason)
 

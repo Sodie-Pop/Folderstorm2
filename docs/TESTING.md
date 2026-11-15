@@ -360,6 +360,23 @@ under Preferences › Layout › Layouts › Quick switch). In Preferences ›
 Shortcuts › Other, give the five *Layouts* actions a key each: none has one by
 default.
 
+**Settings search keywords (Folderstorm2).** The Preferences search finds the
+Folderstorm rows by words that are not in their labels
+(`ui/options/pages/folderstorm_search.rs`): `AURORA_DEMO_OPTIONS` opens the
+window with a search typed.
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_OPTIONS="layout:search=dual monitor" cargo run -p aurora-viewer -- --title "Test search keywords"
+```
+
+Check that "dual monitor" lists the world viewport's and the layouts' rows;
+that "MCP" lists the local assistant's rows, "workspace" the layouts and the
+five *Layouts* shortcuts, "undo" *Previous arrangement*, "photo mode" *Photo
+mode uses the whole window*, "alts" the *Other Folderstorm2 windows* rows,
+"screenshot" the image uploads and "outfit safety" the *Wear* switch of
+Inventory. In French and Japanese the same English words still find them, and
+so do the catalogue's own words ("double écran", "マルチモニター").
+
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
 their editor. Use `graphics:profiles-list` to open its dropdown with one bin per
