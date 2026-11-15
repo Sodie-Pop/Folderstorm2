@@ -59,6 +59,9 @@ const MOVED: f32 = 2.0;
 const ARRIVED: f32 = 1.0;
 /// How many times a window is asked for its position again.
 const RETRIES: u8 = 2;
+/// Every this many frames, the HUDs the workspaces put on are looked at
+/// ([`context::Ours::observe`]).
+const HUDS_EVERY: u64 = 30;
 /// Frames a window is given to take a request before it is looked at.
 const TAKEN_AFTER: u64 = 2;
 /// Seconds a card that asks nothing stays up.
@@ -132,6 +135,13 @@ pub trait Shell {
     }
     /// The name of the user's own Inventory item `item`, if it has it.
     fn item_name(&self, _item: Uuid) -> Option<String> {
+        None
+    }
+    /// The items the outfit has on now: worn, or linked in the Current
+    /// Outfit (a HUD stays linked through a teleport). None while it is
+    /// not known (the Current Outfit not loaded). Asked only while the
+    /// workspaces look after HUDs they put on ([`context::Ours`]).
+    fn huds_on(&self) -> Option<BTreeSet<Uuid>> {
         None
     }
 }
@@ -324,6 +334,13 @@ struct Session {
     refused: Option<StoreError>,
     /// What the app is to do with a workspace's context in the next frame.
     context: Option<context::Ask>,
+    /// The HUDs the workspaces put on for the account logged in (row 1.7):
+    /// the only ones a switch takes off.
+    ours: Option<context::Ours>,
+    /// The context handed last may be undone by *Previous* for its HUDs:
+    /// a switch with *Take off the previous workspace's HUDs*, or a
+    /// *Previous* (so that pressing it again comes back).
+    undo_huds: bool,
     /// The card is not drawn: the interface is hidden, or in mouselook
     /// ([`set_notice_hidden`]).
     notice_hidden: bool,
@@ -570,9 +587,20 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
         session(ctx, |s| s.queued_open = Some(QueuedOpen { open, folders, frame }));
         live.store.active_workspace = workspace.filter(|name| live.store.find_workspace(name).is_some());
     }
-    // the graphics and the camera of then (never the HUDs)
-    if let Some(before) = kept.context {
-        session(ctx, |s| s.context = Some(context::Ask::Restore(before)));
+    // the graphics, the camera and the HUDs of then: the HUDs the switch
+    // put on are taken off only while the workspaces still look after them
+    if let Some(mut before) = kept.context {
+        session(ctx, |s| {
+            if let Some(huds) = &mut before.huds {
+                let ours = s.ours.as_ref().filter(|ours| ours.account == huds.account);
+                huds.added.retain(|hud| ours.is_some_and(|ours| ours.holds(hud.item)));
+            }
+            before.huds = before.huds.take().filter(|huds| !huds.is_empty());
+            if !before.is_empty() {
+                s.context = Some(context::Ask::Restore(before));
+                s.undo_huds = true;
+            }
+        });
     }
     // the marks of then, if that layout is still in the list
     let active = kept.active.filter(|name| live.store.find(name).is_some());
@@ -624,11 +652,18 @@ pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Re
     };
     report.workspace = Some(workspace.name.clone());
     live.store.active_workspace = Some(workspace.name.clone());
-    // its graphics, camera and HUDs: done by the app in the next frame
-    let context = Some(workspace.context()).filter(|context| !context.is_empty());
+    // its graphics, camera and HUDs: done by the app in the next frame,
+    // with the HUDs the workspaces put on that it does not wear taken off
+    // (only when it has HUDs of its own, and unless the user keeps them)
+    let mut context = workspace.context();
+    let undo_huds = !live.store.keep_huds;
     let frame = ctx.cumulative_frame_nr();
     session(ctx, |s| {
-        s.context = context.map(context::Ask::Apply);
+        if undo_huds && let (Some(ours), Some(huds)) = (&s.ours, &context.huds) {
+            context.take_off = ours.take_off_for(huds);
+        }
+        s.context = Some(context).filter(|context| !context.is_empty()).map(context::Ask::Apply);
+        s.undo_huds = undo_huds;
         s.queued_open = Some(QueuedOpen {
             open: workspace.open,
             folders: workspace.folders,
@@ -718,12 +753,21 @@ pub fn report(ctx: &egui::Context) -> Option<Report> {
 }
 
 /// The app did what [`Outcome::context`] asked: what it did goes in the
-/// report, and what it changed from is what *Previous arrangement* puts
-/// back.
-pub fn context_done(ctx: &egui::Context, done: context::Done) {
+/// report, the HUDs it asked to wear and to take off change the ones the
+/// workspaces look after, and what it changed from is what *Previous
+/// arrangement* puts back.
+pub fn context_done(ctx: &egui::Context, mut done: context::Done) {
+    let now = ctx.input(|i| i.time);
     session(ctx, |s| {
         if let Some(report) = &mut s.report {
             report.context = Some(done.told);
+        }
+        if let Some(swap) = &done.huds {
+            context::Ours::changed(&mut s.ours, swap, now);
+        }
+        // (a switch that keeps the HUDs on leaves them to the user)
+        if !s.undo_huds {
+            done.before.huds = None;
         }
         if !done.before.is_empty()
             && let Some(previous) = &mut s.previous
@@ -731,6 +775,23 @@ pub fn context_done(ctx: &egui::Context, done: context::Done) {
             previous.context = Some(done.before);
         }
     });
+}
+
+/// Logged out (the login screen): the HUDs the workspaces put on are not
+/// looked after any more, and *Previous* puts none back.
+pub fn logged_out(ctx: &egui::Context) {
+    session(ctx, |s| {
+        s.ours = None;
+        if let Some(before) = s.previous.as_mut().and_then(|previous| previous.context.as_mut()) {
+            before.huds = None;
+        }
+    });
+}
+
+/// The HUDs the workspaces put on and look after now (row 1.7).
+#[cfg(test)]
+pub fn ours(ctx: &egui::Context) -> Option<context::Ours> {
+    session(ctx, |s| s.ours.clone())
 }
 
 /// The windows are as the active layout has them from now on: compared
@@ -1008,6 +1069,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     run_requests(ctx, live, &mut outcome);
     let now = ctx.cumulative_frame_nr();
     let mut s = session(ctx, std::mem::take);
+    look_after_huds(&mut s, shell, now, ctx.input(|i| i.time));
     let found = s.viewer.frame(ctx, live.store, seen, &mut outcome.commands);
     outcome.save |= found.save;
     let mut apply_now = None;
@@ -1064,6 +1126,23 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
         });
     }
     outcome
+}
+
+/// The HUDs the workspaces put on, looked after (row 1.7): forgotten with
+/// another account; every [`HUDS_EVERY`] frames, the ones that arrived
+/// are marked and the ones taken off since are forgotten.
+fn look_after_huds(s: &mut Session, shell: &dyn Shell, frame: u64, now: f64) {
+    let account = shell.account();
+    if s.ours.as_ref().is_some_and(|ours| Some(ours.account) != account) {
+        s.ours = None;
+    }
+    if frame.is_multiple_of(HUDS_EVERY)
+        && let Some(ours) = &mut s.ours
+        && let Some(on) = shell.huds_on()
+        && !ours.observe(&on, now)
+    {
+        s.ours = None;
+    }
 }
 
 /// What Preferences shows of HUDs: the HUDs worn now and the names of the

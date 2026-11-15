@@ -1857,8 +1857,8 @@ fs-context-camera-keep = Laisser la caméra telle quelle
 fs-context-camera-help = L'une des quatre vues des commandes de caméra, ou un préréglage de caméra que vous avez enregistré, choisi par son nom. Non appliqué tant que RLVa verrouille la caméra, ni en vue subjective.
 fs-context-camera-preset = préréglage de caméra « { $name } »
 fs-context-gone = { $name } (introuvable)
-fs-context-huds = HUD qu'il porte (n'enlève jamais rien) :
-fs-context-huds-help = Cochez un HUD que vous portez : appliquer l'espace de travail le remet au même point HUD s'il n'est pas porté, avec les règles de la tenue (RLVa, la limite d'attachements). Rien n'est jamais enlevé, pas même par Disposition précédente. Seulement pour le compte qui les a choisis ; l'espace de travail garde l'objet, jamais son contenu.
+fs-context-huds = HUD qu'il porte :
+fs-context-huds-help = Cochez un HUD que vous portez : appliquer l'espace de travail le remet au même point HUD s'il n'est pas porté, avec les règles de la tenue (RLVa, la limite d'attachements). Passer ensuite à un autre espace de travail qui a des HUD enlève ceux que cet espace de travail a mis, sauf si l'autre les porte aussi ; un HUD que vous portiez déjà ou que vous avez mis vous-même n'est jamais enlevé. Arrangement précédent les remet comme avant. Seulement pour le compte qui les a choisis ; l'espace de travail garde l'objet, jamais son contenu.
 fs-context-huds-none = Portez un HUD pour le choisir ici.
 fs-context-hud-gone = Un objet absent de l'inventaire
 fs-context-huds-other = { $count ->
@@ -1872,7 +1872,7 @@ fs-context-holds-huds = { $count ->
     [one] Porte { $count } HUD.
    *[other] Porte { $count } HUD.
     }
-fs-context-restored = Graphismes et caméra remis comme avant (les HUD restent portés).
+fs-context-restored = Graphismes et caméra remis comme avant.
 fs-context-graphics-done = Profil graphique « { $name } » sélectionné.
 fs-context-graphics-missing = Le profil graphique « { $name } » est introuvable : les graphismes n'ont pas changé.
 fs-context-camera-done = Caméra : { $camera }.
@@ -1901,9 +1901,19 @@ fs-context-huds-blocked = { $count ->
    *[other] { $count } HUD sont refusés par RLVa et ont été ignorés.
     }
 fs-context-huds-other-account = Ses HUD ont été choisis par un autre compte et ont été ignorés.
-fs-context-huds-busy = Un changement de tenue était en cours : ses HUD n'ont pas été portés. Appliquez-le de nouveau dans un instant.
-fs-context-huds-refused = Ses HUD n'ont pas été portés : { $why }
+fs-context-huds-busy = Un changement de tenue était en cours : aucun HUD n'a été mis ni enlevé. Appliquez-le de nouveau dans un instant.
+fs-context-huds-refused = Aucun HUD n'a été mis ni enlevé : { $why }
 fs-context-huds-refused-plain = le changement de tenue a été refusé.
+fs-context-huds-taken-off = { $count ->
+    [one] { $count } HUD mis par un espace de travail a été enlevé.
+   *[other] { $count } HUD mis par un espace de travail ont été enlevés.
+    }
+fs-context-huds-stuck = { $count ->
+    [one] { $count } HUD mis par un espace de travail n'a pas pu être enlevé (RLVa le garde).
+   *[other] { $count } HUD mis par un espace de travail n'ont pas pu être enlevés (RLVa les garde).
+    }
+fs-context-take-off = Enlever les HUD de l'espace de travail précédent
+fs-context-take-off-help = Quand vous passez à un espace de travail qui a des HUD, ceux que l'espace de travail précédent a mis sont enlevés, sauf si le nouveau les porte aussi. Seulement les HUD mis par un espace de travail : un HUD que vous portiez déjà, ou que vous avez mis vous-même, n'est jamais enlevé ; RLVa peut en garder un. Arrangement précédent les remet. Désactivez pour ne faire qu'ajouter des HUD.
 
 # Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
 fs-background-group = Fond autour du monde

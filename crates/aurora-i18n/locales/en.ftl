@@ -1854,8 +1854,8 @@ fs-context-camera-keep = Leave the camera as it is
 fs-context-camera-help = One of the four views of the camera controls, or a camera preset you saved, chosen by its name. Not applied while RLVa locks the camera, or in mouselook.
 fs-context-camera-preset = camera preset “{ $name }”
 fs-context-gone = { $name } (not found)
-fs-context-huds = HUDs it wears (never takes anything off):
-fs-context-huds-help = Tick a HUD you are wearing: applying the workspace wears it again at the same HUD point when it is not worn, with the outfit's own rules (RLVa, the attachment limit). Nothing is ever taken off, not even by Previous arrangement. Only for the account that chose them; the workspace keeps the item, never what it contains.
+fs-context-huds = HUDs it wears:
+fs-context-huds-help = Tick a HUD you are wearing: applying the workspace wears it again at the same HUD point when it is not worn, with the outfit's own rules (RLVa, the attachment limit). Switching then to another workspace that has HUDs takes off the ones this workspace put on, unless that one wears them too; a HUD you were already wearing or put on yourself is never taken off. Previous arrangement puts them back as they were. Only for the account that chose them; the workspace keeps the item, never what it contains.
 fs-context-huds-none = Wear a HUD to choose it here.
 fs-context-hud-gone = An item that is not in the Inventory
 fs-context-huds-other = { $count ->
@@ -1869,7 +1869,7 @@ fs-context-holds-huds = { $count ->
     [one] Wears { $count } HUD.
    *[other] Wears { $count } HUDs.
     }
-fs-context-restored = Graphics and camera put back as they were (HUDs stay on).
+fs-context-restored = Graphics and camera put back as they were.
 fs-context-graphics-done = Graphics profile “{ $name }” selected.
 fs-context-graphics-missing = The graphics profile “{ $name }” was not found: the graphics were left as they were.
 fs-context-camera-done = Camera: { $camera }.
@@ -1898,9 +1898,19 @@ fs-context-huds-blocked = { $count ->
    *[other] { $count } HUDs are refused by RLVa and were skipped.
     }
 fs-context-huds-other-account = Its HUDs were chosen by another account and were skipped.
-fs-context-huds-busy = An outfit change was under way: its HUDs were not worn. Apply it again in a moment.
-fs-context-huds-refused = Its HUDs were not worn: { $why }
+fs-context-huds-busy = An outfit change was under way: no HUD was worn or taken off. Apply it again in a moment.
+fs-context-huds-refused = No HUD was worn or taken off: { $why }
 fs-context-huds-refused-plain = the outfit change was refused.
+fs-context-huds-taken-off = { $count ->
+    [one] { $count } HUD put on by a workspace was taken off.
+   *[other] { $count } HUDs put on by a workspace were taken off.
+    }
+fs-context-huds-stuck = { $count ->
+    [one] { $count } HUD put on by a workspace could not be taken off (RLVa keeps it on).
+   *[other] { $count } HUDs put on by a workspace could not be taken off (RLVa keeps them on).
+    }
+fs-context-take-off = Take off the previous workspace's HUDs
+fs-context-take-off-help = When you switch to a workspace that has HUDs, the HUDs the workspace before put on are taken off, unless the new one wears them too. Only HUDs a workspace put on: a HUD you were already wearing, or put on yourself, is never taken off; RLVa can keep one on. Previous arrangement puts them back. Turn off to only ever add HUDs.
 
 # Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
 fs-background-group = Background around the world

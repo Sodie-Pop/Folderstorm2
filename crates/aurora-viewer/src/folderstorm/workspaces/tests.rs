@@ -67,6 +67,9 @@ struct Viewer {
     /// app has them.
     huds: Vec<super::context::Hud>,
     names: std::collections::BTreeMap<uuid::Uuid, String>,
+    /// What the outfit has on (worn or linked), as the app has it; None:
+    /// not known.
+    on: Option<BTreeSet<uuid::Uuid>>,
 }
 
 /// The pixels of the last frame and what draws them, with the icons and
@@ -116,6 +119,7 @@ struct Windows<'a> {
     inventory: &'a mut Folders,
     huds: &'a [super::context::Hud],
     names: &'a std::collections::BTreeMap<uuid::Uuid, String>,
+    on: &'a Option<BTreeSet<uuid::Uuid>>,
 }
 
 impl apply::Shell for Windows<'_> {
@@ -159,6 +163,10 @@ impl apply::Shell for Windows<'_> {
     fn item_name(&self, item: uuid::Uuid) -> Option<String> {
         self.names.get(&item).cloned()
     }
+
+    fn huds_on(&self) -> Option<BTreeSet<uuid::Uuid>> {
+        self.on.clone()
+    }
 }
 
 impl Viewer {
@@ -187,6 +195,7 @@ impl Viewer {
             asked: Vec::new(),
             huds: Vec::new(),
             names: Default::default(),
+            on: None,
         }
     }
 
@@ -274,6 +283,7 @@ impl Viewer {
             inventory: &mut self.inventory,
             huds: &self.huds,
             names: &self.names,
+            on: &self.on,
         };
         let mut live = Live {
             store: &mut self.store,

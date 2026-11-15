@@ -572,6 +572,11 @@ pub struct Store {
     /// (row 1.8, `crate::folderstorm::backgrounds`).
     #[serde(skip_serializing_if = "crate::folderstorm::backgrounds::Background::is_default")]
     pub background: crate::folderstorm::backgrounds::Background,
+    /// A switch to another workspace leaves on the HUDs the workspace
+    /// before put on (row 1.7): *Take off the previous workspace's HUDs*
+    /// unticked. Off (they are taken off) until chosen.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub keep_huds: bool,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -590,6 +595,7 @@ struct Raw {
     active_workspace: Option<String>,
     strip: serde_json::Value,
     background: serde_json::Value,
+    keep_huds: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -639,6 +645,7 @@ impl From<Raw> for Store {
             // (anything but `true` reads as off, as an entry is read on its own)
             strip: raw.strip.as_bool().unwrap_or(false),
             background: crate::folderstorm::backgrounds::Background::read(raw.background),
+            keep_huds: raw.keep_huds.as_bool().unwrap_or(false),
         };
         if store.active_workspace().is_none() {
             store.active_workspace = None;

@@ -119,6 +119,12 @@ pub fn context_text(told: &Told) -> Vec<String> {
         if huds.asked > 0 {
             text.push(tr!("fs-context-huds-asked", count = huds.asked));
         }
+        if huds.taken_off > 0 {
+            text.push(tr!("fs-context-huds-taken-off", count = huds.taken_off));
+        }
+        if huds.stuck > 0 {
+            text.push(tr!("fs-context-huds-stuck", count = huds.stuck));
+        }
         if huds.worn > 0 {
             text.push(tr!("fs-context-huds-worn", count = huds.worn));
         }

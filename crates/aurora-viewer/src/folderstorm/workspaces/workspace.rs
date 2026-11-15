@@ -172,6 +172,7 @@ impl Workspace {
             graphics: self.graphics.clone(),
             camera: self.camera.clone(),
             huds: self.huds.clone(),
+            take_off: None,
         }
     }
 
