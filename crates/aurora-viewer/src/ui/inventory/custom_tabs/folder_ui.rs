@@ -14,12 +14,16 @@
 //! - a note above the list when some of the tab's folders are gone, or when
 //!   it is scoped on another account only.
 //!
+//! Items go into a tab the same ways (feature 2.13, `items.rs`): they are
+//! pinned, the folders of the same selection join the scope.
+//!
 //! What these need from the inventory (the selection that may be chosen, the
 //! paths and states of the tab's folders) is read once a frame by
 //! `before_list`, before the list is searched; the menus and the dialog,
 //! drawn where the inventory is not at hand, read it from there.
 
-use super::folders::{self, Change, MAX_FOLDERS, Refusal, Status};
+use super::folders::{self, Change, Chosen, MAX_FOLDERS, Refusal, Status};
+use super::items::{self, MAX_ITEMS};
 use super::*;
 
 /// What the window saw of the inventory this frame (`before_list`).
@@ -29,14 +33,15 @@ pub(in crate::ui::inventory) struct Seen {
     account: Uuid,
     /// The inventory is there (its root known).
     ready: bool,
-    /// The window's selection, when it may become a scope.
-    choosable: Vec<Uuid>,
-    /// The names of `choosable`.
+    /// The window's selection, when it may go into a tab.
+    choosable: Chosen,
+    /// The names of `choosable`, folders first.
     names: Vec<String>,
-    /// The tab shown, its folders on this account, by path.
+    /// The tab shown, its folders then its pinned items on this account.
     rows: Vec<Row>,
-    /// Its folders and the inventory generation `rows` were read from.
-    key: Option<(u64, u64, Vec<Uuid>)>,
+    /// Its folders and items and the inventory generation `rows` were read
+    /// from.
+    key: Option<(u64, u64, Vec<Uuid>, Vec<Uuid>)>,
     /// It is scoped on another account only.
     elsewhere: bool,
     /// `AURORA_DEMO_FOLDER_TABS=menu`: lists drawn before the demo opens
@@ -47,8 +52,11 @@ pub(in crate::ui::inventory) struct Seen {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::ui::inventory) struct Row {
     pub id: Uuid,
+    /// A folder's path; a pinned item's name, then its folder's path.
     pub path: String,
     pub status: Status,
+    /// A pinned item (else a folder).
+    pub item: bool,
 }
 
 impl Seen {
@@ -67,20 +75,22 @@ fn shown_tab<'a>(st: &InventoryUi, prefs: &'a InventoryPreferences) -> Option<&'
 /// scoped custom tab is shown).
 pub(in crate::ui::inventory) fn before_list(inv: &Inventory, st: &mut InventoryUi, prefs: &InventoryPreferences, account: Uuid) {
     demo_menu(st);
+    super::window::keep(st, prefs);
     let seen = &mut st.custom_tabs.seen;
     seen.account = account;
     seen.ready = !inv.root.is_nil();
     // a folder window has no custom tabs (Folderstorm: not in single-folder mode)
-    seen.choosable = if st.scope.is_nil() && st.selection.len() <= MAX_FOLDERS && !account.is_nil() {
+    seen.choosable = if st.scope.is_nil() && st.selection.len() <= MAX_FOLDERS + MAX_ITEMS && !account.is_nil() {
         let selection: Vec<Uuid> = st.selection.iter().copied().collect();
         folders::choosable(inv, &selection)
     } else {
-        Vec::new()
+        Chosen::default()
     };
-    seen.names = seen.choosable.iter().map(|id| super::super::folder_name(inv, *id)).collect();
+    seen.names = seen.choosable.all().map(|id| entry_name(inv, id)).collect();
     let tab = shown_tab(st, prefs);
     let saved = tab.map(|t| folders::of(t, account).to_vec()).unwrap_or_default();
-    let key = (inv.generation, tab.map_or(0, |t| t.id), saved.clone());
+    let pinned = tab.map(|t| items::of(t, account).to_vec()).unwrap_or_default();
+    let key = (inv.generation, tab.map_or(0, |t| t.id), saved.clone(), pinned.clone());
     let seen = &mut st.custom_tabs.seen;
     seen.elsewhere = tab.is_some_and(|t| folders::elsewhere(t, account));
     if seen.key.as_ref() != Some(&key) {
@@ -93,13 +103,43 @@ pub(in crate::ui::inventory) fn before_list(inv: &Inventory, st: &mut InventoryU
                 } else {
                     super::super::inventory_path(inv, *id)
                 };
-                Row { id: *id, path, status }
+                Row {
+                    id: *id,
+                    path,
+                    status,
+                    item: false,
+                }
             })
+            .chain(pinned.iter().map(|id| {
+                let status = items::status(inv, *id);
+                let path = if status == Status::Missing {
+                    aurora_i18n::tr!("inventory-folder-tab-deleted-item").to_owned()
+                } else {
+                    super::super::inventory_path(inv, *id)
+                };
+                Row {
+                    id: *id,
+                    path,
+                    status,
+                    item: true,
+                }
+            }))
             .collect();
         seen.key = Some(key);
     }
     let roots = tab.and_then(|t| folders::search_roots(inv, t, account));
-    st.view.set_folder_scope(roots);
+    let pins = tab.map(|t| items::search_pins(inv, t, account)).unwrap_or_default();
+    let flat = tab.is_some_and(|t| t.flat);
+    st.view.set_tab_scope(roots, pins, flat);
+}
+
+/// A folder's name, or an item's.
+fn entry_name(inv: &Inventory, id: Uuid) -> String {
+    if inv.folders.contains_key(&id) {
+        super::super::folder_name(inv, id)
+    } else {
+        rules::name(inv, id)
+    }
 }
 
 fn apply(st: &mut InventoryUi, prefs: &mut InventoryPreferences, id: u64, how: Change) {
@@ -115,26 +155,35 @@ fn apply(st: &mut InventoryUi, prefs: &mut InventoryPreferences, id: u64, how: C
         st.message = add_chosen(tab, account, &chosen, &st.custom_tabs.seen.names);
         return;
     }
-    match folders::change(folders::of(tab, account), &chosen, how) {
-        Ok(new) => folders::set(tab, account, new),
-        Err(folders::TooMany) => st.message = aurora_i18n::tr!("inventory-folder-tab-limit", count = MAX_FOLDERS),
+    if let Err(limit) = items::apply(tab, account, &chosen, how) {
+        st.message = limit_text(limit);
     }
 }
 
-/// Adds the `chosen` folders to the tab (those it has already are not
-/// repeated) and says what was done, for the status line. `names` are the
-/// folders' names, used when there is one.
-fn add_chosen(tab: &mut CustomTab, account: Uuid, chosen: &[Uuid], names: &[String]) -> String {
+/// Why a tab cannot take more.
+fn limit_text(limit: items::Limit) -> String {
+    match limit {
+        items::Limit::Folders => aurora_i18n::tr!("inventory-folder-tab-limit", count = MAX_FOLDERS),
+        items::Limit::Items => aurora_i18n::tr!("inventory-folder-tab-item-limit", count = MAX_ITEMS),
+    }
+}
+
+/// Adds the `chosen` folders and items to the tab (those it has already
+/// are not repeated) and says what was done, for the status line. `names`
+/// are their names, used when there is one.
+fn add_chosen(tab: &mut CustomTab, account: Uuid, chosen: &Chosen, names: &[String]) -> String {
     let name = tab.name.clone();
     let name = name.as_str();
-    match folders::add_to(folders::of(tab, account), chosen) {
-        Err(folders::TooMany) => aurora_i18n::tr!("inventory-folder-tab-limit", count = MAX_FOLDERS),
-        Ok((_, added)) if added.new == 0 => match names {
+    match items::would_add(tab, account, chosen) {
+        Err(limit) => limit_text(limit),
+        Ok(added) if added.new == 0 => match names {
             [folder] => aurora_i18n::tr!("inventory-folder-tab-already-one", folder = folder.as_str(), tab = name),
             _ => aurora_i18n::tr!("inventory-folder-tab-already-many", tab = name),
         },
-        Ok((new, added)) => {
-            folders::set(tab, account, new);
+        Ok(_) => {
+            let Ok(added) = items::apply(tab, account, chosen, Change::Add) else {
+                return String::new();
+            };
             let done = match names {
                 [folder] => aurora_i18n::tr!("inventory-folder-tab-added-one", folder = folder.as_str(), tab = name),
                 _ => aurora_i18n::tr!("inventory-folder-tab-added-many", count = added.new, tab = name),
@@ -149,11 +198,14 @@ fn add_chosen(tab: &mut CustomTab, account: Uuid, chosen: &[Uuid], names: &[Stri
     }
 }
 
-fn remove(st: &InventoryUi, prefs: &mut InventoryPreferences, id: u64, folder: impl Fn(&Uuid) -> bool) {
+/// Removes the folders and pinned items `gone` says from the tab.
+fn remove(st: &InventoryUi, prefs: &mut InventoryPreferences, id: u64, gone: impl Fn(&Uuid) -> bool) {
     let account = st.custom_tabs.seen.account;
     if let Some(tab) = prefs.custom_tabs.iter_mut().find(|t| t.id == id) {
-        let kept = folders::of(tab, account).iter().copied().filter(|f| !folder(f)).collect();
+        let kept = folders::of(tab, account).iter().copied().filter(|f| !gone(f)).collect();
         folders::set(tab, account, kept);
+        let kept = items::of(tab, account).iter().copied().filter(|f| !gone(f)).collect();
+        items::set(tab, account, kept);
     }
 }
 
@@ -165,7 +217,7 @@ fn actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut Inv
         .custom_tabs
         .iter()
         .find(|t| t.id == id)
-        .is_some_and(|t| !folders::of(t, seen.account).is_empty());
+        .is_some_and(|t| folders::scoped(t, seen.account));
     let select_tip = aurora_i18n::tr!("inventory-folder-tab-select-tip", count = MAX_FOLDERS);
     let entries = [
         (
@@ -241,9 +293,16 @@ pub(in crate::ui::inventory) fn editor(ui: &mut egui::Ui, p: &Palette, st: &mut 
             if widgets::icon_button(ui, p, "x", aurora_i18n::tr!("inventory-folder-tab-remove"), true) {
                 drop = Some(row.id);
             }
+            if row.item {
+                widgets::glyph(ui, "pinned-filled", p.muted, 13.0);
+            }
             let color = if row.status == Status::Live { p.ink } else { p.muted };
             ui.add(egui::Label::new(RichText::new(&row.path).color(color)).truncate())
-                .on_hover_text(&row.path);
+                .on_hover_text(if row.item {
+                    format!("{}\n{}", aurora_i18n::tr!("inventory-quick-pinned"), row.path)
+                } else {
+                    row.path.clone()
+                });
             let tag = match row.status {
                 Status::Live => None,
                 Status::Missing => Some(aurora_i18n::tr!("inventory-folder-tab-status-missing")),
@@ -268,6 +327,7 @@ pub(in crate::ui::inventory) fn editor(ui: &mut egui::Ui, p: &Palette, st: &mut 
             .size(12.0)
             .color(p.muted),
     );
+    super::flat::editor_switch(ui, p, prefs, id);
     widgets::divider(ui, p);
 }
 
@@ -329,15 +389,17 @@ pub(in crate::ui::inventory) fn note(
 fn refusal_text(why: Refusal) -> String {
     match why {
         Refusal::Empty => aurora_i18n::tr!("inventory-folder-tab-why-empty").to_owned(),
-        Refusal::Item => aurora_i18n::tr!("inventory-folder-tab-why-item").to_owned(),
+        Refusal::Broken => aurora_i18n::tr!("inventory-folder-tab-why-broken").to_owned(),
         Refusal::NotAllowed => aurora_i18n::tr!("inventory-folder-tab-why-refused").to_owned(),
         Refusal::TooMany => aurora_i18n::tr!("inventory-folder-tab-limit", count = MAX_FOLDERS),
+        Refusal::TooManyItems => aurora_i18n::tr!("inventory-folder-tab-item-limit", count = MAX_ITEMS),
     }
 }
 
-/// The folders of `ids` that can go into a tab, or why none can: in the
-/// main window, on a known account, live folders only (`folders::check`).
-fn chosen(inv: &Inventory, st: &InventoryUi, account: Uuid, ids: &[Uuid]) -> Result<Vec<Uuid>, String> {
+/// The folders and items of `ids` that can go into a tab, or why none can:
+/// not in a folder window, on a known account, live entries only
+/// (`folders::check`).
+fn chosen(inv: &Inventory, st: &InventoryUi, account: Uuid, ids: &[Uuid]) -> Result<Chosen, String> {
     if account.is_nil() || inv.root.is_nil() {
         return Err(aurora_i18n::tr!("inventory-folder-tab-why-loading").to_owned());
     }
@@ -353,8 +415,8 @@ fn chosen(inv: &Inventory, st: &InventoryUi, account: Uuid, ids: &[Uuid]) -> Res
 pub(in crate::ui::inventory) struct TabOffer {
     pub id: u64,
     pub name: String,
-    /// It has every folder of the selection already (a check mark; picking
-    /// it says so).
+    /// It has every folder and item of the selection already (a check mark;
+    /// picking it says so).
     pub has_all: bool,
     /// Why the folders cannot join it (greyed), if they cannot.
     pub refused: Option<String>,
@@ -388,12 +450,11 @@ pub(in crate::ui::inventory) fn offer(
         .custom_tabs
         .iter()
         .map(|tab| {
-            let current = folders::of(tab, account);
             let (has_all, refused) = match &chosen {
                 Err(why) => (false, Some(why.clone())),
-                Ok(chosen) => match folders::add_to(current, chosen) {
-                    Ok((_, added)) => (added.new == 0, None),
-                    Err(folders::TooMany) => (false, Some(aurora_i18n::tr!("inventory-folder-tab-limit", count = MAX_FOLDERS))),
+                Ok(chosen) => match items::would_add(tab, account, chosen) {
+                    Ok(added) => (added.new == 0, None),
+                    Err(limit) => (false, Some(limit_text(limit))),
                 },
             };
             TabOffer {
@@ -411,8 +472,9 @@ pub(in crate::ui::inventory) fn offer(
     }
 }
 
-/// A new custom tab scoped to the folders `ids`, named after the first and
-/// shown, its Rename dialog open (`FSInventoryCustomTabs::createFolderView`).
+/// A new custom tab scoped to the folders of `ids` and pinning its items,
+/// named after the first folder (or item) and shown, its Rename dialog open
+/// (`FSInventoryCustomTabs::createFolderView`).
 pub(in crate::ui::inventory) fn save_as_tab(
     inv: &Inventory,
     st: &mut InventoryUi,
@@ -425,20 +487,21 @@ pub(in crate::ui::inventory) fn save_as_tab(
         return None;
     }
     let chosen = folders::choosable(inv, ids);
-    let name = super::super::folder_name(inv, *chosen.first()?);
+    let name = entry_name(inv, chosen.all().next()?);
     sync(st, prefs);
     let id = add(&mut prefs.custom_tabs, &name, Filters::default(), String::new())?;
     let tab = prefs.custom_tabs.iter_mut().find(|t| t.id == id)?;
-    folders::set(tab, account, chosen);
+    folders::set(tab, account, chosen.folders);
+    items::set(tab, account, chosen.items);
     let text = tab.name.clone();
     select_custom(st, prefs, id);
     st.custom_tabs.rename = Some(Rename { id, text, focus: true });
     Some(id)
 }
 
-/// "Add to › <tab>": the folders `ids` join the tab `id` (those it has
-/// already are not repeated), and the status line says what was done or
-/// why not. The tab shown stays.
+/// "Add to › <tab>": the folders of `ids` join the tab `id` and its items
+/// are pinned (those it has already are not repeated), and the status line
+/// says what was done or why not. The tab shown stays.
 pub(in crate::ui::inventory) fn add_to_tab(
     inv: &Inventory,
     st: &mut InventoryUi,
@@ -454,7 +517,7 @@ pub(in crate::ui::inventory) fn add_to_tab(
             return;
         }
     };
-    let names: Vec<String> = chosen.iter().map(|id| super::super::folder_name(inv, *id)).collect();
+    let names: Vec<String> = chosen.all().map(|id| entry_name(inv, id)).collect();
     if let Some(tab) = prefs.custom_tabs.iter_mut().find(|t| t.id == id) {
         st.message = add_chosen(tab, account, &chosen, &names);
     }
@@ -463,7 +526,8 @@ pub(in crate::ui::inventory) fn add_to_tab(
 // ---- Folders dragged onto a tab ----
 
 /// A custom tab's button in a tab strip (`slot`, its `response`) takes the
-/// folders dragged from the list: they join the tab as with "Add to ›".
+/// folders and items dragged from the list: they join the tab as with
+/// "Add to ›".
 /// The outline and the cursor say whether it would take them.
 pub(in crate::ui::inventory) fn drop_on_tab(
     ui: &egui::Ui,

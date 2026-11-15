@@ -22,6 +22,9 @@
 //!
 //! A custom tab may be scoped to chosen folders (feature 2.2): `folders.rs`
 //! holds the rules, `folder_ui.rs` the menus, the dialog part and the note.
+//! It may pin single items, open in a window of its own and list its items
+//! flat (feature 2.13, "Inventory quick access"): `items.rs`, `window.rs`,
+//! `flat.rs`.
 
 use super::view::{Age, Filters, InventoryPreferences};
 use super::*;
@@ -53,6 +56,13 @@ pub struct CustomTab {
     /// for an account: the whole inventory.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub folders: std::collections::BTreeMap<Uuid, Vec<Uuid>>,
+    /// The items pinned to the tab, by account id (`items.rs`, feature
+    /// 2.13): shown at the top of its list.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub items: std::collections::BTreeMap<Uuid, Vec<Uuid>>,
+    /// Its items in one flat list, without folders (`flat.rs`).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub flat: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,7 +120,7 @@ pub fn add(tabs: &mut Vec<CustomTab>, name: &str, filters: Filters, search: Stri
         name,
         filters,
         search,
-        folders: Default::default(),
+        ..Default::default()
     });
     Some(id)
 }
@@ -167,6 +177,7 @@ pub fn normalize(tabs: &mut [CustomTab]) -> bool {
             changed = true;
         }
         changed |= folders::normalize(&mut tab.folders);
+        changed |= folders::normalize_within(&mut tab.items, items::MAX_ITEMS);
     }
     changed
 }
@@ -216,6 +227,12 @@ pub(super) struct State {
     delete: Option<(u64, String)>,
     /// What the folder scope read of the inventory this frame.
     seen: folder_ui::Seen,
+    /// A tab window (`window.rs`): the custom tab it is locked to.
+    window: Option<u64>,
+    /// The tab, filters and search last written to the preferences or read
+    /// from them: a change there made by another window showing the same
+    /// tab is taken up (`sync`).
+    synced: Option<(u64, Filters, String)>,
 }
 
 struct Rename {
@@ -311,6 +328,7 @@ fn select_custom(st: &mut InventoryUi, prefs: &InventoryPreferences, id: u64) {
     }
     st.custom_tabs.active = Some(id);
     st.custom_tabs.name.clone_from(&tab.name);
+    st.custom_tabs.synced = Some((id, tab.filters.clone(), tab.search.clone()));
 }
 
 /// Writes the live filters and search of the custom tab shown to its entry
@@ -326,6 +344,10 @@ pub(super) fn sync(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
         return;
     };
     let Some(tab) = prefs.custom_tabs.iter_mut().find(|t| t.id == id) else {
+        if st.custom_tabs.window.is_some() {
+            // a tab window closes instead (`window::after`)
+            return;
+        }
         st.custom_tabs.active = None;
         set_tab(st, prefs, 0);
         return;
@@ -336,12 +358,39 @@ pub(super) fn sync(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
     if st.saved_filters.is_some() || st.similar || st.links_filter.is_some() {
         return;
     }
+    // Feature 2.13: another window showing the same tab (a tab window and
+    // the main window) changed it, and this one did not: take it up.
+    let text = if st.advanced { &st.quick_text } else { &st.search };
+    if let Some((synced, filters, search)) = &st.custom_tabs.synced
+        && *synced == id
+        && (tab.filters != *filters || tab.search != *search)
+        && st.filters == *filters
+        && text == search
+    {
+        st.filters = tab.filters.clone();
+        st.advanced = st.filters.smart.is_some();
+        if st.advanced {
+            st.quick_text = tab.search.clone();
+            st.search.clear();
+        } else {
+            st.quick_text.clear();
+            st.search = tab.search.clone();
+        }
+    }
     if tab.filters != st.filters {
         tab.filters.clone_from(&st.filters);
     }
     let text = if st.advanced { &st.quick_text } else { &st.search };
     if tab.search != *text {
         tab.search.clone_from(text);
+    }
+    let unchanged = st
+        .custom_tabs
+        .synced
+        .as_ref()
+        .is_some_and(|(synced, filters, search)| *synced == id && *filters == tab.filters && *search == tab.search);
+    if !unchanged {
+        st.custom_tabs.synced = Some((id, tab.filters.clone(), tab.search.clone()));
     }
 }
 
@@ -461,6 +510,8 @@ pub(super) fn tab_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, pre
     ) {
         clone_custom(st, prefs, id);
     }
+    window::menu_entry(ui, p, st, id);
+    flat::menu_entry(ui, p, prefs, id);
     folder_ui::tab_menu(ui, p, st, prefs, id);
     menu::separator(ui, p);
     if menu::item(ui, p, "trash-filled", aurora_i18n::tr!("inventory-custom-tab-delete")) {
@@ -488,6 +539,11 @@ pub(super) fn legacy_strip(
     tab_ids: &[usize],
     labels: &[(&str, bool)],
 ) {
+    if window::of(st).is_some() {
+        // a tab window shows its tab only (feature 2.13)
+        window::keep(st, prefs);
+        return;
+    }
     let custom = entries(prefs);
     let mut slots = tab_ids.to_vec();
     let mut all = labels.to_vec();
@@ -537,6 +593,7 @@ pub(super) fn legacy_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi
 /// the Rename and Delete dialogs.
 pub(super) fn frame(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
     normalize(&mut prefs.custom_tabs);
+    super::window_mode::forget_deleted_tabs(prefs); // feature 2.13
     sync(st, prefs);
     rename_dialog(ctx, p, st, prefs);
     delete_dialog(ctx, p, st, prefs);
@@ -660,7 +717,7 @@ fn delete_dialog(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: 
 
 /// Deletes the tab; this window goes back to All if it showed it.
 fn delete_and_leave(st: &mut InventoryUi, prefs: &mut InventoryPreferences, id: u64) {
-    if active(st) == Some(id) {
+    if active(st) == Some(id) && st.custom_tabs.window.is_none() {
         st.custom_tabs.active = None;
         set_tab(st, prefs, 0);
     }
@@ -695,9 +752,13 @@ pub fn demo(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
     }
 }
 
+pub(super) mod flat;
 pub(super) mod folder_ui;
 pub(super) mod folders;
+pub(super) mod items;
+pub(super) mod window;
 pub use folder_ui::demo as folder_demo;
+pub use window::demo as quick_access_demo;
 
 #[cfg(test)]
 mod tests;

@@ -149,8 +149,8 @@ fn the_customize_dialog_lists_and_edits_the_tabs_folders() {
         let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
         assert!(!has(&texts, &note), "classic={classic}: no note once none is gone");
 
-        // an item in the selection: nothing to add
-        st.selection = [id(BODY), id(SHIRT)].into();
+        // something in the Trash in the selection: nothing to use
+        st.selection = [id(BODY), id(OLD)].into();
         let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
         let replace = at(&texts, aurora_i18n::tr!("inventory-folder-tab-replace"));
         run(
@@ -162,6 +162,21 @@ fn the_customize_dialog_lists_and_edits_the_tabs_folders() {
             click(replace, egui::PointerButton::Primary),
         );
         assert_eq!(saved(&prefs), [id(CLOTHING), id(BODY)], "classic={classic}: disabled");
+
+        // feature 2.13: a folder and an item, used alone: the item is pinned
+        st.selection = [id(BODY), id(SHIRT)].into();
+        let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
+        let replace = at(&texts, aurora_i18n::tr!("inventory-folder-tab-replace"));
+        run(
+            &mut frames,
+            classic,
+            &mut inv,
+            &mut st,
+            &mut prefs,
+            click(replace, egui::PointerButton::Primary),
+        );
+        assert_eq!(saved(&prefs), [id(BODY)], "classic={classic}");
+        assert_eq!(items::of(&prefs.custom_tabs[0], account()), [id(SHIRT)], "classic={classic}");
 
         // Show all folders
         let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
@@ -175,6 +190,7 @@ fn the_customize_dialog_lists_and_edits_the_tabs_folders() {
             click(clear, egui::PointerButton::Primary),
         );
         assert!(saved(&prefs).is_empty(), "classic={classic}");
+        assert!(prefs.custom_tabs[0].items.is_empty(), "classic={classic}: no pins either");
         run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
         let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
         assert!(has(&texts, aurora_i18n::tr!("inventory-folder-tab-all")), "classic={classic}");
@@ -306,7 +322,7 @@ fn save_as_tab_makes_a_scoped_tab_named_after_the_first_folder() {
     assert_eq!(prefs.custom_tabs[1].name, "Body 2");
 
     // what cannot become a tab
-    assert!(!can_save(&inv, &st, &prefs, account(), &[id(SHIRT)]), "an item");
+    assert!(can_save(&inv, &st, &prefs, account(), &[id(SHIRT)]), "an item (feature 2.13)");
     assert!(!can_save(&inv, &st, &prefs, account(), &[id(OLD)]), "in the Trash");
     assert!(!can_save(&inv, &st, &prefs, Uuid::nil(), &[id(BODY)]), "no account");
     let folder_window = InventoryUi {
@@ -330,7 +346,7 @@ fn entry(catalog: &super::super::super::context_catalog::Catalog, entry: &str) -
 }
 
 #[test]
-fn the_folder_menu_offers_create_tab_and_add_to_for_folders_only() {
+fn the_menu_offers_create_tab_and_add_to_for_folders_and_items() {
     let inv = inventory();
     let mut prefs = scoped_prefs(&[CLOTHING]);
     add(&mut prefs.custom_tabs, "Looks", Filters::default(), String::new()).expect("room");
@@ -375,19 +391,15 @@ fn the_folder_menu_offers_create_tab_and_add_to_for_folders_only() {
     assert_eq!(c.help[&has.id], aurora_i18n::tr!("inventory-folder-tab-has-tip"));
     assert_eq!(entry(&c, &format!("folder-tab-add:{looks}")).expect("listed").checked, None);
 
-    // not on an item; greyed, with the reason, when an item is selected too
+    // feature 2.13: on an item too, and on folders and items together
     st.selection = [id(SHIRT)].into();
     let c = catalog(&inv, &st, &prefs, SHIRT);
-    assert!(
-        entry(&c, "folder-tab").is_none() && entry(&c, "folder-tab-add").is_none(),
-        "not on an item"
-    );
+    assert!(entry(&c, "folder-tab").expect("on an item").enabled);
+    assert!(entry(&c, "folder-tab-add").expect("on an item").enabled);
     st.selection = [id(CLOTHING), id(SHIRT)].into();
     let c = catalog(&inv, &st, &prefs, CLOTHING);
-    let why = aurora_i18n::tr!("inventory-folder-tab-why-item");
-    assert!(!entry(&c, "folder-tab").expect("on a folder").enabled);
-    assert!(!entry(&c, "folder-tab-add").expect("on a folder").enabled);
-    assert_eq!((c.help["folder-tab"].as_str(), c.help["folder-tab-add"].as_str()), (why, why));
+    assert!(entry(&c, "folder-tab").expect("on a folder").enabled);
+    assert!(entry(&c, "folder-tab-add").expect("on a folder").enabled);
 
     // the Trash, the Library, the root: hidden (the Trash's own menu is
     // short) or greyed with the reason
@@ -736,4 +748,130 @@ fn a_tab_scoped_on_another_account_shows_everything_with_a_note() {
     let texts = run(&mut frames, true, &mut inv, &mut st, &mut prefs, vec![]);
     assert!(has(&texts, aurora_i18n::tr!("inventory-folder-tab-elsewhere")));
     assert!(row(&texts, "Unrelated") && row(&texts, "Shirt"));
+}
+
+// ---- Feature 2.13: single items ----
+
+#[test]
+fn an_items_menu_pins_it_to_a_tab_picked_under_add_to() {
+    for classic in [true, false] {
+        let mut w = Window::new(classic, two_tabs());
+        w.st.expand_all = Some(true);
+        w.settle();
+        w.click_row(SHIRT, Default::default());
+        let texts = w.menu(SHIRT);
+        assert!(has(&texts, aurora_i18n::tr!("inventory-folder-tab-create")), "classic={classic}");
+        let add_to = aurora_i18n::tr!("inventory-folder-tab-add-to");
+        let texts = w.hover(&texts, add_to);
+        w.choose(&texts, "Looks");
+        assert_eq!(items::of(&w.prefs.custom_tabs[1], account()), [id(SHIRT)], "classic={classic}");
+        assert!(folders::of(&w.prefs.custom_tabs[1], account()).is_empty(), "classic={classic}");
+        assert_eq!(
+            w.st.message,
+            aurora_i18n::tr!("inventory-folder-tab-added-one", folder = "Shirt", tab = "Looks"),
+            "classic={classic}"
+        );
+        // the tab of that one item lists it alone
+        select(&mut w.st, &w.prefs, SLOT_BASE + 1);
+        let texts = w.settle();
+        assert!(row(&texts, "Shirt"), "classic={classic}");
+        assert!(!row(&texts, "Skin") && !row(&texts, "Unrelated"), "classic={classic}");
+    }
+}
+
+#[test]
+fn create_tab_on_an_item_makes_a_tab_named_after_it() {
+    let inv = inventory();
+    let mut prefs = InventoryPreferences::default();
+    let mut st = InventoryUi::default();
+    let made = save_as_tab(&inv, &mut st, &mut prefs, account(), &[id(SHIRT)]).expect("a new tab");
+    let tab = &prefs.custom_tabs[0];
+    assert_eq!((tab.id, tab.name.as_str()), (made, "Shirt"));
+    assert_eq!(items::of(tab, account()), [id(SHIRT)]);
+    assert!(folders::of(tab, account()).is_empty());
+    // folders and items: named after the first folder
+    save_as_tab(&inv, &mut st, &mut prefs, account(), &[id(SHIRT), id(BODY)]).expect("another");
+    let tab = &prefs.custom_tabs[1];
+    assert_eq!(tab.name, "Body");
+    assert_eq!(
+        (folders::of(tab, account()), items::of(tab, account())),
+        (&[id(BODY)][..], &[id(SHIRT)][..])
+    );
+}
+
+#[test]
+fn pinned_items_head_the_tabs_list_and_gone_ones_are_noted() {
+    for classic in [true, false] {
+        let mut prefs = scoped_prefs(&[CLOTHING]);
+        items::set(&mut prefs.custom_tabs[0], account(), vec![id(120), id(DELETED)]);
+        let mut w = Window::new(classic, prefs);
+        select(&mut w.st, &w.prefs, SLOT_BASE);
+        let texts = w.settle();
+        let skin = texts
+            .iter()
+            .find(|t| t.source == "Skin" || t.source.starts_with("Skin "))
+            .map(|t| t.rect.top());
+        let clothing = texts.iter().find(|t| t.source == "Clothing").map(|t| t.rect.top());
+        assert!(
+            skin.zip(clothing).is_some_and(|(skin, clothing)| skin < clothing),
+            "classic={classic}: the pin above the folders ({skin:?}, {clothing:?})"
+        );
+        assert!(row(&texts, "Shirt") && !row(&texts, "Unrelated"), "classic={classic}");
+        let note = aurora_i18n::tr!("inventory-folder-tab-note-gone", count = 1);
+        assert!(has(&texts, &note), "classic={classic}: the deleted pin is noted");
+        // "Remove from tab" forgets it, the live pin stays
+        let at = at(&texts, aurora_i18n::tr!("inventory-folder-tab-note-remove"));
+        w.run(click(at, egui::PointerButton::Primary));
+        w.settle();
+        assert_eq!(items::of(&w.prefs.custom_tabs[0], account()), [id(120)], "classic={classic}");
+    }
+}
+
+#[test]
+fn a_flat_tab_lists_items_without_folders_with_their_folder() {
+    for classic in [true, false] {
+        let mut prefs = scoped_prefs(&[CLOTHING]);
+        prefs.custom_tabs[0].flat = true;
+        let mut w = Window::new(classic, prefs);
+        select(&mut w.st, &w.prefs, SLOT_BASE);
+        let texts = w.settle();
+        for item in ["Shirt", "Sneaker", "Boot"] {
+            assert!(row(&texts, item), "classic={classic}: {item}");
+        }
+        for folder in ["Clothing", "Shoes", "Boots"] {
+            assert!(!has(&texts, folder), "classic={classic}: no {folder} row");
+        }
+        // the folder of a row in its tooltip (and at its right when it fits)
+        let boot = texts
+            .iter()
+            .find(|t| t.source == "Boot" || t.source.starts_with("Boot "))
+            .expect("Boot")
+            .rect
+            .center();
+        let path = super::super::flat::folder_path(&w.inv, id(112)).expect("its folder");
+        let tip = aurora_i18n::tr!("inventory-quick-in-folder", path = path.as_str());
+        let classic_ = w.classic;
+        let (inv, st, prefs) = (&mut w.inv, &mut w.st, &mut w.prefs);
+        let p = crate::theme::Theme::default().palette();
+        let facts = facts();
+        let hovered = w.frames.hover(boot, |ui| {
+            ui.set_max_size(Vec2::new(420.0, 700.0));
+            if classic_ {
+                super::super::super::inventory_contents(ui, &p, &Icons::default(), inv, st, prefs, &facts, &mut vec![]);
+            } else {
+                super::super::super::aurora::contents(
+                    ui,
+                    &p,
+                    &Icons::default(),
+                    inv,
+                    st,
+                    prefs,
+                    &facts,
+                    &std::collections::HashMap::new(),
+                    &mut vec![],
+                );
+            }
+        });
+        assert!(has(&hovered, &tip), "classic={classic}: {tip}");
+    }
 }

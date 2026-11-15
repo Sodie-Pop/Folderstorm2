@@ -1232,45 +1232,58 @@ inventory-folder-tab-create = Créer un onglet
 inventory-folder-tab-add-to = Ajouter à
 inventory-folder-tab-new = Nouvel onglet…
 inventory-folder-tab-has-tip = Déjà dans cet onglet.
-inventory-folder-tab-why-empty = Sélectionnez d'abord des dossiers.
-inventory-folder-tab-why-item = Seuls des dossiers peuvent aller dans un onglet : la sélection contient un objet.
+inventory-folder-tab-why-empty = Sélectionnez d'abord des dossiers ou des objets.
 inventory-folder-tab-why-refused = La racine de l'inventaire, la Bibliothèque, la Corbeille et ce qu'elle contient ne peuvent pas aller dans un onglet.
 inventory-folder-tab-why-loading = L'inventaire n'est pas encore chargé.
 inventory-folder-tab-why-window = Une fenêtre ouverte sur un seul dossier n'a pas d'onglets personnalisés.
 inventory-folder-tab-added-one = « { $folder } » ajouté à « { $tab } ».
 inventory-folder-tab-added-many = { $count ->
-    [one] { $count } dossier ajouté à « { $tab } ».
-   *[other] { $count } dossiers ajoutés à « { $tab } ».
+    [one] { $count } élément ajouté à « { $tab } ».
+   *[other] { $count } éléments ajoutés à « { $tab } ».
     }
 inventory-folder-tab-added-already = { $count ->
     [one] { $count } y était déjà.
    *[other] { $count } y étaient déjà.
     }
 inventory-folder-tab-already-one = « { $folder } » est déjà dans « { $tab } ».
-inventory-folder-tab-already-many = Ces dossiers sont déjà dans « { $tab } ».
-inventory-folder-tab-add = Ajouter les dossiers sélectionnés
-inventory-folder-tab-replace = N'utiliser que les dossiers sélectionnés
-inventory-folder-tab-clear = Afficher tous les dossiers
-inventory-folder-tab-clear-tip = Afficher à nouveau tout l'inventaire dans cet onglet. Ses filtres et sa recherche restent.
-inventory-folder-tab-select-tip = Sélectionnez d'abord des dossiers dans la liste de l'inventaire : { $count } au plus, ni la Corbeille ni la Bibliothèque.
+inventory-folder-tab-already-many = Ils sont déjà dans « { $tab } ».
+inventory-folder-tab-add = Ajouter la sélection
+inventory-folder-tab-replace = N'utiliser que la sélection
+inventory-folder-tab-clear = Tout afficher
+inventory-folder-tab-clear-tip = Afficher à nouveau tout l'inventaire dans cet onglet : aucun dossier, aucun objet épinglé. Ses filtres et sa recherche restent.
+inventory-folder-tab-select-tip = Sélectionnez d'abord des dossiers ou des objets dans la liste de l'inventaire : { $count } dossiers au plus, ni la Corbeille ni la Bibliothèque.
 inventory-folder-tab-limit = Un onglet peut afficher au plus { $count } dossiers.
-inventory-folder-tab-heading = Dossiers
+inventory-folder-tab-heading = Dossiers et objets épinglés
 inventory-folder-tab-all = Tous les dossiers
-inventory-folder-tab-elsewhere = Les dossiers de cet onglet ont été choisis sur un autre compte : ici, il affiche tous les dossiers.
-inventory-folder-tab-help = L'onglet affiche ces dossiers et tout ce qu'ils contiennent, avec ses filtres et sa recherche. Sélectionnez des dossiers dans la liste de l'inventaire ({ $count } au plus), puis ajoutez-les.
-inventory-folder-tab-remove = Retirer ce dossier de l'onglet
+inventory-folder-tab-elsewhere = Les dossiers et objets de cet onglet ont été choisis sur un autre compte : ici, il affiche tous les dossiers.
+inventory-folder-tab-help = L'onglet affiche ces dossiers et tout ce qu'ils contiennent, et les objets épinglés en tête, avec ses filtres et sa recherche. Sélectionnez des dossiers ({ $count } au plus) ou des objets dans la liste de l'inventaire, puis ajoutez-les.
+inventory-folder-tab-remove = Retirer de l'onglet
 inventory-folder-tab-deleted-folder = Dossier supprimé
 inventory-folder-tab-status-missing = supprimé
 inventory-folder-tab-status-trash = dans la Corbeille
 inventory-folder-tab-status-refused = non autorisé
 inventory-folder-tab-note-gone = { $count ->
-    [one] { $count } dossier de cet onglet est supprimé ou dans la Corbeille.
-   *[other] { $count } dossiers de cet onglet sont supprimés ou dans la Corbeille.
+    [one] { $count } dossier ou objet de cet onglet est supprimé ou dans la Corbeille.
+   *[other] { $count } dossiers ou objets de cet onglet sont supprimés ou dans la Corbeille.
     }
 inventory-folder-tab-note-remove = Retirer de l'onglet
-inventory-folder-tab-note-remove-tip = Oublier ces dossiers dans cet onglet. Un dossier restauré depuis la Corbeille n'y reviendrait pas.
+inventory-folder-tab-note-remove-tip = Les oublier dans cet onglet. Ce qui sera restauré depuis la Corbeille n'y reviendrait pas.
 inventory-folder-tab-demo-name = Vêtements et corps
 inventory-folder-tab-demo-other = Au quotidien
+inventory-folder-tab-why-broken = Un lien de la sélection ne mène à rien : il ne peut pas aller dans un onglet.
+inventory-folder-tab-item-limit = Un onglet peut épingler au plus { $count } objets.
+inventory-folder-tab-deleted-item = Objet supprimé
+inventory-quick-pinned = Objet épinglé
+inventory-quick-open-window = Ouvrir dans une fenêtre
+inventory-quick-open-window-tip = Afficher cet onglet dans une petite fenêtre à lui.
+inventory-quick-flat = Liste à plat
+inventory-quick-flat-tip = Lister tous les objets de cet onglet sans dossiers, chacun avec son dossier.
+inventory-quick-in-folder = Dans { $path }
+inventory-quick-pin = Épingler : garder cette fenêtre au-dessus des autres
+inventory-quick-unpin = Désépingler : laisser d'autres fenêtres la couvrir
+inventory-quick-quiet = Vue simple : la liste seule
+inventory-quick-full = Vue complète : recherche, onglets et outils
+inventory-quick-demo-name = Accès rapide
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar
