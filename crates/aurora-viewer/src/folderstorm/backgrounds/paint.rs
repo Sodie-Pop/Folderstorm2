@@ -80,7 +80,7 @@ fn side_for(window: [u32; 2], fit: Fit, gpu: usize) -> u32 {
     let gpu = u32::try_from(gpu).unwrap_or(u32::MAX).max(1);
     let want = match fit {
         Fit::Centre | Fit::Tile => TEXTURE_SIDE,
-        Fit::Fill | Fit::Fit | Fit::Stretch => window[0].max(window[1]).div_ceil(1024).max(1) * 1024,
+        Fit::Fill | Fit::Contain | Fit::Stretch => window[0].max(window[1]).div_ceil(1024).max(1) * 1024,
     };
     want.min(TEXTURE_SIDE).min(gpu)
 }
@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(side_for([800, 600], Fit::Stretch, 16384), 1024);
         assert_eq!(side_for([800, 600], Fit::Tile, 16384), 4096);
         assert_eq!(side_for([800, 600], Fit::Centre, 2048), 2048, "the GPU's limit");
-        assert_eq!(side_for([7680, 2160], Fit::Fit, 16384), 4096);
+        assert_eq!(side_for([7680, 2160], Fit::Contain, 16384), 4096);
     }
 
     #[test]

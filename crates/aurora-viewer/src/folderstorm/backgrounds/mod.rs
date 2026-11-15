@@ -14,7 +14,7 @@
 //! - [`import`]: the copy of a chosen picture, and its decoding.
 //! - [`paint`]: the texture, and the shapes put under everything egui
 //!   draws (one hook in `app.rs`).
-//! - [`demo`]: `AURORA_DEMO_BACKGROUND`.
+//! - [`demo`]: the demo, `AURORA_DEMO_BACKGROUND`.
 //!
 //! The world is never covered: only the window minus the world viewport is
 //! painted, and nothing at all while the world fills the window.

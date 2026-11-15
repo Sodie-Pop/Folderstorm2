@@ -233,7 +233,7 @@ fn the_picture_is_drawn_in_each_monitor_s_margin_and_the_world_kept() {
 #[test]
 fn each_fit_and_the_span_over_both_monitors() {
     for (fit, span, name) in [
-        (Fit::Fit, false, "background-fit"),
+        (Fit::Contain, false, "background-fit"),
         (Fit::Centre, false, "background-centre"),
         (Fit::Tile, false, "background-tile"),
         (Fit::Stretch, true, "background-span"),
@@ -249,7 +249,7 @@ fn each_fit_and_the_span_over_both_monitors() {
         let colour = Color32::from_rgb(20, 30, 60);
         match fit {
             // 480 × 270 in 640 × 360: the same proportions, no border
-            Fit::Fit => assert_ne!(v.at(5, 180), colour),
+            Fit::Contain => assert_ne!(v.at(5, 180), colour),
             // at its own size in the middle of each monitor: the colour
             // at the monitor's corner, the picture from x = 80
             Fit::Centre => {
@@ -341,7 +341,6 @@ fn the_store_keeps_the_backgrounds_and_writes_nothing_while_default() {
     assert_eq!(layout.background, None);
     assert_eq!(read.background, Background::default());
     // Update keeps a layout's own background
-    let mut store = store;
     let world = store.layout(0).and_then(|l| l.world.clone()).unwrap_or_default();
     store.update(0, world, None, None, Vec::new()).expect("updated");
     assert!(store.layout(0).expect("there").background.is_some());

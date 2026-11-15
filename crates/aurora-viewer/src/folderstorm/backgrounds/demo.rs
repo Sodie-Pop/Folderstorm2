@@ -64,7 +64,7 @@ pub const MISSING: &str = "0000000000000000.png";
 pub fn seed(mode: &str, store: &mut Store, viewport: &mut ViewportSettings, width: u32, folder: &Path) -> bool {
     let fit = match mode {
         "1" | "fill" | "span" | "dim" | "layout" => Fit::Fill,
-        "fit" => Fit::Fit,
+        "fit" => Fit::Contain,
         "stretch" => Fit::Stretch,
         "centre" | "center" => Fit::Centre,
         "tile" => Fit::Tile,

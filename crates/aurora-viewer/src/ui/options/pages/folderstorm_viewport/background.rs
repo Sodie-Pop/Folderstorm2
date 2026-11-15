@@ -29,7 +29,7 @@ fn kinds() -> [(Kind, &'static str, bool); 3] {
 fn fits() -> [(Fit, &'static str); 5] {
     [
         (Fit::Fill, tr!("fs-background-fit-fill")),
-        (Fit::Fit, tr!("fs-background-fit-fit")),
+        (Fit::Contain, tr!("fs-background-fit-fit")),
         (Fit::Stretch, tr!("fs-background-fit-stretch")),
         (Fit::Centre, tr!("fs-background-fit-centre")),
         (Fit::Tile, tr!("fs-background-fit-tile")),
@@ -182,13 +182,14 @@ fn answer(ctx: &egui::Context, target: &Target) -> (Option<Result<Picture, Impor
     if choosing.looked.saturating_add(3) < now {
         choosing.pending = None;
     }
-    choosing.looked = now;
-    let Some((for_target, slot)) = &choosing.pending else {
+    let Some((for_target, slot)) = choosing.pending.clone() else {
         return (None, false);
     };
-    if for_target != target {
+    // (only the row it was opened from keeps it awaited)
+    if for_target != *target {
         return (None, true);
     }
+    choosing.looked = now;
     let done = slot.lock().ok().and_then(|mut slot| slot.take());
     let waiting = done.is_none();
     if !waiting {

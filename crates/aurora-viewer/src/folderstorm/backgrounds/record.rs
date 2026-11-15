@@ -33,7 +33,8 @@ pub enum Fit {
     #[default]
     Fill,
     /// Shown whole, its proportions kept: the colour around it.
-    Fit,
+    #[serde(rename = "fit")]
+    Contain,
     /// Covers the area exactly, its proportions lost.
     Stretch,
     /// At its own size in pixels, in the middle.

@@ -73,7 +73,7 @@ pub fn placed(area: Rect, size: Vec2, fit: Fit) -> Rect {
     }
     match fit {
         Fit::Stretch => area,
-        Fit::Fill | Fit::Fit => {
+        Fit::Fill | Fit::Contain => {
             let sx = area.width() / size.x;
             let sy = area.height() / size.y;
             let scale = if fit == Fit::Fill { sx.max(sy) } else { sx.min(sy) };
@@ -207,7 +207,7 @@ mod tests {
         // Fill: covers, the sides cut
         assert_eq!(placed(area, square, Fit::Fill), r(0.0, -420.0, 1920.0, 1920.0));
         // Fit: whole, the colour around
-        assert_eq!(placed(area, square, Fit::Fit), r(420.0, 0.0, 1080.0, 1080.0));
+        assert_eq!(placed(area, square, Fit::Contain), r(420.0, 0.0, 1080.0, 1080.0));
         assert_eq!(placed(area, square, Fit::Stretch), area);
         assert_eq!(placed(area, square, Fit::Centre), r(710.0, 290.0, 500.0, 500.0));
         assert_eq!(placed(area, square, Fit::Tile), r(0.0, 0.0, 500.0, 500.0));
@@ -215,7 +215,7 @@ mod tests {
         assert_eq!(placed(area, vec2(3840.0, 2160.0), Fit::Centre), r(-960.0, -540.0, 3840.0, 2160.0));
         // an area that is not on the window's corner
         let area = r(1920.0, 0.0, 1920.0, 1080.0);
-        assert_eq!(placed(area, vec2(3840.0, 2160.0), Fit::Fit), area);
+        assert_eq!(placed(area, vec2(3840.0, 2160.0), Fit::Contain), area);
         // nothing to place
         assert_eq!(placed(area, Vec2::ZERO, Fit::Fill), area);
     }

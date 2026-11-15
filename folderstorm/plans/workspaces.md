@@ -2349,6 +2349,124 @@ Preferences: the group, the layout's choice, a picture.
    layouts).
 5. Brightness 10–100 %, the colour not dimmed.
 
+#### 1.8 as built (branch `claude/workspaces-backgrounds`, 2026-11-15)
+
+As planned above, with these details:
+
+- **The record** is `folderstorm/backgrounds/record.rs`'s `Background`
+  (`kind`, `colour`, `picture`, `fit`, `span`, `brightness`). Fit's
+  "show it whole" variant is `Fit::Contain` in code, `"fit"` in the file.
+  The default is `Store::background`, read leniently by the store's `Raw`
+  (anything else reads as the default); a layout's own is
+  `Layout::background` (`record::lenient_own`: one that cannot be read is
+  dropped, the layout kept). `Store::set_layout_background` sets it;
+  `Store::update` keeps it; `Layout::new` has none.
+- **In effect**: `backgrounds::in_effect(store)`, the active layout's own
+  (`Store::active`), else the default.
+- **Choosing a picture** (`backgrounds::import`): `import` / `store` check
+  32 MiB, 8192 a side and 32 megapixels, decode once with `image`'s
+  limits, and write the bytes as they are under `<FNV-1a 64 of the
+  bytes>.<extension>` in `<settings folder>/folderstorm_backgrounds/`
+  (written as `.part`, then renamed). The file dialog and the copy run on
+  their own thread (`ui/options/pages/folderstorm_viewport/background.rs`);
+  the answer is taken only by the row it was opened from, and dropped when
+  that row was not drawn for 3 frames. A refusal is said under the row.
+  After a picture is taken, `import::prune` deletes the copies that
+  `backgrounds::referenced` (the default, each layout's own, and the
+  entries kept unread) does not name; only names of our own form.
+- **Painting** (`backgrounds::paint`): `underlay_in` runs after the pass,
+  from the one hook in `app.rs`, and `splice`s its shapes at the start of
+  the frame's list. The margins come from `viewport::world_area` (new:
+  the world's part in points, this frame or the last; `dialog_area` now
+  uses it), the monitors from `viewport::monitors`. The picture is decoded
+  on a thread (`import::decode`) at `side_for` the window (its pixels
+  rounded up to 1024, at most 4096 and the GPU's limit; 4096 for Centre
+  and Tile, which use its own pixels) and uploaded once
+  (`TextureOptions::LINEAR`), drawn from the next frame (egui hands a new
+  texture to the GPU with the following frame). A window that grows over
+  more monitors decodes it again only if it was reduced. Tile draws one
+  mesh of the tiles that meet each margin. No picture chosen, a colour or
+  nothing: no texture is kept. No margin: no decoding.
+- **Status** for Preferences (`paint::status`): loading, shown, missing,
+  unreadable, as far as the painting tried the picture; `paint::forget`
+  reads it again after it is chosen again.
+- **Preferences.** The group *Background around the world* is drawn by
+  `folderstorm_viewport.rs` after *World viewport* (a child module, so no
+  hook in `pages.rs` or `layout.rs`): *Background* (choice), *Picture*
+  (wide row: *Choose a picture…*, the name, "loading…", what is wrong),
+  *Fit* (list), *Across all monitors*, *Colour*, *Brightness*; rows greyed
+  when their kind is not chosen; a note while the viewport is off. Each row
+  edits a tracked field of `folderstorm_workspaces.background`, so the
+  modified dots and the page's reset work. The selected layout in Layouts &
+  workspaces gets *Background: Use the default / Its own* (its own starts
+  as a copy of the default) and its own choices in a small grid (*Shows*,
+  *Picture*, *Fit*, *Across all monitors*, *Colour*, *Brightness*).
+- **Demo.** `AURORA_DEMO_BACKGROUND` (`backgrounds::demo::seed`, called
+  from `app/folderstorm_workspaces.rs`), as planned; the picture is drawn
+  in code and copied through `import::store`.
+
+**Settings format.** `folderstorm_workspaces.background` (absent while the
+default) and `folderstorm_workspaces.layouts[].background` (absent for
+"Use the default"). An older build keeps a layout's `background` (the unknown fields of an
+entry are kept) but drops the default's when it saves the settings. No
+migration, no schema change.
+
+**Upstream hooks.**
+
+| File | Change |
+|---|---|
+| `crates/aurora-viewer/src/app.rs` (line 12151) | one line before `studio_fade`: `crate::folderstorm::backgrounds::underlay(...)` |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 37 `fs-background-*` keys after the workspace context's |
+| `docs/TESTING.md` | a paragraph and a table row for `AURORA_DEMO_BACKGROUND` |
+
+**Changed beside them (ours):** `folderstorm/mod.rs` (the `mod` line),
+`folderstorm/viewport.rs` (`world_area`), `folderstorm/workspaces/store.rs`
+(the two fields, `Kept::raw`, `set_layout_background`),
+`app/folderstorm_workspaces.rs` (the demo), the two Preferences pages.
+
+**New files:** `folderstorm/backgrounds/{mod,record,place,import,paint,demo,tests}.rs`,
+`ui/options/pages/folderstorm_viewport/background.rs`,
+`ui/options/pages/folderstorm_workspaces/tests/background.rs`.
+
+**Tests.** Pure: `backgrounds::record` (4: the file, names of our own
+only, ranges, what is painted), `backgrounds::place` (4: margins for
+several viewports, monitor areas at 100 and 200 %, each fit, tiles and
+their cap), `backgrounds::import` (4: the copy and the same picture twice,
+refusals, reduction, pruning), `backgrounds::paint` (2: the side decoded,
+the shapes in the margins). Frame tests with the software painter,
+`backgrounds::tests` (7): nothing without margins (not even a decode) or
+without a choice, a colour in four margins under a window, the picture on
+the left monitor with the world untouched, each fit and the span, a
+missing picture, a layout's own in effect while active, the store's file.
+Preferences (`folderstorm_workspaces::tests::background`, 4): the group, the
+default chosen by clicks, a layout's own taken and given back, a layout's
+own drawn. Pictures: `background-fill-left-monitor.png`,
+`background-fit.png`, `background-centre.png`, `background-tile.png`,
+`background-span.png`, `preferences-background.png`,
+`preferences-layout-background.png`.
+
+**Not checked here** (no graphics device in the sandbox, no Vulkan
+driver): the viewer itself: the hook's place in the real frame, the
+texture on the GPU, the file dialog, DPI over mixed monitors, the demo.
+
+**Search words** (`cx.keywords`, English for now): *Background*
+("wallpaper background margins monitors desktop"), *Picture* ("wallpaper
+image photo file"), *Across all monitors* ("span spanning wallpaper"),
+*Brightness* ("dim dimming darker"), and "background wallpaper" added to
+the saved layouts' list. They become `fs-search-*` keys once #69 lands.
+
+**Known limits.**
+
+- No Inventory texture or texture UUID (C++ had both): local files only.
+- No per-monitor override (C++: up to 16 display slots); one fit for all
+  monitors.
+- egui textures have no mipmaps: a picture much larger than its area is
+  reduced on the thread to about the window's size, not each monitor's.
+- A settings backup restored after its picture was pruned shows the
+  colour and the "cannot be found" note until it is chosen again.
+- "Reset everything" keeps the default background (the store is kept).
+- The layout's "modified" mark ignores its background.
+
 ## 14. Later (outline only)
 
 - **1.6 Favorites strip.** Built: "1.6 in detail" and "1.6 as built"
@@ -2359,7 +2477,7 @@ Preferences: the group, the layout's choice, a picture.
   through the normal outfit paths (outfit safety, RLVa), never detaching
   anything else. Missing-monitor recovery is already section 8.5. MCP tools
   `workspace_list` / `workspace_apply` belong with row 4.6.
-- **1.8 Backgrounds.** "1.8 in detail" above. Outline: an image painted in
+- **1.8 Backgrounds.** Built: "1.8 in detail" and "1.8 as built" above. Outline: an image painted in
   the margins outside the world, before the windows; no renderer change.
   Optional per layout.
 - **1.9 Search keywords.** Help texts (section 9.2).

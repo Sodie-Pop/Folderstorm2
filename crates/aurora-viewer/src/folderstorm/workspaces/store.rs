@@ -1098,11 +1098,12 @@ mod tests {
     #[test]
     fn unknown_fields_of_a_layout_are_kept_and_unknown_windows_too() {
         let mut value = serde_json::to_value(wide()).expect("saved");
-        value["background"] = json!({ "image": "margins.png", "dim": 0.5 });
+        // (not "background": row 1.8 uses that name)
+        value["later_part"] = json!({ "image": "margins.png", "dim": 0.5 });
         value["windows"]["windows"]["a_window_of_later"] = json!({ "x": 1.0, "y": 2.0, "width": 300.0, "height": 200.0 });
         let store = read(json!({ "layouts": [value.clone()], "active_layout": "Wide" }));
         let layout = store.layout(0).expect("usable");
-        assert_eq!(layout.other["background"]["dim"], 0.5);
+        assert_eq!(layout.other["later_part"]["dim"], 0.5);
         assert!(layout.windows.as_ref().expect("windows").windows.contains_key("a_window_of_later"));
         // written back with them
         let mut expected = value;
