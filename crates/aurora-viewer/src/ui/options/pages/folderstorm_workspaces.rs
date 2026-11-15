@@ -989,6 +989,30 @@ mod tests {
             }
         }
 
+        /// Scrolls the page down, with the wheel over it, until `text` is
+        /// shown (at most a few turns).
+        fn reveal(&mut self, text: &str) {
+            for _ in 0..12 {
+                if self.shows(text) {
+                    return;
+                }
+                let at = pos2(700.0, 500.0);
+                self.run(vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -80.0),
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Unknown,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                for _ in 0..10 {
+                    self.run(Vec::new());
+                }
+            }
+        }
+
         /// Clicks the text `label` (a button's, a line's of the list).
         fn click(&mut self, label: &str) {
             let rect = self.rect_of(label).unwrap_or_else(|| panic!("“{label}” is shown"));

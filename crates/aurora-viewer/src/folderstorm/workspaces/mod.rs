@@ -16,7 +16,7 @@
 //!
 //! - [`store`]: what `settings.json` keeps, its limits, the list.
 //! - [`windows`]: the allowlist. [`workspace`]: the workspaces and their
-//!   list.
+//!   list. [`context`]: a workspace's graphics, camera and HUDs (row 1.7).
 //! - [`fit`]: a saved place in an interface of another size or scale.
 //! - [`monitors`]: monitor setups, and a saved viewer window on the
 //!   monitors of now.
@@ -38,6 +38,7 @@
 
 pub mod apply;
 pub mod capture;
+pub mod context;
 pub mod fit;
 pub mod menu;
 pub mod monitors;

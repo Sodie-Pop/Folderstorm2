@@ -32,6 +32,7 @@
 //! when the monitors change.
 
 use super::capture::{self, Room};
+use super::context::{self, Hud};
 use super::fit::{Fitted, fit};
 use super::menu::{self, Request};
 use super::monitors;
@@ -121,6 +122,18 @@ pub trait Shell {
     }
     /// Closes the folder window of that floater's id.
     fn close_folder(&mut self, _window: &str) {}
+
+    // A workspace's HUDs (row 1.7): what Preferences shows of them.
+
+    /// The HUDs worn now, each with its point (none when nobody needs
+    /// them: Preferences is closed).
+    fn worn_huds(&self) -> Vec<Hud> {
+        Vec::new()
+    }
+    /// The name of the user's own Inventory item `item`, if it has it.
+    fn item_name(&self, _item: Uuid) -> Option<String> {
+        None
+    }
 }
 
 /// A viewer that opens nothing and says every window is closed: the tests
@@ -180,6 +193,9 @@ struct Arrangement {
     /// the apply this undoes is a workspace's (it opens and closes); and
     /// the folder windows of then, when that workspace has its own.
     shown: Option<(BTreeSet<String>, Option<String>, Option<Folders>)>,
+    /// The graphics and the camera of then, when the apply this undoes
+    /// changed them (row 1.7): said by the app once it has.
+    context: Option<context::Before>,
 }
 
 /// What an apply did, for one line under the list.
@@ -222,6 +238,9 @@ pub struct Report {
     pub unlocked: bool,
     /// The layout has a viewer window and there is none to drive here.
     pub no_window: bool,
+    /// What the app did with the workspace's context (row 1.7), once it
+    /// has said.
+    pub context: Option<context::Told>,
 }
 
 /// The card shown over the world when the monitors changed (section 8.5).
@@ -244,6 +263,10 @@ pub struct Outcome {
     pub commands: Vec<Command>,
     /// *Layouts…* was chosen: Preferences on the Layouts tab.
     pub preferences: bool,
+    /// A workspace's context to apply, or the graphics and the camera to
+    /// put back (row 1.7): the app does it, then says what it did
+    /// ([`context_done`]).
+    pub context: Option<context::Ask>,
 }
 
 #[derive(Clone, Debug)]
@@ -299,6 +322,8 @@ struct Session {
     menu: u64,
     /// Why the switcher's last *Save new* or *Update* was refused.
     refused: Option<StoreError>,
+    /// What the app is to do with a workspace's context in the next frame.
+    context: Option<context::Ask>,
     /// The card is not drawn: the interface is hidden, or in mouselook
     /// ([`set_notice_hidden`]).
     notice_hidden: bool,
@@ -439,6 +464,7 @@ fn arrangement(ctx: &egui::Context, live: &Live, window: bool) -> Arrangement {
         active: live.store.active_layout.clone(),
         modified: live.store.modified,
         shown: None,
+        context: None,
     }
 }
 
@@ -498,6 +524,7 @@ fn start(
             frame: now,
         });
         s.queued_open = None;
+        s.context = None;
         s.settle = Some(now + SETTLE);
         s.baseline = None;
         s.notice = None;
@@ -542,6 +569,10 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
         let frame = ctx.cumulative_frame_nr();
         session(ctx, |s| s.queued_open = Some(QueuedOpen { open, folders, frame }));
         live.store.active_workspace = workspace.filter(|name| live.store.find_workspace(name).is_some());
+    }
+    // the graphics and the camera of then (never the HUDs)
+    if let Some(before) = kept.context {
+        session(ctx, |s| s.context = Some(context::Ask::Restore(before)));
     }
     // the marks of then, if that layout is still in the list
     let active = kept.active.filter(|name| live.store.find(name).is_some());
@@ -592,9 +623,12 @@ pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Re
         ..applied.unwrap_or_default()
     };
     report.workspace = Some(workspace.name.clone());
-    live.store.active_workspace = Some(workspace.name);
+    live.store.active_workspace = Some(workspace.name.clone());
+    // its graphics, camera and HUDs: done by the app in the next frame
+    let context = Some(workspace.context()).filter(|context| !context.is_empty());
     let frame = ctx.cumulative_frame_nr();
     session(ctx, |s| {
+        s.context = context.map(context::Ask::Apply);
         s.queued_open = Some(QueuedOpen {
             open: workspace.open,
             folders: workspace.folders,
@@ -681,6 +715,22 @@ pub fn has_previous(ctx: &egui::Context) -> bool {
 /// What the last apply did.
 pub fn report(ctx: &egui::Context) -> Option<Report> {
     session(ctx, |s| s.report.clone())
+}
+
+/// The app did what [`Outcome::context`] asked: what it did goes in the
+/// report, and what it changed from is what *Previous arrangement* puts
+/// back.
+pub fn context_done(ctx: &egui::Context, done: context::Done) {
+    session(ctx, |s| {
+        if let Some(report) = &mut s.report {
+            report.context = Some(done.told);
+        }
+        if !done.before.is_empty()
+            && let Some(previous) = &mut s.previous
+        {
+            previous.context = Some(done.before);
+        }
+    });
 }
 
 /// The windows are as the active layout has them from now on: compared
@@ -954,6 +1004,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
             windows: shell.folder_windows(),
         },
     );
+    context::set_view(ctx, hud_view(live.store, shell));
     run_requests(ctx, live, &mut outcome);
     let now = ctx.cumulative_frame_nr();
     let mut s = session(ctx, std::mem::take);
@@ -999,6 +1050,8 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     // the switcher draws a copy of the store, kept up while it is open
     switcher::publish(ctx, live.store, live.world, &capture::open(ctx));
     // (with the session back in its place: an apply reads and writes it)
+    // (asked by the requests of this frame, or by Preferences in the last)
+    outcome.context = session(ctx, |s| s.context.take());
     if let Some(index) = apply_now
         && apply(ctx, live, index).is_ok()
     {
@@ -1010,6 +1063,23 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
         });
     }
     outcome
+}
+
+/// What Preferences shows of HUDs: the HUDs worn now and the names of the
+/// items the workspaces hold for the account logged in.
+fn hud_view(store: &Store, shell: &dyn Shell) -> context::HudView {
+    let account = shell.account();
+    let name = |item: Uuid| shell.item_name(item).unwrap_or_default();
+    let worn = shell.worn_huds().into_iter().map(|hud| (hud, name(hud.item))).collect();
+    let names = store
+        .workspaces
+        .iter()
+        .filter_map(|record| record.workspace()?.huds.as_ref())
+        .filter(|huds| Some(huds.account) == account)
+        .flat_map(|huds| &huds.items)
+        .filter_map(|hud| Some((hud.item, shell.item_name(hud.item)?)))
+        .collect();
+    context::HudView { account, worn, names }
 }
 
 #[derive(Default)]

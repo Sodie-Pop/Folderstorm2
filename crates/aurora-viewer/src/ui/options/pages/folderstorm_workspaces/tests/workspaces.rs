@@ -15,6 +15,8 @@ fn searched() -> Window {
 }
 
 fn save_workspace(w: &mut Window, name: &str) {
+    // (under a selected workspace's settings: the page is scrolled to it)
+    w.reveal(tr!("fs-workspaces-name-hint"));
     w.click(tr!("fs-workspaces-name-hint"));
     w.type_text(name);
     w.click(tr!("fs-workspaces-save"));
@@ -61,6 +63,7 @@ fn a_workspace_is_saved_with_the_layout_in_use_when_asked() {
     assert_eq!(w.store().workspace(0).expect("saved").layout.as_deref(), Some("Wide"));
     // a name that cannot be used is refused with the reason
     save_workspace(&mut w, " photos ");
+    w.reveal(tr!("fs-workspaces-error-taken"));
     assert!(w.shows(tr!("fs-workspaces-error-taken")));
     assert_eq!(w.store().workspaces.len(), 1);
 }

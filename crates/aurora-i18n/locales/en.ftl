@@ -1729,6 +1729,63 @@ fs-workspaces-folders-missing = { $count ->
     }
 fs-workspaces-folders-blocked = Inventory is hidden by RLVa: its folder windows were not opened.
 fs-workspaces-folders-other-account = Its Inventory folders were saved by another account and were skipped.
+fs-context-section = Graphics, camera and HUDs
+fs-context-section-set = Graphics, camera and HUDs (chosen)
+fs-context-graphics = Graphics profile
+fs-context-graphics-keep = Leave the graphics as they are
+fs-context-graphics-help = A graphics profile saved in Preferences › Graphics, chosen by its name: applying the workspace selects it, as choosing it there does. A change to the profile is used the next time. Never the window or full screen.
+fs-context-camera = Camera
+fs-context-camera-keep = Leave the camera as it is
+fs-context-camera-help = One of the four views of the camera controls, or a camera preset you saved, chosen by its name. Not applied while RLVa locks the camera, or in mouselook.
+fs-context-camera-preset = camera preset “{ $name }”
+fs-context-gone = { $name } (not found)
+fs-context-huds = HUDs it wears (never takes anything off):
+fs-context-huds-help = Tick a HUD you are wearing: applying the workspace wears it again at the same HUD point when it is not worn, with the outfit's own rules (RLVa, the attachment limit). Nothing is ever taken off, not even by Previous arrangement. Only for the account that chose them; the workspace keeps the item, never what it contains.
+fs-context-huds-none = Wear a HUD to choose it here.
+fs-context-hud-gone = An item that is not in the Inventory
+fs-context-huds-other = { $count ->
+    [one] { $count } HUD chosen by another account.
+   *[other] { $count } HUDs chosen by another account.
+    }
+fs-context-huds-forget = Forget them
+fs-context-holds-graphics = Graphics profile “{ $name }”.
+fs-context-holds-camera = Camera: { $camera }.
+fs-context-holds-huds = { $count ->
+    [one] Wears { $count } HUD.
+   *[other] Wears { $count } HUDs.
+    }
+fs-context-restored = Graphics and camera put back as they were (HUDs stay on).
+fs-context-graphics-done = Graphics profile “{ $name }” selected.
+fs-context-graphics-missing = The graphics profile “{ $name }” was not found: the graphics were left as they were.
+fs-context-camera-done = Camera: { $camera }.
+fs-context-camera-missing = The { $camera } was not found: the camera was left as it was.
+fs-context-camera-locked = RLVa locks the camera: it was left as it was.
+fs-context-camera-mouselook = In mouselook, the camera was left as it was.
+fs-context-camera-failed = Camera: { $why }
+fs-context-huds-asked = { $count ->
+    [one] { $count } HUD asked to be worn.
+   *[other] { $count } HUDs asked to be worn.
+    }
+fs-context-huds-worn = { $count ->
+    [one] { $count } HUD was already worn.
+   *[other] { $count } HUDs were already worn.
+    }
+fs-context-huds-missing = { $count ->
+    [one] { $count } HUD was not found in the Inventory (deleted, or not loaded yet) and was skipped.
+   *[other] { $count } HUDs were not found in the Inventory (deleted, or not loaded yet) and were skipped.
+    }
+fs-context-huds-not-wearable = { $count ->
+    [one] { $count } item cannot be worn (not an object, or in the Library or the Trash) and was skipped.
+   *[other] { $count } items cannot be worn (not objects, or in the Library or the Trash) and were skipped.
+    }
+fs-context-huds-blocked = { $count ->
+    [one] { $count } HUD is refused by RLVa and was skipped.
+   *[other] { $count } HUDs are refused by RLVa and were skipped.
+    }
+fs-context-huds-other-account = Its HUDs were chosen by another account and were skipped.
+fs-context-huds-busy = An outfit change was under way: its HUDs were not worn. Apply it again in a moment.
+fs-context-huds-refused = Its HUDs were not worn: { $why }
+fs-context-huds-refused-plain = the outfit change was refused.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message

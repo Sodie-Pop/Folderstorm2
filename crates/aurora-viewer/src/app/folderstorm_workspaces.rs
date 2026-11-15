@@ -12,6 +12,8 @@ use crate::folderstorm::viewport;
 use crate::folderstorm::workspaces::apply;
 use crate::folderstorm::workspaces::window::{Command, Seen};
 
+mod context;
+
 /// The viewer's windows for the layouts and the workspaces
 /// (`apply::Shell`): which of the allowlisted windows are open, Aurora's
 /// own way of opening each (the path of its menu entry or toolbar button:
@@ -33,6 +35,8 @@ struct Windows<'a> {
     /// windows are for one account and for folders that still exist.
     account: uuid::Uuid,
     folders: Option<&'a crate::world::inventory::Inventory>,
+    /// The HUDs worn now (row 1.7), while Preferences may show them.
+    huds: Vec<crate::folderstorm::workspaces::context::Hud>,
 }
 
 /// The `Panels` flag of an allowlisted window that has one of its own.
@@ -166,6 +170,14 @@ impl apply::Shell for Windows<'_> {
     fn close_folder(&mut self, window: &str) {
         self.inventory.folderstorm_close_folder(window);
     }
+
+    fn worn_huds(&self) -> Vec<crate::folderstorm::workspaces::context::Hud> {
+        self.huds.clone()
+    }
+
+    fn item_name(&self, item: uuid::Uuid) -> Option<String> {
+        self.folders?.items.get(&item).map(|item| item.name.clone())
+    }
 }
 
 impl App {
@@ -181,6 +193,12 @@ impl App {
         }
         let seen = self.folderstorm_viewer_window(window);
         self.layouts_demo(seen.as_ref());
+        // (looked for only while Preferences, where they are chosen, is open)
+        let huds = if self.panels.settings {
+            context::worn_huds(&self.world)
+        } else {
+            Vec::new()
+        };
         let rlva = &self.world.rlva;
         let mut windows = Windows {
             panels: &mut self.panels,
@@ -194,10 +212,15 @@ impl App {
             no_world_map: rlva.has("showworldmap"),
             account: self.world.agent_id,
             folders: Some(&self.world.inventory),
+            huds,
         };
-        let outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen, &mut windows);
+        let mut outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen, &mut windows);
         for command in &outcome.commands {
             self.folderstorm_viewer_command(window, *command);
+        }
+        // a workspace's graphics, camera and HUDs (row 1.7)
+        if let Some(ask) = outcome.context.take() {
+            self.folderstorm_workspace_context(ask);
         }
         // (not in mouselook or with the interface put away, where a key may
         // have asked: no window shows)
@@ -644,6 +667,7 @@ mod tests {
                 no_world_map: false,
                 account: uuid::Uuid::nil(),
                 folders: None,
+                huds: Vec::new(),
             };
             for window in windows::all() {
                 assert!(!shell.is_open(window), "{}", window.id);
@@ -682,6 +706,7 @@ mod tests {
                 no_world_map: false,
                 account: uuid::Uuid::nil(),
                 folders: None,
+                huds: Vec::new(),
             };
             for window in windows::all() {
                 if shell.open(&ctx, window) {
@@ -716,6 +741,7 @@ mod tests {
                 no_world_map: false,
                 account: uuid::Uuid::from_u128(7),
                 folders: Some(&world),
+                huds: Vec::new(),
             };
             assert_eq!(shell.account(), Some(uuid::Uuid::from_u128(7)));
             assert!(!shell.has_folder(folder), "not in this Inventory");
@@ -745,6 +771,7 @@ mod tests {
             no_world_map: true,
             account: uuid::Uuid::nil(),
             folders: None,
+            huds: Vec::new(),
         };
         for id in ["inventory", windows::ADDITIONAL_INVENTORY, "minimap", "worldmap", "contacts"] {
             let window = windows::find(id).expect("on the list");
