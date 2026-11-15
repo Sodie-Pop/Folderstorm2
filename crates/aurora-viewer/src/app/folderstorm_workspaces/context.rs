@@ -176,4 +176,43 @@ impl App {
         }
         done
     }
+
+    /// `AURORA_DEMO_WORKSPACES=context`: the demo's graphics profiles ("My
+    /// fast profile" selected), and the workspace "Photos": the world map,
+    /// "My photo profile", the Front view, and as HUDs the first two
+    /// objects of the demo's Inventory (outside the Library), for the
+    /// demo's account. Preferences opens on the tab, the workspace
+    /// selected.
+    pub(super) fn workspace_context_demo_seed(&mut self) {
+        use crate::folderstorm::workspaces::workspace::Workspace;
+        saved::demo(&mut self.settings);
+        saved::select(&mut self.settings, "My fast profile");
+        let inventory = &self.world.inventory;
+        let mut objects: Vec<uuid::Uuid> = inventory
+            .items
+            .values()
+            .filter(|item| item.asset_type == 6 && !crate::world::inventory::actions::library(inventory, item.id))
+            .map(|item| item.id)
+            .collect();
+        objects.sort();
+        let mut photos = Workspace::new("Photos", None, ["worldmap".to_owned()]);
+        photos.graphics = Some("My photo profile".to_owned());
+        photos.camera = Some(Camera::View(crate::camera::CameraPreset::Front));
+        photos.huds = Some(Huds {
+            account: self.world.agent_id,
+            items: objects.into_iter().zip([35, 31]).map(|(item, point)| Hud { item, point }).collect(),
+        })
+        .filter(|huds| !huds.items.is_empty());
+        let store = &mut self.settings.folderstorm_workspaces;
+        let name = photos.name.clone();
+        match store.add_workspace(photos) {
+            Ok(_) => {
+                store.set_favorite_workspace(&name, true);
+            }
+            Err(error) => log::warn!("AURORA_DEMO_WORKSPACES: workspace not seeded: {error:?}"),
+        }
+        store.active_workspace = Some(name);
+        self.panels.settings = true;
+        self.options_ui.open(ui::options::Page::Layout, 3);
+    }
 }

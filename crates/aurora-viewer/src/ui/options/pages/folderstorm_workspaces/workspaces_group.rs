@@ -422,9 +422,19 @@ fn context_section(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usiz
         false => tr!("fs-context-section"),
     };
     widgets::collapsing(ui, p, ("folderstorm-workspace-context", name), title, has, |ui| {
-        let mut changed = graphics_picker(ui, s, index);
-        changed |= camera_picker(ui, s, index);
-        changed | hud_boxes(ui, p, s, index)
+        // (the two pickers in a grid: their boxes line up)
+        let mut changed = egui::Grid::new("folderstorm-workspace-context-pickers")
+            .num_columns(2)
+            .show(ui, |ui| {
+                let changed = graphics_picker(ui, s, index);
+                ui.end_row();
+                let changed = camera_picker(ui, s, index) | changed;
+                ui.end_row();
+                changed
+            })
+            .inner;
+        changed |= hud_boxes(ui, p, s, index);
+        changed
     })
     .body
     .unwrap_or(false)
@@ -432,7 +442,8 @@ fn context_section(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usiz
 
 /// The graphics profile applied with the workspace at `index` (row 1.7):
 /// "leave the graphics as they are", or a profile of Preferences ›
-/// Graphics, by name. True when the choice changed.
+/// Graphics, by name: its label and its box, two cells of a grid. True
+/// when the choice changed.
 fn graphics_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
     let chosen = s
         .folderstorm_workspaces
@@ -446,28 +457,27 @@ fn graphics_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
         (Some(name), None) => name.clone(),
     };
     let mut pick = chosen.clone();
-    ui.horizontal(|ui| {
-        ui.label(tr!("fs-context-graphics")).on_hover_text(tr!("fs-context-graphics-help"));
-        egui::ComboBox::from_id_salt("folderstorm-workspace-graphics")
-            .width(PICKER_W)
-            .selected_text(shown)
-            .truncate()
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut pick, None, keep_label);
-                if let Some(name) = &gone {
-                    ui.selectable_value(&mut pick, Some(name.clone()), tr!("fs-context-gone", name = name.as_str()));
-                }
-                for name in s.graphics_saved.keys() {
-                    ui.selectable_value(&mut pick, Some(name.clone()), name.as_str());
-                }
-            });
-    });
+    ui.label(tr!("fs-context-graphics")).on_hover_text(tr!("fs-context-graphics-help"));
+    egui::ComboBox::from_id_salt("folderstorm-workspace-graphics")
+        .width(PICKER_W)
+        .selected_text(shown)
+        .truncate()
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut pick, None, keep_label);
+            if let Some(name) = &gone {
+                ui.selectable_value(&mut pick, Some(name.clone()), tr!("fs-context-gone", name = name.as_str()));
+            }
+            for name in s.graphics_saved.keys() {
+                ui.selectable_value(&mut pick, Some(name.clone()), name.as_str());
+            }
+        });
     pick != chosen && s.folderstorm_workspaces.set_workspace_graphics(index, pick.as_deref())
 }
 
 /// The camera chosen with the workspace at `index` (row 1.7): "leave the
 /// camera as it is", one of the four views, or a camera preset by name.
-/// True when the choice changed.
+/// Its label and its box, two cells of a grid. True when the choice
+/// changed.
 fn camera_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
     let chosen = s
         .folderstorm_workspaces
@@ -499,18 +509,16 @@ fn camera_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
         .find(|(value, _)| *value == chosen)
         .map_or_else(String::new, |(_, label)| label.clone());
     let mut pick = chosen.clone();
-    ui.horizontal(|ui| {
-        ui.label(tr!("fs-context-camera")).on_hover_text(tr!("fs-context-camera-help"));
-        egui::ComboBox::from_id_salt("folderstorm-workspace-camera")
-            .width(PICKER_W)
-            .selected_text(shown)
-            .truncate()
-            .show_ui(ui, |ui| {
-                for (value, label) in &choices {
-                    ui.selectable_value(&mut pick, value.clone(), label.as_str());
-                }
-            });
-    });
+    ui.label(tr!("fs-context-camera")).on_hover_text(tr!("fs-context-camera-help"));
+    egui::ComboBox::from_id_salt("folderstorm-workspace-camera")
+        .width(PICKER_W)
+        .selected_text(shown)
+        .truncate()
+        .show_ui(ui, |ui| {
+            for (value, label) in &choices {
+                ui.selectable_value(&mut pick, value.clone(), label.as_str());
+            }
+        });
     pick != chosen && s.folderstorm_workspaces.set_workspace_camera(index, pick)
 }
 

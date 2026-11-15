@@ -346,7 +346,11 @@ impl App {
     /// first two folders of the demo's Inventory at frame 120, saves them
     /// at frame 240 as the workspace "Folders" (*Remember Inventory
     /// folders*), closes them at frame 300 and applies "Folders" at frame
-    /// 420: they come back at their places.
+    /// 420: they come back at their places. `=context` (row 1.7) adds the
+    /// demo's graphics profiles and the workspace "Photos" (the world map,
+    /// "My photo profile", the Front view, two object items of the demo's
+    /// Inventory as HUDs), opens Preferences on the tab, applies "Photos"
+    /// at frame 180 and goes back with *Previous arrangement* at frame 420.
     ///
     /// `AURORA_DEMO_STRIP=1` (row 1.6) seeds the same as
     /// `AURORA_DEMO_WORKSPACES=1` with the favorites strip on, the switcher
@@ -371,6 +375,7 @@ impl App {
             (_, Ok(_), _, _) => "switcher".to_owned(),
             (_, _, Ok(workspaces), _) if workspaces == "apply" => "switcher-workspaces-apply".to_owned(),
             (_, _, Ok(workspaces), _) if workspaces == "folders" => "switcher-workspaces-folders".to_owned(),
+            (_, _, Ok(workspaces), _) if workspaces == "context" => "switcher-workspaces-context".to_owned(),
             (_, _, Ok(_), _) => "switcher-workspaces".to_owned(),
             (_, _, _, Ok(strip)) if strip == "row" => "switcher-workspaces-strip-row".to_owned(),
             (_, _, _, Ok(strip)) if strip == "many" => "switcher-workspaces-strip-many".to_owned(),
@@ -510,12 +515,15 @@ impl App {
                         self.settings.favorites_access = crate::settings::FavoritesAccess::Row;
                         self.settings.favorites_row_folded = false;
                     }
-                } else {
+                } else if mode != "switcher-workspaces-context" {
                     crate::folderstorm::workspaces::switcher::open(&ctx);
                 }
             } else {
                 self.panels.settings = true;
                 self.options_ui.open(ui::options::Page::Layout, 3);
+            }
+            if mode == "switcher-workspaces-context" {
+                self.workspace_context_demo_seed();
             }
         }
         let apply_at = |index: usize, frame: u64, app: &mut Self| {
@@ -598,6 +606,24 @@ impl App {
                     _ => {}
                 }
             }
+            // "Photos" (its graphics profile, the Front view, two HUDs), then
+            // Previous arrangement
+            "switcher-workspaces-context" => match self.frame_count {
+                180 => {
+                    let index = self
+                        .settings
+                        .folderstorm_workspaces
+                        .find_workspace("Photos")
+                        .map(|(index, _)| index);
+                    if let Some(index) = index
+                        && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
+                    {
+                        log::warn!("AURORA_DEMO_WORKSPACES: workspace not applied: {error:?}");
+                    }
+                }
+                420 => crate::folderstorm::workspaces::menu::ask(&ctx, crate::folderstorm::workspaces::menu::Request::Previous),
+                _ => {}
+            },
             "unplug" => {
                 apply_at(0, 180, self);
                 if self.frame_count == 600 {
@@ -754,6 +780,42 @@ mod tests {
             shell.close_folder(&window);
             assert!(shell.folder_windows().is_empty());
         }
+    }
+
+    /// What Preferences shows of a workspace's HUDs (row 1.7): the HUDs
+    /// worn now, and the names of the Inventory's items.
+    #[test]
+    fn the_huds_worn_and_the_names_of_items_are_told() {
+        use crate::folderstorm::workspaces::context::Hud;
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let mut world = crate::world::inventory::Inventory::default();
+        let radar = uuid::Uuid::from_u128(9001);
+        world.items.insert(
+            radar,
+            aurora_net::inventory::InvItem {
+                id: radar,
+                name: "Radar".into(),
+                asset_type: 6,
+                ..Default::default()
+            },
+        );
+        let worn = vec![Hud { item: radar, point: 35 }];
+        let shell = Windows {
+            panels: &mut panels,
+            inventory: &mut inventory,
+            classic_controls: false,
+            contacts_torn_off: false,
+            no_inventory: false,
+            no_minimap: false,
+            no_world_map: false,
+            account: uuid::Uuid::from_u128(7),
+            folders: Some(&world),
+            huds: worn.clone(),
+        };
+        assert_eq!(shell.worn_huds(), worn);
+        assert_eq!(shell.item_name(radar).as_deref(), Some("Radar"));
+        assert_eq!(shell.item_name(uuid::Uuid::from_u128(1)), None, "not in this Inventory");
     }
 
     #[test]

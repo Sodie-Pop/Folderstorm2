@@ -361,12 +361,18 @@ opens its windows and closes the others; Conversations is left as it is.
 seconds later. `folders` opens windows on the first two folders of the demo's
 Inventory, saves them as the workspace "Folders" (*Remember Inventory
 folders*), closes them, then applies "Folders": they come back at their
-places:
+places. `context` (row 1.7) adds the demo's graphics profiles and a workspace
+"Photos" with "My photo profile", the Front view and two objects of the demo's
+Inventory as HUDs, opens Preferences on the tab, applies "Photos" after three
+seconds (the line under the list says what was done) and goes back with
+*Previous arrangement* four seconds later (graphics and camera back, HUDs
+left on):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=1 cargo run -p aurora-viewer -- --title "Test workspaces"
 AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=apply cargo run -p aurora-viewer -- --title "Test workspaces apply"
 AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=folders cargo run -p aurora-viewer -- --title "Test workspaces folders"
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=context cargo run -p aurora-viewer -- --title "Test workspace context"
 ```
 
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
@@ -6153,7 +6159,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|reopen\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself; `reopen` closes two windows then applies "Wide", which opens them. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
-| `AURORA_DEMO_WORKSPACES=1\|apply\|folders` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it |
+| `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |

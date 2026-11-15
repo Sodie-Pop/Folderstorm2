@@ -144,3 +144,174 @@ fn the_workspaces_group_is_drawn() {
     }
     assert!(!texts.iter().any(|text| text == tr!("common-conversations")), "never Conversations");
 }
+
+mod context {
+    //! The workspace's context (row 1.7): its folded section, the graphics
+    //! profile and camera pickers, the HUD boxes, *Forget them*.
+
+    use super::*;
+    use crate::camera::{CameraPreset, CameraShot};
+    use crate::folderstorm::workspaces::context::{Camera, Hud, HudView, Huds};
+
+    const ME: uuid::Uuid = uuid::Uuid::from_u128(7);
+
+    fn radar() -> Hud {
+        Hud {
+            item: uuid::Uuid::from_u128(9001),
+            point: 35,
+        }
+    }
+
+    /// [`searched`] with two graphics profiles, a camera preset, logged in
+    /// as `ME` wearing the HUD "Radar", and the workspace "Photos" saved.
+    fn photos() -> Window {
+        let mut w = searched();
+        w.s.graphics_saved.insert("Fast".into(), Default::default());
+        w.s.graphics_saved.insert("My photo profile".into(), Default::default());
+        w.s.camera_shots
+            .push(CameraShot::at_avatar("Portrait".into(), [-2.0, 0.0, 0.5], [0.0, 0.0, 0.5]));
+        w.shell.account = Some(ME);
+        w.shell.huds = vec![radar()];
+        w.shell.names.insert(radar().item, "Radar".into());
+        save_workspace(&mut w, "Photos");
+        w
+    }
+
+    fn photos_workspace(w: &Window) -> crate::folderstorm::workspaces::workspace::Workspace {
+        w.store().workspace(0).expect("saved").clone()
+    }
+
+    /// Picks `choice` in the combo box showing `shown`.
+    fn pick(w: &mut Window, shown: &str, choice: &str) {
+        w.reveal(shown);
+        w.click(shown);
+        let at = w
+            .run(Vec::new())
+            .iter()
+            .filter(|t| t.source == choice)
+            .map(|t| t.rect)
+            .next_back()
+            .unwrap_or_else(|| panic!("“{choice}” is offered"));
+        w.click_at(at.center());
+    }
+
+    #[test]
+    fn the_context_is_folded_until_chosen_and_chosen_in_its_section() {
+        let mut w = photos();
+        w.reveal(tr!("fs-context-section"));
+        assert!(!w.shows(tr!("fs-context-graphics-keep")), "folded: no context yet");
+        w.click(tr!("fs-context-section"));
+        w.settle();
+        // the graphics profile, by name
+        pick(&mut w, tr!("fs-context-graphics-keep"), "My photo profile");
+        assert_eq!(photos_workspace(&w).graphics.as_deref(), Some("My photo profile"));
+        assert!(w.changed);
+        // the camera: a view, then a preset
+        pick(&mut w, tr!("fs-context-camera-keep"), CameraPreset::Front.label());
+        assert_eq!(photos_workspace(&w).camera, Some(Camera::View(CameraPreset::Front)));
+        pick(
+            &mut w,
+            CameraPreset::Front.label(),
+            &tr!("fs-context-camera-preset", name = "Portrait"),
+        );
+        assert_eq!(photos_workspace(&w).camera, Some(Camera::Preset("Portrait".into())));
+        // a HUD worn now, ticked: added with its point for this account
+        w.reveal("Radar");
+        w.click("Radar");
+        assert_eq!(
+            photos_workspace(&w).huds,
+            Some(Huds {
+                account: ME,
+                items: vec![radar()]
+            })
+        );
+        // what it holds is said under its name
+        assert!(w.shows(&workspace_holds(&photos_workspace(&w))));
+        // taken off: still listed by its name, ticked; unticked, gone
+        w.shell.huds.clear();
+        w.settle();
+        w.reveal("Radar");
+        w.click("Radar");
+        assert_eq!(photos_workspace(&w).huds, None);
+        assert!(w.shows(tr!("fs-context-huds-none")));
+    }
+
+    #[test]
+    fn a_profile_or_preset_gone_is_shown_as_such_and_another_account_s_huds_can_be_forgotten() {
+        let mut w = photos();
+        let index = 0;
+        assert!(w.s.folderstorm_workspaces.set_workspace_graphics(index, Some("Deleted profile")));
+        assert!(
+            w.s.folderstorm_workspaces
+                .set_workspace_camera(index, Some(Camera::Preset("Old shot".into())))
+        );
+        let theirs = Huds {
+            account: uuid::Uuid::from_u128(8),
+            items: vec![radar()],
+        };
+        assert!(w.s.folderstorm_workspaces.set_workspace_huds(index, Some(theirs)));
+        w.settle();
+        // (the section stays as the user left it: folded when it had none)
+        w.reveal(tr!("fs-context-section-set"));
+        w.click(tr!("fs-context-section-set"));
+        w.settle();
+        w.reveal(&tr!("fs-context-gone", name = "Deleted profile"));
+        assert!(w.shows(&tr!("fs-context-gone", name = "Deleted profile")));
+        let preset = tr!("fs-context-camera-preset", name = "Old shot");
+        w.reveal(&tr!("fs-context-gone", name = preset.as_str()));
+        assert!(w.shows(&tr!("fs-context-gone", name = preset.as_str())));
+        w.reveal(&tr!("fs-context-huds-other", count = 1));
+        assert!(w.shows(&tr!("fs-context-huds-other", count = 1)));
+        assert!(!w.shows("Radar"), "this account's HUDs wait until those are forgotten");
+        w.click(tr!("fs-context-huds-forget"));
+        assert_eq!(photos_workspace(&w).huds, None);
+        w.reveal("Radar");
+        assert!(w.shows("Radar"));
+    }
+
+    /// The picture of the section open, for a workspace with a context
+    /// (`preferences-workspace-context.png`).
+    #[test]
+    fn the_context_section_is_drawn() {
+        let mut s = Settings::default();
+        s.graphics_saved.insert("My photo profile".into(), Default::default());
+        s.folderstorm_workspaces = serde_json::from_value(serde_json::json!({
+            "workspaces": [{
+                "schema": 1, "name": "Photos", "open": ["worldmap"],
+                "graphics": "My photo profile",
+                "camera": { "view": "Front" },
+                "huds": { "account": ME.to_string(), "items": [
+                    { "item": radar().item.to_string(), "point": 35 },
+                    { "item": "00000000-0000-0000-0000-000000002333", "point": 31 },
+                ]},
+            }],
+            "active_workspace": "Photos",
+        }))
+        .expect("read");
+        let huds = HudView {
+            account: Some(ME),
+            worn: vec![(
+                Hud {
+                    item: uuid::Uuid::from_u128(9100),
+                    point: 33,
+                },
+                "Camera HUD".into(),
+            )],
+            names: [(radar().item, "Radar".to_owned())].into_iter().collect(),
+        };
+        let texts = drawn_scrolled("preferences-workspace-context", 3, s, false, "workspace", Some(huds), 420.0);
+        for expected in [
+            tr!("fs-context-section-set").to_owned(),
+            tr!("fs-context-graphics").to_owned(),
+            "My photo profile".to_owned(),
+            tr!("fs-context-camera").to_owned(),
+            CameraPreset::Front.label().to_owned(),
+            tr!("fs-context-huds").to_owned(),
+            "Radar".to_owned(),
+            tr!("fs-context-hud-gone").to_owned(),
+            "Camera HUD".to_owned(),
+        ] {
+            assert!(texts.contains(&expected), "“{expected}” is drawn: {texts:?}");
+        }
+    }
+}

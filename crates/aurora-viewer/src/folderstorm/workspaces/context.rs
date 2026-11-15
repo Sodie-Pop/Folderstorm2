@@ -266,7 +266,8 @@ fn view_id() -> egui::Id {
     egui::Id::unique("folderstorm_workspaces_huds")
 }
 
-pub(super) fn set_view(ctx: &egui::Context, view: HudView) {
+/// Says what the app has of HUDs (`apply::frame`, each frame).
+pub fn set_view(ctx: &egui::Context, view: HudView) {
     let same = ctx
         .data(|d| d.get_temp::<std::sync::Arc<HudView>>(view_id()))
         .is_some_and(|said| *said == view);
