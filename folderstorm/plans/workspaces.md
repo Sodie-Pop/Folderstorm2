@@ -2,7 +2,7 @@
 
 Plan for [FEATURES.md](../FEATURES.md) rows **1.2** (the rest: the
 interactive viewport diagram), **1.3** layout profiles, **1.4** workspaces and
-**1.5** the switcher, **1.6** the favorites strip, with an outline of 1.7–1.9. Planning only: nothing here
+**1.5** the switcher, **1.6** the favorites strip, **1.7** workspace context, with an outline of 1.8–1.9. Planning only: nothing here
 is implemented, built or run yet. Written 2026-11-11 from Folderstorm2 `main`
 (`45bccb7`, custom world viewport merged) and Folderstorm (C++) `main`
 (`abbe3cb0ca`).
@@ -1963,11 +1963,155 @@ As planned above, with these differences and details:
 - With many landmarks and many favorites, each keeps its half; the
   landmarks do not give room to the strip when they need less.
 
+### 1.7 in detail: workspace context (2026-11-15)
+
+Written before the build, from `claude/workspaces-favorites-strip` at
+`4c90aff` (PR #66, not merged: this row is stacked on it). "As built"
+follows.
+
+**What Folderstorm (C++) did** (`doc/plans/workspace-context-and-snapshot.md`
+and `workspace-context-validation.md`, branch `feat/workspace-context`):
+three optional groups of a workspace, each "Do not change" by default.
+*Graphics*: do not change, capture current, or a named graphics preset; a
+bounded allowlist of rendering settings, never the window mode. *Camera*:
+the same three choices, avatar-relative only, honouring RLVa camera locks,
+mouselook and scripted cameras (skipped and said, never forced). *HUDs*: a
+checklist of the HUDs worn now, none ticked at first; applying **adds** the
+missing ones (Inventory item references, at most 64, with their HUD point),
+never removes an unrelated HUD, body attachment or clothing; *Previous*
+does not detach them; a missing, locked or temporary HUD, the attachment
+limit and a pending change are said in the report. Monitor recovery was a
+fourth part of the same plan; here it is already section 8.5 (layouts).
+Its MCP tools belong with row 4.6. Its snapshot repair is row 1.1's
+business (photo mode already uses the world's rectangle here).
+
+**1. The record.** Three optional fields of a workspace, each left out of
+the file while unset, so a workspace without them is written exactly as
+before:
+
+```json
+"graphics": "My photo profile",
+"camera": { "view": "Front" },            // or { "preset": "Portrait" }
+"huds": { "account": "<the account's id>",
+          "items": [ { "item": "<item id>", "point": 35 } ] }
+```
+
+- `graphics`: the **name** of one of Aurora's saved graphics profiles
+  (Preferences › Graphics, `graphics_saved`, LLPresetsManager's graphics
+  presets). Applied as choosing it there does
+  (`graphics_presets::saved::select`): Aurora's own allowlist of rendering
+  controls, sanitized, never the window mode or a monitor. Not "capture
+  current": the plan says *by name*, and a profile already holds the
+  values (decision 1).
+- `camera`: a **view** (Rear, Front, Side, Shoulder: the Controls window's
+  four, `CameraPreset`, never Custom) or a saved **camera preset** by name
+  (`camera_shots`, issue #1164). Applied the app's way
+  (`switch_camera_view`, `apply_camera_preset`). The workspace holds a
+  name, never a position: what the preset holds (an anchor on the avatar,
+  in the world or on an object) is the preset's business (decision 2).
+- `huds`: the HUDs to **add**, as the user's own Inventory item ids
+  (the original item, never a link, never an asset id) with the HUD point
+  each was worn on (31 to 38), at most 16, and the account they belong to:
+  another account skips them, as the folder windows of checkpoint 6
+  (decision 5). Never a name, a script state or what the object contains.
+- Limits checked as the rest of the record: names 1 to 64 characters
+  without control characters, a known view, points 31 to 38, at most 16
+  distinct items. A workspace that breaks one is kept as read and never
+  applied. Schema stays 1: an older build keeps the fields (unknown fields
+  of an entry are kept) and applies the workspace without them, as it does
+  with `"folders"`.
+
+**2. Applying** a workspace with context, after its layout and its
+windows have been asked (the frame of `apply::apply_workspace`, unchanged):
+the workspace's context is queued; the next frame hands it to the app
+(`apply::Outcome::context`), which does each part with the whole viewer at
+hand and tells what happened (`apply::context_done`), merged into the
+report. In this order, as the C++ plan: graphics, camera, HUDs.
+
+- **Graphics**: the profile is selected; one that is gone leaves the
+  graphics as they are, said.
+- **Camera**: skipped and said while RLVa locks the camera presets
+  (`camera_preset_locked`) or in mouselook (never forced out of it); a
+  preset that is gone is said; a preset whose part cannot be applied (an
+  object anchor away) says why, as the Controls window does.
+- **HUDs**: for the account that chose them, each item is looked at: not
+  in the Inventory (deleted, not loaded yet), not wearable (not an object,
+  in the Library or the Trash), **already worn** (nothing to do), refused
+  by RLVa (`rlva_can_add` at its point). The rest are added **in one
+  outfit change** through Aurora's own wear path (`apply_appearance_action`,
+  `Action::Force` with each item's own point and "add", never "replace"):
+  the Current Outfit folder update, RLVa's filtering of the command, the
+  38-attachment limit and "an outfit change is already under way" all
+  apply as for a wear from the Inventory. Nothing is ever detached: the
+  HUDs of the workspace before stay on (C++: additive; decision 3). The
+  report says how many were **asked** to be worn (not that they arrived:
+  the server answers later), and each kind of skip (decision 4).
+- Outfit safety (`ui/inventory/outfit_safety.rs`) greys *Wear*
+  (replace) and asks before a folder's Replace / Add to Current Outfit; a
+  workspace's HUDs are added item by item at the user's own request (the
+  apply), so they are not asked again.
+
+**3. *Previous arrangement*** after a workspace with context also puts the
+graphics back as they were (the values, even unsaved, and the profile
+selected then) and the camera view (the view, its offsets and the field of
+view); pressing it again comes back. HUDs are never taken off (C++).
+
+**4. Save, Update, modified.** *Save new* takes no context (C++: every
+group off by default); it is chosen afterwards in Preferences for the
+selected workspace. *Update* keeps the workspace's context as chosen (C++:
+"Update current preserves its selected capture mode"). The "modified" mark
+still looks at the windows only (decision 6).
+
+**5. Preferences › Layout › Layouts & workspaces**, for the selected
+workspace, under its windows: *Graphics profile* (Leave the graphics as
+they are, or a profile; one that is gone is listed as such), *Camera*
+(Leave the camera as it is, a view, or a preset), *HUDs to wear*: a box per
+HUD of the workspace (ticked; "not in the Inventory" when gone) and per HUD
+worn now (unticked: tick to add it with its point). HUDs chosen by another
+account are counted, with *Forget them*. The switcher's side and the
+workspace's line say what the context holds.
+
+**6. Demo.** `AURORA_DEMO_WORKSPACES=context`: the seed of
+`AURORA_DEMO_WORKSPACES=1`, the demo graphics profiles, and a workspace
+"Photos" with "My photo profile", the Front view and two object items of
+the demo's Inventory as HUDs; Preferences open on the tab; "Photos" applied
+at frame 180, *Previous* at frame 420.
+
+**7. Upstream hooks.** None planned: the app's side lives in
+`app/folderstorm_workspaces.rs` (ours) and a child module of it; the wear
+goes through `apply_appearance_action`, the camera through the app's own
+methods. Locale keys in our section; `docs/TESTING.md`.
+
+**8. Tests.** Pure: the record (round trip, absent fields written as
+before, limits, a view never Custom, another schema kept), the store's
+setters, which HUDs are worn or skipped (`context::plan_huds`), the
+report's sentences. Frame tests with the pretend viewer: the context is
+handed to the app once, after the windows; the report merges what the app
+did; *Previous* hands back the values of before and comes back; a
+workspace without context hands nothing; another account's HUDs. The
+Preferences group (pickers, HUD boxes, *Forget them*) and a picture.
+
+**Decisions to confirm (the human).** Each took the option closest to
+Folderstorm (C++) or to this plan:
+
+1. Graphics by profile name only, no "capture current".
+2. Camera: one of the four views or a saved camera preset, by name; a
+   preset anchored in the world or on an object stays the user's choice.
+3. HUDs are only added, never detached, not even by *Previous*; HUDs of
+   the workspace before stay on.
+4. A HUD missing, not wearable, already worn or refused by RLVa is
+   skipped and counted; a refusal of the whole outfit change (Current
+   Outfit not loaded, attachment limit, a change under way) is said with
+   Aurora's own message.
+5. HUDs are per account; another account skips them.
+6. No context at *Save new*; *Update* keeps it; the "modified" mark
+   ignores it.
+
 ## 14. Later (outline only)
 
 - **1.6 Favorites strip.** Built: "1.6 in detail" and "1.6 as built"
   above.
-- **1.7 Workspace context.** Optional parts of a workspace: a graphics
+- **1.7 Workspace context.** Detailed in "1.7 in detail" above. Outline: optional parts of a workspace: a graphics
   profile *by name* (Aurora's `graphics_saved`), a camera preset, and HUDs to
   add, stored as the user's own Inventory item ids (never asset ids) and worn
   through the normal outfit paths (outfit safety, RLVa), never detaching
