@@ -141,7 +141,11 @@ pub fn clean_name(text: &str) -> String {
 /// A size brought into the tiles' range (a hand-edited file).
 pub fn clamp_size([w, h]: [f32; 2]) -> [f32; 2] {
     let fix = |v: f32, range: &std::ops::RangeInclusive<f32>, usual: f32| {
-        if v.is_finite() { v.clamp(*range.start(), *range.end()) } else { usual }
+        if v.is_finite() {
+            v.clamp(*range.start(), *range.end())
+        } else {
+            usual
+        }
     };
     [fix(w, &WIDTHS, DEFAULT_TILE[0]), fix(h, &HEIGHTS, DEFAULT_TILE[1])]
 }
@@ -233,9 +237,7 @@ pub struct Added {
 impl Account {
     /// The board shown: the selected one, else the first.
     pub fn current(&self) -> Option<&Board> {
-        self.selected
-            .and_then(|id| self.board(id))
-            .or_else(|| self.boards.first())
+        self.selected.and_then(|id| self.board(id)).or_else(|| self.boards.first())
     }
 
     /// The id of the board shown.
@@ -465,9 +467,7 @@ impl Board {
         for value in raw.tiles {
             let usable = board.tiles.len() < MAX_TILES;
             match serde_json::from_value::<Tile>(value.clone()) {
-                Ok(tile)
-                    if usable && !tile.item.is_nil() && board.tile_of(tile.item).is_none() && tile_ids.insert(tile.id) =>
-                {
+                Ok(tile) if usable && !tile.item.is_nil() && board.tile_of(tile.item).is_none() && tile_ids.insert(tile.id) => {
                     board.tiles.push(tile.normalized());
                 }
                 _ => board.kept.push(value),

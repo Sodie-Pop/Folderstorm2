@@ -80,14 +80,19 @@ Tile    { id, item: <inventory item id>, label?, color?: [r, g, b], size?: [w, h
 
 ## Decisions (to confirm)
 
-1. **Sounds play in-world, as the inventory's double-click does.** The
+1. **Sounds play in-world, as the inventory's double-click does.** Confirmed
+   by the human (2026-11-15): sounds and gestures play publicly, like
+   Folderstorm (C++), respecting RLVa and permissions on that path. The
    Legacy Viewer's inventory "Play" on a sound (LLSoundBridge::performAction
    "sound_play", and its double-click) calls `send_sound_trigger`: everyone
    nearby hears it. Aurora ports it as `InvAction::TriggerSound`, and
    Folderstorm (C++)'s board uses that same path ("one-shot in-world audio
    at normal gain"). The board uses `InvAction::TriggerSound` too. RLVa has
-   no restriction on sound triggers; the board adds none. The tooltip says
-   that others hear it.
+   no restriction on sound triggers (Aurora's `world::rlva` and RLVa's
+   command list have none): the path is the inventory's own, with the same
+   rights (the user's own sound, not the Library's, not the Trash's; the
+   asset id is never shown). The tooltip and the help say that others
+   hear it.
 2. **Gestures play through the Gestures window's Play**
    (`gestures::Action::Play`): it activates an inactive gesture, loads it,
    plays it, and stops it when it is already playing. RLVa `@sendgesture`

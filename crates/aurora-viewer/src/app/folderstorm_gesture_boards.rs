@@ -100,7 +100,10 @@ impl App {
                 original,
                 kind: Kind::Gesture,
             } => self.gesture_action(crate::ui::gestures::Action::Play(original)),
-            Request::Play { original, kind: Kind::Sound } => {
+            Request::Play {
+                original,
+                kind: Kind::Sound,
+            } => {
                 // send_sound_trigger sends nothing for a null sound
                 if let Some(asset) = self
                     .world
@@ -155,7 +158,11 @@ impl App {
                 account.search_current = false;
             }
             let area = crate::ui::layout::work_area(ctx);
-            let size = if mode == "pages" { egui::vec2(300.0, 150.0) } else { egui::vec2(380.0, 230.0) };
+            let size = if mode == "pages" {
+                egui::vec2(300.0, 150.0)
+            } else {
+                egui::vec2(380.0, 230.0)
+            };
             ui::widgets::place_floater(ctx, boards::WINDOW, egui::pos2(area.left() + 380.0, area.top() + 120.0), size);
             boards::open(ctx);
         }
@@ -178,17 +185,22 @@ const DEMO_GONE: Uuid = Uuid::from_u128(960_999);
 
 /// Gestures and sounds in the demo's inventory (in its test folder), and
 /// the gestures' definitions: each one says something in the chat.
-fn demo_items(
-    inv: &mut crate::world::inventory::Inventory,
-    agent: Uuid,
-    sound: Uuid,
-) -> Vec<(Uuid, aurora_assets::gesture::Gesture)> {
+fn demo_items(inv: &mut crate::world::inventory::Inventory, agent: Uuid, sound: Uuid) -> Vec<(Uuid, aurora_assets::gesture::Gesture)> {
     use aurora_assets::gesture::{Gesture, Step};
     if inv.root.is_nil() || !inv.items.contains_key(&Uuid::from_u128(8106)) {
         crate::world::inventory::demo::seed(inv, agent);
     }
     let parent = Uuid::from_u128(8000);
-    let gestures = ["Wave hello", "Bow", "Clap clap clap", "Laugh out loud", "Thumbs up", "Shrug", "Dance a little jig with everyone around", "Wave goodbye"];
+    let gestures = [
+        "Wave hello",
+        "Bow",
+        "Clap clap clap",
+        "Laugh out loud",
+        "Thumbs up",
+        "Shrug",
+        "Dance a little jig with everyone around",
+        "Wave goodbye",
+    ];
     let sounds = ["Chime", "Air horn", "Applause", "Drum roll please", "Crickets"];
     let mut out = Vec::new();
     let mut items = Vec::new();

@@ -2466,7 +2466,7 @@ pub fn run_command(ctx: &egui::Context, cmd: &str, panels: &mut Panels) -> BarAc
         "resync_animations" => return BarAction::ResyncAnimations,
         "immersive" => return BarAction::ToggleImmersive,
         "workspaces" | "layout_toggle" => crate::folderstorm::workspaces::toolbar::run(ctx, cmd), // Folderstorm: the layouts' buttons
-        "gesture_board" => crate::folderstorm::gesture_boards::run(ctx, cmd), // Folderstorm: gesture boards
+        "gesture_board" => crate::folderstorm::gesture_boards::run(ctx, cmd),                     // Folderstorm: gesture boards
         _ => {}
     }
     BarAction::None

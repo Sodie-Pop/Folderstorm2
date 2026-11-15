@@ -140,7 +140,15 @@ fn buttons(ui: &mut egui::Ui, p: &Palette, ok: &str, valid: bool) -> (bool, bool
     out
 }
 
-fn name(ctx: &egui::Context, p: &Palette, account: &mut Account, view: &mut View, purpose: Purpose, text: &mut String, select: &mut bool) -> bool {
+fn name(
+    ctx: &egui::Context,
+    p: &Palette,
+    account: &mut Account,
+    view: &mut View,
+    purpose: Purpose,
+    text: &mut String,
+    select: &mut bool,
+) -> bool {
     let mut close = false;
     let response = Modal::new(egui::Id::unique("fs_gesture_board_name")).show(ctx, |ui| {
         ui.set_width(340.0);
@@ -295,7 +303,13 @@ fn edit(ctx: &egui::Context, p: &Palette, account: &mut Account, facts: &Facts, 
         return false;
     };
     let item = resolve(facts.inv, tile.item);
-    let item_name = super::window::label_of(&store::Tile { label: None, ..tile.clone() }, &item);
+    let item_name = super::window::label_of(
+        &store::Tile {
+            label: None,
+            ..tile.clone()
+        },
+        &item,
+    );
     let board_size = board.tile;
     let mut close = false;
     let mut save = false;
@@ -381,7 +395,15 @@ fn edit(ctx: &egui::Context, p: &Palette, account: &mut Account, facts: &Facts, 
     !(close || response.should_close())
 }
 
-fn preview(ui: &egui::Ui, p: &Palette, rect: egui::Rect, response: &egui::Response, label: &str, kind: Option<Kind>, color: Option<[u8; 3]>) {
+fn preview(
+    ui: &egui::Ui,
+    p: &Palette,
+    rect: egui::Rect,
+    response: &egui::Response,
+    label: &str,
+    kind: Option<Kind>,
+    color: Option<[u8; 3]>,
+) {
     let radius = ui.visuals().widgets.inactive.corner_radius;
     let fill = match color {
         // theme-guard: content — the colour the user chose for this tile
@@ -389,6 +411,8 @@ fn preview(ui: &egui::Ui, p: &Palette, rect: egui::Rect, response: &egui::Respon
         None => ui.style().interact(response).weak_bg_fill,
     };
     ui.painter().rect_filled(rect, radius, fill);
+    ui.painter()
+        .rect_stroke(rect, radius, Stroke::new(1.0, p.muted_dim), egui::StrokeKind::Inside);
     let ink = super::window::ink_on(p, fill);
     let speaker = if kind == Some(Kind::Sound) { layout::SPEAKER } else { 0.0 };
     if speaker > 0.0 {
@@ -416,13 +440,19 @@ fn preview(ui: &egui::Ui, p: &Palette, rect: egui::Rect, response: &egui::Respon
 
 /// The user's gestures and sounds that a board may hold: of their own
 /// inventory, not in the Trash, not links (their originals are listed).
-fn catalogue(inv: &crate::world::inventory::Inventory) -> Vec<(Uuid, String, Kind)> {
+pub(super) fn catalogue(inv: &crate::world::inventory::Inventory) -> Vec<(Uuid, String, Kind)> {
     let mut rows: Vec<_> = inv
         .items
         .values()
         .filter(|it| matches!(it.asset_type, 1 | 21))
         .filter(|it| !rules::library(inv, it.id) && !rules::in_type(inv, it.id, 14))
-        .map(|it| (it.id, it.name.clone(), if it.asset_type == 21 { Kind::Gesture } else { Kind::Sound }))
+        .map(|it| {
+            (
+                it.id,
+                it.name.clone(),
+                if it.asset_type == 21 { Kind::Gesture } else { Kind::Sound },
+            )
+        })
         .collect();
     rows.sort_by_cached_key(|(id, name, _)| (crate::natural_order::key(name), *id));
     rows

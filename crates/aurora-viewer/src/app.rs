@@ -63,8 +63,8 @@ mod derender;
 mod describe;
 mod dev_toolbox;
 mod folders;
-mod folderstorm_viewport;
 mod folderstorm_gesture_boards; // Folderstorm: gesture boards (folderstorm/gesture_boards)
+mod folderstorm_viewport;
 mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
 mod hover_pick;
 mod texture_picker;

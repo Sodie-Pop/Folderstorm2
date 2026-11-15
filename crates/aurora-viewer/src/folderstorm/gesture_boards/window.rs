@@ -87,7 +87,7 @@ struct TileDrag {
     tile: u32,
 }
 
-fn view_id() -> egui::Id {
+pub(super) fn view_id() -> egui::Id {
     egui::Id::unique("fs_gesture_board_view")
 }
 
@@ -156,7 +156,12 @@ fn body(ui: &mut egui::Ui, p: &Palette, account: &mut Account, facts: &Facts, vi
         ui.horizontal(|ui| {
             let room = ui.available_width();
             let only = tr!("fs-gesture-board-search-current");
-            let only_width = ui.painter().layout_no_wrap(only.to_owned(), egui::TextStyle::Body.resolve(ui.style()), p.ink).size().x + 28.0;
+            let only_width = ui
+                .painter()
+                .layout_no_wrap(only.to_owned(), egui::TextStyle::Body.resolve(ui.style()), p.ink)
+                .size()
+                .x
+                + 28.0;
             let field_width = (room - only_width - ui.spacing().item_spacing.x).max(80.0);
             let response = widgets::search_text_edit(ui, p, &mut search.text, |edit| {
                 edit.id(search_field_id())
@@ -170,7 +175,7 @@ fn body(ui: &mut egui::Ui, p: &Palette, account: &mut Account, facts: &Facts, vi
             if response.changed() {
                 search.page = 0;
             }
-            if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if (response.has_focus() || response.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 close = true;
             }
             widgets::checkbox(ui, p, &mut account.search_current, only).on_hover_text(tr!("fs-gesture-board-search-current-help"));
@@ -197,7 +202,9 @@ fn strip(ui: &mut egui::Ui, p: &Palette, account: &mut Account, view: &mut View)
         let buttons = 3.0 * (20.0 + ui.spacing().item_spacing.x) + 8.0;
         let combo_width = (ui.available_width() - buttons).max(60.0);
         let current = account.current_id();
-        let name = account.current().map_or_else(|| tr!("fs-gesture-board-none").to_owned(), |b| b.name.clone());
+        let name = account
+            .current()
+            .map_or_else(|| tr!("fs-gesture-board-none").to_owned(), |b| b.name.clone());
         let mut chosen = None;
         egui::ComboBox::from_id_salt("fs_gesture_board_pick")
             .width(combo_width)
@@ -427,7 +434,11 @@ fn sizes(ui: &egui::Ui, board: &Board, items: &[Item], room: Vec2) -> Vec<Vec2> 
         .map(|(tile, item)| {
             let size = tile.size_on(board);
             let sound = matches!(item, Item::Ready { kind: Kind::Sound, .. });
-            let label = if board.full_names { label_width(ui, &label_of(tile, item)) } else { 0.0 };
+            let label = if board.full_names {
+                label_width(ui, &label_of(tile, item))
+            } else {
+                0.0
+            };
             vec2(layout::tile_width(board, size, label, sound, room.x), size[1].min(room.y))
         })
         .collect()
@@ -446,7 +457,10 @@ fn board_page(
 ) {
     let Some(board_id) = account.current_id() else {
         empty(ui, p, full, tr!("fs-gesture-board-empty-boards"));
-        if ui.interact(full, egui::Id::unique("fs_gesture_board_empty"), Sense::click()).clicked() {
+        if ui
+            .interact(full, egui::Id::unique("fs_gesture_board_empty"), Sense::click())
+            .clicked()
+        {
             view.dialog = Some(Dialog::new_board());
         }
         return;
@@ -496,7 +510,11 @@ fn board_page(
             _ => (None, None),
         };
         let playing = ready_kind == Some(Kind::Gesture) && original.is_some_and(|o| (facts.playing)(o));
-        let blocked = if ready_kind == Some(Kind::Gesture) { facts.gestures_blocked } else { None };
+        let blocked = if ready_kind == Some(Kind::Gesture) {
+            facts.gestures_blocked
+        } else {
+            None
+        };
         let label = label_of(tile, item);
         paint_tile(
             ui,
@@ -525,7 +543,8 @@ fn board_page(
             && ui.rect_contains_pointer(rect)
         {
             let x = rect.left() - layout::GAP / 2.0;
-            ui.painter().line_segment([pos2(x, rect.top()), pos2(x, rect.bottom())], Stroke::new(2.0, p.violet_light));
+            ui.painter()
+                .line_segment([pos2(x, rect.top()), pos2(x, rect.bottom())], Stroke::new(2.0, p.violet_light));
             if ui.input(|i| i.pointer.any_released())
                 && let Some(from) = board.index_of(drag.tile)
             {
@@ -585,7 +604,10 @@ fn board_page(
         && moved.is_none()
         && ui.rect_contains_pointer(room_rect)
         && ui.input(|i| i.pointer.any_released())
-        && !pages[page].tiles.iter().any(|(_, r)| ui.rect_contains_pointer(r.translate(room_rect.min.to_vec2())))
+        && !pages[page]
+            .tiles
+            .iter()
+            .any(|(_, r)| ui.rect_contains_pointer(r.translate(room_rect.min.to_vec2())))
         && let Some(from) = board.index_of(drag.tile)
     {
         moved = Some((from, pages[page].span().end));
@@ -646,7 +668,15 @@ fn inventory_drop(ui: &egui::Ui, p: &Palette, room: Rect) -> Option<Uuid> {
 }
 
 /// Adds the dropped item `id` to the board, before the tile at `at`.
-pub(super) fn add_dropped(ctx: &egui::Context, account: &mut Account, facts: &Facts, view: &mut View, board: u32, id: Uuid, at: Option<usize>) {
+pub(super) fn add_dropped(
+    ctx: &egui::Context,
+    account: &mut Account,
+    facts: &Facts,
+    view: &mut View,
+    board: u32,
+    id: Uuid,
+    at: Option<usize>,
+) {
     match resolve(facts.inv, id) {
         Item::Ready { .. } => match account.add_items(board, &[id], at) {
             Ok(added) => {
@@ -743,7 +773,11 @@ fn search_results(
             .map(|(board, tile, item)| {
                 let size = tile.size_on(board);
                 let sound = matches!(item, Item::Ready { kind: Kind::Sound, .. });
-                let label = if board.full_names { label_width(ui, &label_of(tile, item)) } else { 0.0 };
+                let label = if board.full_names {
+                    label_width(ui, &label_of(tile, item))
+                } else {
+                    0.0
+                };
                 vec2(layout::tile_width(board, size, label, sound, room.x), size[1].min(room.y))
             })
             .collect()
@@ -763,7 +797,11 @@ fn search_results(
             _ => (None, None),
         };
         let playing = kind == Some(Kind::Gesture) && original.is_some_and(|o| (facts.playing)(o));
-        let blocked = if kind == Some(Kind::Gesture) { facts.gestures_blocked } else { None };
+        let blocked = if kind == Some(Kind::Gesture) {
+            facts.gestures_blocked
+        } else {
+            None
+        };
         let label = label_of(tile, item);
         paint_tile(
             ui,
