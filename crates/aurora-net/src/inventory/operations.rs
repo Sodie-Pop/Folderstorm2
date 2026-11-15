@@ -824,7 +824,8 @@ fn confirmed(operations: &[Operation], created: &HashMap<Uuid, Uuid>, contents: 
             llsd_map! { "name" => it.name.clone(), "desc" => it.desc.clone(), "parent_id" => it.parent, "linked_id" => it.asset_id,
             "favorite" => metadata_favorite(it.favorite)["favorite"].clone(), "thumbnail" => metadata_thumbnail(it.thumbnail)["thumbnail"].clone(),
             "permissions" => llsd_map! { "next_owner_mask" => it.next_owner_mask as i32, "group_mask" => it.group_mask as i32, "everyone_mask" => it.everyone_mask as i32 },
-            "sale_info" => llsd_map! { "sale_type" => i32::from(it.sale_type), "sale_price" => it.sale_price } }
+            "sale_info" => llsd_map! { "sale_type" => i32::from(it.sale_type), "sale_price" => it.sale_price },
+            "flags" => it.flags as i32 } // Folderstorm: rez overrides of an object (SLAM_PERM…), sent with its permissions
         };
         for (key, value) in body.as_map().into_iter().flatten() {
             if key == "parent_id" {
@@ -1848,6 +1849,34 @@ mod tests {
             contents.iter().map(|c| c.folder_id).collect::<Vec<_>>(),
             vec![id(900), id(300), id(200), id(100)]
         );
+    }
+
+    #[test]
+    fn an_object_permissions_patch_with_rez_flags_is_confirmed_by_the_flags_read_back() {
+        let item = |flags| InvItem {
+            id: id(3),
+            parent: id(1),
+            asset_type: 6,
+            flags,
+            next_owner_mask: 0xe000,
+            ..Default::default()
+        };
+        let contents = |flags| {
+            vec![FolderContents {
+                folder_id: id(1),
+                owner_id: id(2),
+                version: 2,
+                folders: Vec::new(),
+                items: vec![item(flags)],
+            }]
+        };
+        let patch = [Operation::Patch {
+            id: id(3),
+            folder: false,
+            body: llsd_map! { "permissions" => llsd_map! { "next_owner_mask" => 0xe000 }, "flags" => 0x105 },
+        }];
+        assert!(confirmed(&patch, &HashMap::new(), &contents(0x105)));
+        assert!(!confirmed(&patch, &HashMap::new(), &contents(0x5)));
     }
 
     #[tokio::test]
