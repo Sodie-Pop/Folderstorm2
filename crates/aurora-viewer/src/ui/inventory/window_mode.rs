@@ -4,10 +4,10 @@
 //! Two title bar buttons on the main window, the additional window, the tab
 //! windows and the folder windows, in both styles:
 //!
-//! - **pin**: the window stays above the viewer's other windows (it is drawn
-//!   on egui's `Foreground` order, as the photo poser's floater is), the
-//!   meaning of the pin of the session host's pop-out windows (always on
-//!   top);
+//! - **pin**: the window stays above the viewer's other windows (brought to
+//!   the front of the windows' layer at every frame), the meaning of the pin
+//!   of the session host's pop-out windows (always on top). Menus, tooltips
+//!   and notifications still open over it;
 //! - **quiet mode**: the window shows only its list (the tab or folder
 //!   shown): no toolbar, search box, tab strip, chips, status line, nor
 //!   Aurora's column, breadcrumb and details. The title bar stays, with these
@@ -125,8 +125,7 @@ pub(super) struct Clicks {
 }
 
 /// Before the window is shown: its mode for this frame (read by its
-/// contents), its two title bar buttons and, pinned, its layer above the
-/// other windows. No key (a document): nothing.
+/// contents) and its two title bar buttons. No key (a document): nothing.
 pub(super) fn decorate<'a>(
     floater: widgets::Floater<'a>,
     st: &mut InventoryUi,
@@ -151,22 +150,24 @@ pub(super) fn decorate<'a>(
     } else {
         ("pin-filled", aurora_i18n::tr!("inventory-quick-pin"))
     };
-    let mut floater = floater.action(quiet_icon, quiet_tip, quiet).action(pin_icon, pin_tip, pin);
-    if mode.pinned {
-        floater.order = egui::Order::Foreground;
-    }
-    floater
+    floater.action(quiet_icon, quiet_tip, quiet).action(pin_icon, pin_tip, pin)
 }
 
-/// After the window is shown: a title bar button clicked changes its mode.
-pub(super) fn apply(clicks: Clicks, prefs: &mut InventoryPreferences, key: Option<Key>) {
+/// After the window `floater` is shown (`open` or not): pinned, it goes in
+/// front of the other windows; a title bar button clicked changes its mode.
+/// (A window brought to the front by a click comes back behind it on the
+/// next frame.)
+pub(super) fn apply(ctx: &egui::Context, floater: &str, open: bool, clicks: Clicks, prefs: &mut InventoryPreferences, key: Option<Key>) {
     let Some(key) = key else {
         return;
     };
+    let mut mode = prefs.window_modes.get(key);
+    if mode.pinned && open && !widgets::interface_hidden(ctx) && !widgets::floater_minimized(ctx, floater) {
+        widgets::bring_floater_front(ctx, floater);
+    }
     if !clicks.pin && !clicks.quiet {
         return;
     }
-    let mut mode = prefs.window_modes.get(key);
     mode.pinned ^= clicks.pin;
     mode.quiet ^= clicks.quiet;
     prefs.window_modes.set(key, mode);

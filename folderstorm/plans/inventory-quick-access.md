@@ -59,7 +59,7 @@ behaviour reference is Aurora's own Inventory windows.
 | Switch | Right click on a custom tab › *Flat list* (a check mark); per tab, shared by the accounts like the tab's filters |
 | What it lists | Every item the tab shows (its folders and all below them, filtered), pins first, without folders (*Always show folders* is ignored there) |
 | Order | The window's sort |
-| Folder path | Muted at the right of the row when the row leaves room (Legacy style), and in the row's tooltip (both styles) |
+| Folder path | In the row's tooltip (both styles); also muted at the row's right when the row leaves room, which a full-width row seldom does |
 
 ### Pin (every Inventory window)
 
@@ -67,13 +67,19 @@ Aurora's floaters have no pin. The closest meaning is the Folderstorm session
 host's pop-out windows (`folderstorm_characters/host/ui/bar.rs`,
 `monitor_windows.rs`), whose pin is **always on top**. Inside the viewer this
 is: **a pinned Inventory window stays above the viewer's other windows** (it
-is drawn on egui's `Foreground` order, as the photo poser's floater is).
+is brought to the front of the windows' layer at every frame).
 
 - A title bar button, per window: the pin icon, the pinned icon while pinned.
 - Remembered per window (main, additional, each tab window, each folder
   window by folder).
-- Menus and tooltips still open above it. Windows it opens (Properties, the
-  Rename dialog) are ordinary windows and may open under it: move it or unpin.
+- Menus, tooltips and notifications still open above it. Windows it opens
+  (Properties, the Rename dialog) are ordinary windows and may open under
+  it: move it or unpin. A window clicked comes to the front for one frame,
+  then goes back behind it. Being in front, it is the one Ctrl+W closes
+  first.
+- Not egui's `Foreground` order (tried first): that is the layer of menus
+  and of modal questions, and a pinned window there covered a modal question
+  (the web and media support offer) that should stay on top.
 - Not chosen (could be added): "stays shown when the interface is hidden",
   "Close All Windows (Ctrl+Shift+W) leaves it open".
 

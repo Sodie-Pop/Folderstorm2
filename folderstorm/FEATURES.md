@@ -57,6 +57,7 @@ Needed before shipping any build. They also keep merges simple.
 | 2.9 | Outfit Gallery thumbnail size | Slider for photo width, 80–256 px. | check | `doc/help.md` "Outfit Gallery" | P3 | ✅ #5 |
 | 2.11 | Folder-preserving bulk upload | Upload a folder of files and recreate its folder tree in Inventory. | check | branch `codex/sl-folder-upload` | P3 | ⬜ |
 | 2.12 | Safe link replacement | Replace links (e.g. after a re-delivery): create the new link first, only then move the old one; report each item's result. | – | `doc/plans/safe-link-replacement.md` | P3 | ⬜ |
+| 2.13 | Inventory quick access | Easy access to common items (**new**, asked by you; not in Folderstorm (C++)): pin single items to a custom tab (2.1, 2.2), open a tab in a small window of its own, list a tab flat; every Inventory window gets a pin (stays on top) and a quiet mode (only the list). | – | [plan](plans/inventory-quick-access.md) | P1 | 🔧 branch `claude/inventory-quick-access` (on 2.2): right click on items › *Create tab* / *Add to ›* pins them (a link pins its item), shown at the top of the tab with its filters and search; right click on a custom tab › *Open in a window*, *Flat list* (each row's folder in its tooltip); title bar pin and quiet buttons in the main, additional, tab and folder windows of both styles, remembered per window; demo `AURORA_DEMO_INVENTORY=quick-access`; awaiting your test on the grid and your answer to the plan's decisions (what pin and quiet mode do) |
 
 ## 3. Chat and gestures
 

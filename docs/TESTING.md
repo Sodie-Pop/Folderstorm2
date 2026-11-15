@@ -6996,14 +6996,14 @@ failure. Grid validation and any paid upload are performed by the human.
   from tab" forgets it; that the dialog's Folders part lists each folder by
   path (the deleted one marked), with a remove button. Select folders in the
   list (from the Inventory tab), then right-click the custom tab: "Add
-  selected folders", "Use only selected folders" (greyed while the selection
-  holds an item, the Trash or a Library folder), "Show all folders". On the
+  the selection", "Use only the selection" (greyed while the selection
+  holds something in the Trash or the Library), "Show everything". On the
   Inventory tab, select folders (Ctrl+click, Shift+click for a range) and
   right-click them: "Create tab" makes a new tab named after the first, its
   Rename dialog open; "Add to ›" lists every custom tab (a check mark on one
   that has them all already) and "New tab…"; picking a tab adds the folders to
   it, and the status line says so, or that they were already there. Both are
-  greyed, with the reason on hover, while the selection holds an item, the
+  greyed, with the reason on hover, while the selection holds the
   root, the Trash or a Library folder. Dragging folders onto a custom tab's
   button adds them the same way (a red outline refuses). With
   `AURORA_DEMO_FOLDER_TABS=menu`, a second tab "Everyday", and the Inventory
@@ -7012,6 +7012,27 @@ failure. Grid validation and any paid upload are performed by the human.
   window without focus, as under xvfb). Filters and search
   apply inside the folders; moving a scoped folder elsewhere keeps it in the
   tab; moving it to the Trash takes it out (and the note appears).
+- **`AURORA_DEMO_INVENTORY=quick-access|aurora-quick-access`** (Folderstorm2,
+  Inventory quick access): a custom tab "Quick access" scoped to the demo's
+  Body folder, pinning the demo gesture, the demo object (the link "Link to
+  object" pins what it points to) and a deleted item; shown in the main
+  window, and opened in its own small window, pinned and in quiet mode. Check
+  that the pinned items head the tab's list above the folders, once each;
+  that the note above the list counts the deleted pin and "Remove from tab"
+  forgets it; that the tab's window shows only its list (no search box, tab
+  strip or status line) and stays above the other windows, even after a click
+  on another window; that its title bar's arrows button brings the full view
+  back (without a tab strip: the tab only) and the pin button unpins it; that
+  both buttons are on the main, additional and folder windows too, in both
+  styles, and are remembered after a restart, per window. Right-click items
+  (Ctrl+click for several, folders too): "Create tab" makes a tab named after
+  the first folder or item; "Add to ›" pins them in a tab (and adds the
+  folders). Right-click a custom tab: "Open in a window" (again: the same
+  window comes to the front), "Flat list" (every item of the tab, no folder
+  rows, the pins first, each row's folder in its tooltip). A search typed in the tab's window shows in the main
+  window on the same tab, and the other way round. Deleting the tab closes
+  its window; RLVa's `@showinv` closes it with the other Inventory windows.
+  With `AURORA_DEMO_QUICK_ACCESS=flat`, the tab starts as a flat list.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory

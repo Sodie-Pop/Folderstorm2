@@ -153,6 +153,12 @@ impl Viewer {
         let layer = egui::LayerId::new(order, egui::Id::unique(floater));
         self.frames.ctx.memory(|m| m.areas().is_visible(&layer))
     }
+
+    /// The window `floater` is in front of the other windows.
+    fn in_front(&self, floater: &str) -> bool {
+        let layer = egui::LayerId::new(egui::Order::Middle, egui::Id::unique(floater));
+        self.frames.ctx.memory(|m| m.areas().top_layer_id(egui::Order::Middle)) == Some(layer)
+    }
 }
 
 fn has(texts: &[Text], source: &str) -> bool {
@@ -174,18 +180,29 @@ fn the_title_bar_pins_and_quiets_the_main_window() {
         let texts = v.settle(true);
         assert!(row(&texts, "Clothing"), "classic={classic}");
         assert!(v.layer_shown(egui::Order::Middle, "inventory"), "classic={classic}");
+        // a folder window opened after it covers it
+        v.st.open_folder_window(id(CLOTHING));
+        let folder = floater_id(v.st.windows[0].id);
+        let texts = v.settle(true);
+        assert!(v.in_front(&folder), "classic={classic}: the newer window in front");
         let tabs_label = if classic {
             aurora_i18n::tr!("common-inventory")
         } else {
             aurora_i18n::tr!("inventory-tab-all")
         };
         let normal = count(&texts, tabs_label);
+        let hint = aurora_i18n::tr!("ui-inventory-filter-inventory");
+        let status = aurora_i18n::tr!("workspace-inventory-selected", count = 0);
+        let (hints, statuses) = (count(&texts, hint), count(&texts, &status));
 
         // pin: above the other windows, remembered
         v.click_action(true, "inventory", "pin-filled");
         assert!(v.prefs.window_modes.get(Key::Main).pinned, "classic={classic}");
-        assert!(v.layer_shown(egui::Order::Foreground, "inventory"), "classic={classic}: on top");
-        assert!(!v.layer_shown(egui::Order::Middle, "inventory"), "classic={classic}");
+        assert!(v.in_front("inventory"), "classic={classic}: on top");
+        // the folder window brought to the front goes back behind it
+        widgets::bring_floater_front(&v.frames.ctx, &folder);
+        v.settle(true);
+        assert!(v.in_front("inventory"), "classic={classic}: still on top");
 
         // quiet: the list alone, the title bar kept
         v.click_action(true, "inventory", "arrows-minimize");
@@ -194,19 +211,18 @@ fn the_title_bar_pins_and_quiets_the_main_window() {
         assert!(row(&texts, "Clothing"), "classic={classic}: the list stays");
         assert!(count(&texts, tabs_label) < normal, "classic={classic}: no tab strip");
         if classic {
-            let hint = aurora_i18n::tr!("ui-inventory-filter-inventory");
-            assert!(!has(&texts, hint), "classic={classic}: no search box");
-            let status = aurora_i18n::tr!("workspace-inventory-selected", count = 0);
-            assert!(!has(&texts, &status), "classic={classic}: no status line");
+            assert!(count(&texts, hint) < hints, "classic={classic}: no search box");
+            assert!(count(&texts, &status) < statuses, "classic={classic}: no status line");
         }
 
         // and back, still pinned
         v.click_action(true, "inventory", "arrows-maximize");
         v.click_action(true, "inventory", "pinned-filled");
         assert_eq!(v.prefs.window_modes.get(Key::Main), Mode::default(), "classic={classic}");
+        widgets::bring_floater_front(&v.frames.ctx, &folder);
         let texts = v.settle(true);
         assert_eq!(count(&texts, tabs_label), normal, "classic={classic}: all back");
-        assert!(v.layer_shown(egui::Order::Middle, "inventory"), "classic={classic}");
+        assert!(v.in_front(&folder), "classic={classic}: unpinned, covered again");
     }
 }
 
@@ -228,7 +244,7 @@ fn a_folder_window_has_its_own_mode() {
             let hint = aurora_i18n::tr!("ui-inventory-filter-inventory-folder");
             assert!(!has(&texts, hint), "no search box");
         }
-        assert!(v.layer_shown(egui::Order::Foreground, &window), "classic={classic}: pinned");
+        assert!(v.in_front(&window), "classic={classic}: pinned");
         v.click_action(false, &window, "arrows-maximize");
         assert!(!v.prefs.window_modes.get(Key::Folder(id(CLOTHING))).quiet, "classic={classic}");
         if classic {
@@ -284,7 +300,7 @@ fn a_tab_opens_in_a_window_of_its_own() {
         v.click_action(false, &floater, "pin-filled");
         assert!(v.prefs.window_modes.get(Key::Tab(tab)).pinned, "classic={classic}");
         assert!(!v.prefs.window_modes.get(Key::Main).pinned, "classic={classic}");
-        assert!(v.layer_shown(egui::Order::Foreground, &floater), "classic={classic}");
+        assert!(v.in_front(&floater), "classic={classic}");
 
         // RLVa's @showinv closes it
         v.st.close_additional_window();

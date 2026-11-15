@@ -2313,7 +2313,7 @@ pub fn show(
             aurora::widen(ctx, "inventory");
         }
     }
-    window_mode::apply(mode_clicks, prefs, Some(window_mode::Key::Main)); // Folderstorm: pin and quiet mode
+    window_mode::apply(ctx, "inventory", *open, mode_clicks, prefs, Some(window_mode::Key::Main)); // Folderstorm: pin and quiet mode
     st.hover.show(p, inv, prefs, hover_images, &mut st.wanted_hover_images);
     st.was_open = *open && !super::widgets::floater_minimized(ctx, "inventory");
     controls::dialogs(ctx, p, st, prefs);
@@ -2472,7 +2472,7 @@ pub fn show(
                 aurora::widen(ctx, &window_id);
             }
         }
-        window_mode::apply(mode_clicks, prefs, mode_key); // Folderstorm: pin and quiet mode
+        window_mode::apply(ctx, &window_id, w.open, mode_clicks, prefs, mode_key); // Folderstorm: pin and quiet mode
         custom_tabs::window::after(w, prefs); // Folderstorm: a tab window closes with its tab
         w.state
             .hover
