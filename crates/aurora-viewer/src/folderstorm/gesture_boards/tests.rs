@@ -7,8 +7,8 @@ mod frames;
 use super::layout::{self, GAP};
 use super::store::{self, Account, Error, MAX_BOARDS, MAX_TILES, Store};
 use super::{Item, Kind, resolve};
-use crate::world::inventory::{FetchState, Folder, Inventory};
-use aurora_net::inventory::{InvFolder, InvItem};
+use crate::world::inventory::Inventory;
+use aurora_net::inventory::InvItem;
 use egui::{Vec2, vec2};
 use uuid::Uuid;
 
@@ -341,26 +341,6 @@ fn the_search_looks_at_labels_and_names_on_all_boards_or_one() {
 
 // ---- what a tile plays -------------------------------------------------
 
-fn folder(inv: &mut Inventory, id: Uuid, parent: Uuid, kind: i32) {
-    inv.folders.insert(
-        id,
-        Folder {
-            info: InvFolder {
-                id,
-                parent,
-                name: format!("folder {kind}"),
-                type_default: kind,
-                version: 1,
-                ..Default::default()
-            },
-            children: Vec::new(),
-            items: Vec::new(),
-            state: FetchState::Fetched,
-            library: false,
-        },
-    );
-}
-
 pub(super) fn item(n: u128, parent: Uuid, name: &str, asset_type: i32, asset: Uuid) -> InvItem {
     InvItem {
         id: id(n),
@@ -386,9 +366,8 @@ pub(super) fn inventory() -> Inventory {
     let mut inv = Inventory::default();
     crate::world::inventory::demo::seed(&mut inv, id(42));
     let mine = id(8000);
-    let trash = id(9500);
-    let root = inv.root;
-    folder(&mut inv, trash, root, 14);
+    // the demo's own Trash (a second one would make the Trash ambiguous)
+    let trash = crate::world::appearance::system_folder(&inv, 14).expect("a Trash");
     let library = inv.lib_root;
     inv.add_items(vec![
         item(100, mine, "Wave hello", 21, id(1100)),

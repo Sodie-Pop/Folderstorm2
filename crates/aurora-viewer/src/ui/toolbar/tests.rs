@@ -896,7 +896,7 @@ fn toolbar_catalogue_holds_firestorm_commands_and_runs_the_ready_ones() {
     let skin = Layout::default();
     let all = catalogue(&skin);
     assert_eq!(all.len(), 78 + 3); // Folderstorm: + workspaces, layout_toggle, gesture_board
-    assert_eq!(COMMANDS.len(), 78 + 2); // Folderstorm: the same two
+    assert_eq!(COMMANDS.len(), 78 + 3); // Folderstorm: the same three
     let mut ids: Vec<_> = COMMANDS.iter().map(|c| c.id).collect();
     ids.sort_unstable();
     ids.dedup();
