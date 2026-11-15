@@ -1133,6 +1133,29 @@ inventory-custom-tab-delete-question = Delete the custom tab “{ $name }”? It
 inventory-custom-tab-clone-name = { $name } copy
 inventory-custom-tab-demo-media = Textures and sounds
 inventory-custom-tab-demo-named = Demo items
+inventory-folder-tab-save = Save as Inventory tab…
+inventory-folder-tab-add = Add selected folders
+inventory-folder-tab-replace = Use only selected folders
+inventory-folder-tab-clear = Show all folders
+inventory-folder-tab-clear-tip = Show the whole inventory in this tab again. Its filters and search stay.
+inventory-folder-tab-select-tip = Select folders in the Inventory list first: up to { $count }, not the Trash or the Library.
+inventory-folder-tab-limit = A tab can show up to { $count } folders.
+inventory-folder-tab-heading = Folders
+inventory-folder-tab-all = All folders
+inventory-folder-tab-elsewhere = This tab's folders were chosen on another account: here it shows all folders.
+inventory-folder-tab-help = The tab shows these folders and everything inside them, with its filters and search. Select folders in the Inventory list (up to { $count }), then add them.
+inventory-folder-tab-remove = Remove this folder from the tab
+inventory-folder-tab-deleted-folder = Deleted folder
+inventory-folder-tab-status-missing = deleted
+inventory-folder-tab-status-trash = in the Trash
+inventory-folder-tab-status-refused = not allowed
+inventory-folder-tab-note-gone = { $count ->
+    [one] { $count } folder of this tab is deleted or in the Trash.
+   *[other] { $count } folders of this tab are deleted or in the Trash.
+    }
+inventory-folder-tab-note-remove = Remove from tab
+inventory-folder-tab-note-remove-tip = Forget these folders in this tab. A folder restored from the Trash would not come back in it.
+inventory-folder-tab-demo-name = Clothing and body
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations
