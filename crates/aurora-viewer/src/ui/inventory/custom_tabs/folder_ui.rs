@@ -163,6 +163,10 @@ fn actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut Inv
         if clicked {
             apply(st, prefs, id, how);
         }
+        if !in_menu && how == Change::Replace {
+            // the dialog: "Show all folders" on a line of its own
+            ui.end_row();
+        }
     }
 }
 
@@ -212,7 +216,11 @@ pub(in crate::ui::inventory) fn editor(ui: &mut egui::Ui, p: &Palette, st: &mut 
     if let Some(folder) = drop {
         remove(st, prefs, id, |f| *f == folder);
     }
-    ui.horizontal_wrapped(|ui| actions(ui, p, st, prefs, id, false));
+    ui.horizontal_wrapped(|ui| {
+        // a button too long for the line goes to the next one, whole
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+        actions(ui, p, st, prefs, id, false);
+    });
     ui.label(
         RichText::new(aurora_i18n::tr!("inventory-folder-tab-help", count = MAX_FOLDERS))
             .size(12.0)

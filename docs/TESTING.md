@@ -6987,6 +6987,21 @@ failure. Grid validation and any paid upload are performed by the human.
   focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
   a custom tab with that tab's finder and search. The `aurora-` mode starts with
   the narrow window; widen it to see the shortcuts column.
+- **`AURORA_DEMO_INVENTORY=folder-tabs|aurora-folder-tabs`** (Folderstorm2):
+  a custom tab "Clothing and body" scoped to the demo's Clothing and Body
+  folders and to a deleted one, shown with its "Customize tab…" dialog open.
+  Check that the list holds those two folders and what is inside them, under
+  their path (My inventory / A — Personal folder) and nothing else; that a
+  note above the list says one folder is deleted or in the Trash, and "Remove
+  from tab" forgets it; that the dialog's Folders part lists each folder by
+  path (the deleted one marked), with a remove button. Select folders in the
+  list (from the Inventory tab), then right-click the custom tab: "Add
+  selected folders", "Use only selected folders" (greyed while the selection
+  holds an item, the Trash or a Library folder), "Show all folders". Right-click
+  folders › "Save as Inventory tab…" makes a new tab named after the first,
+  its Rename dialog open. Filters and search apply inside the folders; moving a
+  scoped folder elsewhere keeps it in the tab; moving it to the Trash takes it
+  out (and the note appears).
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory

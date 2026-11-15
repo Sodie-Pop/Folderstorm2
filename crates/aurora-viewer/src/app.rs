@@ -21234,17 +21234,17 @@ impl ApplicationHandler for App {
                         // Folderstorm: custom Inventory tabs
                         ui::inventory::custom_tabs::demo(&mut self.inventory_ui, &mut self.settings.inventory);
                     }
-                    if view.ends_with("folder-tabs") {
-                        // Folderstorm: folder-scoped Inventory tabs
-                        let account = self.world.agent_id;
-                        ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
-                    }
                     if view.contains("folder-colors") {
                         ui::inventory::folder_colors_demo(&mut self.inventory_ui, &mut self.settings.inventory);
                     }
                     self.inventory_ui.filters_open = view == "filters";
                     self.inventory_ui.preferences_open = view == "preferences";
                     self.inventory_ui.default_permissions_open = view.ends_with("default-permissions");
+                    if view.ends_with("folder-tabs") {
+                        // Folderstorm: folder-scoped Inventory tabs
+                        let account = self.world.agent_id;
+                        ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
+                    }
                     if view.ends_with("locked") {
                         // a locked folder: its "Locked" tag, its contents ordinary
                         self.settings.inventory.protected.insert(uuid::Uuid::from_u128(8000));
