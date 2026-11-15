@@ -21240,11 +21240,6 @@ impl ApplicationHandler for App {
                     self.inventory_ui.filters_open = view == "filters";
                     self.inventory_ui.preferences_open = view == "preferences";
                     self.inventory_ui.default_permissions_open = view.ends_with("default-permissions");
-                    if view.ends_with("folder-tabs") {
-                        // Folderstorm: folder-scoped Inventory tabs
-                        let account = self.world.agent_id;
-                        ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
-                    }
                     if view.ends_with("locked") {
                         // a locked folder: its "Locked" tag, its contents ordinary
                         self.settings.inventory.protected.insert(uuid::Uuid::from_u128(8000));
@@ -21316,6 +21311,11 @@ impl ApplicationHandler for App {
                                 window.id = ui::inventory::AURORA_DEMO_FOLDER_WINDOW;
                             }
                         }
+                    }
+                    if view.ends_with("folder-tabs") {
+                        // Folderstorm: folder-scoped Inventory tabs
+                        let account = self.world.agent_id;
+                        ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
                     }
                     if view.contains("favorites") {
                         if view.ends_with("-flat") || view.ends_with("-parents") {
