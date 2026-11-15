@@ -8,6 +8,7 @@
 //! one; a build never carries a token (`chat_upload::token`).
 
 use super::super::cx::{Cx, Nothing, field};
+use super::folderstorm_search::words;
 use crate::folderstorm::chat_upload::{self, TokenStatus, settings, token};
 use crate::ui::widgets;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -53,14 +54,14 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
     let p = cx.p;
     cx.group(tr!("fs-chat-upload-group"), |cx| {
         cx.note(tr!("fs-chat-upload-intro"));
-        cx.keywords("image upload Zipline picture paste").toggle(
+        words(cx, &["fs-search-chat-upload"]).toggle(
             tr!("fs-chat-upload-enable"),
             tr!("fs-chat-upload-enable-help"),
             &field!(folderstorm_chat_upload.enabled),
         );
         let off = !cx.s.folderstorm_chat_upload.enabled;
         cx.subs(off, |cx| {
-            cx.wide().row(
+            words(cx, &["fs-search-chat-upload"]).wide().row(
                 tr!("fs-chat-upload-host"),
                 tr!("fs-chat-upload-host-help"),
                 &field!(folderstorm_chat_upload.host),
@@ -75,7 +76,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     changed
                 },
             );
-            cx.wide().row(
+            words(cx, &["fs-search-chat-upload"]).wide().row(
                 tr!("fs-chat-upload-folder"),
                 tr!("fs-chat-upload-folder-help"),
                 &field!(folderstorm_chat_upload.folders),
@@ -114,11 +115,15 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     false
                 },
             );
-            cx.wide()
-                .row(tr!("fs-chat-upload-token"), tr!("fs-chat-upload-token-help"), &Nothing, |ui, s| {
+            words(cx, &["fs-search-chat-upload"]).wide().row(
+                tr!("fs-chat-upload-token"),
+                tr!("fs-chat-upload-token-help"),
+                &Nothing,
+                |ui, s| {
                     token_row(ui, &p, &s.folderstorm_chat_upload);
                     false
-                });
+                },
+            );
             cx.slider(
                 tr!("fs-chat-upload-max"),
                 tr!("fs-chat-upload-max-help"),

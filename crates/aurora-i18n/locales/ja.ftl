@@ -1957,6 +1957,24 @@ fs-folder-upload-balance = 残高：L${ $balance }、このアップロード後
 fs-folder-upload-short = L$が足りません。このアップロードにはL${ $cost }かかり、残高はL${ $balance }です。
 fs-folder-upload-receipt = フォルダー { $folder } のアップロード：{ $uploaded }個完了、{ $failed }個失敗、{ $cancelled }個未送信、L${ $spent }を使用しました。
 fs-folder-upload-receipt-failed = 失敗：{ $names }。
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP ローカル アシスタント AI エージェント ブリッジ API 自動化 Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = アクティビティ 履歴 ログ 受領 操作 停止
+fs-search-viewport = デュアル モニター デュアルモニター マルチ マルチモニター 複数 画面 ディスプレイ 表示領域 ワールド 余白 マージン ワイド ウルトラワイド
+fs-search-photo = 写真 写真モード フォト スナップショット 撮影 カメラ
+fs-search-layouts = レイアウト ワークスペース 作業 プロファイル 配置 ウィンドウ デュアル モニター マルチモニター 複数 画面
+fs-search-layouts-list = お気に入り スター 適用 名前の変更 削除 背景 壁紙
+fs-search-layouts-save = 保存 新規 取り込み
+fs-search-layouts-previous = 元に戻す 戻る 復元 取り消し
+fs-search-layouts-lock = ロック 解除 ウィンドウ サイズ ボーダーレス 全画面 フルスクリーン
+fs-search-layouts-monitors = 抜く 接続 画面 モニター 変更
+fs-search-layouts-reset = 既定 デフォルト リセット バー 表示領域
+fs-search-layouts-quick = クイック 切り替え 切替 スイッチャー トグル ツールバー ボタン ショートカット キーボード ホットキー お気に入り
+fs-search-characters = 複数 アカウント サブアカウント サブ垢 キャラクター マルチボックス セッション ホスト 背景 バックグラウンド モニター
+fs-search-chat-upload = 画像 アップロード 写真 スクリーンショット 貼り付け ドロップ 共有 リンク Zipline ホスト
+fs-search-outfit-safety = アウトフィット 安全 着用 誤クリック 置き換え 保護
+
 ui-options-place-bar-stretch = 場所バーを右に伸ばす
 ui-options-place-bar-stretch-help = 場所アイランドがアカウントアイランドまで伸びます。オフにすると表示内容に合わせた幅になります。
 ui-options-place-bar-rights-text = 区画の権限名を表示

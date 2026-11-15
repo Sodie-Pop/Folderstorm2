@@ -2127,6 +2127,24 @@ fs-folder-upload-balance = Balance: L${ $balance }, then L${ $after } after this
 fs-folder-upload-short = Not enough L$: this upload costs L${ $cost } and the balance is L${ $balance }.
 fs-folder-upload-receipt = Folder upload { $folder }: { $uploaded } uploaded, { $failed } failed, { $cancelled } not sent, L${ $spent } spent.
 fs-folder-upload-receipt-failed = Failed: { $names }.
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = activity history log receipts operations stop
+fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
+fs-search-photo = photo mode snapshot picture camera
+fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
+fs-search-layouts-list = favorite favorites star apply rename delete background wallpaper
+fs-search-layouts-save = save new capture
+fs-search-layouts-previous = undo back restore revert
+fs-search-layouts-lock = lock unlock window size borderless full screen
+fs-search-layouts-monitors = unplug plug screens monitors changed
+fs-search-layouts-reset = default reset bars viewport
+fs-search-layouts-quick = quick switch switcher toggle toolbar button shortcut keyboard hotkey favorite favorites
+fs-search-characters = multiple accounts alts alt characters character multibox session host background monitors
+fs-search-chat-upload = image upload picture photo screenshot paste drop share link Zipline host
+fs-search-outfit-safety = outfit safety wear misclick replace protect
+
 ui-options-place-bar-stretch = Stretch the place bar to the right
 ui-options-place-bar-stretch-help = The place island reaches the account island; off, it is as wide as what it shows.
 ui-options-place-bar-rights-text = Name the parcel rights

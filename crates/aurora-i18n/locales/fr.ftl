@@ -2130,6 +2130,24 @@ fs-folder-upload-balance = Solde : { $balance } L$, puis { $after } L$ après ce
 fs-folder-upload-short = Pas assez de L$ : cet import coûte { $cost } L$ et le solde est de { $balance } L$.
 fs-folder-upload-receipt = Import du dossier { $folder } : { $uploaded } importés, { $failed } en échec, { $cancelled } non envoyés, { $spent } L$ dépensés.
 fs-folder-upload-receipt-failed = En échec : { $names }.
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = activité historique journal reçus opérations arrêter
+fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
+fs-search-photo = mode photo capture image appareil
+fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
+fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer arrière-plan fond d'écran
+fs-search-layouts-save = enregistrer nouvelle capturer
+fs-search-layouts-previous = annuler retour restaurer revenir
+fs-search-layouts-lock = verrouiller déverrouiller taille de la fenêtre sans bordure plein écran
+fs-search-layouts-monitors = débrancher brancher écrans moniteurs changés
+fs-search-layouts-reset = défaut réinitialiser barres zone du monde
+fs-search-layouts-quick = bascule rapide changement sélecteur bouton barre d'outils raccourci clavier touche favori favoris
+fs-search-characters = plusieurs comptes alts alt personnages personnage multibox hôte de session arrière-plan moniteurs
+fs-search-chat-upload = image envoi téléverser photo capture d'écran coller déposer partager lien Zipline hébergeur
+fs-search-outfit-safety = tenue sécurité porter clic de travers remplacer protéger
+
 ui-options-place-bar-stretch = Étirer la barre du lieu jusqu'à droite
 ui-options-place-bar-stretch-help = L'îlot du lieu va jusqu'à l'îlot du compte ; désactivé, il prend la largeur de ce qu'il affiche.
 ui-options-place-bar-rights-text = Nommer les droits de la parcelle
