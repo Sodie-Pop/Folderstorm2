@@ -56,6 +56,13 @@ impl App {
                 chat_commands: Some(&self.settings.chat_commands),
                 poses: (!self.world.agent_id.is_nil()).then(|| crate::settings::account_dir(&self.world.agent_id).join("poses")),
             },
+            // Folderstorm: the account's prices and balance (mcp-uploads.md)
+            uploads: mcp_bridge::uploads::Account {
+                prices: self.photo_prices(),
+                balance: self.world.balance,
+                sound_limit: self.imports.sound_limit,
+                texture: self.settings.imports.texture(),
+            },
         }
     }
 
@@ -105,6 +112,10 @@ impl App {
         let runs = mcp_bridge::frame(&self.settings.local_assistant, &self.local_assistant_view());
         for call in runs {
             self.local_assistant_run(call);
+        }
+        // Folderstorm: the upload run's folders, files and picture (mcp-uploads.md)
+        for act in mcp_bridge::upload_acts() {
+            self.local_assistant_upload(act);
         }
         // inventory_landmark: the landmark cache asks for what it lacks
         for asset in mcp_bridge::wanted_landmarks() {
@@ -591,6 +602,9 @@ impl App {
             // Folderstorm: mcp-gestures.md
             Work::Gesture(work) => self.local_assistant_gesture(call, planned.reply, *work),
             Work::Pose(work) => mcp_bridge::pose_run(call, *work, planned.reply, &self.world),
+            // Folderstorm: mcp-uploads.md
+            Work::Upload => mcp_bridge::upload_start(call),
+            Work::MeshReview(path) => self.local_assistant_mesh_review(call, path, planned.reply),
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));
@@ -966,6 +980,80 @@ impl App {
             name,
         });
         mcp_bridge::sent(None, None);
+    }
+
+    /// Folderstorm: one step of the assistant's upload, sent as the
+    /// uploader sends it: a folder (`EditInventory`), a file
+    /// (`UploadAsset` with the uploads' permissions of Preferences; a
+    /// snapshot as the photo window's), or the picture set from the new
+    /// texture through the Image window's path (mcp-uploads.md). Each is
+    /// checked for RLVa just before, as `send` would.
+    fn local_assistant_upload(&mut self, act: mcp_bridge::uploads::Act) {
+        use aurora_net::inventory::upload::{self, Kind};
+        use mcp_bridge::uploads::Act;
+        match act {
+            Act::Folder { request, change } => {
+                let command = NetCommand::EditInventory { request, change };
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    let refused = Err("an RLV restriction blocks this change".to_owned());
+                    return mcp_bridge::upload_folder_result(request, refused, &mut self.world.inventory);
+                }
+                log::info!("local assistant upload: one folder");
+                self.send(command);
+            }
+            Act::Upload { request, mut upload } => {
+                let uploads = self.settings.imports.permissions();
+                upload.permissions = if upload.kind == Kind::Snapshot {
+                    // as the photo window's Save to inventory
+                    upload::Permissions {
+                        next_owner: 0x7fff_ffff,
+                        ..uploads
+                    }
+                } else {
+                    self.settings.imports.permissions_for(upload.kind)
+                };
+                let command = NetCommand::UploadAsset { request, upload };
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    let _ = mcp_bridge::uploaded(request, Err(upload::Error::Rejected));
+                    return;
+                }
+                log::info!("local assistant upload: one file");
+                self.send(command);
+            }
+            Act::Thumbnail { request, target, asset } => {
+                self.inventory_image_action(
+                    request,
+                    target,
+                    crate::ui::inventory::thumbnail::Input::Texture { asset, resize: true },
+                );
+            }
+        }
+    }
+
+    /// Folderstorm: a Collada file opened in the uploader's Mesh window for
+    /// the user to review and upload by hand (mcp-uploads.md). Nothing is
+    /// uploaded: the window shows the server's fee and its Upload button.
+    fn local_assistant_mesh_review(&mut self, call: Pending, path: std::path::PathBuf, reply: serde_json::Value) {
+        let holds_mesh = self
+            .imports
+            .entries
+            .iter()
+            .any(|e| !e.local && matches!(e.source, Some(crate::imports::Source::Mesh(_))));
+        if self.imports.busy() || self.imports.pending_files.is_some() || self.imports.confirm || holds_mesh {
+            return call.answer(Err(ToolError::new(
+                ErrorCode::Busy,
+                "the viewer's uploader is busy or already holds a mesh: the user finishes or clears it first",
+            )));
+        }
+        let ctx = self.egui_ctx.clone();
+        self.imports
+            .add_mesh_path(path, &self.scene.jobs, &ctx, self.settings.imports.texture());
+        if self.imports.pending_files.is_none() {
+            return call.answer(Err(ToolError::new(ErrorCode::Busy, "the viewer's uploader did not take the file")));
+        }
+        self.imports.open_type_window(&ctx, crate::imports::Choice::Mesh);
+        log::info!("local assistant mesh review opened");
+        call.answer(Ok(reply));
     }
 
     /// `submit_inventory_change` (app/inventory.rs), without what belongs

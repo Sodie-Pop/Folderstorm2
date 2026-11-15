@@ -822,7 +822,11 @@ mod upload_tests {
         for read in ["camera_get", "inventory_upload_preview", "inventory_upload_status"] {
             assert_eq!(tool(read)["annotations"]["readOnlyHint"], true, "{read}");
         }
-        for change in ["inventory_upload_execute", "inventory_upload_mesh_review", "inventory_snapshot_upload"] {
+        for change in [
+            "inventory_upload_execute",
+            "inventory_upload_mesh_review",
+            "inventory_snapshot_upload",
+        ] {
             assert_eq!(tool(change)["annotations"]["readOnlyHint"], false, "{change}");
         }
         assert!(

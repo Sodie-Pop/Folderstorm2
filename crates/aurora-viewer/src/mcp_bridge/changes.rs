@@ -76,6 +76,11 @@ pub enum Work {
     /// Folderstorm: the assistant's pose session of the user's own avatar
     /// (mcp-gestures.md).
     Pose(Box<super::posing::Work>),
+    /// Folderstorm: an upload plan's run starts, its plan carried by the
+    /// call (mcp-uploads.md).
+    Upload,
+    /// Folderstorm: a Collada file opened in the uploader's Mesh window.
+    MeshReview(std::path::PathBuf),
 }
 
 #[derive(Debug, Clone)]

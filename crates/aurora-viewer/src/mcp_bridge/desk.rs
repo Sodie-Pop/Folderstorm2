@@ -44,6 +44,7 @@ use super::posing::{self, Posing}; // Folderstorm: own posing (mcp-gestures.md)
 use super::script_testing::{self, ScriptTesting}; // Folderstorm: script testing (mcp-script-testing.md)
 use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::tools::{self, Ctx};
+use super::uploads::{self, Uploads}; // Folderstorm: file uploads (mcp-uploads.md)
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
 use folderstorm_mcp_bridge::protocol::building as build_tool; // Folderstorm: building
@@ -54,6 +55,7 @@ use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: ob
 use folderstorm_mcp_bridge::protocol::posing as pose_tool; // Folderstorm: own posing
 use folderstorm_mcp_bridge::protocol::script_testing as test_tool; // Folderstorm: script testing
 use folderstorm_mcp_bridge::protocol::task_scripts as task_tool; // Folderstorm: task scripts
+use folderstorm_mcp_bridge::protocol::uploads as upload_tool; // Folderstorm: file uploads
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
@@ -238,6 +240,8 @@ pub struct Desk {
     /// login change, when access is turned off and when the Interact level
     /// changes; never saved.
     touch_grants: HashSet<Uuid>,
+    /// Folderstorm: this login's upload plans, previews and run.
+    uploads: Uploads,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -329,6 +333,8 @@ pub fn call_decision(permissions: &Permissions, call: &Pending) -> Decision {
             // Folderstorm: a test recipe reads, and touches or speaks
             // (mcp-script-testing.md)
             extra.extend(test_tool::extra_classes(&call.tool, &call.arguments));
+            // Folderstorm: an upload that sets a picture edits too (mcp-uploads.md)
+            extra.extend(uploads::extra_classes(&call.tool, &call.arguments));
             let base = decision(permissions, &call.tool);
             if extra.is_empty() || base == Decision::Refuse {
                 base
@@ -448,6 +454,19 @@ impl Desk {
                 Some(taken) => call = taken,
                 None => return,
             }
+        }
+        // Folderstorm: an upload's execute takes its plan, once, before its
+        // classes are decided (a picture set needs Edit too)
+        if fresh && call.tool == upload_tool::EXECUTE {
+            match self.uploads.freeze(&call, now) {
+                Ok(frozen) => call.arguments = frozen,
+                Err(e) => return call.answer(Err(e)),
+            }
+        }
+        // Folderstorm: inventory_upload_cancel needs no class
+        if call.tool == upload_tool::CANCEL {
+            let result = self.upload_cancel(&call.arguments);
+            return call.answer(result);
         }
         // the levels may have changed while the call was queued
         match self.decide_call(&call) {
@@ -593,6 +612,16 @@ impl Desk {
             self.posing.start_presets(call, cx, now);
             return;
         }
+        // Folderstorm: the upload tools' reads (mcp-uploads.md)
+        if call.tool == upload_tool::PREVIEW {
+            self.uploads.start_preview(call, cx, now);
+            return;
+        }
+        if call.tool == upload_tool::STATUS {
+            let decision = self.permissions.decide_all([Class::Upload, Class::Read]);
+            let result = self.uploads.status(&call.arguments, cx, decision);
+            return call.answer(result);
+        }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
             call.answer(result);
@@ -633,6 +662,8 @@ impl Desk {
             self.gestures.plan(&call, cx) // Folderstorm: mcp-gestures.md
         } else if posing::is_change(&call.tool) {
             self.posing.plan(&call, cx)
+        } else if uploads::is_change(&call.tool) {
+            self.uploads.plan(&call, cx) // Folderstorm: mcp-uploads.md
         } else {
             changes::plan(&call.tool, &call.arguments, cx)
         };
@@ -647,6 +678,11 @@ impl Desk {
                 // Folderstorm: a gesture that says something always asks
                 // (mcp-gestures.md)
                 if matches!(&planned.work, Work::Gesture(w) if w.says()) {
+                    call.ask = true;
+                }
+                // Folderstorm: an upload that costs L$ always asks, with
+                // its price (mcp-uploads.md)
+                if Uploads::always_asks(&call) {
                     call.ask = true;
                 }
                 call.receipt(|r| {
@@ -709,6 +745,10 @@ impl Desk {
         }
         // Folderstorm: a move under way stops; a teleport is asked to cancel
         if let Some(answer) = self.nav.stop(operation_id, by_user, Instant::now()) {
+            return Ok(answer);
+        }
+        // Folderstorm: an upload under way sends nothing more
+        if let Some(answer) = self.uploads.cancel(operation_id, by_user) {
             return Ok(answer);
         }
         let message = if state.live() {
@@ -1014,6 +1054,7 @@ impl Desk {
         self.gestures.clear(&refusal); // Folderstorm: gestures
         self.posing.clear(&refusal, "login_changed"); // Folderstorm: own posing
         self.touch_grants.clear(); // Folderstorm: touches allowed for the session
+        self.uploads.clear(&refusal); // Folderstorm: file uploads
         super::script_feed::clear();
     }
 
@@ -1035,6 +1076,7 @@ impl Desk {
         self.building.refuse_all(refusal); // Folderstorm: building reads
         self.gestures.refuse_all(refusal); // Folderstorm: gesture reads
         self.posing.refuse_all(refusal); // Folderstorm: pose reads
+        self.uploads.refuse_all(refusal); // Folderstorm: upload previews
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -1077,6 +1119,9 @@ impl Desk {
         self.gestures = old.gestures;
         old.posing.clear(&refused(ACCESS_OFF), "access_off");
         self.posing = old.posing;
+        // Folderstorm: the plans go, an upload sends nothing more
+        old.uploads.clear(&refused(ACCESS_OFF));
+        self.uploads = old.uploads;
         super::script_feed::set_capturing(false);
     }
 
@@ -1147,7 +1192,12 @@ impl Desk {
             detail: {
                 let detail = plans::dialog_lines(&first.call.arguments);
                 if detail.is_empty() {
-                    content::dialog_lines(&first.call.arguments) // Folderstorm: content saves
+                    let detail = content::dialog_lines(&first.call.arguments); // Folderstorm: content saves
+                    if detail.is_empty() {
+                        self.uploads.dialog_lines(&first.call) // Folderstorm: uploads
+                    } else {
+                        detail
+                    }
                 } else {
                     detail
                 }
@@ -1572,6 +1622,50 @@ impl Desk {
             self.gestures.plan(call, cx)
         } else {
             self.posing.plan(call, cx)
+        }
+    }
+
+    /// Folderstorm: the upload tools' state (mcp-uploads.md).
+    pub fn uploads(&mut self) -> &mut Uploads {
+        &mut self.uploads
+    }
+
+    /// Folderstorm: an upload's execute starts running (its receipt's rows
+    /// are its files).
+    pub fn upload_start(&mut self, call: Pending, now: Instant) {
+        self.uploads.start(call, &self.receipts, now);
+    }
+
+    /// Folderstorm: once per frame, the previews and the run under way,
+    /// decided again with the levels in force.
+    pub fn tick_uploads(&mut self, cx: &Ctx, now: Instant) {
+        self.uploads.tick(cx, &self.permissions, now);
+    }
+
+    /// Folderstorm: an upload change planned again just before it runs.
+    pub fn upload_plan(&self, call: &Pending, cx: &Ctx) -> Result<Planned, ToolError> {
+        self.uploads.plan(call, cx)
+    }
+
+    /// Folderstorm: `inventory_upload_cancel`: [`Desk::cancel`] for an
+    /// upload of this login only.
+    fn upload_cancel(&mut self, args: &Value) -> Result<Value, ToolError> {
+        let id = match args.as_object() {
+            Some(a) if a.len() == 1 => a
+                .get("operation_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ToolError::new(ErrorCode::InvalidArguments, "`operation_id` is a string"))?,
+            _ => return Err(ToolError::new(ErrorCode::InvalidArguments, "give `operation_id` only")),
+        };
+        let session = self.session.clone();
+        let tool = self.receipts.with(|s| s.find(session.as_deref(), id).map(|r| r.tool.clone()));
+        match tool {
+            Some(tool) if tool == upload_tool::EXECUTE => self.cancel(id, false),
+            Some(_) => Err(ToolError::new(
+                ErrorCode::NotFound,
+                "not an upload: assistant_operation_cancel stops other operations",
+            )),
+            None => Err(ToolError::new(ErrorCode::NotFound, "no such operation on this login")),
         }
     }
 

@@ -75,6 +75,24 @@ impl Pose {
     }
 }
 
+/// Folderstorm: `camera_get` (mcp-uploads.md): where the camera is now,
+/// as the camera moves give it, with the distance to its focus and the
+/// avatar's position.
+pub fn get(pose: &Pose, stage: &Stage) -> Result<Value, ToolError> {
+    if !stage.in_world {
+        return Err(ToolError::new(ErrorCode::NotReady, "the world is not shown yet"));
+    }
+    let mut answer = pose.json();
+    answer["focus"] = answer["target"].clone();
+    answer["distance"] = json!(round(pose.position.distance(pose.target)));
+    answer["avatar"] = match stage.avatar {
+        Some(p) => json!([round(p.x), round(p.y), round(p.z)]),
+        None => Value::Null,
+    };
+    answer["coordinates"] = json!("region metres");
+    Ok(answer)
+}
+
 fn round(v: f32) -> f64 {
     (f64::from(v) * 1000.0).round() / 1000.0
 }
