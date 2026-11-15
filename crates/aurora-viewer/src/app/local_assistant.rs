@@ -84,7 +84,7 @@ impl App {
     /// Once per frame: the bridge's calls, then the changes due now.
     pub(super) fn local_assistant_frame(&mut self) {
         // Folderstorm: content editing: the demo's fixtures, and the scripts
-        // the assistant saved (their new asset, then the item read back)
+        // the assistant saved (their new asset held on the inventory)
         if self.demo
             && mcp_bridge::content::demo::wanted()
             && !self.world.inventory.root.is_nil()
@@ -97,18 +97,10 @@ impl App {
                 self.demo_script_sources.insert(target, source);
             }
         }
-        for (item, asset) in mcp_bridge::content_updates() {
-            if let Some(mut it) = self.world.inventory.items.get(&item).cloned() {
-                it.asset_id = asset;
-                self.world.inventory.add_items(vec![it]);
-            }
-            if !self.demo {
-                self.send(NetCommand::FetchItems {
-                    items: vec![item],
-                    owner: self.world.agent_id,
-                });
-            }
-        }
+        // the upload's new asset is authoritative, as the Legacy Viewer
+        // takes it (LLBufferedAssetUploadInfo::finishUpload): no item read
+        // after the save, whose answer may still carry the old asset
+        mcp_bridge::content_hold(&mut self.world.inventory);
         // Folderstorm: the upload demo pays from a demo balance (mcp-uploads.md)
         if self.demo && mcp_bridge::uploads::demo::wanted() && self.world.balance.is_none() {
             self.world.balance = Some(500);
