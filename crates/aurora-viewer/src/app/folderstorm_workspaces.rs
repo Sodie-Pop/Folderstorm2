@@ -193,6 +193,7 @@ impl App {
         }
         let seen = self.folderstorm_viewer_window(window);
         self.layouts_demo(seen.as_ref());
+        self.backgrounds_demo(window);
         // (looked for only while Preferences, where they are chosen, is open)
         let huds = if self.panels.settings {
             context::worn_huds(&self.world)
@@ -357,6 +358,32 @@ impl App {
     /// closed; `=row` also shows the favourites' row under the top bar
     /// (the strip at its right end); `=many` adds favorite layouts until
     /// some go to *More…*.
+    /// `AURORA_DEMO_BACKGROUND=<mode>`: a background chosen once, at the
+    /// start of a demo run (in the demo's own settings), the viewport
+    /// turned on when it is off (`crate::folderstorm::backgrounds::demo`).
+    fn backgrounds_demo(&mut self, window: &Window) {
+        use crate::folderstorm::backgrounds::{demo, import};
+        static SEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !self.demo || SEEDED.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let Ok(mode) = std::env::var("AURORA_DEMO_BACKGROUND") else {
+            return;
+        };
+        SEEDED.store(true, std::sync::atomic::Ordering::Relaxed);
+        let s = &mut self.settings;
+        let width = window.inner_size().width;
+        if !demo::seed(
+            &mode,
+            &mut s.folderstorm_workspaces,
+            &mut s.folderstorm_viewport,
+            width,
+            &import::folder(),
+        ) {
+            log::warn!("AURORA_DEMO_BACKGROUND={mode}: not a mode of the demo");
+        }
+    }
+
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
