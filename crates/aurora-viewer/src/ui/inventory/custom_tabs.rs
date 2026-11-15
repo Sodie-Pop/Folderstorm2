@@ -19,6 +19,9 @@
 //! The tab strips (the Legacy window's, Aurora's narrow icon tabs and its
 //! wide shortcuts column) number their tabs as "slots": a built-in tab is
 //! its own number, a custom tab is `SLOT_BASE` plus its place in the list.
+//!
+//! A custom tab may be scoped to chosen folders (feature 2.2): `folders.rs`
+//! holds the rules, `folder_ui.rs` the menus, the dialog part and the note.
 
 use super::view::{Age, Filters, InventoryPreferences};
 use super::*;
@@ -46,6 +49,10 @@ pub struct CustomTab {
     /// The quick search text (the advanced search keeps its rules in
     /// `filters.smart`, and the text typed before it here).
     pub search: String,
+    /// The folders the tab is scoped to, by account id (`folders.rs`); none
+    /// for an account: the whole inventory.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub folders: std::collections::BTreeMap<Uuid, Vec<Uuid>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +105,13 @@ pub fn add(tabs: &mut Vec<CustomTab>, name: &str, filters: Filters, search: Stri
     }
     let id = next_id(tabs);
     let name = unique_name(tabs, name);
-    tabs.push(CustomTab { id, name, filters, search });
+    tabs.push(CustomTab {
+        id,
+        name,
+        filters,
+        search,
+        folders: Default::default(),
+    });
     Some(id)
 }
 
@@ -153,6 +166,7 @@ pub fn normalize(tabs: &mut [CustomTab]) -> bool {
             tab.name = if name.is_empty() { format!("Tab {}", tab.id) } else { name };
             changed = true;
         }
+        changed |= folders::normalize(&mut tab.folders);
     }
     changed
 }
@@ -200,6 +214,8 @@ pub(super) struct State {
     name: String,
     rename: Option<Rename>,
     delete: Option<(u64, String)>,
+    /// What the folder scope read of the inventory this frame.
+    seen: folder_ui::Seen,
 }
 
 struct Rename {
@@ -445,6 +461,7 @@ pub(super) fn tab_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, pre
     ) {
         clone_custom(st, prefs, id);
     }
+    folder_ui::tab_menu(ui, p, st, prefs, id);
     menu::separator(ui, p);
     if menu::item(ui, p, "trash-filled", aurora_i18n::tr!("inventory-custom-tab-delete")) {
         let name = prefs
@@ -674,6 +691,10 @@ pub fn demo(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
         select_custom(st, prefs, id);
     }
 }
+
+pub(super) mod folder_ui;
+pub(super) mod folders;
+pub use folder_ui::demo as folder_demo;
 
 #[cfg(test)]
 mod tests;

@@ -25,6 +25,8 @@ pub(super) enum Command {
     BulkPermissions(Vec<Uuid>),
     // Folderstorm: Review bulk changes
     BulkReview(Vec<Uuid>),
+    // Folderstorm: Save as Inventory tab (custom_tabs/folder_ui.rs)
+    FolderTab(Vec<Uuid>),
     Rename(Uuid),
     Image(Uuid),
     Protect(Uuid),
@@ -756,6 +758,18 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
             ready && (1..=super::bulk_review::MAX).contains(&ids.len()),
             Command::BulkReview(ids.clone()),
         );
+        if all || folder.is_some() {
+            // Folderstorm: Save as Inventory tab (custom_tabs/folder_ui.rs)
+            let can = super::custom_tabs::folder_ui::can_save(inv, st, prefs, facts.agent, &ids);
+            c.add(
+                "folder-tab",
+                TEXT,
+                "bookmarks",
+                aurora_i18n::tr!("inventory-folder-tab-save"),
+                can,
+                Command::FolderTab(ids.clone()),
+            );
+        }
         c.add(
             "rename",
             TEXT,
@@ -1260,6 +1274,10 @@ pub(super) fn execute(
         }
         Command::BulkPermissions(ids) => st.open_bulk_permissions(ids),
         Command::BulkReview(ids) => super::bulk_review::open(st, ids), // Folderstorm: Review bulk changes
+        Command::FolderTab(ids) => {
+            // Folderstorm: Save as Inventory tab (custom_tabs/folder_ui.rs)
+            super::custom_tabs::folder_ui::save_as_tab(inv, st, prefs, facts.agent, &ids);
+        }
         Command::Rename(id) => st.begin_rename(inv, id),
         Command::Image(id) => st.thumbnail.open(id),
         Command::Protect(id) => {

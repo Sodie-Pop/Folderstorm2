@@ -21228,6 +21228,9 @@ impl ApplicationHandler for App {
                         // Folderstorm: custom Inventory tabs
                         | "custom-tabs"
                         | "aurora-custom-tabs"
+                        // Folderstorm: folder-scoped Inventory tabs
+                        | "folder-tabs"
+                        | "aurora-folder-tabs"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
@@ -21331,6 +21334,11 @@ impl ApplicationHandler for App {
                                 window.id = ui::inventory::AURORA_DEMO_FOLDER_WINDOW;
                             }
                         }
+                    }
+                    if view.ends_with("folder-tabs") {
+                        // Folderstorm: folder-scoped Inventory tabs
+                        let account = self.world.agent_id;
+                        ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
                     }
                     if view.contains("favorites") {
                         if view.ends_with("-flat") || view.ends_with("-parents") {
