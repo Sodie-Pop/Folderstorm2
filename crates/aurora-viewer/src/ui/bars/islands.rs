@@ -379,6 +379,7 @@ pub fn top(
     } else {
         set_favorites_row_bottom(&ctx, None);
     }
+    crate::folderstorm::workspaces::strip::own_row(&ctx, p, icons, place_rect); // Folderstorm: the favorites strip without the row
     (action, audio_action)
 }
 

@@ -12165,6 +12165,7 @@ impl App {
             log::info!("GPU recovery: egui's textures sent again ({} KB)", self.egui_shadow.bytes() >> 10);
             textures = self.egui_shadow.replay(textures);
         }
+        crate::folderstorm::backgrounds::underlay(&ctx, &self.settings.folderstorm_workspaces, &mut full.shapes); // Folderstorm: the margins' background
         self.studio_fade(&ctx, &mut full.shapes);
         let egui_frame = self
             .egui_hand_over

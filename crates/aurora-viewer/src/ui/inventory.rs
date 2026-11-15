@@ -45,6 +45,7 @@ pub use embedded::save_focused as document_save_focused;
 pub(crate) mod drag;
 mod embedded;
 mod folder_colors;
+mod folderstorm_windows; // Folderstorm: folder windows for workspaces
 pub use folder_colors::{demo as folder_colors_demo, demo_frame as folder_colors_demo_frame};
 // Folderstorm: Go to folder demo
 pub use folder_jump::demo as folder_jump_demo;

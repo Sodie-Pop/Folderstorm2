@@ -6,11 +6,17 @@
 //! says where things go, in three optional parts: the viewer window (its
 //! place and size, full screen or borderless over monitors, optionally
 //! locked), the world viewport with the bars' place, and the position and
-//! size of each window of an allowlist. Which windows are open is a
-//! workspace's business (a later checkpoint).
+//! size of each window of an allowlist, with whether it was open: applying
+//! a layout opens the windows it was saved with open (never an arbitrary
+//! one: the allowlist, through the app's own way of opening each), and
+//! closes none. A **workspace** says what is open ([`workspace`]): the
+//! windows of the allowlist it has open, and optionally the layout applied
+//! with it; applying it opens those windows and closes the others
+//! (Conversations aside).
 //!
 //! - [`store`]: what `settings.json` keeps, its limits, the list.
-//! - [`windows`]: the allowlist.
+//! - [`windows`]: the allowlist. [`workspace`]: the workspaces and their
+//!   list. [`context`]: a workspace's graphics, camera and HUDs (row 1.7).
 //! - [`fit`]: a saved place in an interface of another size or scale.
 //! - [`monitors`]: monitor setups, and a saved viewer window on the
 //!   monitors of now.
@@ -24,6 +30,7 @@
 //! - [`pick`]: which layout a quick switch means. [`preview`]: the picture
 //!   of a layout before it is applied. [`switcher`]: the window to change
 //!   layout from the keyboard. [`toolbar`]: the two toolbar commands.
+//!   [`strip`]: the favorites on the row under the top bar.
 //!   [`words`]: the layouts in words.
 //!
 //! A layout never holds what a window contains: no message, conversation,
@@ -31,6 +38,7 @@
 
 pub mod apply;
 pub mod capture;
+pub mod context;
 pub mod fit;
 pub mod menu;
 pub mod monitors;
@@ -38,12 +46,14 @@ pub mod notice;
 pub mod pick;
 pub mod preview;
 pub mod store;
+pub mod strip;
 pub mod switcher;
 pub mod toolbar;
 pub mod viewer;
 pub mod window;
 pub mod windows;
 pub mod words;
+pub mod workspace;
 
 #[cfg(test)]
 mod tests;
@@ -57,6 +67,7 @@ pub use store::Store;
 /// not drawn and waits (the switcher is hidden with the other windows).
 pub fn interface(ctx: &egui::Context, p: &crate::theme::Palette, hidden: bool) {
     apply::set_notice_hidden(ctx, hidden);
+    strip::set_hidden(ctx, hidden);
     if !hidden {
         notice::show(ctx, p);
     }

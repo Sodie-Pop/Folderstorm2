@@ -2352,6 +2352,7 @@ pub fn top_bars(
     } else {
         islands::set_favorites_row_bottom(ui.ctx(), None);
     }
+    crate::folderstorm::workspaces::strip::own_row(ui.ctx(), p, icons, bar.response.rect); // Folderstorm: the favorites strip without the row
     (action, audio_action)
 }
 

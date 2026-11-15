@@ -2,7 +2,7 @@
 
 Plan for [FEATURES.md](../FEATURES.md) rows **1.2** (the rest: the
 interactive viewport diagram), **1.3** layout profiles, **1.4** workspaces and
-**1.5** the switcher, with an outline of 1.6–1.9. Planning only: nothing here
+**1.5** the switcher, **1.6** the favorites strip, **1.7** workspace context, **1.8** backgrounds, with an outline of 1.9. Planning only: nothing here
 is implemented, built or run yet. Written 2026-11-11 from Folderstorm2 `main`
 (`45bccb7`, custom world viewport merged) and Folderstorm (C++) `main`
 (`abbe3cb0ca`).
@@ -172,7 +172,7 @@ reachable (`layout::keep_title_in`). Section 8.5 gives the rule for each part.
 | World viewport (margins, mouselook switch) | Yes (optional part) | Through its layout |
 | Bars: inside the world, around it, or over the whole window | Yes (with the viewport) | Through its layout |
 | Position, size, minimized state of each allowlisted window, open or closed | Yes (optional part) | — |
-| Which windows are open | Never changed | Yes |
+| Which windows are open | Opens the windows it was saved with open; closes none (fixes of 2026-11-14, below checkpoint 5) | Yes: opens and closes, but Conversations (checkpoint 6) |
 | Additional Inventory window, folder windows | Placement only | Opens them; folder roots optional |
 | Contents, chat, selections, filters | Never | Never |
 | Stored | Per profile | Per profile; folder references per account |
@@ -300,8 +300,9 @@ newer schema is listed read-only ("made by a newer version").
   size* box goes with it.
 - Window positions: every allowlisted window the viewer knows, open or
   closed. Open windows from their live rectangle, closed ones from their
-  last remembered rectangle, minimized ones with their expanded size. A
-  window never opened has no entry and is left alone later.
+  last remembered rectangle, minimized ones with their expanded size, each
+  with whether it is open. A window never opened has no entry and is left
+  alone later.
 - **Update** overwrites the active layout or workspace with the current
   state, after a confirmation naming it.
 - Saving a workspace records the open allowlisted windows, the additional
@@ -321,7 +322,9 @@ One action, in steps. Each step waits for the previous one to settle.
    next frame.
 5. **Windows.** On the next frame (bars drawn, work area known), place each
    window: open ones at once, closed ones when they next open
-   (`move_floater` + `size_floater`; the minimized state is kept).
+   (`move_floater` + `size_floater`; the minimized state is kept). A window
+   saved open and closed now is opened first, through the same `Panels`
+   flags as the menus; no window is closed.
 6. **Workspace only.** Open the windows in its list and close the other
    allowlisted ones, through the same `Panels` flags as the menus. Open the
    additional Inventory window and the folder windows.
@@ -532,7 +535,7 @@ All in the demo's own settings; nothing reaches the user's.
 | `AURORA_DEMO_LAYOUTS=1` | Seeds "Wide" (world on the right half, Inventory and map on the left) and "Single" (viewport off, windows on one screen); opens the Layouts tab. Try with `AURORA_WINDOW_SIZE=3840,1080` | 3 |
 | `AURORA_DEMO_LAYOUTS=toggle` | Flips between them every 5 s, for captures; `=lock` locks "Wide"; `=unplug` takes the last pretend monitor away after 10 s (the card offers "Single") | 4 |
 | `AURORA_DEMO_SWITCHER=1` | Opens the switcher on the seeded entries | 5 |
-| `AURORA_DEMO_WORKSPACES=1` | Seeds "Sorting" and "Exploring" on the demo inventory; `=folders` adds folder windows | 6 |
+| `AURORA_DEMO_WORKSPACES=1` | Seeds the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" and "Exploring", in the switcher; `=apply` applies them in turn (`=folders`, with folder windows, comes with part 2) | 6 |
 
 ## 12. Tests
 
@@ -617,7 +620,9 @@ build does not know is kept on a layout when it is saved again.
   older file has no `bars_around` and reads as before. A three-way enum in
   the file would have changed every reader of `bars_in_viewport` (the
   session host's docked bar, the diagram) and the lines PR #41 edits.
-- The rule is pure (`folderstorm/viewport/bars.rs`): the bars' area is still
+- (Changed by the fixes of 2026-11-14, below checkpoint 5: the top and
+  bottom bars and the side toolbars now have each their area.) The rule
+  is pure (`folderstorm/viewport/bars.rs`): the bars' area is still
   **one rectangle**, the world grown on each side by that side's bars when
   the margin between the world and the window has room for them; a side
   without room keeps its bars inside (the Folderstorm (C++) rule). So no
@@ -675,8 +680,9 @@ build does not know is kept on a layout when it is saved again.
 
 **3. What a layout captures, and what it never does.** Per allowlisted
 window (`folderstorm/workspaces/windows.rs`, section 7.3): its position,
-size and whether it is minimized. Nothing else: no open/closed state (a
-layout never opens or closes a window), no contents, messages,
+size and whether it is minimized (and, since the fixes of 2026-11-14 below
+checkpoint 5, whether it is open: a layout opens the windows it was saved
+with open, and closes none). Nothing else: no contents, messages,
 conversations, Inventory folders, filters or selections. The capture reads
 egui's rectangle for the window id and Aurora's "minimized" and "expanded
 size" entries for it, and nothing from the world state: there is no path
@@ -1383,30 +1389,1097 @@ scenario. The human's list is in the checkpoint's report.
   and export / import: not ported (section 3).
 - Checkpoint 4's other limits stand, but the card in mouselook.
 
+#### Fixes after the human's tests (2026-11-14)
+
+Two reports from the human's tests of checkpoints 3 and 4 on Windows, fixed
+on `claude/workspaces-fixes`.
+
+**1. *Around the world*: the side toolbars (PR #48).** The bars were laid
+out in one rectangle, the world grown on every side that had room. With a
+left toolbar in its margin, that rectangle was wider than the world: the
+top and bottom bars ran over the toolbar's margin, and the toolbar stood
+between them instead of along the world. Now (`viewport::bars::Areas`):
+
+- the **top and bottom bars** keep the world's width, above and below it
+  where they have room (inside otherwise, as before);
+- a **side toolbar** stands in its margin just outside the world's edge
+  (Aurora's 8 points from it with the islands, against it with the Legacy
+  bars), placed along the **world's own height**: centred on the world
+  with the toolbar's default alignment, at its top or bottom with the
+  other two (the toolbar's own setting still decides). With the Legacy
+  bars the panel is as high as the room between the top and bottom bars;
+- **no room outside** (the world at the window's edge, or a margin thinner
+  than the toolbar, measured as before from the last frame): that toolbar
+  stays **inside the world at that edge**, between the top and bottom
+  bars, exactly as with *Inside the world*. Each side decides for itself.
+  A margin with room for part of a toolbar is not used: a toolbar is never
+  drawn across the world's edge;
+- the windows' room, the diagram of the world viewport and the hidden
+  interface's edges follow: the diagram draws a side toolbar outside the
+  world along its height.
+
+Hooks: the three existing `// Folderstorm:` lines of `ui/bars/side.rs` now
+call `viewport::bars::{sides, side_screen, side}`, and one line is added
+after the first (the `Ui` of the Legacy side panels when they stand
+outside). `app.rs` is unchanged: `App::folderstorm_bars_rect` (ours)
+returns the top and bottom bars' area and says where the sides go.
+
+**2. Applying a layout opens the windows it was saved with open (PR #50).**
+A layout placed the open windows and left the closed ones closed, their
+places waiting. Decision changed (section 6): each saved window now also
+records whether it was **open** (`"open"` beside `"minimized"`), and an
+apply opens those that are closed now, at their saved place and size (and
+minimized, if saved so). It still **closes nothing**: closing the others
+is a workspace's business (checkpoint 6).
+
+- Opening goes through the app (`apply::Shell`, implemented in
+  `app/folderstorm_workspaces.rs`, no upstream line): the `Panels` flag
+  with `ui::widgets::open_floater`, as `ui::bars::run_command` does;
+  `InventoryUi::open_additional_window`; `ui::controls::request` for
+  Aurora's Controls window (on its Camera tab); the flag alone for the
+  mini-map. Only windows of the allowlist: a stored id never opens
+  anything else.
+- **Cannot be opened now: skipped, and said.** Inventory and the
+  additional Inventory window under RLVa's `@showinv`, the mini-map under
+  `@showminimap`, the world map under `@showworldmap`; the Contacts window
+  while Contacts is a tab of Conversations; the Controls window of the
+  other look (Aurora's one window, or Legacy's two). They stay closed,
+  keep their place for when they open, and the apply's line says "N
+  windows of this layout cannot be opened right now and were left
+  closed". Opened ones are counted too ("N windows that were open in this
+  layout were opened").
+- **Layouts saved before this fix have no `"open"`**: they read as "all
+  closed" and open nothing, as before. *Update* them once (with the
+  windows wanted open) to record it. No migration, no schema change: an
+  older build ignores the field and keeps it.
+- *Previous arrangement* opens the windows that were open before the
+  apply and were closed since; it does not close the ones the apply
+  opened.
+- Opening or closing a window does not mark the layout modified (only a
+  move, a resize or minimizing does, as before).
+- With the interface hidden or in mouselook, the windows are opened and
+  show when the interface is back.
+
+Tests: `viewport::bars::tests` (the real `ui::bars::side::bars`, islands
+and Legacy, frame after frame as `app.rs` lays the bars out: the human's
+case, margins all round, no room outside, leaving *Around the world*);
+`diagram::tests`; `workspaces::tests` (a window saved open is opened at
+its place, one saved closed waits, one that cannot be opened is counted
+and waits, minimized, Previous, an older layout); `app::folderstorm_workspaces::tests`
+(every allowlisted window has its way of being opened; RLVa and the
+settings). **Not checked here** (no graphics device): the viewer itself.
+
 ### Checkpoint 6: workspaces (row 1.4)
 
-- Open / close allowlisted windows, additional Inventory window, folder
+- Open / close allowlisted windows (a layout already opens the ones it was
+  saved with open; a workspace also closes the others), additional Inventory window, folder
   windows with *Remember Inventory folders* (per account), Conversations
   geometry only, restore report.
 - **Human checks:** "Sorting" and "Exploring" on both layouts; RLVa
   `@showinv` blocks Inventory; a deleted folder skips with a note; another
   account skips the folders.
 
+#### Checkpoint 6 in detail (2026-11-14)
+
+Written before the build, from `claude/workspaces-fixes` at `cc9961c`
+(PR #57, not merged: this checkpoint is stacked on it). What differs from
+the sketches of sections 7 to 10 is said here; "As built" below is filled
+in when the checkpoint is done.
+
+**Scope: two parts.** The checkpoint is large, so it is built in two parts,
+each working on its own.
+
+- **Part 1 (this branch):** the workspace record and its list; applying a
+  workspace (its layout if it names one, then its windows opened and the
+  others closed); *Previous*; the restore report; workspaces in the
+  switcher (now *Layouts & workspaces*), in World › Layouts, in the
+  favorites and in Preferences; the demo.
+- **Part 2 (left):** Inventory **folder windows** with *Remember Inventory
+  folders* (per account, at most 16, a deleted folder or another account
+  skipped with a note), and its one upstream hook
+  (`ui/inventory.rs`, `open_folder_window` returning the window's id).
+  Until then a workspace leaves folder windows alone.
+
+**1. Store.** Two fields beside `layouts`, both left out while empty, and a
+second kind of favorite:
+
+```json
+"workspaces": [
+  { "schema": 1, "name": "Sorting", "layout": "1 monitor",
+    "open": ["inventory", "inventory_6b1f2c4e-…", "people"] }
+],
+"active_workspace": "Sorting",
+"favorites": [ { "layout": "2 monitors" }, { "workspace": "Sorting" } ]
+```
+
+- `open`: the ids of the allowlisted windows the workspace has open
+  (section 7.3). The additional Inventory window is one of them (its fixed
+  id), not a field of its own. An id this version does not know is kept and
+  ignored; at most 64.
+- `layout`: the layout applied with the workspace, by name; absent: the
+  layout in use stays. Renaming the layout renames it here; deleting the
+  layout takes it out (the workspace then keeps the current layout).
+- As for layouts: each entry is read on its own; one of a newer schema or
+  that breaks a limit is kept as read, listed as such, never applied; what
+  this version does not know of an entry is kept; at most 32; names 1 to 40
+  characters, unique among workspaces ignoring case. **A workspace and a
+  layout may have the same name**: every list and request says which it
+  means.
+- `active_workspace`: the workspace last applied, saved or updated. It
+  stays when a layout is applied on its own (any workspace works on any
+  layout).
+- A build from before checkpoint 6 keeps a `{ "workspace": … }` favorite as
+  read (checkpoint 5's rule) but **drops `workspaces` and
+  `active_workspace` when it saves the settings**: going back to an older
+  build loses the workspaces.
+
+**2. Which windows a workspace switches.** Every window of the allowlist
+**but Conversations**: as in Folderstorm (C++) ("loading a workspace leaves
+its open/closed state and selected conversations unchanged"), a workspace
+neither opens nor closes it, and does not record it. A layout still places
+it, and opens it when it was saved open and no workspace is applied with
+it.
+
+**3. Apply.** One request, in the steps of section 8.2:
+
+1. the workspace's layout, when it names one that can be used, exactly as
+   a layout is applied (viewer window, world and bars, window places). A
+   layout that cannot be used (a newer or damaged entry) is skipped and
+   said;
+2. in the frame where the layout's windows are placed (at once without a
+   layout): each window of the workspace's list that is closed is opened
+   the app's way (`apply::Shell::open`, as a layout does: RLVa and the
+   settings may refuse, counted), and each other allowlisted window that is
+   open is **closed** (`Shell::close`, new: the `Panels` flag,
+   `InventoryUi::close_additional_window`, both flags of the Controls
+   window). **The workspace's list wins over the layout's `"open"` marks**:
+   a window the layout was saved with open and that the workspace does not
+   list is not opened;
+3. the workspace becomes the one in use; the report says what was done:
+   "Workspace “Sorting” applied. 2 windows opened, 3 closed. 1 window
+   cannot be opened right now…", after the layout's own sentence.
+
+A window opened this way and placed by no layout opens where Aurora last
+had it. Nothing a window contains is touched.
+
+**4. Previous.** After a workspace, *Previous arrangement* also puts the
+windows back open or closed as they were (and the workspace in use then);
+pressing it again comes back. After a layout alone it closes nothing, as
+before.
+
+**5. Modified.** A workspace in use is "modified" when the windows open
+now are not its list (Conversations and unknown ids aside). Worked out when
+drawn, from the open windows; nothing is stored.
+
+**6. Save and Update.** *Save new* in the switcher and in Preferences asks
+what to save: a **layout** (as before) or a **workspace**: its name, and
+*Use the layout in use* (ticked: the workspace names the active layout;
+greyed without one). It records the windows open now. *Update* on a
+workspace replaces its list with the windows open now (its layout choice
+is kept), after the question.
+
+**7. The switcher** is titled *Layouts & workspaces*. Its list: Favorites
+(both kinds, in their order), then the other Workspaces, then the other
+Layouts; a workspace's line has its own icon in place of the lock. Enter
+applies the selected entry. The side shows, for a workspace: the picture
+of its layout when it names one, the layout's name (or "keeps the layout
+in use"), and the windows it opens by name. *Update* offers the layout in
+use and the workspace in use, each with its name.
+
+**8. Menu, toolbar, keyboard.** World › Layouts lists the favorites of
+both kinds (every usable layout and workspace when there is no favorite),
+workspaces after a separator; *Layouts & workspaces…* opens the switcher.
+The toolbar command `workspaces` and its key are relabelled *Layouts &
+workspaces*. The toggle and the favorites' round of the keyboard stay
+**layouts only** (their names say so).
+
+**9. Preferences › Layout › Layouts & workspaces** (the tab renamed) gains
+a group *Workspaces*: the list (in use, modified, star), Apply, Update,
+Rename, Delete, Move up / down, the star; for the selected one, *Layout*
+(Keep the layout in use, or a name) and a box per window it opens.
+*Save as a new workspace* with its name and the layout box.
+
+**10. Demo.** `AURORA_DEMO_WORKSPACES=1` seeds the two layouts of
+`AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the
+additional Inventory window, People) and "Exploring" (mini-map, world map,
+Places), both favorites, and opens the switcher; `=apply` also applies
+"Sorting" at frame 180 and "Exploring" at frame 360.
+
+**11. Upstream hooks.** None new in part 1: the windows are opened and
+closed from `app/folderstorm_workspaces.rs` (ours), the switcher and the
+menu are drawn from checkpoint 4 and 5's calls. Locale keys in our
+section, and `docs/TESTING.md`.
+
+**12. Tests.** Pure: the store's workspaces (round trip, absent fields,
+newer and damaged entries kept, unknown ids kept, limits, names, rename and
+delete of a layout followed, the favorite of a workspace, a checkpoint 5
+file read and written as it was); `pick` with both kinds (order, filter,
+first choice). Frame tests with the pretend viewer: a workspace opens and
+closes; Conversations left alone; a blocked window counted; with a layout
+(places and the list winning over `"open"`); without one (the layout in
+use stays); Previous; modified; save, update; the switcher (sections,
+Enter, star, Save new as a workspace, Update); the menu; the tab's group.
+The app's `Shell::close` for every allowlisted window. Pictures with the
+software painter.
+
+**Decisions to confirm (the human).** Each took the option closest to
+Folderstorm (C++):
+
+1. Conversations is never opened or closed by a workspace (point 2).
+2. A workspace applied with a layout: its list wins over the layout's
+   `"open"` marks (point 3).
+3. The toggle and the next / previous favorite keys stay layouts only
+   (point 8); Folderstorm (C++)'s favorites round went through both.
+4. A workspace and a layout may share a name (point 1).
+5. Folder windows wait for part 2.
+
+#### Checkpoint 6 as built: part 1 (branch `claude/workspaces-cp6`, 2026-11-14)
+
+Part 1 is built as detailed above, stacked on the fixes of PR #57. What
+the build added or changed on the way:
+
+- **The groups of Preferences come after *Arrangement***, before *Quick
+  switch*: *Saved workspaces* holds the list, the selected workspace's
+  actions, its layout, a box per window, and *Save as a new workspace*.
+- **In the switcher, *Update* follows the selection**: with a workspace
+  selected it is for the workspace in use, otherwise for the layout in
+  use; its label names which. *Save new…* opens on *Workspace* when a
+  workspace is selected, on *Layout* otherwise.
+- **With workspaces in the list, the first choice of the switcher** (open,
+  Enter) is the first entry that is not in use, in the list's order:
+  favorites, then workspaces, then layouts. Star the two layouts to keep
+  "open, Enter: the other layout".
+- **A workspace applied without a layout does not interrupt a layout still
+  being applied**: its windows are opened and closed in the frame the
+  layout's are placed.
+- **The report of *Previous*** after a workspace counts the windows it
+  opened and closed.
+- **`fs-layouts-intro`** no longer says a layout never opens a window
+  (stale since the fixes of 2026-11-14).
+
+**Settings format.** `folderstorm_workspaces` may hold `"workspaces"` and
+`"active_workspace"`, and `"favorites"` entries `{ "workspace": name }`, as
+in "1. Store" above. All are left out while there is no workspace: a store
+that has none is written exactly as checkpoint 5 wrote it, and a file from
+before reads with none (tests: `workspaces_survive_a_save_and_a_read`,
+`a_store_without_workspaces_is_written_as_before`,
+`newer_and_damaged_entries_are_kept_as_read_and_not_usable`,
+`unknown_fields_and_window_ids_are_kept_through_an_update`,
+`a_stale_favorite_workspace_is_dropped_and_none_is_twice`). No migration,
+no schema change. **Going back to a build from before this checkpoint
+loses the workspaces at its first save** (it keeps their favorites, which
+it does not show).
+
+**Upstream hooks.** None new: no upstream source file is touched. The
+windows are opened and closed in `app/folderstorm_workspaces.rs`
+(`Shell::close`: the `Panels` flag, `InventoryUi::close_additional_window`,
+both flags of Aurora's Controls window), the switcher and the menu are
+drawn from the calls of checkpoints 4 and 5. Changed beside our files:
+
+| File | Change |
+|---|---|
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 14 `fs-layouts-*`, `fs-switcher-*` and `fs-keys-*` texts reworded for both kinds (the tab, the window, its toolbar command and its key are *Layouts & workspaces*), and a section of 36 `fs-workspaces-*` keys and `fs-switcher-workspaces` |
+| `docs/TESTING.md` | one paragraph, one table row |
+
+**New files:** `folderstorm/workspaces/workspace.rs`,
+`folderstorm/workspaces/tests/workspace.rs`,
+`ui/options/pages/folderstorm_workspaces/workspaces_group.rs`,
+`ui/options/pages/folderstorm_workspaces/tests/workspaces.rs`.
+
+**Tests.** Pure: `workspaces::workspace` (12: the store's workspaces),
+`workspaces::pick` (+1: both kinds). Frame tests with the pretend viewer,
+`workspaces::tests::workspace` (13): what a workspace records, opening and
+closing, Conversations left alone, a blocked window, with a layout (its
+list winning), a layout alone, *Previous*, the modified mark and *Update*,
+a layout that cannot be used, the requests, the switcher (sections, Enter,
+the filter, the star, *Update*, *Save new* as a workspace and its
+refusal), World › Layouts. The tab's group (4, one a picture). The app's
+`Shell::close` for every allowlisted window
+(`app::folderstorm_workspaces::tests`). Drawn with the software painter
+(`FOLDERSTORM_TEST_CAPTURE_DIR`): `switcher.png` (now with workspaces),
+`switcher-workspace.png`, `switcher-save-workspace.png`,
+`preferences-workspaces.png`.
+
+**Not checked here** (no graphics device, no window system in the
+sandbox): the viewer itself: real windows opened and closed (each window's
+own opening and closing code), RLVa, the demo scenario. The human's list is
+in the checkpoint's report.
+
+**Known limits, and what is left.**
+
+- **Part 2: Inventory folder windows** and *Remember Inventory folders*:
+  built on `claude/workspaces-cp6-folders`, below.
+- A window is closed by its flag, as its cross leaves it; a window that
+  asks a question before closing would not ask it (none of the allowlist
+  does today).
+- A window a workspace opens and no layout places opens where Aurora last
+  had it.
+- The favorites' round of the keyboard and the toolbar's toggle are
+  layouts only (decision 3 above).
+- The picture of a workspace is its layout's: it does not show which
+  windows the workspace opens (the words under it do).
+- The switcher says a refused *Update* or *Save new* of a workspace with
+  the layouts' sentence when the refusal comes from the frame's call and
+  not from the form (a rare race: the list changed in between).
+- Workspaces are never applied at login, and the card shown when the
+  monitors change offers layouts only (sections 8.3, 8.5).
+- Checkpoint 5's other limits stand.
+
+#### Checkpoint 6, part 2: Inventory folder windows (branch `claude/workspaces-cp6-folders`, 2026-11-14)
+
+Stacked on part 1 (PR #62). Folderstorm (C++): "Enable Remember Inventory
+folders before saving … to include the folder root … of each single-folder
+Inventory window. … The choice belongs to that save. … Folder IDs stay in
+account-local settings … If a folder was deleted … the rest of the
+workspace still loads with a brief notice."
+
+**As built.**
+
+- **The record.** A workspace may hold `"folders"`, left out unless asked:
+
+  ```json
+  "folders": {
+    "account": "<the account's id>",
+    "frame": { "width": 1600.0, "height": 900.0, "pixels_per_point": 1.0 },
+    "windows": [ { "folder": "<folder id>", "x": 40.0, "y": 80.0,
+                   "width": 420.0, "height": 440.0, "minimized": false, "open": true } ]
+  }
+  ```
+
+  The user's own folder ids and each window's place, at most 16; never a
+  name, an item or what a folder contains. A folder window has a random id
+  each time it opens, so its place is kept here with its folder and not in
+  a layout: it is fitted to the interface of now as a layout's windows are.
+- **Saving.** *Remember Inventory folders* is a box of *Save new…* (the
+  switcher) and of *Save as a new workspace* (Preferences), off by
+  default: the choice belongs to that save. In Preferences the selected
+  workspace has the same box: ticked, it takes the folder windows open
+  now; unticked, it forgets them. *Update* takes the folder windows of now
+  for a workspace that remembers folders, and gives none to one that does
+  not.
+- **Applying** a workspace that remembers folders, with its other
+  windows: for the account that saved them, each folder still in the
+  Inventory gets its window (one already open on that folder is reused,
+  another is opened as *Open in a new window* does) at its saved place,
+  and **the other folder windows are closed** (C++: "hides extras absent
+  from that workspace"). A workspace that does not remember folders
+  leaves every folder window alone.
+- **Skipped, with a note in the report:** a folder that is not in the
+  Inventory (deleted, or not loaded yet: the workspace keeps it, apply
+  again once the Inventory is loaded); **another account** (all its
+  folders, and no folder window is closed); RLVa's `@showinv` (no folder
+  window is opened).
+- ***Previous arrangement*** after such a workspace also puts the folder
+  windows back.
+- **Demo.** `AURORA_DEMO_WORKSPACES=folders`.
+
+**Upstream hook** (one line, marked `// Folderstorm:`):
+`crates/aurora-viewer/src/ui/inventory.rs` line 48,
+`mod folderstorm_windows;`. Our file `ui/inventory/folderstorm_windows.rs`
+lists the open folder windows, opens one through
+`InventoryUi::open_folder_window` and tells its floater's id, and closes
+one. **`open_folder_window` itself is not changed**: section 10 planned to
+make it return the window's id, but a `mod` line conflicts less at a merge
+than a changed signature, and the child module reads the id of the window
+just pushed (decision to confirm).
+
+**Settings.** `"folders"` is absent unless asked, so a workspace saved by
+part 1 reads and writes as it was; an older build keeps the field (a
+workspace's unknown fields are kept) but part 1's build ignores it. No
+migration.
+
+**Tests.** Pure: `workspaces::workspace` (+2: the record, its limits).
+Frame tests with the pretend viewer and a pretend Inventory,
+`workspaces::tests::folders` (9): what is recorded, reopening at the
+places with reuse and closing of the others, a workspace without folders,
+a deleted folder, another account, RLVa, *Previous*, *Update* and the
+box, the limit of 16. `ui::inventory::folderstorm_windows` (1) and
+`app::folderstorm_workspaces` (+1) for the Inventory's side.
+
+**Known limits.**
+
+- The view of a folder window (list, gallery) and a folder selected in a
+  normal Inventory window are not remembered (C++ kept them): only each
+  folder window's folder and place.
+- A folder window is not asked for its position a second time when Aurora
+  stops it short of its place (the layouts' windows are).
+- The "modified" mark of a workspace does not look at folder windows.
+- A folder not found is told apart from "Inventory not loaded yet" only by
+  applying again later.
+- Not logged in to any account: *Remember Inventory folders* cannot be
+  saved (refused with "could not be saved").
+- The pictures of the switcher and of Preferences were not drawn again for
+  the new box in the sandbox beyond the tests of part 1.
+
+### 1.6 in detail: the favorites strip (2026-11-14)
+
+Written before the build, from `claude/workspaces-cp6-folders` at `e335151`
+(PR #64, not merged: this row is stacked on it). "As built" follows.
+
+**What Folderstorm (C++) did.** First a row of its own under the navigation
+and landmark bars, with the labels "Workspaces:" and "Layouts:"
+(`doc/help.md`). Then, at the user's request, the favorites **on the
+landmark row itself**: the landmark buttons' look, a `|` divider, no labels,
+no second opaque row (`doc/plans/workspace-enhancements.md`, follow-up of
+October 4). In both: the same favorites as the switcher, in their order;
+full names in tooltips, long names cut; what does not fit in *More…*, which
+also opens the switcher, goes back to the previous arrangement and hides
+the strip; hidden until enabled; hidden in mouselook and with the interface.
+We port the second form.
+
+**1. Where it is.** Aurora's landmark row is the favourites' row of
+Preferences › Interface › *Favourites access* (`ui/bars/favorites.rs`,
+`row`), one glass row under the top bar, the same with the islands and with
+the Legacy bars. So the strip is the same in both looks, and has three
+places:
+
+- *the landmark row is shown*: our pills stand at its right end, before the
+  button that folds it, after a thin divider. They take at most half of the
+  row; the landmarks keep the rest and their own "n more";
+- *the landmark row is folded*: a short island of ours beside its tab;
+- *there is no landmark row* (favourites in the menu or in the dock, the
+  default): a short island of ours where the row would start. It is as wide
+  as what it holds, not the whole width, and the windows stay under it as
+  they do under the landmark row (`favorites_row_bottom`).
+
+It is drawn by the top bar's own code, so it goes with it: hidden with the
+bars, with the interface put away, peeking with the top bar when the bars
+hide themselves. In mouselook it is never drawn, even with *Show the
+interface in mouselook* (the pointer could not reach it).
+
+**2. What it shows.** The usable favorites in their order (`pick::entries`,
+the switcher's own list: layouts and workspaces mixed, as the user ordered
+them), each a pill: the icon of its kind (the menu's), its name cut at 18
+characters. The layout in use and the workspace in use are lit; the tooltip
+gives the full name, the kind, and "in use" or "in use · modified". Then
+*More…*, always there: the favorites that did not fit, then *Layouts &
+workspaces…* (the switcher), *Previous arrangement*, *Hide the favorites
+strip*. With no favorite yet, *More…* alone.
+
+A click asks what World › Layouts asks (`menu::Request::Apply`,
+`ApplyWorkspace`): one path, the same report. A click on the one in use
+applies it again (puts back what was moved). Not ported: "switching is
+disabled while Preferences is open" (Aurora's Preferences have no OK /
+Cancel, section 8.7); the two groups with labels (superseded in C++ itself).
+
+**3. The setting.** `Store.strip`, a boolean of `folderstorm_workspaces`,
+left out of the file while false, **off by default** as in Folderstorm
+(C++). Not a part of any layout or workspace: applying one never shows or
+hides the strip. Changed in Preferences › Layout › Layouts & workspaces ›
+Quick switch, in the switcher (a box), in World › Layouts (a check), and by
+*More…* › *Hide the favorites strip*.
+
+**4. Code.** `folderstorm/workspaces/strip.rs`: the rule of what fits
+(pure), the pills, the two entry points. It reads the view the frame call
+already publishes for the menu (`menu::View`, two more fields) and leaves
+requests (`menu::ask`, one more: `Strip(bool)`).
+
+**5. Upstream hooks** (three lines, each `// Folderstorm:`):
+
+| File | Hook |
+|---|---|
+| `ui/bars/favorites.rs`, `row` | One line after the fold button: our pills drawn at the row's right end; it gives back where the landmarks must stop |
+| `ui/bars/islands.rs`, `top` | One call after the favourites' row: our own island when the row did not hold the strip |
+| `ui/bars.rs`, the Legacy top bar | The same call |
+
+**6. Demo.** `AURORA_DEMO_STRIP=1`: the seed of `AURORA_DEMO_WORKSPACES=1`
+with the strip on; `=row` also shows the landmark row (the demo's
+favourites); `=many` adds favorites until some go to *More…*.
+
+**7. Tests.** Pure: how many pills fit, *More…* always kept. Frame tests
+(an `egui::Context`): the strip is not drawn while off or hidden; a click on
+a pill applies it and lights it; what does not fit is in *More…* and
+applies from there; *Hide the favorites strip* turns the setting off; on
+the landmark row the landmarks stop before our divider; the island of our
+own pushes `favorites_row_bottom`; the store writes nothing while off.
+
+**Human checks (Windows).** Both looks (islands, Legacy bars) with each
+*Favourites access*; a narrow window (overflow); mouselook with and without
+*Show the interface in mouselook*; the bars set to hide themselves; a
+custom world viewport with the bars inside and around it.
+
+#### 1.6 as built (branch `claude/workspaces-favorites-strip`, 2026-11-14)
+
+As planned above, with these differences and details:
+
+- **Where.** `folderstorm/workspaces/strip.rs`: `in_row` (the landmark
+  row's right end, at most half of it, after a divider; it hands the row
+  back where its landmarks and their own "n more" must stop) and
+  `own_row` (a short island of our own where the row would be, or beside
+  its tab when folded; `islands::favorites_row_bottom` is set to its
+  bottom so the windows stay under it). `own_row` draws nothing in a frame
+  where `in_row` already drew the strip.
+- **What it shows.** `menu::View` has `strip` and `favorites` (kind, name,
+  in use, modified), built from `pick::entries` in the user's order. The
+  tooltip says the kind and "In use" or "In use · modified". The
+  "modified" mark (`menu::Modified`, `apply::modified` and
+  `workspace_modified`) is worked out in the frame call **only while the
+  strip is shown**, and is part of the menu's stamp, so the view is
+  published again when it changes.
+- **More….** Always there: the favorites that did not fit (a check on
+  the ones in use), *Layouts & workspaces…*, *Previous arrangement*
+  (greyed when there is none), *Hide the favorites strip*. Its face is
+  the `dots-filled` icon when nothing is left over, else `chevrons-right`
+  and "n more".
+- **Requests.** One more: `menu::Request::Strip(bool)`; a pill asks
+  `Apply` or `ApplyWorkspace` as World › Layouts does.
+- **The setting.** `Store.strip` (`"strip": true` in
+  `folderstorm_workspaces`, absent while off; anything else reads as off).
+  Off by default. Changed in Preferences › Layout › Layouts & workspaces ›
+  Quick switch (*Favorites strip*), in the switcher's footer (*Show the
+  favorites strip*), in World › Layouts (a check) and by *More…* › *Hide
+  the favorites strip*. No migration.
+- **Hidden.** `workspaces::interface` (already called before the bars in
+  the interface's pass) tells the strip whether the camera is in
+  mouselook or the interface is put away; then neither entry point draws.
+  It also goes with the top bar, whose code calls it.
+- **Upstream hooks.** Three lines, as planned: `ui/bars/favorites.rs`
+  (`row`, after the fold button), `ui/bars/islands.rs` (`top`, after the
+  favourites' row) and `ui/bars.rs` (`top_bars`, the Legacy top bar, same
+  place). Nothing else upstream; the i18n catalogues get nine `fs-strip-*`
+  entries.
+- **Demo.** `AURORA_DEMO_STRIP=1|row|many` (`docs/TESTING.md`), in
+  `app/folderstorm_workspaces.rs` with the other layouts demos. `row`
+  sets Interface › Favourites access to the row (unfolded).
+- **Tests.** `workspaces::tests::strip` (14): what fits (pure), names cut,
+  the file, its own island and its order, mouselook, a click applies and
+  lights, the "modified" mark, overflow in *More…* and applying from it,
+  *More…*'s three entries, *More…* alone without favorites, on the
+  landmark row (landmarks stop before our divider and have the whole row
+  again without the strip), beside the folded tab, the menu's check and
+  the switcher's box, and a picture test. The pretend viewer of the tests
+  can now draw its frames with the software painter (`Viewer::painted`,
+  `Viewer::picture`, `FOLDERSTORM_TEST_CAPTURE_DIR`):
+  `strip-island.png`, `strip-row.png`, `strip-folded.png`,
+  `strip-more.png`.
+
+**Known limits.**
+
+- The pictures are drawn with a pretend place island and the real
+  favourites' row, not the whole top bar; the islands and the Legacy bars
+  were not drawn together with the strip in the sandbox.
+- Dragging a favorite on the strip to reorder it is not offered (the
+  order is the switcher's).
+- With many landmarks and many favorites, each keeps its half; the
+  landmarks do not give room to the strip when they need less.
+
+### 1.7 in detail: workspace context (2026-11-15)
+
+Written before the build, from `claude/workspaces-favorites-strip` at
+`4c90aff` (PR #66, not merged: this row is stacked on it). "As built"
+follows.
+
+**What Folderstorm (C++) did** (`doc/plans/workspace-context-and-snapshot.md`
+and `workspace-context-validation.md`, branch `feat/workspace-context`):
+three optional groups of a workspace, each "Do not change" by default.
+*Graphics*: do not change, capture current, or a named graphics preset; a
+bounded allowlist of rendering settings, never the window mode. *Camera*:
+the same three choices, avatar-relative only, honouring RLVa camera locks,
+mouselook and scripted cameras (skipped and said, never forced). *HUDs*: a
+checklist of the HUDs worn now, none ticked at first; applying **adds** the
+missing ones (Inventory item references, at most 64, with their HUD point),
+never removes an unrelated HUD, body attachment or clothing; *Previous*
+does not detach them; a missing, locked or temporary HUD, the attachment
+limit and a pending change are said in the report. Monitor recovery was a
+fourth part of the same plan; here it is already section 8.5 (layouts).
+Its MCP tools belong with row 4.6. Its snapshot repair is row 1.1's
+business (photo mode already uses the world's rectangle here).
+
+**1. The record.** Three optional fields of a workspace, each left out of
+the file while unset, so a workspace without them is written exactly as
+before:
+
+```json
+"graphics": "My photo profile",
+"camera": { "view": "Front" },            // or { "preset": "Portrait" }
+"huds": { "account": "<the account's id>",
+          "items": [ { "item": "<item id>", "point": 35 } ] }
+```
+
+- `graphics`: the **name** of one of Aurora's saved graphics profiles
+  (Preferences › Graphics, `graphics_saved`, LLPresetsManager's graphics
+  presets). Applied as choosing it there does
+  (`graphics_presets::saved::select`): Aurora's own allowlist of rendering
+  controls, sanitized, never the window mode or a monitor. Not "capture
+  current": the plan says *by name*, and a profile already holds the
+  values (decision 1).
+- `camera`: a **view** (Rear, Front, Side, Shoulder: the Controls window's
+  four, `CameraPreset`, never Custom) or a saved **camera preset** by name
+  (`camera_shots`, issue #1164). Applied the app's way
+  (`switch_camera_view`, `apply_camera_preset`). The workspace holds a
+  name, never a position: what the preset holds (an anchor on the avatar,
+  in the world or on an object) is the preset's business (decision 2).
+- `huds`: the HUDs to **add**, as the user's own Inventory item ids
+  (the original item, never a link, never an asset id) with the HUD point
+  each was worn on (31 to 38), at most 16, and the account they belong to:
+  another account skips them, as the folder windows of checkpoint 6
+  (decision 5). Never a name, a script state or what the object contains.
+- Limits checked as the rest of the record: names 1 to 64 characters
+  without control characters, a known view, points 31 to 38, at most 16
+  distinct items. A workspace that breaks one is kept as read and never
+  applied. Schema stays 1: an older build keeps the fields (unknown fields
+  of an entry are kept) and applies the workspace without them, as it does
+  with `"folders"`.
+
+**2. Applying** a workspace with context, after its layout and its
+windows have been asked (the frame of `apply::apply_workspace`, unchanged):
+the workspace's context is queued; the next frame hands it to the app
+(`apply::Outcome::context`), which does each part with the whole viewer at
+hand and tells what happened (`apply::context_done`), merged into the
+report. In this order, as the C++ plan: graphics, camera, HUDs.
+
+- **Graphics**: the profile is selected; one that is gone leaves the
+  graphics as they are, said.
+- **Camera**: skipped and said while RLVa locks the camera presets
+  (`camera_preset_locked`) or in mouselook (never forced out of it); a
+  preset that is gone is said; a preset whose part cannot be applied (an
+  object anchor away) says why, as the Controls window does.
+- **HUDs**: for the account that chose them, each item is looked at: not
+  in the Inventory (deleted, not loaded yet), not wearable (not an object,
+  in the Library or the Trash), **already worn** (nothing to do), refused
+  by RLVa (`rlva_can_add` at its point). The rest are added **in one
+  outfit change** through Aurora's own wear path (`apply_appearance_action`,
+  `Action::Force` with each item's own point and "add", never "replace"):
+  the Current Outfit folder update, RLVa's filtering of the command, the
+  38-attachment limit and "an outfit change is already under way" all
+  apply as for a wear from the Inventory. Nothing is ever detached: the
+  HUDs of the workspace before stay on (C++: additive; decision 3). The
+  report says how many were **asked** to be worn (not that they arrived:
+  the server answers later), and each kind of skip (decision 4).
+- Outfit safety (`ui/inventory/outfit_safety.rs`) greys *Wear*
+  (replace) and asks before a folder's Replace / Add to Current Outfit; a
+  workspace's HUDs are added item by item at the user's own request (the
+  apply), so they are not asked again.
+
+**3. *Previous arrangement*** after a workspace with context also puts the
+graphics back as they were (the values, even unsaved, and the profile
+selected then) and the camera view (the view, its offsets and the field of
+view); pressing it again comes back. HUDs are never taken off (C++).
+
+**4. Save, Update, modified.** *Save new* takes no context (C++: every
+group off by default); it is chosen afterwards in Preferences for the
+selected workspace. *Update* keeps the workspace's context as chosen (C++:
+"Update current preserves its selected capture mode"). The "modified" mark
+still looks at the windows only (decision 6).
+
+**5. Preferences › Layout › Layouts & workspaces**, for the selected
+workspace, under its windows: *Graphics profile* (Leave the graphics as
+they are, or a profile; one that is gone is listed as such), *Camera*
+(Leave the camera as it is, a view, or a preset), *HUDs to wear*: a box per
+HUD of the workspace (ticked; "not in the Inventory" when gone) and per HUD
+worn now (unticked: tick to add it with its point). HUDs chosen by another
+account are counted, with *Forget them*. The switcher's side and the
+workspace's line say what the context holds.
+
+**6. Demo.** `AURORA_DEMO_WORKSPACES=context`: the seed of
+`AURORA_DEMO_WORKSPACES=1`, the demo graphics profiles, and a workspace
+"Photos" with "My photo profile", the Front view and two object items of
+the demo's Inventory as HUDs; Preferences open on the tab; "Photos" applied
+at frame 180, *Previous* at frame 420.
+
+**7. Upstream hooks.** None planned: the app's side lives in
+`app/folderstorm_workspaces.rs` (ours) and a child module of it; the wear
+goes through `apply_appearance_action`, the camera through the app's own
+methods. Locale keys in our section; `docs/TESTING.md`.
+
+**8. Tests.** Pure: the record (round trip, absent fields written as
+before, limits, a view never Custom, another schema kept), the store's
+setters, which HUDs are worn or skipped (`context::plan_huds`), the
+report's sentences. Frame tests with the pretend viewer: the context is
+handed to the app once, after the windows; the report merges what the app
+did; *Previous* hands back the values of before and comes back; a
+workspace without context hands nothing; another account's HUDs. The
+Preferences group (pickers, HUD boxes, *Forget them*) and a picture.
+
+**Decisions to confirm (the human).** Each took the option closest to
+Folderstorm (C++) or to this plan:
+
+1. Graphics by profile name only, no "capture current".
+2. Camera: one of the four views or a saved camera preset, by name; a
+   preset anchored in the world or on an object stays the user's choice.
+3. HUDs are only added, never detached, not even by *Previous*; HUDs of
+   the workspace before stay on.
+4. A HUD missing, not wearable, already worn or refused by RLVa is
+   skipped and counted; a refusal of the whole outfit change (Current
+   Outfit not loaded, attachment limit, a change under way) is said with
+   Aurora's own message.
+5. HUDs are per account; another account skips them.
+6. No context at *Save new*; *Update* keeps it; the "modified" mark
+   ignores it.
+
+#### 1.7 as built (branch `claude/workspaces-context`, 2026-11-15)
+
+As planned above, with these details:
+
+- **The record** is `workspace.rs`'s `Workspace` with three more optional
+  fields (`graphics`, `camera`, `huds`), their types and limits in
+  `folderstorm/workspaces/context.rs`, with the store's setters
+  (`set_workspace_graphics`, `set_workspace_camera`, `set_workspace_huds`,
+  `set_workspace_hud`). An empty HUD list is written as none.
+- **Applying.** `apply::apply_workspace` queues the workspace's context
+  when it has one (`context::Ask::Apply`); `apply::frame` hands it to the
+  app in `Outcome::context` at the end of the same frame (a request of the
+  menu, the strip, the switcher or a key) or of the next one (Preferences).
+  A new apply in between cancels it. The app
+  (`app/folderstorm_workspaces/context.rs`) selects the profile
+  (`graphics_presets::saved::select`), moves the camera
+  (`switch_camera_view`, `apply_camera_preset`) unless RLVa locks it or the
+  camera is in mouselook, and adds the HUDs that can be worn in one
+  `apply_appearance_action(Action::Force { remove: [], wear })`, each
+  `replace: false` at its own point. It says what it did with
+  `apply::context_done`, which goes in the report (`Report::context`,
+  `words::context_text`).
+- **What a HUD is checked for** before the outfit change: in the
+  Inventory, an object (asset type 6) outside the Library and the Trash,
+  not worn now, and `rlva_can_add` at its point. When none is left,
+  nothing is asked. An outfit change already under way skips them all
+  ("apply it again in a moment"); a refusal of the whole change (Current
+  Outfit not loaded, the attachment limit, RLVa) says Aurora's own message.
+- ***Previous arrangement*** gets from the app what the context changed
+  from (`context::Before`: the graphics values and the selected profile,
+  the camera view, offsets and field of view), only for the parts that
+  were changed; `context::Ask::Restore` puts them back and hands back what
+  it replaced, so that pressing it again comes back. A profile that was
+  gone or a camera that was locked leaves nothing to put back.
+- **Preferences.** Under the selected workspace's windows, a folded
+  section *Graphics, camera and HUDs* (open at first when the workspace
+  has a context; then as the user leaves it, per workspace, for the
+  session): *Graphics profile* and *Camera* in a grid, then *HUDs it
+  wears*: a box per HUD of the workspace (its item's name, or "An item
+  that is not in the Inventory") and per HUD worn now. HUDs chosen by
+  another account are counted with *Forget them*. The section's title
+  says "(chosen)" when there is a context. The search finds the list's
+  row with "graphics", "camera", "preset", "view", "hud".
+- **What Preferences is told of HUDs** (`context::HudView`): the account,
+  the HUDs worn now with their names, and the names of the workspaces'
+  items for this account, published by `apply::frame` from two new
+  `Shell` methods (`worn_huds`, `item_name`). The app looks for the HUDs
+  worn only while Preferences is open.
+- **In words.** A workspace's line in the switcher and in Preferences
+  (`words::workspace_holds`) adds "Graphics profile “…”. Camera: …. Wears
+  2 HUDs."; the report adds a sentence per part.
+- **Demo.** `AURORA_DEMO_WORKSPACES=context` (`docs/TESTING.md`), as
+  planned; its HUDs are the first two objects of the demo's Inventory,
+  so the outfit change is the demo's.
+
+**Settings format.** `folderstorm_workspaces.workspaces[]` may hold
+`"graphics"`, `"camera"` and `"huds"`, each absent unless chosen: a
+workspace without them is written exactly as before (test
+`the_context_survives_a_save_and_a_read_and_is_absent_until_chosen`). An
+older build keeps them (unknown fields of an entry are kept) and applies
+the workspace without them. No migration, no schema change.
+
+**Upstream hooks.** None: no upstream source file is touched. Changed
+beside our files:
+
+| File | Change |
+|---|---|
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 36 `fs-context-*` keys after the workspaces' section |
+| `docs/TESTING.md` | `=context` in the workspaces paragraph and the table row |
+
+**New files:** `folderstorm/workspaces/context.rs`,
+`folderstorm/workspaces/tests/context.rs`,
+`app/folderstorm_workspaces/context.rs` (a child module of our
+`app/folderstorm_workspaces.rs`, so no `mod` line in `app.rs`).
+
+**Tests.** Pure: `workspaces::context` (5: the record and the file, the
+limits, the HUD boxes one by one, `plan_huds`, an empty context and the
+camera view). Frame tests with the pretend viewer,
+`workspaces::tests::context` (9): handed to the app once, in the frame
+of a request, the report, *Previous* and back, nothing to put back, a
+layout alone, a new apply cancelling it, what Preferences is told,
+*Update* keeping it. Preferences (`folderstorm_workspaces::tests::
+workspaces::context`, 3): choosing each part in the folded section, a
+profile and a preset gone, another account's HUDs forgotten, and a
+picture (`preferences-workspace-context.png`). The app's two `Shell`
+methods (`app::folderstorm_workspaces::tests`, 1). The test window of
+Preferences can now scroll (`Window::reveal`): one test of checkpoint 6
+uses it, the page being longer under a selected workspace.
+
+**Not checked here** (no graphics device in the sandbox): the viewer
+itself: a profile selected, the camera moved, HUDs worn on the grid,
+RLVa, the demo scenario.
+
+**Known limits.**
+
+- The report says how many HUDs were **asked** to be worn, not that they
+  arrived (the server answers later); a HUD the server refuses later is
+  not counted.
+- *Save new* (switcher and Preferences) takes no context; it is chosen in
+  Preferences afterwards. The switcher has no picker for it.
+- The "modified" mark ignores the context.
+- *Previous* puts back the camera view, its offsets and the field of
+  view, not what a camera preset also changed (the photo's lens, looks
+  and light); it never takes a HUD off.
+- A HUD is shown by its item's name, not its HUD point.
+- Aurora's graphics profiles have no Rename: a profile deleted and saved
+  again under another name is "not found" until chosen again.
+- MCP tools (`workspace_list`, `workspace_apply`) belong with row 4.6.
+
+### 1.8 in detail: workspace backgrounds (2026-11-15)
+
+Written before the build, from `claude/workspaces-context` at `d531249`
+(PR #72, not merged: this row is stacked on it). "As built" follows.
+
+**What Folderstorm (C++) did** (`doc/testing/manual-workspace-backgrounds.md`,
+branch `feat/native-workspace-backgrounds`): Preferences › Move & View ›
+Backgrounds. A default background for the account and, per workspace,
+"Use default background" or its own. Sources: a solid colour, an Inventory
+texture or texture UUID, or an imported PNG / JPEG / BMP / TGA, **copied**
+into the account's data folder (`workspace_backgrounds`, never uploaded; the
+workspace holds a managed file name, never a path), at most 32 MiB,
+32 megapixels and 8192 pixels a side, the texture at most 4096 a side.
+Fill (crop), Fit (letterbox), Stretch, Center and Tile (in the picture's own
+pixels), per display, and Span over the whole window. Brightness dims the
+picture, not its backing colour. Drawn after the world and before the HUDs
+and the interface, only outside the viewport, never in snapshots; no work
+when there is no margin. A missing picture or texture shows the backing
+colour and says so in Preferences. Display overrides per monitor (up to
+16 slots) and "Locate replacement" also existed.
+
+**1. The record.** One type, `Background`, in
+`folderstorm/backgrounds/record.rs`:
+
+```json
+"background": { "kind": "picture",          // "none" (default), "colour", "picture"
+                "colour": [16, 20, 32, 255], // backing colour, and the solid colour
+                "picture": { "file": "0123456789abcdef.jpg", "name": "beach.jpg" },
+                "fit": "fill",               // fill, fit, stretch, centre, tile
+                "span": false,               // one picture over the whole window
+                "brightness": 100 }          // 10 to 100 %
+```
+
+- **The default** is `folderstorm_workspaces.background` (the layouts'
+  store, our struct: no new field in `Settings`), left out of the file
+  while it is the default ("none"). "Reset everything" keeps it with the
+  layouts (they are user content), as it keeps the store.
+- **Per layout**: `layout.background`, absent = "Use the default". The
+  plan put it on layouts (a layout says where things go, and the margins
+  are a layout's), not on workspaces as Folderstorm (C++) did. The
+  background **in effect** is the active layout's own, else the default:
+  nothing is applied or restored, so *Previous arrangement* and a switch
+  bring it with the layout. *Save new* takes none (the default);
+  *Update* keeps it.
+- `picture.file` must be a managed name (16 hex digits and one of the
+  known extensions); anything else (a path, `..`) is dropped when read.
+  `name` is the original file's name, shown in Preferences only, never a
+  folder. An invalid entry reads as the default; a layout with an invalid
+  background keeps the layout and drops the background.
+
+**2. Choosing a picture.** *Choose a picture…* opens the system's file
+dialog on its own thread (as the crosshair picture does). On that thread
+the file is checked (32 MiB, 8192 a side, 32 megapixels, a format the
+viewer decodes: PNG, JPEG, BMP, TGA, GIF, WebP), decoded once to be sure it
+is readable, and **copied** into `<settings folder>/folderstorm_backgrounds/`
+under the hash of its content (the same picture twice is one file). The
+original may then move or go. A result that arrives after Preferences was
+closed or left is dropped (C++: no late result replaces the choice). Files
+no background refers to any more are deleted from that folder (only names
+of our own form). Never a path in the logs; no network.
+
+**3. Painting.** In the margins only: the window minus the world viewport
+(up to four rectangles, the world never covered). Shapes in egui points,
+**put first in the frame's shape list** after the pass (one hook line in
+`app.rs`, beside `studio_fade`), so that everything egui draws, from the
+chat lines and HUD labels of the background order to the windows, is on
+top. (A layer of egui's background order would be drawn among the others
+in an order egui does not promise.) For each margin: the colour, then the
+picture, clipped to the margin:
+
+- per monitor: each monitor's part of the window (the monitors the
+  viewport already publishes once a second); one area, the window, when
+  *Across all monitors* is on or the system gives no position (Wayland);
+- Fill covers the area and crops, Fit shows it all (the colour around),
+  Stretch fills it, Centre and Tile use the picture's own pixels (its size
+  before any reduction), Tile from the area's top-left corner, at most
+  4096 tiles (a smaller picture is then drawn larger);
+- brightness is the picture's tint (a grey), the colour is not dimmed.
+
+Nothing is drawn while the world fills the window (viewport off, the
+quarter-of-the-window fallback, mouselook without the viewport, photo mode
+with the whole window, the login). Not in photos: they are taken from the
+world, not the interface.
+
+**4. Performance.** The picture is decoded on a thread when it changes
+(never per frame), reduced to at most 4096 pixels a side (and the GPU's
+limit), and uploaded once as one texture (linear filtering); the decoded
+pixels are not kept. Per frame: at most 4 margins × the monitors, a few
+quads.
+
+**5. Missing picture.** A file that is gone or cannot be decoded: the
+colour is shown (black by default, as before), and Preferences says
+"The picture cannot be found: its colour is shown. Choose it again."
+
+**6. Preferences.** Layout › Bars and windows, after *World viewport*, a
+group *Background around the world*: *Background* (Nothing, A colour, A
+picture), *Picture* (*Choose a picture…*, its name or what is wrong),
+*Fit* (Fill, Fit, Stretch, Centre, Tile), *Across all monitors*,
+*Colour*, *Brightness*; a note while the viewport is off. Layout ›
+Layouts & workspaces, for the selected layout: *Background* (Use the
+default, Its own) and, when its own, the same choices.
+
+**7. Demo.** `AURORA_DEMO_BACKGROUND=1|fit|stretch|centre|tile|span|colour|dim|missing|layout`:
+a picture made in code (no binary in the repository), copied the same way,
+as the default background with that fit; the viewport turned on (world in
+the middle third) unless `AURORA_DEMO_VIEWPORT` says otherwise; `layout`
+seeds a layout "Wall" with its own tiled background and makes it active.
+
+**8. Upstream hooks.** One line in `app.rs` (the shapes put first). The
+rest is ours: `folderstorm/backgrounds/`, our Preferences files, our app
+module, the store.
+
+**9. Tests.** Pure: the record (round trip, default left out, a path
+refused, brightness kept in range, a bad layout background dropped),
+margins for several viewports, monitor areas, each fit, tiles and their
+cap, the import (limits, an unreadable file, the same picture twice,
+pruning). Frame tests: shapes only in the margins, none without margins,
+the picture loaded and drawn (software painter: world pixels untouched),
+a missing picture gives the colour, a layout's own background in effect.
+Preferences: the group, the layout's choice, a picture.
+
+**Decisions to confirm (the human).**
+
+1. Per layout (with a default), not per workspace.
+2. A local picture copied into the profile's settings folder; no
+   Inventory texture or UUID (asset ids and creators' rights: not
+   ported).
+3. Fit modes per monitor, plus *Across all monitors*; no per-monitor
+   override.
+4. "Reset everything" keeps the default background (it lives with the
+   layouts).
+5. Brightness 10–100 %, the colour not dimmed.
+
+#### 1.8 as built (branch `claude/workspaces-backgrounds`, 2026-11-15)
+
+As planned above, with these details:
+
+- **The record** is `folderstorm/backgrounds/record.rs`'s `Background`
+  (`kind`, `colour`, `picture`, `fit`, `span`, `brightness`). Fit's
+  "show it whole" variant is `Fit::Contain` in code, `"fit"` in the file.
+  The default is `Store::background`, read leniently by the store's `Raw`
+  (anything else reads as the default); a layout's own is
+  `Layout::background` (`record::lenient_own`: one that cannot be read is
+  dropped, the layout kept). `Store::set_layout_background` sets it;
+  `Store::update` keeps it; `Layout::new` has none.
+- **In effect**: `backgrounds::in_effect(store)`, the active layout's own
+  (`Store::active`), else the default.
+- **Choosing a picture** (`backgrounds::import`): `import` / `store` check
+  32 MiB, 8192 a side and 32 megapixels, decode once with `image`'s
+  limits, and write the bytes as they are under `<FNV-1a 64 of the
+  bytes>.<extension>` in `<settings folder>/folderstorm_backgrounds/`
+  (written as `.part`, then renamed). The file dialog and the copy run on
+  their own thread (`ui/options/pages/folderstorm_viewport/background.rs`);
+  the answer is taken only by the row it was opened from, and dropped when
+  that row was not drawn for 3 frames. A refusal is said under the row.
+  After a picture is taken, `import::prune` deletes the copies that
+  `backgrounds::referenced` (the default, each layout's own, and the
+  entries kept unread) does not name; only names of our own form.
+- **Painting** (`backgrounds::paint`): `underlay_in` runs after the pass,
+  from the one hook in `app.rs`, and `splice`s its shapes at the start of
+  the frame's list. The margins come from `viewport::world_area` (new:
+  the world's part in points, this frame or the last; `dialog_area` now
+  uses it), the monitors from `viewport::monitors`. The picture is decoded
+  on a thread (`import::decode`) at `side_for` the window (its pixels
+  rounded up to 1024, at most 4096 and the GPU's limit; 4096 for Centre
+  and Tile, which use its own pixels) and uploaded once
+  (`TextureOptions::LINEAR`), drawn from the next frame (egui hands a new
+  texture to the GPU with the following frame). A window that grows over
+  more monitors decodes it again only if it was reduced. Tile draws one
+  mesh of the tiles that meet each margin. No picture chosen, a colour or
+  nothing: no texture is kept. No margin: no decoding.
+- **Status** for Preferences (`paint::status`): loading, shown, missing,
+  unreadable, as far as the painting tried the picture; `paint::forget`
+  reads it again after it is chosen again.
+- **Preferences.** The group *Background around the world* is drawn by
+  `folderstorm_viewport.rs` after *World viewport* (a child module, so no
+  hook in `pages.rs` or `layout.rs`): *Background* (choice), *Picture*
+  (wide row: *Choose a picture…*, the name, "loading…", what is wrong),
+  *Fit* (list), *Across all monitors*, *Colour*, *Brightness*; rows greyed
+  when their kind is not chosen; a note while the viewport is off. Each row
+  edits a tracked field of `folderstorm_workspaces.background`, so the
+  modified dots and the page's reset work. The selected layout in Layouts &
+  workspaces gets *Background: Use the default / Its own* (its own starts
+  as a copy of the default) and its own choices in a small grid (*Shows*,
+  *Picture*, *Fit*, *Across all monitors*, *Colour*, *Brightness*).
+- **Demo.** `AURORA_DEMO_BACKGROUND` (`backgrounds::demo::seed`, called
+  from `app/folderstorm_workspaces.rs`), as planned; the picture is drawn
+  in code and copied through `import::store`.
+
+**Settings format.** `folderstorm_workspaces.background` (absent while the
+default) and `folderstorm_workspaces.layouts[].background` (absent for
+"Use the default"). An older build keeps a layout's `background` (the unknown fields of an
+entry are kept) but drops the default's when it saves the settings. No
+migration, no schema change.
+
+**Upstream hooks.**
+
+| File | Change |
+|---|---|
+| `crates/aurora-viewer/src/app.rs` (line 12151) | one line before `studio_fade`: `crate::folderstorm::backgrounds::underlay(...)` |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 37 `fs-background-*` keys after the workspace context's |
+| `docs/TESTING.md` | a paragraph and a table row for `AURORA_DEMO_BACKGROUND` |
+
+**Changed beside them (ours):** `folderstorm/mod.rs` (the `mod` line),
+`folderstorm/viewport.rs` (`world_area`), `folderstorm/workspaces/store.rs`
+(the two fields, `Kept::raw`, `set_layout_background`),
+`app/folderstorm_workspaces.rs` (the demo), the two Preferences pages.
+
+**New files:** `folderstorm/backgrounds/{mod,record,place,import,paint,demo,tests}.rs`,
+`ui/options/pages/folderstorm_viewport/background.rs`,
+`ui/options/pages/folderstorm_workspaces/tests/background.rs`.
+
+**Tests.** Pure: `backgrounds::record` (4: the file, names of our own
+only, ranges, what is painted), `backgrounds::place` (4: margins for
+several viewports, monitor areas at 100 and 200 %, each fit, tiles and
+their cap), `backgrounds::import` (4: the copy and the same picture twice,
+refusals, reduction, pruning), `backgrounds::paint` (2: the side decoded,
+the shapes in the margins). Frame tests with the software painter,
+`backgrounds::tests` (7): nothing without margins (not even a decode) or
+without a choice, a colour in four margins under a window, the picture on
+the left monitor with the world untouched, each fit and the span, a
+missing picture, a layout's own in effect while active, the store's file.
+Preferences (`folderstorm_workspaces::tests::background`, 4): the group, the
+default chosen by clicks, a layout's own taken and given back, a layout's
+own drawn. Pictures: `background-fill-left-monitor.png`,
+`background-fit.png`, `background-centre.png`, `background-tile.png`,
+`background-span.png`, `preferences-background.png`,
+`preferences-layout-background.png`.
+
+**Not checked here** (no graphics device in the sandbox, no Vulkan
+driver): the viewer itself: the hook's place in the real frame, the
+texture on the GPU, the file dialog, DPI over mixed monitors, the demo.
+
+**Search words** (`cx.keywords`, English for now): *Background*
+("wallpaper background margins monitors desktop"), *Picture* ("wallpaper
+image photo file"), *Across all monitors* ("span spanning wallpaper"),
+*Brightness* ("dim dimming darker"), and "background wallpaper" added to
+the saved layouts' list. They become `fs-search-*` keys once #69 lands.
+
+**Known limits.**
+
+- No Inventory texture or texture UUID (C++ had both): local files only.
+- No per-monitor override (C++: up to 16 display slots); one fit for all
+  monitors.
+- egui textures have no mipmaps: a picture much larger than its area is
+  reduced on the thread to about the window's size, not each monitor's.
+- A settings backup restored after its picture was pruned shows the
+  colour and the "cannot be found" note until it is chosen again.
+- "Reset everything" keeps the default background (the store is kept).
+- The layout's "modified" mark ignores its background.
+
 ## 14. Later (outline only)
 
-- **1.6 Favorites strip.** Favorite layouts and workspaces after a divider on
-  the islands' favourites row (`ui/bars/islands.rs`,
-  `favorites_row_bottom`), overflow in *More…*, hidden with the bars and in
-  mouselook. Reads `Store.favorites`; one hook where the row is drawn.
-- **1.7 Workspace context.** Optional parts of a workspace: a graphics
+- **1.6 Favorites strip.** Built: "1.6 in detail" and "1.6 as built"
+  above.
+- **1.7 Workspace context.** Built: "1.7 in detail" and "1.7 as built" above. Outline: optional parts of a workspace: a graphics
   profile *by name* (Aurora's `graphics_saved`), a camera preset, and HUDs to
   add, stored as the user's own Inventory item ids (never asset ids) and worn
   through the normal outfit paths (outfit safety, RLVa), never detaching
   anything else. Missing-monitor recovery is already section 8.5. MCP tools
   `workspace_list` / `workspace_apply` belong with row 4.6.
-- **1.8 Backgrounds.** An image painted in the margins outside the world, on
-  egui's background layer, before the windows; no renderer change. Optional
-  per layout.
+- **1.8 Backgrounds.** Built: "1.8 in detail" and "1.8 as built" above. Outline: an image painted in
+  the margins outside the world, before the windows; no renderer change.
+  Optional per layout.
 - **1.9 Search keywords.** Help texts (section 9.2).
 - Startup restore of a workspace (opt-in), export / import, toolbar button
   sets per workspace: only if the human asks.

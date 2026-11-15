@@ -1,4 +1,4 @@
-//! Folderstorm: Preferences › Layout › Layouts
+//! Folderstorm: Preferences › Layout › Layouts & workspaces
 //! (`crate::folderstorm::workspaces`, FEATURES.md row 1.3). Folderstorm (C++)
 //! saved its bar placement as named profiles under Move & View › Layout:
 //! apply, rename, delete, Reset.
@@ -11,6 +11,9 @@
 //! toolbar's toggle (*Quick switch*). Like the rest of Preferences, everything
 //! applies at once; Update and Delete ask first, in the page. The rows
 //! edit no tracked setting: "Reset this page" never deletes a layout.
+//! The workspaces' groups are in [`workspaces_group`].
+
+mod workspaces_group;
 
 use super::super::cx::{Cx, Nothing};
 use crate::folderstorm::workspaces::apply::{self, Live, Parts};
@@ -91,7 +94,7 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-layouts-group"), |cx| {
         cx.note(tr!("fs-layouts-intro"));
         // (the search words of Folderstorm (C++): "dual monitor", "layout")
-        cx.keywords("layout layouts profile dual monitor two monitors arrangement windows")
+        cx.keywords("layout layouts profile dual monitor two monitors arrangement windows background wallpaper")
             .section_body()
             .row(tr!("fs-layouts-list"), tr!("fs-layouts-list-help"), &Nothing, |ui, s| {
                 list(ui, &p, s)
@@ -174,12 +177,18 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 clicked && apply::reset_world(ui.ctx(), &mut Live::of(s))
             });
     });
+    workspaces_group::groups(cx);
     cx.group(tr!("fs-layouts-quick"), |cx| {
         cx.note(tr!("fs-layouts-quick-intro"));
         for (place, label) in [(0, tr!("fs-layouts-toggle-first")), (1, tr!("fs-layouts-toggle-second"))] {
             cx.keywords("layout toggle switch switcher workspace toolbar button dual monitor two monitors shortcut keyboard favorite")
                 .row(label, tr!("fs-layouts-toggle-help"), &Nothing, |ui, s| toggle_picker(ui, s, place));
         }
+        // (Folderstorm (C++): "Show workspace favorites strip", off until chosen)
+        cx.keywords("layout workspace favorite favorites strip row bar pills landmark star quick switch")
+            .row(tr!("fs-strip-show"), tr!("fs-strip-show-help"), &Nothing, |ui, s| {
+                super::super::toggle(ui, &p, &mut s.folderstorm_workspaces.strip)
+            });
     });
 }
 
@@ -399,7 +408,8 @@ fn list(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
         let waiting = s.folderstorm_workspaces.pending.len();
         if tab.went_back {
             muted(ui, p, tr!("fs-layouts-previous-done"));
-        } else if let Some(report) = apply::report(&ctx) {
+        } else if let Some(report) = apply::report(&ctx).filter(|report| report.workspace.is_none()) {
+            // (a workspace's is said under the workspaces)
             muted(ui, p, report_text(&report, waiting));
         }
     });
@@ -601,6 +611,10 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             }
             Err(error) => tab.refused = Some(Refused::Selected(error)),
         }
+    }
+    // its own background, or the default (row 1.8)
+    if tab.rename.is_none() && tab.ask.is_none() && usable {
+        changed |= super::folderstorm_viewport::background::layout_part(ui, p, s, index);
     }
     changed
 }
@@ -847,6 +861,9 @@ mod tests {
     use crate::ui::widgets::elide_tests::{Frames, Text};
     use egui::Rect;
 
+    mod background;
+    mod workspaces;
+
     /// Preferences on the Layouts tab, over a viewer with two windows open.
     struct Window {
         frames: Frames,
@@ -858,6 +875,42 @@ mod tests {
         /// A pretend viewer window over two pretend monitors, when the
         /// test has one (`Window::with_viewer`).
         viewer: Option<Pretend>,
+        /// The account and its HUDs, as the app tells the workspaces.
+        shell: HudShell,
+    }
+
+    /// The viewer as far as a workspace's HUDs go (row 1.7): the account
+    /// logged in, the HUDs worn, the names of the Inventory's items. No
+    /// window is open or opened.
+    #[derive(Default)]
+    struct HudShell {
+        account: Option<uuid::Uuid>,
+        huds: Vec<crate::folderstorm::workspaces::context::Hud>,
+        names: std::collections::BTreeMap<uuid::Uuid, String>,
+    }
+
+    impl apply::Shell for HudShell {
+        fn is_open(&self, _: &crate::folderstorm::workspaces::windows::Window) -> bool {
+            false
+        }
+
+        fn open(&mut self, _: &egui::Context, _: &crate::folderstorm::workspaces::windows::Window) -> bool {
+            false
+        }
+
+        fn close(&mut self, _: &egui::Context, _: &crate::folderstorm::workspaces::windows::Window) {}
+
+        fn account(&self) -> Option<uuid::Uuid> {
+            self.account
+        }
+
+        fn worn_huds(&self) -> Vec<crate::folderstorm::workspaces::context::Hud> {
+            self.huds.clone()
+        }
+
+        fn item_name(&self, item: uuid::Uuid) -> Option<String> {
+            self.names.get(&item).cloned()
+        }
     }
 
     const MONITORS: [[i32; 4]; 2] = [[0, 0, 1920, 1080], [1920, 0, 1920, 1080]];
@@ -892,6 +945,7 @@ mod tests {
                 st,
                 changed: false,
                 viewer: None,
+                shell: HudShell::default(),
             };
             window.run(Vec::new());
             // the two windows out of the way of Preferences, at known places
@@ -918,7 +972,12 @@ mod tests {
                     },
                 );
             }
-            let outcome = apply::frame(&ctx, &mut Live::of(&mut self.s), self.viewer.as_ref().map(|viewer| viewer.seen));
+            let outcome = apply::frame(
+                &ctx,
+                &mut Live::of(&mut self.s),
+                self.viewer.as_ref().map(|viewer| viewer.seen),
+                &mut self.shell,
+            );
             self.changed |= outcome.save;
             if let Some(viewer) = &mut self.viewer {
                 viewer.send(&outcome.commands);
@@ -969,6 +1028,30 @@ mod tests {
                 Vec::new(),
             ] {
                 self.run(events);
+            }
+        }
+
+        /// Scrolls the page down, with the wheel over it, until `text` is
+        /// shown (at most a few turns).
+        fn reveal(&mut self, text: &str) {
+            for _ in 0..12 {
+                if self.shows(text) {
+                    return;
+                }
+                let at = pos2(700.0, 500.0);
+                self.run(vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -80.0),
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Unknown,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                for _ in 0..10 {
+                    self.run(Vec::new());
+                }
             }
         }
 
@@ -1574,7 +1657,21 @@ mod tests {
     }
 
     /// [`drawn`], with `query` typed in the window's search.
-    fn drawn_found(name: &str, tab: usize, mut s: Settings, cogs: bool, query: &str) -> Vec<String> {
+    fn drawn_found(name: &str, tab: usize, s: Settings, cogs: bool, query: &str) -> Vec<String> {
+        drawn_scrolled(name, tab, s, cogs, query, None, 0.0)
+    }
+
+    /// [`drawn_found`], with what the app says of HUDs (`huds`) and the
+    /// page scrolled down by `scroll` points with the wheel.
+    fn drawn_scrolled(
+        name: &str,
+        tab: usize,
+        mut s: Settings,
+        cogs: bool,
+        query: &str,
+        huds: Option<crate::folderstorm::workspaces::context::HudView>,
+        scroll: f32,
+    ) -> Vec<String> {
         let theme = crate::theme::Theme::default();
         let p = theme.skin_palette();
         let ctx = egui::Context::default();
@@ -1590,11 +1687,30 @@ mod tests {
         let mut pixels = vec![0u32; (width * height) as usize];
         let mut painter = crate::crash::software::Painter::default();
         let mut texts = Vec::new();
-        for frame in 0..8 {
+        if let Some(huds) = huds {
+            crate::folderstorm::workspaces::context::set_view(&ctx, huds);
+        }
+        let frames = if scroll > 0.0 { 60 } else { 8 };
+        for frame in 0..frames {
+            let at = egui::pos2(700.0, 500.0);
+            let events = match frame {
+                2 if scroll > 0.0 => vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -scroll),
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Unknown,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                _ => Vec::new(),
+            };
             let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(window),
                     time: Some(frame as f64 / 60.0),
+                    events,
                     ..Default::default()
                 },
                 |ui| {
