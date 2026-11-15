@@ -752,9 +752,7 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
             ready && (1..=super::bulk_review::MAX).contains(&ids.len()),
             Command::BulkReview(ids.clone()),
         );
-        if all || folder.is_some() {
-            folder_tabs::entries(&mut c, inv, st, prefs, facts, &ids); // Folderstorm: Create tab / Add to ›
-        }
+        folder_tabs::entries(&mut c, inv, st, prefs, facts, &ids); // Folderstorm: Create tab / Add to ›
         c.add(
             "rename",
             TEXT,

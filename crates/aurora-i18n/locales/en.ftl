@@ -1137,45 +1137,58 @@ inventory-folder-tab-create = Create tab
 inventory-folder-tab-add-to = Add to
 inventory-folder-tab-new = New tab…
 inventory-folder-tab-has-tip = Already in this tab.
-inventory-folder-tab-why-empty = Select folders first.
-inventory-folder-tab-why-item = Only folders can go into a tab: the selection holds an item.
+inventory-folder-tab-why-empty = Select folders or items first.
 inventory-folder-tab-why-refused = The inventory's root, the Library, the Trash and what it holds cannot go into a tab.
 inventory-folder-tab-why-loading = The inventory is not loaded yet.
 inventory-folder-tab-why-window = A window opened on one folder has no custom tabs.
 inventory-folder-tab-added-one = Added “{ $folder }” to “{ $tab }”.
 inventory-folder-tab-added-many = { $count ->
-    [one] Added { $count } folder to “{ $tab }”.
-   *[other] Added { $count } folders to “{ $tab }”.
+    [one] Added { $count } entry to “{ $tab }”.
+   *[other] Added { $count } entries to “{ $tab }”.
     }
 inventory-folder-tab-added-already = { $count ->
     [one] { $count } was already there.
    *[other] { $count } were already there.
     }
 inventory-folder-tab-already-one = “{ $folder }” is already in “{ $tab }”.
-inventory-folder-tab-already-many = These folders are already in “{ $tab }”.
-inventory-folder-tab-add = Add selected folders
-inventory-folder-tab-replace = Use only selected folders
-inventory-folder-tab-clear = Show all folders
-inventory-folder-tab-clear-tip = Show the whole inventory in this tab again. Its filters and search stay.
-inventory-folder-tab-select-tip = Select folders in the Inventory list first: up to { $count }, not the Trash or the Library.
+inventory-folder-tab-already-many = These are already in “{ $tab }”.
+inventory-folder-tab-add = Add the selection
+inventory-folder-tab-replace = Use only the selection
+inventory-folder-tab-clear = Show everything
+inventory-folder-tab-clear-tip = Show the whole inventory in this tab again: no folders, no pinned items. Its filters and search stay.
+inventory-folder-tab-select-tip = Select folders or items in the Inventory list first: up to { $count } folders, not the Trash or the Library.
 inventory-folder-tab-limit = A tab can show up to { $count } folders.
-inventory-folder-tab-heading = Folders
+inventory-folder-tab-heading = Folders and pinned items
 inventory-folder-tab-all = All folders
-inventory-folder-tab-elsewhere = This tab's folders were chosen on another account: here it shows all folders.
-inventory-folder-tab-help = The tab shows these folders and everything inside them, with its filters and search. Select folders in the Inventory list (up to { $count }), then add them.
-inventory-folder-tab-remove = Remove this folder from the tab
+inventory-folder-tab-elsewhere = This tab's folders and items were chosen on another account: here it shows all folders.
+inventory-folder-tab-help = The tab shows these folders and everything inside them, and the pinned items at the top, with its filters and search. Select folders (up to { $count }) or items in the Inventory list, then add them.
+inventory-folder-tab-remove = Remove from the tab
 inventory-folder-tab-deleted-folder = Deleted folder
 inventory-folder-tab-status-missing = deleted
 inventory-folder-tab-status-trash = in the Trash
 inventory-folder-tab-status-refused = not allowed
 inventory-folder-tab-note-gone = { $count ->
-    [one] { $count } folder of this tab is deleted or in the Trash.
-   *[other] { $count } folders of this tab are deleted or in the Trash.
+    [one] { $count } folder or item of this tab is deleted or in the Trash.
+   *[other] { $count } folders or items of this tab are deleted or in the Trash.
     }
 inventory-folder-tab-note-remove = Remove from tab
-inventory-folder-tab-note-remove-tip = Forget these folders in this tab. A folder restored from the Trash would not come back in it.
+inventory-folder-tab-note-remove-tip = Forget them in this tab. What is restored from the Trash would not come back in it.
 inventory-folder-tab-demo-name = Clothing and body
 inventory-folder-tab-demo-other = Everyday
+inventory-folder-tab-why-broken = A link in the selection points to nothing: it cannot go into a tab.
+inventory-folder-tab-item-limit = A tab can pin up to { $count } items.
+inventory-folder-tab-deleted-item = Deleted item
+inventory-quick-pinned = Pinned item
+inventory-quick-open-window = Open in a window
+inventory-quick-open-window-tip = Show this tab in a small window of its own.
+inventory-quick-flat = Flat list
+inventory-quick-flat-tip = List every item of this tab without folders, each with its folder.
+inventory-quick-in-folder = In { $path }
+inventory-quick-pin = Pin: keep this window above the others
+inventory-quick-unpin = Unpin: let other windows cover it
+inventory-quick-quiet = Simple view: only the list
+inventory-quick-full = Full view: search, tabs and tools
+inventory-quick-demo-name = Quick access
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations

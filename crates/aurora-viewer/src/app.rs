@@ -21208,6 +21208,9 @@ impl ApplicationHandler for App {
                         // Folderstorm: folder-scoped Inventory tabs
                         | "folder-tabs"
                         | "aurora-folder-tabs"
+                        // Folderstorm: Inventory quick access
+                        | "quick-access"
+                        | "aurora-quick-access"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
@@ -21316,6 +21319,12 @@ impl ApplicationHandler for App {
                         // Folderstorm: folder-scoped Inventory tabs
                         let account = self.world.agent_id;
                         ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
+                    }
+                    if view.ends_with("quick-access") {
+                        // Folderstorm: Inventory quick access
+                        let account = self.world.agent_id;
+                        let ctx = self.egui_ctx.clone();
+                        ui::inventory::custom_tabs::quick_access_demo(&ctx, &mut self.inventory_ui, &mut self.settings.inventory, account);
                     }
                     if view.contains("favorites") {
                         if view.ends_with("-flat") || view.ends_with("-parents") {
