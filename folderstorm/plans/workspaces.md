@@ -2210,21 +2210,104 @@ RLVa, the demo scenario.
 - The "modified" mark ignores the context.
 - *Previous* puts back the camera view, its offsets and the field of
   view, not what a camera preset also changed (the photo's lens, looks
-  and light); it never takes a HUD off.
+  and light). (HUDs: see "HUDs taken off at a switch" below.)
 - A HUD is shown by its item's name, not its HUD point.
 - Aurora's graphics profiles have no Rename: a profile deleted and saved
   again under another name is "not found" until chosen again.
 - MCP tools (`workspace_list`, `workspace_apply`) belong with row 4.6.
 
+#### 1.7: HUDs taken off at a switch (2026-11-15)
+
+The human: "1.7 was designed to not remove HUDs, only add them. Is it
+possible, when switching from one workspace to another, to remove the HUDs
+of the previous workspace, but not any other HUDs worn?" Yes: this replaces
+decision 3 above ("HUDs are only added, never detached, not even by
+*Previous*") while keeping its point: a HUD the user wears is never taken
+off by a workspace.
+
+- **Only HUDs the workspaces put on** (`context::Ours`, kept in `apply`'s
+  session): the items an apply asked to wear that were not worn then
+  (`Done::huds`, `HudSwap::added`), for the account logged in. A HUD worn
+  before the apply, or put on by hand, is never one of them, even when the
+  workspace before lists it.
+- **Arrived, and still on.** Every 30 frames `apply::frame` asks the app
+  what the outfit has on (`Shell::huds_on`: the items worn, or linked in
+  the Current Outfit, so that a teleport does not count as taken off): a
+  HUD seen there has arrived; one that had arrived and is gone was taken
+  off (by hand, a script, another outfit) and is forgotten, so worn again
+  by hand it is the user's; one that has not arrived after 120 s
+  (`ARRIVES_WITHIN`: refused by the server, the attachment limit) is
+  forgotten.
+- **A switch** to workspace B takes off the HUDs looked after that B does
+  not wear (`Ours::take_off_for`, by item id; `Context::take_off`), in the
+  same outfit change that wears B's: `apply_appearance_action(Action::Force
+  { remove, wear })`, the path of RLVa's forced detach and of a wear from
+  the Inventory, so the Current Outfit, RLVa's filtering and "an outfit
+  change is under way" apply. A HUD in both stays on. A HUD RLVa will not
+  let go (`rlva_can_remove`: `@detach`, `@remattach`, `@detachthis`, a
+  locked point or folder) stays on, is counted ("could not be taken off")
+  and stays looked after (`context::plan_take_off`). One that is not on
+  any more is left alone.
+- **Only a workspace with HUDs of its own** takes them off (decision 7): a
+  workspace without a HUD list, a layout alone, or a workspace whose HUDs
+  are another account's, leaves every HUD as it is.
+- ***Previous arrangement*** after a switch puts back the HUDs it took off
+  (each at the point it was on, checked as a wear) and takes off the ones
+  it put on, only while they are still looked after (`Before::huds`,
+  filtered in `apply::previous`); pressing it again comes back (decision
+  8). It replaces "Previous never detaches".
+- **Per login** (decision 9): forgotten with another account
+  (`Shell::account`) and at the login screen (`apply::logged_out`, from
+  the app's frame when it is not in the world), and when the viewer quits.
+  Never written to the settings.
+- **Preferences** (decision 10): one switch for all workspaces in *Saved
+  workspaces*, *Take off the previous workspace's HUDs*, on by default
+  (`Store::keep_huds`, in the file only when unticked). Off, the
+  workspaces only add HUDs and *Previous* leaves HUDs as they are (1.7 as
+  first built); the HUDs put on are still looked after, so ticking it
+  again works at the next switch. Search words: workspace, hud, huds,
+  take, off, detach, remove, attachment, previous, switch.
+- **The report** adds "N HUDs put on by a workspace were taken off" and "N …
+  could not be taken off (RLVa keeps them on)"; the "under way" and
+  "refused" sentences now say no HUD was worn *or taken off*; "Graphics and
+  camera put back" no longer says the HUDs stay on.
+- **Demo.** `AURORA_DEMO_WORKSPACES=context` also seeds "Studio"
+  (Inventory, the demo's third object as its HUD) and applies it at frame
+  300, between "Photos" (180) and *Previous* (420, which now undoes the
+  switch to "Studio").
+
+**Tests.** Pure (`workspaces::context`, 3 more): remembered and taken off
+for the same account only, a HUD in both kept, a swap of another account;
+arrived, a teleport, not arrived in time, taken off by hand; a HUD RLVa
+keeps on counted and still looked after. Frame tests
+(`workspaces::tests::context`, 6 more): a switch takes off only what the
+workspace before put on (never a HUD worn before), a workspace without
+HUDs and one wearing the same HUD; taken off by hand, another account, a
+logout; *Previous* and back; *Previous* with a HUD no longer looked after;
+the switch off (add only, *Previous* HUD-neutral, the file); the report.
+
+**Not checked here:** the outfit change on the grid (that a HUD comes off
+and the Current Outfit follows), RLVa locks on a real object, the demo.
+
+**Decisions to confirm (the human):**
+
+7. Only a workspace with HUDs of its own takes off the previous one's; a
+   workspace without HUDs leaves them on.
+8. *Previous* undoes the HUD part of a switch (puts back what it took
+   off, takes off what it put on).
+9. What the workspaces put on is remembered per login, for the session.
+10. One global switch, on by default, rather than one per workspace.
+
 ## 14. Later (outline only)
 
 - **1.6 Favorites strip.** Built: "1.6 in detail" and "1.6 as built"
   above.
-- **1.7 Workspace context.** Built: "1.7 in detail" and "1.7 as built" above. Outline: optional parts of a workspace: a graphics
+- **1.7 Workspace context.** Built: "1.7 in detail", "1.7 as built" and "HUDs taken off at a switch" above. Outline: optional parts of a workspace: a graphics
   profile *by name* (Aurora's `graphics_saved`), a camera preset, and HUDs to
   add, stored as the user's own Inventory item ids (never asset ids) and worn
-  through the normal outfit paths (outfit safety, RLVa), never detaching
-  anything else. Missing-monitor recovery is already section 8.5. MCP tools
+  through the normal outfit paths (outfit safety, RLVa); a switch takes off
+  only the HUDs the workspace before put on ("HUDs taken off at a
+  switch"). Missing-monitor recovery is already section 8.5. MCP tools
   `workspace_list` / `workspace_apply` belong with row 4.6.
 - **1.8 Backgrounds.** An image painted in the margins outside the world, on
   egui's background layer, before the windows; no renderer change. Optional

@@ -551,6 +551,11 @@ pub struct Store {
     /// for the viewer, not a part of a layout or of a workspace.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub strip: bool,
+    /// A switch to another workspace leaves on the HUDs the workspace
+    /// before put on (row 1.7): *Take off the previous workspace's HUDs*
+    /// unticked. Off (they are taken off) until chosen.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub keep_huds: bool,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -568,6 +573,7 @@ struct Raw {
     workspaces: serde_json::Value,
     active_workspace: Option<String>,
     strip: serde_json::Value,
+    keep_huds: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -616,6 +622,7 @@ impl From<Raw> for Store {
             active_workspace: raw.active_workspace,
             // (anything but `true` reads as off, as an entry is read on its own)
             strip: raw.strip.as_bool().unwrap_or(false),
+            keep_huds: raw.keep_huds.as_bool().unwrap_or(false),
         };
         if store.active_workspace().is_none() {
             store.active_workspace = None;

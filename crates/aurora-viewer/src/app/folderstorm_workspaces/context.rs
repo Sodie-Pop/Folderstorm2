@@ -4,11 +4,12 @@
 //! Preferences › Graphics selects it, the camera view or preset applied as
 //! the camera controls apply it, and the HUDs added through Aurora's own
 //! outfit path (one Current Outfit update, RLVa, the attachment limit).
-//! Nothing is ever taken off.
+//! The only HUDs ever taken off, in the same outfit change, are the ones
+//! the workspaces put on (`context::Ours`), at a switch or by *Previous*.
 
 use super::*;
 use crate::folderstorm::workspaces::context::{
-    self, Ask, Before, Camera, CameraView, Context, Done, GraphicsBefore, Hud, HudCounts, Huds, Item, Part,
+    self, Ask, Before, Camera, CameraView, Context, Done, GraphicsBefore, Hud, HudCounts, HudSwap, Huds, Item, OnNow, Part,
 };
 use crate::graphics_presets::saved::{self, Saved};
 use crate::world::appearance::{Action, WearRequest};
@@ -23,6 +24,21 @@ pub(super) fn worn_huds(world: &crate::world::World) -> Vec<Hud> {
         .collect();
     huds.sort_by_key(|hud| (hud.point, hud.item));
     huds
+}
+
+/// The items the outfit has on now: worn, or linked in the Current Outfit
+/// (a HUD stays linked while it is away, through a teleport). None until
+/// the Current Outfit is known.
+pub(super) fn huds_on(world: &crate::world::World) -> Option<std::collections::BTreeSet<uuid::Uuid>> {
+    use crate::world::appearance::{cof, folder_links};
+    let cof = cof(&world.inventory)?;
+    let mut on: std::collections::BTreeSet<uuid::Uuid> = folder_links(&world.inventory, cof)
+        .into_iter()
+        .filter(|link| !link.folder)
+        .map(|link| link.target)
+        .collect();
+    on.extend(world.outfit_attachment_items());
+    Some(on)
 }
 
 impl App {
@@ -81,7 +97,11 @@ impl App {
             done.told.camera = Some((camera, part));
         }
         if let Some(huds) = context.huds {
-            done.told.huds = Some(self.workspace_huds(&huds));
+            let (counts, swap) = self.workspace_huds(&huds, context.take_off.as_ref());
+            done.told.huds = Some(counts);
+            // (Previous takes them off and puts back the ones taken off)
+            done.before.huds.clone_from(&swap);
+            done.huds = swap;
         }
         done
     }
@@ -105,13 +125,17 @@ impl App {
         }
     }
 
-    /// Adds the workspace's HUDs that can be worn and are not, in one
-    /// outfit change, each at its own point; never takes anything off.
-    fn workspace_huds(&mut self, huds: &Huds) -> HudCounts {
+    /// Adds the HUDs of `huds` that can be worn and are not, each at its
+    /// own point, and takes off the HUDs of `take_off` (put on by the
+    /// workspaces) that are on and that RLVa lets go: in one outfit change,
+    /// as a wear and a detach from the Inventory. Never anything else. Says
+    /// what it asked to wear and to take off.
+    fn workspace_huds(&mut self, huds: &Huds, take_off: Option<&Huds>) -> (HudCounts, Option<HudSwap>) {
         let world = &self.world;
+        let account = world.agent_id;
         let inventory = &world.inventory;
         let worn = world.outfit_attachment_points();
-        let (wear, mut counts) = context::plan_huds(huds, Some(world.agent_id), |hud| {
+        let (wear, mut counts) = context::plan_huds(huds, Some(account), |hud| {
             use crate::world::inventory::actions::{in_type, library};
             match inventory.items.get(&hud.item) {
                 None => Item::Missing,
@@ -121,17 +145,32 @@ impl App {
                 Some(_) => Item::Wearable,
             }
         });
-        if wear.is_empty() {
-            return counts;
+        // the HUDs put on by the workspaces that are still on: taken off
+        // unless RLVa keeps them (@detach, @remattach, a locked point)
+        let on = huds_on(world).unwrap_or_default();
+        let (remove, stuck) = context::plan_take_off(take_off, account, |hud| {
+            let object = inventory.items.get(&hud.item).is_some_and(|item| item.asset_type == 6);
+            if !object || !(worn.contains_key(&hud.item) || on.contains(&hud.item)) {
+                OnNow::Gone
+            } else if !world.rlva_can_remove(hud.item, uuid::Uuid::nil()) {
+                OnNow::Stuck
+            } else {
+                OnNow::At(worn.get(&hud.item).copied().unwrap_or(hud.point))
+            }
+        });
+        counts.stuck = stuck;
+        if wear.is_empty() && remove.is_empty() {
+            return (counts, None);
         }
         if self.appearance_ui.pending.is_some() {
             counts.busy = true;
-            return counts;
+            return (counts, None);
         }
-        // as a wear from the Inventory: "add", each at its own point
+        // as a wear from the Inventory: "add", each at its own point; and
+        // as RLVa's forced detach: the Current Outfit's link taken out
         self.appearance_ui.message.clear();
         self.apply_appearance_action(Action::Force {
-            remove: Vec::new(),
+            remove: remove.iter().map(|hud| hud.item).collect(),
             wear: wear
                 .iter()
                 .map(|hud| WearRequest {
@@ -141,23 +180,31 @@ impl App {
                 })
                 .collect(),
         });
-        if self.appearance_ui.pending.is_some() {
-            counts.asked = wear.len();
-        } else {
+        if self.appearance_ui.pending.is_none() {
             let why = std::mem::take(&mut self.appearance_ui.message);
             counts.refused = Some(match why.is_empty() {
                 true => aurora_i18n::tr!("fs-context-huds-refused-plain").to_owned(),
                 false => why,
             });
+            return (counts, None);
         }
-        counts
+        counts.asked = wear.len();
+        counts.taken_off = remove.len();
+        let swap = HudSwap {
+            account,
+            added: wear,
+            removed: remove,
+        };
+        (counts, Some(swap))
     }
 
-    /// *Previous arrangement*: the graphics and the camera view as they
-    /// were before the workspace (HUDs stay on).
+    /// *Previous arrangement*: the graphics, the camera view and the HUDs
+    /// as they were before the workspace: the HUDs the switch took off are
+    /// worn again, the ones it put on taken off (the workspaces still look
+    /// after each one handed here).
     fn workspace_context_restore(&mut self, before: Before) -> Done {
         let mut done = Done::default();
-        done.told.restored = true;
+        done.told.restored = before.graphics.is_some() || before.camera.is_some();
         if let Some(graphics) = before.graphics {
             done.before.graphics = Some(self.graphics_now());
             graphics.values.apply(&mut self.settings);
@@ -174,15 +221,31 @@ impl App {
                 }
             }
         }
+        if let Some(swap) = before.huds {
+            let wear = Huds {
+                account: swap.account,
+                items: swap.removed,
+            };
+            let take_off = Huds {
+                account: swap.account,
+                items: swap.added,
+            };
+            let (counts, swap) = self.workspace_huds(&wear, Some(&take_off));
+            done.told.huds = Some(counts);
+            // (pressing it again comes back)
+            done.before.huds.clone_from(&swap);
+            done.huds = swap;
+        }
         done
     }
 
     /// `AURORA_DEMO_WORKSPACES=context`: the demo's graphics profiles ("My
-    /// fast profile" selected), and the workspace "Photos": the world map,
+    /// fast profile" selected), the workspace "Photos": the world map,
     /// "My photo profile", the Front view, and as HUDs the first two
     /// objects of the demo's Inventory (outside the Library), for the
-    /// demo's account. Preferences opens on the tab, the workspace
-    /// selected.
+    /// demo's account; and "Studio": Inventory, the third object as its
+    /// HUD (switching to it takes off what "Photos" put on). Preferences
+    /// opens on the tab, "Photos" selected.
     pub(super) fn workspace_context_demo_seed(&mut self) {
         use crate::folderstorm::workspaces::workspace::Workspace;
         saved::demo(&mut self.settings);
@@ -198,18 +261,31 @@ impl App {
         let mut photos = Workspace::new("Photos", None, ["worldmap".to_owned()]);
         photos.graphics = Some("My photo profile".to_owned());
         photos.camera = Some(Camera::View(crate::camera::CameraPreset::Front));
+        let account = self.world.agent_id;
         photos.huds = Some(Huds {
-            account: self.world.agent_id,
-            items: objects.into_iter().zip([35, 31]).map(|(item, point)| Hud { item, point }).collect(),
+            account,
+            items: objects
+                .iter()
+                .zip([35, 31])
+                .map(|(item, point)| Hud { item: *item, point })
+                .collect(),
         })
         .filter(|huds| !huds.items.is_empty());
+        let mut studio = Workspace::new("Studio", None, ["inventory".to_owned()]);
+        studio.huds = objects.get(2).map(|item| Huds {
+            account,
+            items: vec![Hud { item: *item, point: 33 }],
+        });
         let store = &mut self.settings.folderstorm_workspaces;
         let name = photos.name.clone();
-        match store.add_workspace(photos) {
-            Ok(_) => {
-                store.set_favorite_workspace(&name, true);
+        for workspace in [photos, studio] {
+            let name = workspace.name.clone();
+            match store.add_workspace(workspace) {
+                Ok(_) => {
+                    store.set_favorite_workspace(&name, true);
+                }
+                Err(error) => log::warn!("AURORA_DEMO_WORKSPACES: workspace not seeded: {error:?}"),
             }
-            Err(error) => log::warn!("AURORA_DEMO_WORKSPACES: workspace not seeded: {error:?}"),
         }
         store.active_workspace = Some(name);
         self.panels.settings = true;

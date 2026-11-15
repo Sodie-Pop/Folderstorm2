@@ -83,6 +83,15 @@ pub(super) fn groups(cx: &mut Cx) {
             &Nothing,
             |ui, s| save_new(ui, &p, s),
         );
+        // (row 1.7: on until unticked; the store keeps the opposite, so
+        // that a file without it takes them off)
+        cx.keywords("workspace hud huds take off detach remove attachment previous switch")
+            .row(tr!("fs-context-take-off"), tr!("fs-context-take-off-help"), &Nothing, |ui, s| {
+                let mut on = !s.folderstorm_workspaces.keep_huds;
+                let changed = super::super::super::toggle(ui, &p, &mut on);
+                s.folderstorm_workspaces.keep_huds = !on;
+                changed
+            });
     });
 }
 

@@ -37,6 +37,8 @@ struct Windows<'a> {
     folders: Option<&'a crate::world::inventory::Inventory>,
     /// The HUDs worn now (row 1.7), while Preferences may show them.
     huds: Vec<crate::folderstorm::workspaces::context::Hud>,
+    /// What the outfit has on, for the HUDs the workspaces put on.
+    outfit: Option<&'a crate::world::World>,
 }
 
 /// The `Panels` flag of an allowlisted window that has one of its own.
@@ -178,6 +180,10 @@ impl apply::Shell for Windows<'_> {
     fn item_name(&self, item: uuid::Uuid) -> Option<String> {
         self.folders?.items.get(&item).map(|item| item.name.clone())
     }
+
+    fn huds_on(&self) -> Option<std::collections::BTreeSet<uuid::Uuid>> {
+        context::huds_on(self.outfit?)
+    }
 }
 
 impl App {
@@ -189,6 +195,8 @@ impl App {
     /// are opened through [`Windows`].
     pub(super) fn folderstorm_workspaces_frame(&mut self, window: &Window) {
         if !matches!(self.screen, Screen::World) {
+            // (the HUDs the workspaces put on are for one login)
+            apply::logged_out(&self.egui_ctx);
             return;
         }
         let seen = self.folderstorm_viewer_window(window);
@@ -213,6 +221,7 @@ impl App {
             account: self.world.agent_id,
             folders: Some(&self.world.inventory),
             huds,
+            outfit: Some(&self.world),
         };
         let mut outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen, &mut windows);
         for command in &outcome.commands {
@@ -349,8 +358,10 @@ impl App {
     /// 420: they come back at their places. `=context` (row 1.7) adds the
     /// demo's graphics profiles and the workspace "Photos" (the world map,
     /// "My photo profile", the Front view, two object items of the demo's
-    /// Inventory as HUDs), opens Preferences on the tab, applies "Photos"
-    /// at frame 180 and goes back with *Previous arrangement* at frame 420.
+    /// Inventory as HUDs) and "Studio" (Inventory, a third object as its
+    /// HUD), opens Preferences on the tab, applies "Photos" at frame 180,
+    /// "Studio" at frame 300 (the HUDs "Photos" put on are taken off) and
+    /// goes back with *Previous arrangement* at frame 420.
     ///
     /// `AURORA_DEMO_STRIP=1` (row 1.6) seeds the same as
     /// `AURORA_DEMO_WORKSPACES=1` with the favorites strip on, the switcher
@@ -607,14 +618,11 @@ impl App {
                 }
             }
             // "Photos" (its graphics profile, the Front view, two HUDs), then
-            // Previous arrangement
+            // "Studio" (its HUD; Photos' taken off), then Previous arrangement
             "switcher-workspaces-context" => match self.frame_count {
-                180 => {
-                    let index = self
-                        .settings
-                        .folderstorm_workspaces
-                        .find_workspace("Photos")
-                        .map(|(index, _)| index);
+                180 | 300 => {
+                    let name = if self.frame_count == 180 { "Photos" } else { "Studio" };
+                    let index = self.settings.folderstorm_workspaces.find_workspace(name).map(|(index, _)| index);
                     if let Some(index) = index
                         && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
                     {
@@ -694,6 +702,7 @@ mod tests {
                 account: uuid::Uuid::nil(),
                 folders: None,
                 huds: Vec::new(),
+                outfit: None,
             };
             for window in windows::all() {
                 assert!(!shell.is_open(window), "{}", window.id);
@@ -733,6 +742,7 @@ mod tests {
                 account: uuid::Uuid::nil(),
                 folders: None,
                 huds: Vec::new(),
+                outfit: None,
             };
             for window in windows::all() {
                 if shell.open(&ctx, window) {
@@ -768,6 +778,7 @@ mod tests {
                 account: uuid::Uuid::from_u128(7),
                 folders: Some(&world),
                 huds: Vec::new(),
+                outfit: None,
             };
             assert_eq!(shell.account(), Some(uuid::Uuid::from_u128(7)));
             assert!(!shell.has_folder(folder), "not in this Inventory");
@@ -812,6 +823,7 @@ mod tests {
             account: uuid::Uuid::from_u128(7),
             folders: Some(&world),
             huds: worn.clone(),
+            outfit: None,
         };
         assert_eq!(shell.worn_huds(), worn);
         assert_eq!(shell.item_name(radar).as_deref(), Some("Radar"));
@@ -834,6 +846,7 @@ mod tests {
             account: uuid::Uuid::nil(),
             folders: None,
             huds: Vec::new(),
+            outfit: None,
         };
         for id in ["inventory", windows::ADDITIONAL_INVENTORY, "minimap", "worldmap", "contacts"] {
             let window = windows::find(id).expect("on the list");
