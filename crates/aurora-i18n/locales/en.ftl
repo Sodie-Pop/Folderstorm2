@@ -1649,6 +1649,92 @@ fs-keys-layout-toggle = Switch between the two layouts
 fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
 
+# Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
+fs-gesture-board-title = Gesture board
+fs-gesture-board-menu = Gesture board…
+fs-gesture-board-command = Gesture board
+fs-gesture-board-help = Click a button to play its gesture or sound. A sound's button has a speaker: everyone nearby hears it, as when a sound is played from the Inventory. A gesture that is not active is activated when it is played; a click on a gesture that is playing stops it. Drag gestures and sounds from the Inventory onto the board, or choose Add. Right-click a button to rename it, colour it, resize it, move it or remove it (the inventory item stays as it is). Drag a button onto another to move it before it. Ctrl+F finds buttons on all the boards, or on this board only. Options holds the boards (new, rename, duplicate, delete) and the size of all the buttons.
+fs-gesture-board-none = No board
+fs-gesture-board-options = Options
+fs-gesture-board-new = New board…
+fs-gesture-board-new-name = New board
+fs-gesture-board-rename = Rename board…
+fs-gesture-board-duplicate = Duplicate board…
+fs-gesture-board-copy-of = { $name } (copy)
+fs-gesture-board-move-board-earlier = Move board left
+fs-gesture-board-move-board-later = Move board right
+fs-gesture-board-delete = Delete board…
+fs-gesture-board-delete-question = { $count ->
+    [one] Delete the board “{ $name }” and its { $count } button? The gesture or sound stays in your inventory.
+   *[other] Delete the board “{ $name }” and its { $count } buttons? The gestures and sounds stay in your inventory.
+    }
+fs-gesture-board-name-hint = Board name
+fs-gesture-board-add = Add gestures and sounds…
+fs-gesture-board-add-tip = Add gestures and sounds
+fs-gesture-board-add-count = { $count ->
+    [0] Add
+    [one] Add { $count }
+   *[other] Add { $count }
+    }
+fs-gesture-board-add-none = No gesture or sound of your inventory matches.
+fs-gesture-board-gestures = Gestures
+fs-gesture-board-filter = Filter by name
+fs-gesture-board-on-this-board = Already on this board
+fs-gesture-board-find = Find buttons…
+fs-gesture-board-search-tip = Find buttons (Ctrl+F)
+fs-gesture-board-search-hint = Find a button
+fs-gesture-board-search-current = This board only
+fs-gesture-board-search-current-help = Find buttons on the board shown only, instead of on all the boards.
+fs-gesture-board-search-empty = Type part of a button's label or of its item's name.
+fs-gesture-board-search-none = No button has this in its label or name.
+fs-gesture-board-found = { $count ->
+    [one] { $count } button
+   *[other] { $count } buttons
+    }
+fs-gesture-board-on-board = On the board “{ $name }” (right-click to show it there)
+fs-gesture-board-full-names = Show full names
+fs-gesture-board-full-names-help = A button is as wide as its whole name, never wider than the board. Off: every button has the same size and long names are cut short.
+fs-gesture-board-settings = Board settings…
+fs-gesture-board-size-all = Size of all the buttons
+fs-gesture-board-same-size = { $count ->
+    [0] Every button has the board's size
+    [one] Give { $count } button the board's size
+   *[other] Give { $count } buttons the board's size
+    }
+fs-gesture-board-per-page-auto = As many buttons per page as the window holds
+fs-gesture-board-per-page = Buttons per page
+fs-gesture-board-width = Width
+fs-gesture-board-height = Height
+fs-gesture-board-page = { $page } / { $count }
+fs-gesture-board-edit = Edit…
+fs-gesture-board-edit-title = Edit button
+fs-gesture-board-label = Label
+fs-gesture-board-label-reset = Use the item's name
+fs-gesture-board-theme-color = Theme
+fs-gesture-board-custom-color = Any colour
+fs-gesture-board-own-size = Its own size
+fs-gesture-board-move-earlier = Move earlier
+fs-gesture-board-move-later = Move later
+fs-gesture-board-show-inventory = Show in Inventory
+fs-gesture-board-remove = Remove from the board
+fs-gesture-board-empty-boards = No board yet. Click here, or choose Options › New board…, then drag gestures and sounds from the Inventory onto it.
+fs-gesture-board-empty-tiles = Drag gestures and sounds from the Inventory here, or click the plus.
+fs-gesture-board-unavailable = Unavailable
+fs-gesture-board-missing = Not in your inventory (deleted, or not loaded yet).
+fs-gesture-board-trash = In the Trash.
+fs-gesture-board-library = In the Library: copy it to your inventory first.
+fs-gesture-board-other = Neither a gesture nor a sound.
+fs-gesture-board-kind-gesture = Gesture
+fs-gesture-board-kind-sound = Sound: everyone nearby hears it.
+fs-gesture-board-blocked-rlva = Gestures are blocked by RLVa.
+fs-gesture-board-blocked-off = Gestures are turned off (Gestures window).
+fs-gesture-board-already = Already on this board.
+fs-gesture-board-drop-refused = Only gestures and sounds of your inventory can go on a board.
+fs-gesture-board-error-name = Give the board a name.
+fs-gesture-board-error-boards = At most { $count } boards.
+fs-gesture-board-error-tiles = At most { $count } buttons on a board.
+fs-gesture-board-error-missing = That board or button no longer exists.
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
 fs-chat-upload-choose-title = Choose an image to upload

@@ -64,6 +64,7 @@ mod describe;
 mod dev_toolbox;
 mod folders;
 mod folderstorm_viewport;
+mod folderstorm_gesture_boards; // Folderstorm: gesture boards (folderstorm/gesture_boards)
 mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
 mod hover_pick;
 mod texture_picker;
@@ -18133,6 +18134,7 @@ impl App {
                 );
                 ui::inventory::view::set_picker_sort(&ctx, self.settings.inventory.sort);
                 self.show_gestures(&ctx, &p);
+                self.folderstorm_gesture_boards(&ctx, &p); // Folderstorm: gesture boards
                 self.show_texture_library(&ctx, &p);
                 self.inventory_ui.preferences_dirty |= self.settings.inventory != inventory_preferences;
                 self.inventory_ui.preferences_dirty |= self.settings.imports != import_preferences;
