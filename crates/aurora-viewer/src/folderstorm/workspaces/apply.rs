@@ -1049,9 +1049,10 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     session(ctx, |slot| *slot = s);
     // the switcher draws a copy of the store, kept up while it is open
     switcher::publish(ctx, live.store, live.world, &capture::open(ctx));
-    // (with the session back in its place: an apply reads and writes it)
-    // (asked by the requests of this frame, or by Preferences in the last)
+    // a workspace's context, asked by the requests of this frame or by
+    // Preferences in the last
     outcome.context = session(ctx, |s| s.context.take());
+    // (with the session back in its place: an apply reads and writes it)
     if let Some(index) = apply_now
         && apply(ctx, live, index).is_ok()
     {
