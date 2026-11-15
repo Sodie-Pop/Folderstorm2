@@ -296,7 +296,7 @@ fn scan_file(path: &Path, folder: Vec<String>, rules: &Rules) -> Result<Scan, St
     let file = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_owned();
     let fail = |e: String| format!("{file}: {e}");
     let kind = kind_of(path).ok_or_else(|| unsupported(path))?;
-    let name = item_name(&path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_owned()).map_err(fail)?;
+    let name = item_name(path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()).map_err(fail)?;
     let data = read(path).map_err(fail)?;
     let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
     let (kind, source, size, seconds) = decode(kind, &extension, &data, rules).map_err(fail)?;

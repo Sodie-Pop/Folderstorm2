@@ -1076,6 +1076,11 @@ impl Uploads {
     /// The server's answer to a folder: the inventory learns it (as the
     /// uploader's `import_folder_result`); a refusal stops the run.
     pub fn folder_result(&mut self, request: Uuid, result: Result<Reply, String>, inventory: &mut Inventory) {
+        self.record_folder(request, result, inventory);
+        self.settle_stopped();
+    }
+
+    fn record_folder(&mut self, request: Uuid, result: Result<Reply, String>, inventory: &mut Inventory) {
         let Some(run) = &mut self.run else { return };
         let Some((_, asked, path)) = run.folder_pending.take_if(|(id, ..)| *id == request) else {
             return;
@@ -1108,6 +1113,24 @@ impl Uploads {
 
     /// The server's answer to an upload: the new item, for the inventory.
     pub fn uploaded(&mut self, request: Uuid, result: Result<upload::Receipt, upload::Error>) -> Option<InvItem> {
+        let item = self.record_upload(request, result);
+        self.settle_stopped();
+        item
+    }
+
+    /// A stopped run whose last send was answered ends now, even while
+    /// access is off (its tick then does not run).
+    fn settle_stopped(&mut self) {
+        if self
+            .run
+            .as_ref()
+            .is_some_and(|r| r.stop.is_some() && !r.states.iter().any(FileState::busy) && r.folder_pending.is_none())
+        {
+            self.finish();
+        }
+    }
+
+    fn record_upload(&mut self, request: Uuid, result: Result<upload::Receipt, upload::Error>) -> Option<InvItem> {
         let run = self.run.as_mut()?;
         let index = run.states.iter().position(|s| matches!(s, FileState::Sent(id) if *id == request))?;
         match result {
