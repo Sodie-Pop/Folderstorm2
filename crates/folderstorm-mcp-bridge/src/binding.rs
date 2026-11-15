@@ -71,6 +71,11 @@ pub const GESTURES: &str = "gestures";
 /// Folderstorm: own posing (mcp-gestures.md): the `pose_*` tools and the
 /// `pose` class.
 pub const POSING: &str = "posing";
+/// Folderstorm: the camera read (mcp-uploads.md): `camera_get`.
+pub const CAMERA_READ: &str = "camera_read";
+/// Folderstorm: file uploads (mcp-uploads.md): the `inventory_upload_*`
+/// tools, `inventory_snapshot_upload` and the `upload` class.
+pub const UPLOADS: &str = "uploads";
 
 /// What this build implements. Later groups add theirs.
 pub const CAPABILITIES: &[(&str, u32)] = &[
@@ -91,6 +96,8 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (BUILDING, 1),       // Folderstorm: building (mcp-building.md)
     (GESTURES, 1),       // Folderstorm: gestures (mcp-gestures.md)
     (POSING, 1),         // Folderstorm: own posing (mcp-gestures.md)
+    (CAMERA_READ, 1),    // Folderstorm: camera read (mcp-uploads.md)
+    (UPLOADS, 1),        // Folderstorm: file uploads (mcp-uploads.md)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -288,7 +295,9 @@ mod tests {
                 SCRIPT_TESTING,
                 BUILDING,
                 GESTURES,
-                POSING
+                POSING,
+                CAMERA_READ,
+                UPLOADS
             ]
         );
         // a newer viewer: a later version and a group this build lacks
