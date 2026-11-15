@@ -2041,10 +2041,11 @@ impl Default for Settings {
             dev_toolbox: None,
             build: Default::default(),
             camera: Default::default(),
-            folderstorm_viewport: Default::default(),       // Folderstorm: world viewport
-            folderstorm_chat_upload: Default::default(),    // Folderstorm: chat image upload
-            folderstorm_workspaces: Default::default(),     // Folderstorm: layouts
-            folderstorm_gesture_boards: Default::default(), // Folderstorm: gesture boards
+            folderstorm_viewport: Default::default(),    // Folderstorm: world viewport
+            folderstorm_chat_upload: Default::default(), // Folderstorm: chat image upload
+            folderstorm_workspaces: Default::default(),  // Folderstorm: layouts
+            // Folderstorm: gesture boards
+            folderstorm_gesture_boards: Default::default(),
             crosshair: Default::default(),
             joystick: Default::default(),
             gamepad: crate::joystick::Settings::gamepad_defaults(),
