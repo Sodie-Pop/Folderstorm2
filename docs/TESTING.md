@@ -361,12 +361,14 @@ opens its windows and closes the others; Conversations is left as it is.
 seconds later. `folders` opens windows on the first two folders of the demo's
 Inventory, saves them as the workspace "Folders" (*Remember Inventory
 folders*), closes them, then applies "Folders": they come back at their
-places. `context` (row 1.7) adds the demo's graphics profiles and a workspace
+places. `context` (row 1.7) adds the demo's graphics profiles, a workspace
 "Photos" with "My photo profile", the Front view and two objects of the demo's
-Inventory as HUDs, opens Preferences on the tab, applies "Photos" after three
-seconds (the line under the list says what was done) and goes back with
-*Previous arrangement* four seconds later (graphics and camera back, HUDs
-left on):
+Inventory as HUDs, and a workspace "Studio" with a third object as its HUD;
+opens Preferences on the tab, applies "Photos" after three seconds (the line
+under the list says what was done), "Studio" two seconds later (the HUDs
+"Photos" put on are taken off, "Studio"'s put on) and goes back with
+*Previous arrangement* two seconds after that (Photos' HUDs back on,
+Studio's off):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=1 cargo run -p aurora-viewer -- --title "Test workspaces"

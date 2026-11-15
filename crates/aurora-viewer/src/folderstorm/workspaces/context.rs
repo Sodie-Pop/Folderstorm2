@@ -1,17 +1,22 @@
 //! A workspace's context (FEATURES.md row 1.7; folderstorm/plans/
-//! workspaces.md, "1.7 in detail"): three optional parts beside its
-//! windows: a saved graphics profile by name, a camera view or preset by
-//! name, and HUDs to add, by the user's own Inventory item ids.
+//! workspaces.md, "1.7 in detail" and "HUDs taken off at a switch"): three
+//! optional parts beside its windows: a saved graphics profile by name, a
+//! camera view or preset by name, and HUDs to wear, by the user's own
+//! Inventory item ids.
 //!
 //! Folderstorm (C++) (`doc/plans/workspace-context-and-snapshot.md`): every
 //! group "Do not change" by default; HUDs are only added, never an
 //! unrelated attachment removed, and *Previous* does not detach them; a
-//! missing, locked or restricted part is skipped and said.
+//! missing, locked or restricted part is skipped and said. Here a switch
+//! to another workspace with HUDs also takes off the HUDs the workspaces
+//! put on ([`Ours`]) that it does not wear, and never another one;
+//! *Previous* undoes that.
 //!
 //! What is here is pure: the record's parts and their limits, what the app
-//! is asked to do ([`Ask`]) and what it says it did ([`Done`]), and which
-//! HUDs are worn or skipped ([`plan_huds`]). The app does each part with
-//! the viewer's own code (`app/folderstorm_workspaces/context.rs`).
+//! is asked to do ([`Ask`]) and what it says it did ([`Done`]), which HUDs
+//! are worn or skipped ([`plan_huds`]), and the HUDs the workspaces put on
+//! ([`Ours`]). The app does each part with the viewer's own code
+//! (`app/folderstorm_workspaces/context.rs`).
 
 use super::store::Store;
 use super::workspace::id_text;
@@ -23,6 +28,9 @@ use uuid::Uuid;
 
 /// At most this many HUDs in a workspace.
 pub const MAX_HUDS: usize = 16;
+/// Seconds a HUD asked to be worn has to arrive before it is no longer
+/// looked after as one the workspaces put on ([`Ours::observe`]).
+pub const ARRIVES_WITHIN: f64 = 120.0;
 /// The HUD attachment points (avatar_lad.xml: Center 2 to Bottom Right).
 pub const HUD_POINTS: std::ops::RangeInclusive<u8> = 31..=38;
 
@@ -96,11 +104,16 @@ pub struct Context {
     pub graphics: Option<String>,
     pub camera: Option<Camera>,
     pub huds: Option<Huds>,
+    /// The HUDs the workspaces put on that this one does not wear: taken
+    /// off with its own put on ([`Ours::take_off_for`]). Not a part of the
+    /// record: worked out when it is applied.
+    pub take_off: Option<Huds>,
 }
 
 impl Context {
     pub fn is_empty(&self) -> bool {
-        self.graphics.is_none() && self.camera.is_none() && self.huds.as_ref().is_none_or(|huds| huds.items.is_empty())
+        let none = |huds: &Option<Huds>| huds.as_ref().is_none_or(|huds| huds.items.is_empty());
+        self.graphics.is_none() && self.camera.is_none() && none(&self.huds) && none(&self.take_off)
     }
 }
 
@@ -142,17 +155,37 @@ impl CameraView {
     }
 }
 
+/// The HUDs an apply asked to wear and to take off, for one account.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudSwap {
+    pub account: Uuid,
+    /// Asked to be worn: none of them was worn before.
+    pub added: Vec<Hud>,
+    /// Asked to be taken off: HUDs the workspaces had put on, each with
+    /// the point it was on.
+    pub removed: Vec<Hud>,
+}
+
+impl HudSwap {
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.removed.is_empty()
+    }
+}
+
 /// What *Previous arrangement* puts back of a context: the parts the
-/// workspace changed. HUDs are never taken off.
+/// workspace changed.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Before {
     pub graphics: Option<GraphicsBefore>,
     pub camera: Option<CameraView>,
+    /// The HUDs the switch put on (taken off again, while the workspaces
+    /// still look after them) and took off (worn again).
+    pub huds: Option<HudSwap>,
 }
 
 impl Before {
     pub fn is_empty(&self) -> bool {
-        self.graphics.is_none() && self.camera.is_none()
+        self.graphics.is_none() && self.camera.is_none() && self.huds.as_ref().is_none_or(HudSwap::is_empty)
     }
 }
 
@@ -161,7 +194,8 @@ impl Before {
 pub enum Ask {
     /// A workspace's context.
     Apply(Context),
-    /// *Previous arrangement*: the graphics and the camera as they were.
+    /// *Previous arrangement*: the graphics, the camera and the HUDs as
+    /// they were.
     Restore(Before),
 }
 
@@ -193,9 +227,15 @@ pub struct HudCounts {
     pub not_wearable: usize,
     /// Refused by RLVa.
     pub blocked: usize,
+    /// HUDs the workspaces put on, asked to be taken off.
+    pub taken_off: usize,
+    /// HUDs the workspaces put on that RLVa keeps on (`@detach`,
+    /// `@remattach`, a locked point or folder): left on.
+    pub stuck: usize,
     /// Chosen by another account: all skipped.
     pub other_account: bool,
-    /// An outfit change was already under way: none was asked.
+    /// An outfit change was already under way: none was asked, none
+    /// taken off.
     pub busy: bool,
     /// The outfit change was refused as a whole: Aurora's message.
     pub refused: Option<String>,
@@ -217,6 +257,84 @@ pub struct Told {
 pub struct Done {
     pub told: Told,
     pub before: Before,
+    /// The HUDs it asked to wear and to take off: what the workspaces
+    /// look after from now on ([`Ours::changed`]).
+    pub huds: Option<HudSwap>,
+}
+
+/// A HUD the workspaces put on, looked after until it comes off.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OurHud {
+    pub hud: Hud,
+    /// Seen worn since it was asked.
+    pub arrived: bool,
+    /// When it was asked, in egui's seconds.
+    pub asked_at: f64,
+}
+
+/// The HUDs the workspaces put on for the account logged in: the ones a
+/// workspace asked to wear that were not worn then, and that arrived. Only
+/// these are ever taken off by a switch: a HUD worn before, or put on by
+/// hand, never. For the session and one login only (`apply`'s session,
+/// forgotten at a logout or with another account).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ours {
+    pub account: Uuid,
+    pub huds: Vec<OurHud>,
+}
+
+impl Ours {
+    pub fn holds(&self, item: Uuid) -> bool {
+        self.huds.iter().any(|our| our.hud.item == item)
+    }
+
+    /// What a switch to a workspace wearing `next` takes off: the HUDs put
+    /// on for the same account that `next` does not wear. None when there
+    /// is none, or `next` is another account's.
+    pub fn take_off_for(&self, next: &Huds) -> Option<Huds> {
+        let items: Vec<Hud> = self.huds.iter().map(|our| our.hud).filter(|hud| !next.holds(hud.item)).collect();
+        (next.account == self.account && !items.is_empty()).then_some(Huds {
+            account: self.account,
+            items,
+        })
+    }
+
+    /// The HUDs an apply asked to wear and to take off (`swap`), at `now`.
+    /// Another account's swap replaces what is looked after.
+    pub fn changed(ours: &mut Option<Ours>, swap: &HudSwap, now: f64) {
+        let mine = ours.take().filter(|ours| ours.account == swap.account);
+        let mut next = mine.unwrap_or(Ours {
+            account: swap.account,
+            huds: Vec::new(),
+        });
+        next.huds.retain(|our| !swap.removed.iter().any(|hud| hud.item == our.hud.item));
+        for hud in &swap.added {
+            next.huds.retain(|our| our.hud.item != hud.item);
+            next.huds.push(OurHud {
+                hud: *hud,
+                arrived: false,
+                asked_at: now,
+            });
+        }
+        *ours = Some(next).filter(|next| !next.huds.is_empty());
+    }
+
+    /// What the outfit has on now (`on`: the items worn or linked in the
+    /// Current Outfit), at `now`: a HUD seen there has arrived; one that
+    /// had arrived and is not there any more was taken off (by hand, by a
+    /// script or another outfit) and is forgotten; one that did not arrive
+    /// within [`ARRIVES_WITHIN`] is forgotten. False when nothing is left.
+    pub fn observe(&mut self, on: &BTreeSet<Uuid>, now: f64) -> bool {
+        self.huds.retain_mut(|our| {
+            if on.contains(&our.hud.item) {
+                our.arrived = true;
+                true
+            } else {
+                !our.arrived && now - our.asked_at <= ARRIVES_WITHIN
+            }
+        });
+        !self.huds.is_empty()
+    }
 }
 
 /// An item of a workspace's HUDs as the app finds it.
@@ -248,6 +366,41 @@ pub fn plan_huds(huds: &Huds, account: Option<Uuid>, item: impl Fn(&Hud) -> Item
         }
     }
     (wear, counts)
+}
+
+/// A HUD the workspaces put on, as the app finds it when it is to be
+/// taken off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OnNow {
+    /// Not on any more (or not an object of the Inventory): nothing to do.
+    Gone,
+    /// On, and RLVa keeps it on.
+    Stuck,
+    /// On, at this point: taken off.
+    At(u8),
+}
+
+/// Which of `take_off` are taken off, for the account logged in
+/// (`account`): none of another account's; each as `hud` finds it. Gives
+/// them with the point they are on, and how many RLVa keeps on.
+pub fn plan_take_off(take_off: Option<&Huds>, account: Uuid, hud: impl Fn(&Hud) -> OnNow) -> (Vec<Hud>, usize) {
+    let mut remove = Vec::new();
+    let mut stuck = 0;
+    for one in take_off
+        .filter(|take_off| take_off.account == account)
+        .iter()
+        .flat_map(|take_off| &take_off.items)
+    {
+        match hud(one) {
+            OnNow::Gone => {}
+            OnNow::Stuck => stuck += 1,
+            OnNow::At(point) => remove.push(Hud {
+                item: one.item,
+                point: Some(point).filter(|point| HUD_POINTS.contains(point)).unwrap_or(one.point),
+            }),
+        }
+    }
+    (remove, stuck)
 }
 
 /// What Preferences shows of HUDs: the account logged in, the HUDs worn
@@ -543,5 +696,95 @@ mod tests {
         assert_ne!(CameraView::of(&camera), view);
         view.put(&mut camera);
         assert_eq!(CameraView::of(&camera), view);
+    }
+
+    fn swap(added: &[Hud], removed: &[Hud]) -> HudSwap {
+        HudSwap {
+            account: ME,
+            added: added.to_vec(),
+            removed: removed.to_vec(),
+        }
+    }
+
+    fn items(ours: &Option<Ours>) -> Vec<Uuid> {
+        ours.iter().flat_map(|ours| &ours.huds).map(|our| our.hud.item).collect()
+    }
+
+    #[test]
+    fn the_huds_put_on_are_remembered_and_only_those_are_taken_off() {
+        let mut ours = None;
+        // the first workspace put on 1 and 2 (3 was worn before: not asked)
+        Ours::changed(&mut ours, &swap(&[hud(1, 31), hud(2, 32)], &[]), 10.0);
+        assert_eq!(items(&ours), [hud(1, 31).item, hud(2, 32).item]);
+        let held = ours.clone().expect("remembered");
+        // the next one wears 2 and 3: only 1 comes off (3 was never ours)
+        let next = huds(&[hud(2, 32), hud(3, 33)]);
+        assert_eq!(held.take_off_for(&next), Some(huds(&[hud(1, 31)])));
+        // one that wears both: nothing
+        assert_eq!(held.take_off_for(&huds(&[hud(1, 35), hud(2, 32)])), None);
+        // another account's list: nothing
+        let theirs = Huds {
+            account: Uuid::from_u128(8),
+            items: vec![hud(3, 33)],
+        };
+        assert_eq!(held.take_off_for(&theirs), None);
+        // the switch took 1 off and put 4 on; 2 stays ours
+        Ours::changed(&mut ours, &swap(&[hud(4, 34)], &[hud(1, 31)]), 20.0);
+        assert_eq!(items(&ours), [hud(2, 32).item, hud(4, 34).item]);
+        // another account's swap replaces them
+        let mut other = swap(&[hud(5, 35)], &[]);
+        other.account = Uuid::from_u128(8);
+        Ours::changed(&mut ours, &other, 30.0);
+        assert_eq!(items(&ours), [hud(5, 35).item]);
+        // all taken off: nothing left
+        Ours::changed(
+            &mut ours,
+            &HudSwap {
+                account: Uuid::from_u128(8),
+                added: vec![],
+                removed: vec![hud(5, 35)],
+            },
+            40.0,
+        );
+        assert_eq!(ours, None);
+    }
+
+    #[test]
+    fn a_hud_put_on_is_looked_after_until_it_comes_off() {
+        let mut ours = None;
+        Ours::changed(&mut ours, &swap(&[hud(1, 31), hud(2, 32)], &[]), 0.0);
+        let mut ours = ours.expect("remembered");
+        // 1 arrives; 2 not yet
+        assert!(ours.observe(&BTreeSet::from([hud(1, 31).item]), 1.0));
+        assert_eq!(ours.huds.iter().map(|our| our.arrived).collect::<Vec<_>>(), [true, false]);
+        // a teleport: still linked in the Current Outfit, so still on
+        assert!(ours.observe(&BTreeSet::from([hud(1, 31).item]), 2.0));
+        // 2 did not arrive in time: forgotten
+        assert!(ours.observe(&BTreeSet::from([hud(1, 31).item]), ARRIVES_WITHIN + 1.0));
+        assert!(!ours.holds(hud(2, 32).item));
+        // 1 taken off by hand: forgotten, never taken off by a switch
+        // even if it is worn again by hand
+        assert!(!ours.observe(&BTreeSet::new(), ARRIVES_WITHIN + 2.0));
+        assert!(ours.huds.is_empty());
+    }
+
+    #[test]
+    fn a_hud_rlva_keeps_on_is_counted_and_stays_ours() {
+        let take_off = huds(&[hud(1, 31), hud(2, 32), hud(3, 33)]);
+        let (remove, stuck) = plan_take_off(Some(&take_off), ME, |one| match one.item.as_u128() - 9000 {
+            1 => OnNow::At(36),
+            2 => OnNow::Stuck,
+            _ => OnNow::Gone,
+        });
+        assert_eq!(remove, [hud(1, 36)], "at the point it is on now");
+        assert_eq!(stuck, 1);
+        // another account's, or none: nothing
+        assert_eq!(plan_take_off(Some(&take_off), Uuid::from_u128(8), |_| OnNow::At(31)), (vec![], 0));
+        assert_eq!(plan_take_off(None, ME, |_| OnNow::At(31)), (vec![], 0));
+        // what was taken off leaves; the one RLVa kept stays ours
+        let mut ours = None;
+        Ours::changed(&mut ours, &swap(&[hud(1, 31), hud(2, 32)], &[]), 0.0);
+        Ours::changed(&mut ours, &swap(&[], &remove), 1.0);
+        assert_eq!(items(&ours), [hud(2, 32).item]);
     }
 }
