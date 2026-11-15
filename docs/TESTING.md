@@ -7007,8 +7007,9 @@ failure. Grid validation and any paid upload are performed by the human.
   root, the Trash or a Library folder. Dragging folders onto a custom tab's
   button adds them the same way (a red outline refuses). With
   `AURORA_DEMO_FOLDER_TABS=menu`, a second tab "Everyday", and the Inventory
-  tab with Clothing and Body selected and their right-click menu open (hover
-  "Add to" to see the tabs). Filters and search
+  tab with Clothing and Body selected and their right-click menu open at
+  about frame 650 (hover "Add to" to see the tabs; the menu closes in a
+  window without focus, as under xvfb). Filters and search
   apply inside the folders; moving a scoped folder elsewhere keeps it in the
   tab; moving it to the Trash takes it out (and the note appears).
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items

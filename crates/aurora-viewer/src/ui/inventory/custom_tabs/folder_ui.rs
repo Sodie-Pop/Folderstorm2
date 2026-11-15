@@ -538,7 +538,7 @@ pub fn demo(st: &mut InventoryUi, prefs: &mut InventoryPreferences, account: Uui
             Filters::default(),
             String::new(),
         );
-        st.custom_tabs.seen.demo_menu = Some(300);
+        st.custom_tabs.seen.demo_menu = Some(650);
         return;
     }
     select_custom(st, prefs, id);
