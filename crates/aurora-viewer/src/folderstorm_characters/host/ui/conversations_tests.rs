@@ -362,6 +362,87 @@ fn a_monitor_s_chat_has_new_im_and_shows_what_its_viewer_opened() {
     keep("contacts-monitor-friends-320", &drawn, (320, 400));
 }
 
+/// The link's question and both its buttons drawn inside a window of
+/// that size.
+fn question_inside(drawn: &Frame, (width, height): (u32, u32), name: &str) {
+    for text in ["Open this address in your browser?", "Open in browser", "Cancel"] {
+        let at = drawn.point_of(text, 1);
+        assert!(
+            at.x > 0.0 && at.x < width as f32 && at.y > 30.0 && at.y < height as f32 - 4.0,
+            "{name}: {text:?} at {at:?}"
+        );
+    }
+}
+
+#[test]
+fn a_link_s_question_in_a_monitor_s_chat_is_never_cut_off() {
+    let now = Instant::now();
+    let mut app = app_with_contacts();
+    let seat = Seat::Slot(1);
+    app.host.desk.open_monitor(1);
+    let view = app.look.view();
+    app.monitors.test_open(seat, view);
+    app.apply(vec![Act::Monitors(MonitorAct::Chat(seat, true))], now);
+    for number in 1..=8 {
+        heard(
+            &mut app.host,
+            1,
+            Conversation::Nearby,
+            number,
+            LineKind::Said,
+            "Jane Doe",
+            &format!("line {number}: see https://example.org/page{number}"),
+        );
+    }
+    let which = Which::Monitor(1);
+    // the human's window, the first size, and smaller ones
+    for size in [(480, 740), (320, 400), (260, 300), (220, 230)] {
+        let name = format!("monitor-link-{}x{}", size.0, size.1);
+        // (a new size: the lines settle at their bottom in a frame)
+        frame(&mut app, which, size, Vec::new());
+        let drawn = frame(&mut app, which, size, Vec::new());
+        let at = drawn.point_of("example.org/page8", 3);
+        let clicked = click(&mut app, which, size, at);
+        assert!(clicked.opened_urls.is_empty(), "{name}: asked first");
+        // (asked in that frame: drawn whole from the next one)
+        let drawn = frame(&mut app, which, size, Vec::new());
+        keep(&name, &drawn, size);
+        question_inside(&drawn, size, &name);
+        // its button opens the page, once, and the question goes
+        let at = drawn.point_of("Open in browser", 2);
+        let clicked = click(&mut app, which, size, at);
+        assert_eq!(clicked.opened_urls, ["https://example.org/page8"], "{name}");
+        let drawn = frame(&mut app, which, size, Vec::new());
+        assert!(!drawn.shows("Open this address in your browser?"), "{name}");
+    }
+}
+
+#[test]
+fn a_link_s_question_in_a_small_shared_chat_keeps_its_buttons() {
+    let mut app = app_with_contacts();
+    heard(
+        &mut app.host,
+        0,
+        Conversation::Nearby,
+        1,
+        LineKind::Said,
+        "Jane Doe",
+        "see https://example.org/page",
+    );
+    app.chat.show_sheet(0, None);
+    app.host.desk.set_panel_out(Panel::Chat, true);
+    app.panes[Panel::Chat.index()] = Some(app.look.view());
+    let which = Which::Pane(Panel::Chat);
+    let size = (420, 420);
+    let drawn = frame(&mut app, which, size, Vec::new());
+    let at = drawn.point_of("example.org", 2);
+    click(&mut app, which, size, at);
+    assert!(app.chat.test_link().is_some());
+    let drawn = frame(&mut app, which, size, Vec::new());
+    keep("chat-link-question-420", &drawn, size);
+    question_inside(&drawn, size, "shared chat");
+}
+
 #[test]
 fn a_web_link_opens_after_the_viewer_s_judge_and_a_grid_link_switches() {
     let mut app = app_with_contacts();
