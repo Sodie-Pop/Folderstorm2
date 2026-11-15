@@ -213,6 +213,30 @@ fn only_a_selection_of_live_folders_can_be_chosen() {
 }
 
 #[test]
+fn a_refused_selection_says_why() {
+    let inv = inventory();
+    assert_eq!(check(&inv, &[]), Err(Refusal::Empty));
+    assert_eq!(check(&inv, &[id(CLOTHING), id(SHIRT)]), Err(Refusal::Item));
+    for refused in [OLD, TRASH, LIBRARY_CLOTHES, 1, DELETED] {
+        assert_eq!(check(&inv, &[id(BODY), id(refused)]), Err(Refusal::NotAllowed), "{refused}");
+    }
+    let many: Vec<Uuid> = std::iter::repeat_n(id(CLOTHING), MAX_FOLDERS + 1).collect();
+    assert_eq!(check(&inv, &many), Err(Refusal::TooMany));
+    assert_eq!(check(&inv, &[id(BODY)]), Ok(vec![id(BODY)]));
+}
+
+#[test]
+fn adding_to_a_tab_skips_the_folders_it_has() {
+    let (a, b, c) = (id(CLOTHING), id(BODY), id(OTHER));
+    assert_eq!(add_to(&[a], &[b, c]), Ok((vec![a, b, c], Added { new: 2, already: 0 })));
+    assert_eq!(add_to(&[a, b], &[b, c]), Ok((vec![a, b, c], Added { new: 1, already: 1 })));
+    assert_eq!(add_to(&[a, b], &[a, b]), Ok((vec![a, b], Added { new: 0, already: 2 })));
+    let full: Vec<Uuid> = (0..MAX_FOLDERS as u128).map(|n| id(1000 + n)).collect();
+    assert_eq!(add_to(&full, &[a]), Err(TooMany));
+    assert_eq!(add_to(&full, &full[..2]).map(|(_, added)| added.already), Ok(2));
+}
+
+#[test]
 fn add_replace_and_clear_change_the_folders() {
     let (a, b, c) = (id(CLOTHING), id(BODY), id(OTHER));
     assert_eq!(change(&[a, b], &[b, c], Change::Add), Ok(vec![a, b, c]));

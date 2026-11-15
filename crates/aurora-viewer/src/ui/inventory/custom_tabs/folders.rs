@@ -53,16 +53,36 @@ pub fn status(inv: &Inventory, id: Uuid) -> Status {
     Status::Live
 }
 
+/// Why a selection cannot become a scope (the tooltip of a greyed entry).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    /// Nothing is selected.
+    Empty,
+    /// The selection holds an item: only folders make a scope.
+    Item,
+    /// The inventory's root, the Library, the Trash or a folder in it (or
+    /// one not in the inventory).
+    NotAllowed,
+    /// More than `MAX_FOLDERS` folders.
+    TooMany,
+}
+
 /// The folders of a selection that may become a scope, in the order of
-/// their paths; none unless every entry is a live folder (an item in the
+/// their paths; refused unless every entry is a live folder (an item in the
 /// selection, the Trash or the Library refuses it all, as
 /// `FSInventoryCustomTabs::selectedFolders` does), nor over `MAX_FOLDERS`.
-pub fn choosable(inv: &Inventory, selection: &[Uuid]) -> Vec<Uuid> {
-    if selection.is_empty() || selection.len() > MAX_FOLDERS {
-        return Vec::new();
+pub fn check(inv: &Inventory, selection: &[Uuid]) -> Result<Vec<Uuid>, Refusal> {
+    if selection.is_empty() {
+        return Err(Refusal::Empty);
+    }
+    if selection.iter().any(|id| inv.items.contains_key(id)) {
+        return Err(Refusal::Item);
     }
     if selection.iter().any(|id| status(inv, *id) != Status::Live) {
-        return Vec::new();
+        return Err(Refusal::NotAllowed);
+    }
+    if selection.len() > MAX_FOLDERS {
+        return Err(Refusal::TooMany);
     }
     let mut ids: Vec<(String, Uuid)> = selection
         .iter()
@@ -70,7 +90,30 @@ pub fn choosable(inv: &Inventory, selection: &[Uuid]) -> Vec<Uuid> {
         .collect();
     ids.sort();
     ids.dedup_by_key(|(_, id)| *id);
-    ids.into_iter().map(|(_, id)| id).collect()
+    Ok(ids.into_iter().map(|(_, id)| id).collect())
+}
+
+/// `check`, without the reason: none when refused.
+pub fn choosable(inv: &Inventory, selection: &[Uuid]) -> Vec<Uuid> {
+    check(inv, selection).unwrap_or_default()
+}
+
+/// What adding chosen folders to a tab did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Added {
+    /// Folders the tab did not have.
+    pub new: usize,
+    /// Folders it had already (not repeated).
+    pub already: usize,
+}
+
+/// The tab's folders once `chosen` join its `current` ones (the folders it
+/// has already are not repeated), and how many were new.
+pub fn add_to(current: &[Uuid], chosen: &[Uuid]) -> Result<(Vec<Uuid>, Added), TooMany> {
+    let already = chosen.iter().filter(|id| current.contains(id)).count();
+    let out = change(current, chosen, Change::Add)?;
+    let new = out.len() - current.len();
+    Ok((out, Added { new, already }))
 }
 
 /// How the tab's folders change (the three entries of Folderstorm's tab

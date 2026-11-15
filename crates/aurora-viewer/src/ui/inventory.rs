@@ -2096,7 +2096,7 @@ fn inventory_contents(
         }
     }
     // Folderstorm: the custom tabs follow the built-in ones (custom_tabs.rs)
-    custom_tabs::legacy_strip(ui, p, st, prefs, &tab_ids, &labels);
+    custom_tabs::legacy_strip(ui, p, inv, st, prefs, &tab_ids, &labels);
     let (root, filtered) = list_scope(inv, st, prefs, facts);
     ui.add_space(6.0);
     next_owner_control(ui, p, st);

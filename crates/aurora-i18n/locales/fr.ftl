@@ -1228,7 +1228,26 @@ inventory-custom-tab-delete-question = Supprimer l'onglet personnalisé « { $na
 inventory-custom-tab-clone-name = { $name } (copie)
 inventory-custom-tab-demo-media = Textures et sons
 inventory-custom-tab-demo-named = Objets de démo
-inventory-folder-tab-save = Enregistrer comme onglet d'inventaire…
+inventory-folder-tab-create = Créer un onglet
+inventory-folder-tab-add-to = Ajouter à
+inventory-folder-tab-new = Nouvel onglet…
+inventory-folder-tab-has-tip = Déjà dans cet onglet.
+inventory-folder-tab-why-empty = Sélectionnez d'abord des dossiers.
+inventory-folder-tab-why-item = Seuls des dossiers peuvent aller dans un onglet : la sélection contient un objet.
+inventory-folder-tab-why-refused = La racine de l'inventaire, la Bibliothèque, la Corbeille et ce qu'elle contient ne peuvent pas aller dans un onglet.
+inventory-folder-tab-why-loading = L'inventaire n'est pas encore chargé.
+inventory-folder-tab-why-window = Une fenêtre ouverte sur un seul dossier n'a pas d'onglets personnalisés.
+inventory-folder-tab-added-one = « { $folder } » ajouté à « { $tab } ».
+inventory-folder-tab-added-many = { $count ->
+    [one] { $count } dossier ajouté à « { $tab } ».
+   *[other] { $count } dossiers ajoutés à « { $tab } ».
+    }
+inventory-folder-tab-added-already = { $count ->
+    [one] { $count } y était déjà.
+   *[other] { $count } y étaient déjà.
+    }
+inventory-folder-tab-already-one = « { $folder } » est déjà dans « { $tab } ».
+inventory-folder-tab-already-many = Ces dossiers sont déjà dans « { $tab } ».
 inventory-folder-tab-add = Ajouter les dossiers sélectionnés
 inventory-folder-tab-replace = N'utiliser que les dossiers sélectionnés
 inventory-folder-tab-clear = Afficher tous les dossiers
@@ -1251,6 +1270,7 @@ inventory-folder-tab-note-gone = { $count ->
 inventory-folder-tab-note-remove = Retirer de l'onglet
 inventory-folder-tab-note-remove-tip = Oublier ces dossiers dans cet onglet. Un dossier restauré depuis la Corbeille n'y reviendrait pas.
 inventory-folder-tab-demo-name = Vêtements et corps
+inventory-folder-tab-demo-other = Au quotidien
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar

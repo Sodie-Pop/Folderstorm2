@@ -53,7 +53,10 @@ Behaviour (as in Folderstorm (C++) unless marked **differs**):
 
 | Point | Folderstorm2 |
 |---|---|
-| New tab from folders | Right click on folders › *Save as Inventory tab…* (**differs**: a context-menu entry, as the Legacy style has no gear menu), named after the first folder, Rename dialog opens |
+| New tab from folders | Right click on folders › *Create tab* (**differs**: a context-menu entry, as the Legacy style has no gear menu), named after the first folder, Rename dialog opens |
+| Add folders to a tab | Right click on folders › *Add to ›* (**adds**): every custom tab by name, then *New tab…*; picking one adds the folders (union, not repeated) and the status line says so; a check mark on a tab that has them all. Dragging folders onto a custom tab's button does the same (**adds**) |
+| Several folders | Ctrl+click and Shift+click select them (Aurora's own selection); the menu and the drag take the whole selection |
+| Greyed entries | Say why on hover (an item selected, the root, Trash or Library, 32 folders, 10 tabs) |
 | Change a tab's folders | Right click on a custom tab › *Add selected folders* / *Use only selected folders* / *Show all folders*; also in *Customize tab…* (**adds**: a *Folders* part listing each folder by path, with a remove button) |
 | What can be chosen | Folders only; not the root, the Trash or what it holds, the Library; up to 32 |
 | Sub-folders | Included, at any depth; the parents are shown as the path only |
@@ -70,8 +73,16 @@ Upstream hooks (each marked `// Folderstorm:`):
   `ViewCache::search` (narrow the scope, widen the outfit rule).
 - `inventory.rs`: in `list_scope`, one call that hands the tab's scope to
   the search; in `list`, one call that draws the note above the list.
-- `context_catalog.rs`: the *Save as Inventory tab…* entry (a `Command`
-  variant, one `c.add`, one dispatch line), next to *Review bulk changes*.
+- `context_catalog.rs`: `mod folder_tabs;` (the entries, in the new file
+  `context_catalog/folder_tabs.rs`, a child module so that it reaches the
+  menu builder), a `Command` variant, one call after *Review bulk changes*,
+  one dispatch line, and a `help` field on the catalog (why an entry is
+  greyed). *Add to ›* is a submenu: an existing menu group
+  (`Direction::Horizontal`), so the menu layouts and the editor handle it.
+- `context.rs`: one line hands the catalog's `help` to the menu, which
+  already shows `State::help` as an entry's tooltip.
+- `aurora/sidebar.rs`, `aurora/toolbar.rs`: one call each that makes a custom
+  tab's button take dropped folders (the Legacy strip is ours).
 - `controls.rs`: one call in the filter editor (the *Folders* part).
 - `app.rs`: the demo scenario's name and call.
 
@@ -80,7 +91,8 @@ to two demo folders plus one missing, its Customize dialog open.
 
 ## 3. Decisions to confirm
 
-1. Context-menu entry *Save as Inventory tab…* instead of a gear-menu entry.
+1. Context-menu entries *Create tab* and *Add to ›* instead of a gear-menu
+   entry; adding does not switch to the tab.
 2. Tabs shared by accounts, folders per account (Folderstorm (C++) keeps the
    whole tab list per account).
 3. Library folders cannot be chosen (as in Folderstorm (C++)).
