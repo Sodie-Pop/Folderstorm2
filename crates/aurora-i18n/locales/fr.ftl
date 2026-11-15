@@ -1921,6 +1921,92 @@ fs-background-layout-default = Fond par défaut
 fs-background-layout-own = Le sien
 fs-background-shows = Affiche
 
+# Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
+fs-gesture-board-title = Tableau de gestes
+fs-gesture-board-menu = Tableau de gestes…
+fs-gesture-board-command = Tableau de gestes
+fs-gesture-board-help = Cliquez sur un bouton pour jouer son geste ou son son. Le bouton d'un son porte un haut-parleur : tout le monde autour l'entend, comme un son joué depuis l'inventaire. Un geste inactif est activé quand il est joué ; un clic sur un geste en cours l'arrête. Glissez des gestes et des sons de l'inventaire sur le tableau, ou choisissez Ajouter. Clic droit sur un bouton pour le renommer, le colorer, le redimensionner, le déplacer ou le retirer (l'objet de l'inventaire reste tel quel). Glissez un bouton sur un autre pour le placer avant lui. Ctrl+F cherche des boutons sur tous les tableaux, ou sur ce tableau seulement. Options regroupe les tableaux (nouveau, renommer, dupliquer, supprimer) et la taille de tous les boutons.
+fs-gesture-board-none = Aucun tableau
+fs-gesture-board-options = Options
+fs-gesture-board-new = Nouveau tableau…
+fs-gesture-board-new-name = Nouveau tableau
+fs-gesture-board-rename = Renommer le tableau…
+fs-gesture-board-duplicate = Dupliquer le tableau…
+fs-gesture-board-copy-of = { $name } (copie)
+fs-gesture-board-move-board-earlier = Déplacer le tableau à gauche
+fs-gesture-board-move-board-later = Déplacer le tableau à droite
+fs-gesture-board-delete = Supprimer le tableau…
+fs-gesture-board-delete-question = { $count ->
+    [one] Supprimer le tableau « { $name } » et son bouton ? Le geste ou le son reste dans votre inventaire.
+   *[other] Supprimer le tableau « { $name } » et ses { $count } boutons ? Les gestes et les sons restent dans votre inventaire.
+    }
+fs-gesture-board-name-hint = Nom du tableau
+fs-gesture-board-add = Ajouter des gestes et des sons…
+fs-gesture-board-add-tip = Ajouter des gestes et des sons
+fs-gesture-board-add-count = { $count ->
+    [0] Ajouter
+    [one] Ajouter { $count }
+   *[other] Ajouter { $count }
+    }
+fs-gesture-board-add-none = Aucun geste ni son de votre inventaire ne correspond.
+fs-gesture-board-gestures = Gestes
+fs-gesture-board-filter = Filtrer par nom
+fs-gesture-board-on-this-board = Déjà sur ce tableau
+fs-gesture-board-find = Chercher des boutons…
+fs-gesture-board-search-tip = Chercher des boutons (Ctrl+F)
+fs-gesture-board-search-hint = Chercher un bouton
+fs-gesture-board-search-current = Ce tableau seulement
+fs-gesture-board-search-current-help = Chercher des boutons sur le tableau affiché seulement, au lieu de tous les tableaux.
+fs-gesture-board-search-empty = Tapez une partie de l'étiquette d'un bouton ou du nom de son objet.
+fs-gesture-board-search-none = Aucun bouton n'a ce texte dans son étiquette ou son nom.
+fs-gesture-board-found = { $count ->
+    [one] { $count } bouton
+   *[other] { $count } boutons
+    }
+fs-gesture-board-on-board = Sur le tableau « { $name } » (clic droit pour l'y afficher)
+fs-gesture-board-full-names = Afficher les noms complets
+fs-gesture-board-full-names-help = Un bouton est aussi large que son nom entier, jamais plus large que le tableau. Désactivé : tous les boutons ont la même taille et les noms longs sont raccourcis.
+fs-gesture-board-settings = Réglages du tableau…
+fs-gesture-board-size-all = Taille de tous les boutons
+fs-gesture-board-same-size = { $count ->
+    [0] Tous les boutons ont la taille du tableau
+    [one] Donner à { $count } bouton la taille du tableau
+   *[other] Donner à { $count } boutons la taille du tableau
+    }
+fs-gesture-board-per-page-auto = Autant de boutons par page que la fenêtre en contient
+fs-gesture-board-per-page = Boutons par page
+fs-gesture-board-width = Largeur
+fs-gesture-board-height = Hauteur
+fs-gesture-board-page = { $page } / { $count }
+fs-gesture-board-edit = Modifier…
+fs-gesture-board-edit-title = Modifier le bouton
+fs-gesture-board-label = Étiquette
+fs-gesture-board-label-reset = Utiliser le nom de l'objet
+fs-gesture-board-theme-color = Thème
+fs-gesture-board-custom-color = Toute couleur
+fs-gesture-board-own-size = Sa propre taille
+fs-gesture-board-move-earlier = Déplacer avant
+fs-gesture-board-move-later = Déplacer après
+fs-gesture-board-show-inventory = Afficher dans l'inventaire
+fs-gesture-board-remove = Retirer du tableau
+fs-gesture-board-empty-boards = Aucun tableau pour l'instant. Cliquez ici, ou choisissez Options › Nouveau tableau…, puis glissez-y des gestes et des sons de l'inventaire.
+fs-gesture-board-empty-tiles = Glissez ici des gestes et des sons de l'inventaire, ou cliquez sur le plus.
+fs-gesture-board-unavailable = Indisponible
+fs-gesture-board-missing = Absent de votre inventaire (supprimé, ou pas encore chargé).
+fs-gesture-board-trash = Dans la corbeille.
+fs-gesture-board-library = Dans la bibliothèque : copiez-le d'abord dans votre inventaire.
+fs-gesture-board-other = Ni un geste ni un son.
+fs-gesture-board-kind-gesture = Geste
+fs-gesture-board-kind-sound = Son : tout le monde autour l'entend.
+fs-gesture-board-blocked-rlva = Les gestes sont bloqués par RLVa.
+fs-gesture-board-blocked-off = Les gestes sont désactivés (fenêtre Gestes).
+fs-gesture-board-already = Déjà sur ce tableau.
+fs-gesture-board-drop-refused = Seuls les gestes et les sons de votre inventaire peuvent aller sur un tableau.
+fs-gesture-board-error-name = Donnez un nom au tableau.
+fs-gesture-board-error-boards = { $count } tableaux au plus.
+fs-gesture-board-error-tiles = { $count } boutons au plus sur un tableau.
+fs-gesture-board-error-missing = Ce tableau ou ce bouton n'existe plus.
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
 fs-chat-upload-choose-title = Choisir une image à envoyer

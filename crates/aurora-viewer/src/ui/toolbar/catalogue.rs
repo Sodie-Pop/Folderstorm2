@@ -115,6 +115,8 @@ pub const COMMANDS: &[Command] = commands![
     // Folderstorm: the layouts' switcher and the two-layout toggle (folderstorm/workspaces/toolbar.rs)
     "workspaces", "layout-dashboard-filled", "fs-switcher-command", true;
     "layout_toggle", "arrows-exchange", "fs-switcher-toggle-command", true;
+    // Folderstorm: gesture boards (folderstorm/gesture_boards)
+    "gesture_board", "layout-grid-filled", "fs-gesture-board-command", true;
 ];
 
 impl Command {

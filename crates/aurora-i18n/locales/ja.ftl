@@ -1789,6 +1789,84 @@ fs-background-layout-default = 既定を使用
 fs-background-layout-own = 独自
 fs-background-shows = 表示
 
+# Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
+fs-gesture-board-title = ジェスチャーボード
+fs-gesture-board-menu = ジェスチャーボード…
+fs-gesture-board-command = ジェスチャーボード
+fs-gesture-board-help = ボタンをクリックすると、そのジェスチャーまたはサウンドを再生します。サウンドのボタンにはスピーカーが付いています：インベントリからサウンドを再生したときと同じく、周りの全員に聞こえます。アクティブでないジェスチャーは再生時にアクティブになります。再生中のジェスチャーをクリックすると停止します。インベントリからジェスチャーやサウンドをボードにドラッグするか、「追加」を選びます。ボタンを右クリックすると、名前の変更、色、サイズ、移動、削除ができます（インベントリのアイテムはそのままです）。ボタンを別のボタンにドラッグすると、その前に移動します。Ctrl+F ですべてのボード、またはこのボードだけのボタンを検索します。「オプション」にはボードの管理（新規、名前の変更、複製、削除）とすべてのボタンのサイズがあります。
+fs-gesture-board-none = ボードなし
+fs-gesture-board-options = オプション
+fs-gesture-board-new = 新しいボード…
+fs-gesture-board-new-name = 新しいボード
+fs-gesture-board-rename = ボードの名前を変更…
+fs-gesture-board-duplicate = ボードを複製…
+fs-gesture-board-copy-of = { $name }（コピー）
+fs-gesture-board-move-board-earlier = ボードを左へ移動
+fs-gesture-board-move-board-later = ボードを右へ移動
+fs-gesture-board-delete = ボードを削除…
+fs-gesture-board-delete-question = ボード「{ $name }」とその { $count } 個のボタンを削除しますか？ジェスチャーとサウンドはインベントリに残ります。
+fs-gesture-board-name-hint = ボード名
+fs-gesture-board-add = ジェスチャーとサウンドを追加…
+fs-gesture-board-add-tip = ジェスチャーとサウンドを追加
+fs-gesture-board-add-count = { $count ->
+    [0] 追加
+   *[other] { $count } 個追加
+    }
+fs-gesture-board-add-none = 一致するジェスチャーやサウンドがインベントリにありません。
+fs-gesture-board-gestures = ジェスチャー
+fs-gesture-board-filter = 名前で絞り込む
+fs-gesture-board-on-this-board = すでにこのボードにあります
+fs-gesture-board-find = ボタンを検索…
+fs-gesture-board-search-tip = ボタンを検索 (Ctrl+F)
+fs-gesture-board-search-hint = ボタンを検索
+fs-gesture-board-search-current = このボードのみ
+fs-gesture-board-search-current-help = すべてのボードではなく、表示中のボードだけでボタンを検索します。
+fs-gesture-board-search-empty = ボタンのラベルまたはアイテム名の一部を入力してください。
+fs-gesture-board-search-none = ラベルや名前にこの文字を含むボタンはありません。
+fs-gesture-board-found = { $count } 個のボタン
+fs-gesture-board-on-board = ボード「{ $name }」にあります（右クリックでそこに表示）
+fs-gesture-board-full-names = 名前をすべて表示
+fs-gesture-board-full-names-help = ボタンは名前全体の幅になりますが、ボードより広くはなりません。オフ：すべてのボタンが同じサイズになり、長い名前は省略されます。
+fs-gesture-board-settings = ボードの設定…
+fs-gesture-board-size-all = すべてのボタンのサイズ
+fs-gesture-board-same-size = { $count ->
+    [0] すべてのボタンがボードのサイズです
+   *[other] { $count } 個のボタンをボードのサイズにする
+    }
+fs-gesture-board-per-page-auto = ウィンドウに収まるだけのボタンを 1 ページに表示
+fs-gesture-board-per-page = 1 ページのボタン数
+fs-gesture-board-width = 幅
+fs-gesture-board-height = 高さ
+fs-gesture-board-page = { $page } / { $count }
+fs-gesture-board-edit = 編集…
+fs-gesture-board-edit-title = ボタンを編集
+fs-gesture-board-label = ラベル
+fs-gesture-board-label-reset = アイテム名を使う
+fs-gesture-board-theme-color = テーマ
+fs-gesture-board-custom-color = 任意の色
+fs-gesture-board-own-size = 独自のサイズ
+fs-gesture-board-move-earlier = 前へ移動
+fs-gesture-board-move-later = 後ろへ移動
+fs-gesture-board-show-inventory = インベントリで表示
+fs-gesture-board-remove = ボードから削除
+fs-gesture-board-empty-boards = まだボードがありません。ここをクリックするか、「オプション › 新しいボード…」を選び、インベントリからジェスチャーやサウンドをドラッグしてください。
+fs-gesture-board-empty-tiles = インベントリからジェスチャーやサウンドをここへドラッグするか、プラスをクリックしてください。
+fs-gesture-board-unavailable = 利用不可
+fs-gesture-board-missing = インベントリにありません（削除されたか、まだ読み込まれていません）。
+fs-gesture-board-trash = ごみ箱にあります。
+fs-gesture-board-library = ライブラリにあります：先にインベントリへコピーしてください。
+fs-gesture-board-other = ジェスチャーでもサウンドでもありません。
+fs-gesture-board-kind-gesture = ジェスチャー
+fs-gesture-board-kind-sound = サウンド：周りの全員に聞こえます。
+fs-gesture-board-blocked-rlva = ジェスチャーは RLVa によりブロックされています。
+fs-gesture-board-blocked-off = ジェスチャーはオフです（ジェスチャーウィンドウ）。
+fs-gesture-board-already = すでにこのボードにあります。
+fs-gesture-board-drop-refused = ボードに置けるのは、インベントリのジェスチャーとサウンドだけです。
+fs-gesture-board-error-name = ボードに名前を付けてください。
+fs-gesture-board-error-boards = ボードは最大 { $count } 個です。
+fs-gesture-board-error-tiles = 1 つのボードのボタンは最大 { $count } 個です。
+fs-gesture-board-error-missing = そのボードまたはボタンはもう存在しません。
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります
 fs-chat-upload-choose-title = アップロードする画像を選択

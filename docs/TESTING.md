@@ -301,6 +301,28 @@ window or barely under it says why it cannot; that margins set too large with
 the sliders show a dashed outline and the note that the world fills the
 window; and that with `wayland` the window is drawn alone.
 
+**Gesture boards (Folderstorm2).** `AURORA_DEMO_GESTURE_BOARDS=1` adds a few
+gestures and sounds to the demo's inventory, seeds two boards in the demo's
+own settings ("Greetings": gestures and sounds, a label, colours, a tile of
+its own size and one whose item is gone; "Party") and opens World › Gesture
+board…. `full` turns *Show full names* on; `pages` makes the window small, so
+that the board has pages; `search` opens the search on all the boards with
+"wave" typed; `play` plays a gesture's tile and a sound's tile at frame 300
+(the log says "demo sound trigger"):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_GESTURE_BOARDS=1 cargo run -p aurora-viewer -- --title "Test gesture boards"
+AURORA_DEMO=1 AURORA_DEMO_GESTURE_BOARDS=pages cargo run -p aurora-viewer -- --title "Test gesture board pages"
+```
+
+Check that a click plays (a gesture says its line in the chat, a sound
+chimes), that sounds show a speaker, that the window and the buttons resize
+(Options › Board settings…, right-click › Edit…), that previous / next show
+only with more than one page, that Ctrl+F finds buttons on both boards and
+*This board only* keeps the board shown, that dragging a gesture or a sound
+from the Inventory adds it (once) and dragging a button onto another moves
+it, and that Options creates, renames, duplicates, moves and deletes boards.
+
 **Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
 demo's own settings, opens Inventory, the world map and People, and opens
 Preferences › Layout › Layouts. "Wide" has the world on the right half of the
