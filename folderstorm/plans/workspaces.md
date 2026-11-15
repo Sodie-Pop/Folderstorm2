@@ -2,7 +2,7 @@
 
 Plan for [FEATURES.md](../FEATURES.md) rows **1.2** (the rest: the
 interactive viewport diagram), **1.3** layout profiles, **1.4** workspaces and
-**1.5** the switcher, **1.6** the favorites strip, **1.7** workspace context, with an outline of 1.8–1.9. Planning only: nothing here
+**1.5** the switcher, **1.6** the favorites strip, **1.7** workspace context, **1.8** backgrounds, with an outline of 1.9. Planning only: nothing here
 is implemented, built or run yet. Written 2026-11-11 from Folderstorm2 `main`
 (`45bccb7`, custom world viewport merged) and Folderstorm (C++) `main`
 (`abbe3cb0ca`).
@@ -2216,6 +2216,139 @@ RLVa, the demo scenario.
   again under another name is "not found" until chosen again.
 - MCP tools (`workspace_list`, `workspace_apply`) belong with row 4.6.
 
+### 1.8 in detail: workspace backgrounds (2026-11-15)
+
+Written before the build, from `claude/workspaces-context` at `d531249`
+(PR #72, not merged: this row is stacked on it). "As built" follows.
+
+**What Folderstorm (C++) did** (`doc/testing/manual-workspace-backgrounds.md`,
+branch `feat/native-workspace-backgrounds`): Preferences › Move & View ›
+Backgrounds. A default background for the account and, per workspace,
+"Use default background" or its own. Sources: a solid colour, an Inventory
+texture or texture UUID, or an imported PNG / JPEG / BMP / TGA, **copied**
+into the account's data folder (`workspace_backgrounds`, never uploaded; the
+workspace holds a managed file name, never a path), at most 32 MiB,
+32 megapixels and 8192 pixels a side, the texture at most 4096 a side.
+Fill (crop), Fit (letterbox), Stretch, Center and Tile (in the picture's own
+pixels), per display, and Span over the whole window. Brightness dims the
+picture, not its backing colour. Drawn after the world and before the HUDs
+and the interface, only outside the viewport, never in snapshots; no work
+when there is no margin. A missing picture or texture shows the backing
+colour and says so in Preferences. Display overrides per monitor (up to
+16 slots) and "Locate replacement" also existed.
+
+**1. The record.** One type, `Background`, in
+`folderstorm/backgrounds/record.rs`:
+
+```json
+"background": { "kind": "picture",          // "none" (default), "colour", "picture"
+                "colour": [16, 20, 32, 255], // backing colour, and the solid colour
+                "picture": { "file": "0123456789abcdef.jpg", "name": "beach.jpg" },
+                "fit": "fill",               // fill, fit, stretch, centre, tile
+                "span": false,               // one picture over the whole window
+                "brightness": 100 }          // 10 to 100 %
+```
+
+- **The default** is `folderstorm_workspaces.background` (the layouts'
+  store, our struct: no new field in `Settings`), left out of the file
+  while it is the default ("none"). "Reset everything" keeps it with the
+  layouts (they are user content), as it keeps the store.
+- **Per layout**: `layout.background`, absent = "Use the default". The
+  plan put it on layouts (a layout says where things go, and the margins
+  are a layout's), not on workspaces as Folderstorm (C++) did. The
+  background **in effect** is the active layout's own, else the default:
+  nothing is applied or restored, so *Previous arrangement* and a switch
+  bring it with the layout. *Save new* takes none (the default);
+  *Update* keeps it.
+- `picture.file` must be a managed name (16 hex digits and one of the
+  known extensions); anything else (a path, `..`) is dropped when read.
+  `name` is the original file's name, shown in Preferences only, never a
+  folder. An invalid entry reads as the default; a layout with an invalid
+  background keeps the layout and drops the background.
+
+**2. Choosing a picture.** *Choose a picture…* opens the system's file
+dialog on its own thread (as the crosshair picture does). On that thread
+the file is checked (32 MiB, 8192 a side, 32 megapixels, a format the
+viewer decodes: PNG, JPEG, BMP, TGA, GIF, WebP), decoded once to be sure it
+is readable, and **copied** into `<settings folder>/folderstorm_backgrounds/`
+under the hash of its content (the same picture twice is one file). The
+original may then move or go. A result that arrives after Preferences was
+closed or left is dropped (C++: no late result replaces the choice). Files
+no background refers to any more are deleted from that folder (only names
+of our own form). Never a path in the logs; no network.
+
+**3. Painting.** In the margins only: the window minus the world viewport
+(up to four rectangles, the world never covered). Shapes in egui points,
+**put first in the frame's shape list** after the pass (one hook line in
+`app.rs`, beside `studio_fade`), so that everything egui draws, from the
+chat lines and HUD labels of the background order to the windows, is on
+top. (A layer of egui's background order would be drawn among the others
+in an order egui does not promise.) For each margin: the colour, then the
+picture, clipped to the margin:
+
+- per monitor: each monitor's part of the window (the monitors the
+  viewport already publishes once a second); one area, the window, when
+  *Across all monitors* is on or the system gives no position (Wayland);
+- Fill covers the area and crops, Fit shows it all (the colour around),
+  Stretch fills it, Centre and Tile use the picture's own pixels (its size
+  before any reduction), Tile from the area's top-left corner, at most
+  4096 tiles (a smaller picture is then drawn larger);
+- brightness is the picture's tint (a grey), the colour is not dimmed.
+
+Nothing is drawn while the world fills the window (viewport off, the
+quarter-of-the-window fallback, mouselook without the viewport, photo mode
+with the whole window, the login). Not in photos: they are taken from the
+world, not the interface.
+
+**4. Performance.** The picture is decoded on a thread when it changes
+(never per frame), reduced to at most 4096 pixels a side (and the GPU's
+limit), and uploaded once as one texture (linear filtering); the decoded
+pixels are not kept. Per frame: at most 4 margins × the monitors, a few
+quads.
+
+**5. Missing picture.** A file that is gone or cannot be decoded: the
+colour is shown (black by default, as before), and Preferences says
+"The picture cannot be found: its colour is shown. Choose it again."
+
+**6. Preferences.** Layout › Bars and windows, after *World viewport*, a
+group *Background around the world*: *Background* (Nothing, A colour, A
+picture), *Picture* (*Choose a picture…*, its name or what is wrong),
+*Fit* (Fill, Fit, Stretch, Centre, Tile), *Across all monitors*,
+*Colour*, *Brightness*; a note while the viewport is off. Layout ›
+Layouts & workspaces, for the selected layout: *Background* (Use the
+default, Its own) and, when its own, the same choices.
+
+**7. Demo.** `AURORA_DEMO_BACKGROUND=1|fit|stretch|centre|tile|span|colour|dim|missing|layout`:
+a picture made in code (no binary in the repository), copied the same way,
+as the default background with that fit; the viewport turned on (world in
+the middle third) unless `AURORA_DEMO_VIEWPORT` says otherwise; `layout`
+seeds a layout "Wall" with its own tiled background and makes it active.
+
+**8. Upstream hooks.** One line in `app.rs` (the shapes put first). The
+rest is ours: `folderstorm/backgrounds/`, our Preferences files, our app
+module, the store.
+
+**9. Tests.** Pure: the record (round trip, default left out, a path
+refused, brightness kept in range, a bad layout background dropped),
+margins for several viewports, monitor areas, each fit, tiles and their
+cap, the import (limits, an unreadable file, the same picture twice,
+pruning). Frame tests: shapes only in the margins, none without margins,
+the picture loaded and drawn (software painter: world pixels untouched),
+a missing picture gives the colour, a layout's own background in effect.
+Preferences: the group, the layout's choice, a picture.
+
+**Decisions to confirm (the human).**
+
+1. Per layout (with a default), not per workspace.
+2. A local picture copied into the profile's settings folder; no
+   Inventory texture or UUID (asset ids and creators' rights: not
+   ported).
+3. Fit modes per monitor, plus *Across all monitors*; no per-monitor
+   override.
+4. "Reset everything" keeps the default background (it lives with the
+   layouts).
+5. Brightness 10–100 %, the colour not dimmed.
+
 ## 14. Later (outline only)
 
 - **1.6 Favorites strip.** Built: "1.6 in detail" and "1.6 as built"
@@ -2226,9 +2359,9 @@ RLVa, the demo scenario.
   through the normal outfit paths (outfit safety, RLVa), never detaching
   anything else. Missing-monitor recovery is already section 8.5. MCP tools
   `workspace_list` / `workspace_apply` belong with row 4.6.
-- **1.8 Backgrounds.** An image painted in the margins outside the world, on
-  egui's background layer, before the windows; no renderer change. Optional
-  per layout.
+- **1.8 Backgrounds.** "1.8 in detail" above. Outline: an image painted in
+  the margins outside the world, before the windows; no renderer change.
+  Optional per layout.
 - **1.9 Search keywords.** Help texts (section 9.2).
 - Startup restore of a workspace (opt-in), export / import, toolbar button
   sets per workspace: only if the human asks.
