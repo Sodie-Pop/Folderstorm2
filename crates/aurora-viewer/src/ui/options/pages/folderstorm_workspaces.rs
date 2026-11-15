@@ -612,6 +612,10 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             Err(error) => tab.refused = Some(Refused::Selected(error)),
         }
     }
+    // its own background, or the default (row 1.8)
+    if tab.rename.is_none() && tab.ask.is_none() && usable {
+        changed |= super::folderstorm_viewport::background::layout_part(ui, p, s, index);
+    }
     changed
 }
 
@@ -857,6 +861,7 @@ mod tests {
     use crate::ui::widgets::elide_tests::{Frames, Text};
     use egui::Rect;
 
+    mod background;
     mod workspaces;
 
     /// Preferences on the Layouts tab, over a viewer with two windows open.

@@ -1787,6 +1787,45 @@ fs-context-huds-busy = An outfit change was under way: its HUDs were not worn. A
 fs-context-huds-refused = Its HUDs were not worn: { $why }
 fs-context-huds-refused-plain = the outfit change was refused.
 
+# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
+fs-background-group = Background around the world
+fs-background-intro = Shown in the margins the world viewport leaves, as when the window is stretched over several monitors. Turn the world viewport on above to see it.
+fs-background-kind = Background
+fs-background-kind-help = What the margins around the world show instead of black. Windows, bars and HUDs stay on top of it, and the world is never covered.
+fs-background-kind-none = Nothing
+fs-background-kind-colour = A colour
+fs-background-kind-picture = A picture
+fs-background-picture = Picture
+fs-background-picture-help = A PNG, JPEG, BMP, TGA, GIF or WebP file of at most 32 MB and 8192 pixels a side. It is copied into the viewer's settings folder, so the original may move or be deleted. It is never uploaded.
+fs-background-choose = Choose a picture…
+fs-background-choose-title = Choose a background picture
+fs-background-file-type = Pictures
+fs-background-none-chosen = No picture chosen
+fs-background-loading = loading…
+fs-background-missing = The picture cannot be found: its colour is shown instead. Choose it again.
+fs-background-unreadable = The picture cannot be read: its colour is shown instead. Choose another one.
+fs-background-error-too-large = That picture is too large: at most 32 MB and 8192 pixels a side.
+fs-background-error-unreadable = That file is not a picture the viewer can read.
+fs-background-error-disk = That file could not be read, or its copy could not be written.
+fs-background-fit = Fit
+fs-background-fit-help = Fill covers each monitor and cuts what overflows. Fit shows the whole picture with the colour around it. Stretch fills the monitor exactly. Centre and Tile use the picture's own pixels.
+fs-background-fit-fill = Fill
+fs-background-fit-fit = Fit
+fs-background-fit-stretch = Stretch
+fs-background-fit-centre = Centre
+fs-background-fit-tile = Tile
+fs-background-span = Across all monitors
+fs-background-span-help = One picture over the whole window instead of one on each monitor.
+fs-background-colour = Colour
+fs-background-colour-help = Shown alone, or behind and around the picture: with Fit and Centre, while it loads, or when it cannot be found.
+fs-background-brightness = Brightness
+fs-background-brightness-help = Dims the picture. The colour stays as chosen.
+fs-background-layout = Background
+fs-background-layout-help = What the margins show while this layout is in use. The default is chosen in Layout › Bars and windows.
+fs-background-layout-default = Use the default
+fs-background-layout-own = Its own
+fs-background-shows = Shows
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
 fs-chat-upload-choose-title = Choose an image to upload

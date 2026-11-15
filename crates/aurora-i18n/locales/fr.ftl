@@ -1790,6 +1790,45 @@ fs-context-huds-busy = Un changement de tenue était en cours : ses HUD n'ont pa
 fs-context-huds-refused = Ses HUD n'ont pas été portés : { $why }
 fs-context-huds-refused-plain = le changement de tenue a été refusé.
 
+# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
+fs-background-group = Fond autour du monde
+fs-background-intro = Affiché dans les marges que laisse la zone du monde, par exemple quand la fenêtre s'étend sur plusieurs écrans. Activez une zone du monde personnalisée ci-dessus pour le voir.
+fs-background-kind = Fond
+fs-background-kind-help = Ce que montrent les marges autour du monde au lieu du noir. Les fenêtres, les barres et les HUD restent par-dessus, et le monde n'est jamais recouvert.
+fs-background-kind-none = Rien
+fs-background-kind-colour = Une couleur
+fs-background-kind-picture = Une image
+fs-background-picture = Image
+fs-background-picture-help = Un fichier PNG, JPEG, BMP, TGA, GIF ou WebP de 32 Mo et 8192 pixels de côté au plus. Il est copié dans le dossier des réglages du viewer : l'original peut être déplacé ou supprimé. Il n'est jamais envoyé en ligne.
+fs-background-choose = Choisir une image…
+fs-background-choose-title = Choisir une image de fond
+fs-background-file-type = Images
+fs-background-none-chosen = Aucune image choisie
+fs-background-loading = chargement…
+fs-background-missing = L'image est introuvable : sa couleur est affichée à la place. Choisissez-la de nouveau.
+fs-background-unreadable = L'image ne peut pas être lue : sa couleur est affichée à la place. Choisissez-en une autre.
+fs-background-error-too-large = Cette image est trop grande : 32 Mo et 8192 pixels de côté au plus.
+fs-background-error-unreadable = Ce fichier n'est pas une image que le viewer sait lire.
+fs-background-error-disk = Ce fichier n'a pas pu être lu, ou sa copie n'a pas pu être écrite.
+fs-background-fit = Ajustement
+fs-background-fit-help = Remplir couvre chaque écran et coupe ce qui dépasse. Ajuster montre l'image entière avec la couleur autour. Étirer remplit l'écran exactement. Centrer et Mosaïque utilisent les pixels de l'image.
+fs-background-fit-fill = Remplir
+fs-background-fit-fit = Ajuster
+fs-background-fit-stretch = Étirer
+fs-background-fit-centre = Centrer
+fs-background-fit-tile = Mosaïque
+fs-background-span = Sur tous les écrans
+fs-background-span-help = Une seule image sur toute la fenêtre au lieu d'une par écran.
+fs-background-colour = Couleur
+fs-background-colour-help = Affichée seule, ou derrière et autour de l'image : avec Ajuster et Centrer, pendant son chargement, ou quand elle est introuvable.
+fs-background-brightness = Luminosité
+fs-background-brightness-help = Assombrit l'image. La couleur reste telle que choisie.
+fs-background-layout = Fond
+fs-background-layout-help = Ce que montrent les marges tant que cette disposition est utilisée. Le fond par défaut se choisit dans Disposition › Barres et fenêtres.
+fs-background-layout-default = Fond par défaut
+fs-background-layout-own = Le sien
+fs-background-shows = Affiche
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
 fs-chat-upload-choose-title = Choisir une image à envoyer
