@@ -63,6 +63,7 @@ mod derender;
 mod describe;
 mod dev_toolbox;
 mod folders;
+mod folderstorm_folder_upload; // Folderstorm: folder upload (folderstorm/folder_upload)
 mod folderstorm_viewport;
 mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
 mod hover_pick;
@@ -959,6 +960,8 @@ pub struct App {
     instances: crate::instances::Instances,
     // Folderstorm: 3D behind another Folderstorm2 window, GPU trouble behind
     folderstorm_characters: crate::folderstorm_characters::State,
+    // Folderstorm: Upload a folder here… (folderstorm/folder_upload)
+    folderstorm_folder_upload: crate::folderstorm::folder_upload::State,
     /// The Down key's latch (FSCrouchToggle).
     crouch_toggle: crate::movement::crouch_toggle::CrouchToggle,
     /// `key2name` chat commands waiting for a name.
@@ -1922,7 +1925,8 @@ impl App {
             gpu_stall: Default::default(),
             busy_pause: Default::default(),
             instances: crate::instances::Instances::new(),
-            folderstorm_characters: Default::default(), // Folderstorm
+            folderstorm_characters: Default::default(),    // Folderstorm
+            folderstorm_folder_upload: Default::default(), // Folderstorm
             crouch_toggle: Default::default(),
             key_to_name: Vec::new(),
             media,

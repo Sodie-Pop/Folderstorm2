@@ -144,6 +144,8 @@ pub fn show_document(
 
 pub enum InvAction {
     DefaultPermissions,
+    /// Folderstorm: upload a disk folder into this one (folderstorm/folder_upload)
+    FolderstormUploadFolder(Uuid),
     ExportMenuNotecard {
         name: String,
         text: String,

@@ -377,6 +377,7 @@ pub fn show(
                 if imports.folders.active() && !imports.folder_plan_ready(world) {
                     ui.label(aurora_i18n::tr!("import-folders-auto-create"));
                 }
+                crate::folderstorm::folder_upload::ui::confirm_details(ui, p, imports, world, &prices); // Folderstorm
                 ui.horizontal(|ui| {
                     let size = Vec2::new(0.0, 26.0);
                     let upload = aurora_i18n::tr!("import-upload");

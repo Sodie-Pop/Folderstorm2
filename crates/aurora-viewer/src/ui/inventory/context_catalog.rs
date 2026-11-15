@@ -365,6 +365,16 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
     );
     c.slot("new", 0);
     creation(&mut c, &new, to.unwrap_or_default(), can_create);
+    // Folderstorm: Upload a folder here… (folderstorm/folder_upload)
+    let upload = InvAction::FolderstormUploadFolder(to.unwrap_or_default());
+    c.invoke(
+        "folderstorm-upload-folder",
+        &new,
+        "file-upload-filled",
+        aurora_i18n::tr!("fs-folder-upload-menu"),
+        can_create,
+        upload,
+    );
     if trash_root && !all {
         c.add(
             "empty-trash",
