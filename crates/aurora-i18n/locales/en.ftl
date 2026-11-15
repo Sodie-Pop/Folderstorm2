@@ -1133,7 +1133,26 @@ inventory-custom-tab-delete-question = Delete the custom tab “{ $name }”? It
 inventory-custom-tab-clone-name = { $name } copy
 inventory-custom-tab-demo-media = Textures and sounds
 inventory-custom-tab-demo-named = Demo items
-inventory-folder-tab-save = Save as Inventory tab…
+inventory-folder-tab-create = Create tab
+inventory-folder-tab-add-to = Add to
+inventory-folder-tab-new = New tab…
+inventory-folder-tab-has-tip = Already in this tab.
+inventory-folder-tab-why-empty = Select folders first.
+inventory-folder-tab-why-item = Only folders can go into a tab: the selection holds an item.
+inventory-folder-tab-why-refused = The inventory's root, the Library, the Trash and what it holds cannot go into a tab.
+inventory-folder-tab-why-loading = The inventory is not loaded yet.
+inventory-folder-tab-why-window = A window opened on one folder has no custom tabs.
+inventory-folder-tab-added-one = Added “{ $folder }” to “{ $tab }”.
+inventory-folder-tab-added-many = { $count ->
+    [one] Added { $count } folder to “{ $tab }”.
+   *[other] Added { $count } folders to “{ $tab }”.
+    }
+inventory-folder-tab-added-already = { $count ->
+    [one] { $count } was already there.
+   *[other] { $count } were already there.
+    }
+inventory-folder-tab-already-one = “{ $folder }” is already in “{ $tab }”.
+inventory-folder-tab-already-many = These folders are already in “{ $tab }”.
 inventory-folder-tab-add = Add selected folders
 inventory-folder-tab-replace = Use only selected folders
 inventory-folder-tab-clear = Show all folders
@@ -1156,6 +1175,7 @@ inventory-folder-tab-note-gone = { $count ->
 inventory-folder-tab-note-remove = Remove from tab
 inventory-folder-tab-note-remove-tip = Forget these folders in this tab. A folder restored from the Trash would not come back in it.
 inventory-folder-tab-demo-name = Clothing and body
+inventory-folder-tab-demo-other = Everyday
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations

@@ -477,10 +477,12 @@ pub(super) fn tab_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, pre
 // ---- The Legacy window ----
 
 /// The Legacy window's tab strip: the built-in `tab_ids` (labelled by
-/// `labels`) and then the custom tabs, each with its right-click menu.
+/// `labels`) and then the custom tabs, each with its right-click menu and
+/// taking folders dragged onto it.
 pub(super) fn legacy_strip(
     ui: &mut egui::Ui,
     p: &Palette,
+    inv: &Inventory,
     st: &mut InventoryUi,
     prefs: &mut InventoryPreferences,
     tab_ids: &[usize],
@@ -501,6 +503,7 @@ pub(super) fn legacy_strip(
         if has_menu(*slot) {
             menu::context_menu(response, p, |ui| tab_menu(ui, p, st, prefs, *slot));
         }
+        folder_ui::drop_on_tab(ui, p, inv, st, prefs, *slot, response);
     }
 }
 
