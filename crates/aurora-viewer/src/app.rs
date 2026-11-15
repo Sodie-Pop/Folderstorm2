@@ -10647,6 +10647,7 @@ impl App {
                 h as f32,
                 self.egui_ctx.pixels_per_point(),
             );
+            self.world_build_cam(&gfx.renderer); // Folderstorm: world viewport
             if self.build.tool == crate::build::Tool::Edit
                 && self.build.hud_selected(&self.world)
                 && let Some(view) = drag_view
@@ -10672,6 +10673,7 @@ impl App {
                     h as f32,
                     self.egui_ctx.pixels_per_point(),
                 );
+                self.world_build_cam(&gfx.renderer); // Folderstorm: world viewport
             }
             let over_ui = self.ui_takes_pointer();
             let mods = crate::build::Mods {
@@ -10794,6 +10796,7 @@ impl App {
                     h as f32,
                     self.egui_ctx.pixels_per_point(),
                 );
+                self.world_build_cam(&gfx.renderer); // Folderstorm: world viewport
             }
             self.scene.update_beacons(&mut self.world, &self.settings.beacons, &cull);
             self.scene.held_at = hold.map(|h| h.at);
