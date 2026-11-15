@@ -109,6 +109,10 @@ impl App {
                 });
             }
         }
+        // Folderstorm: the upload demo pays from a demo balance (mcp-uploads.md)
+        if self.demo && mcp_bridge::uploads::demo::wanted() && self.world.balance.is_none() {
+            self.world.balance = Some(500);
+        }
         let runs = mcp_bridge::frame(&self.settings.local_assistant, &self.local_assistant_view());
         for call in runs {
             self.local_assistant_run(call);
