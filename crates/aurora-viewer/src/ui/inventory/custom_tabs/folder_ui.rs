@@ -226,7 +226,7 @@ pub(in crate::ui::inventory) fn editor(ui: &mut egui::Ui, p: &Palette, st: &mut 
             .size(12.0)
             .color(p.muted),
     );
-    ui.separator();
+    widgets::divider(ui, p);
 }
 
 /// Above the list of a scoped tab: how many of its folders are gone, with
