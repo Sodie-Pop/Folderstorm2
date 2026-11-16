@@ -7,6 +7,7 @@ pub mod bulk_plan;
 pub mod chat_upload;
 pub mod diagram;
 pub mod folder_upload;
+pub mod gesture_boards;
 pub mod keys;
 pub mod photo_viewport;
 pub mod rez_overrides;
