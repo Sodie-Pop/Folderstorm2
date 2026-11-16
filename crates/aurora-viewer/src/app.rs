@@ -65,6 +65,7 @@ mod dev_toolbox;
 mod folders;
 mod folderstorm_folder_upload; // Folderstorm: folder upload (folderstorm/folder_upload)
 mod folderstorm_gesture_boards; // Folderstorm: gesture boards (folderstorm/gesture_boards)
+mod folderstorm_nearby_media; // Folderstorm: the media button and Nearby media (folderstorm/nearby_media)
 mod folderstorm_viewport;
 mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
 mod hover_pick;
@@ -14764,13 +14765,8 @@ impl App {
                 self.parcel_music.toggle();
                 self.remember_music_choice();
             }
-            ui::audio::AudioAction::ToggleMedia => {
-                if self.media.parcel_playing() {
-                    self.media.stop_parcel();
-                } else {
-                    self.media.play_parcel(&self.world, &self.settings.media);
-                }
-            }
+            // Folderstorm: all media, as the Legacy Viewer's media toggle (folderstorm/nearby_media)
+            ui::audio::AudioAction::ToggleMedia => self.folderstorm_media_action(crate::folderstorm::nearby_media::Action::ToggleAll),
             // applied to the audio engine each frame; saved with the settings on exit
             ui::audio::AudioAction::Changed => {}
             ui::audio::AudioAction::OpenPreferences => {
@@ -14778,6 +14774,7 @@ impl App {
                 self.options_ui.open(ui::options::Page::Sound, 0);
             }
         }
+        self.folderstorm_nearby_media_actions(); // Folderstorm: Nearby media panel
         self.poll_stream_list();
         for command in self.appearance_ui.json.poll(&self.egui_ctx, &mut self.world) {
             self.send(command);
@@ -16932,10 +16929,15 @@ impl App {
                     music_available: !self.parcel_music.station().is_empty() || self.parcel_music.requested(),
                     music_playing: self.parcel_music.requested(),
                     music_status: self.music_status,
-                    media_available: self.settings.media.enabled
-                        && self.world.parcel.as_ref().is_some_and(|pc| !pc.media_url.trim().is_empty()),
-                    media_playing: self.media.parcel_playing(),
+                    // Folderstorm: parcel media and media on objects, as the Legacy Viewer's media toggle
+                    media_available: crate::folderstorm::nearby_media::available(
+                        &self.media,
+                        self.world.parcel.as_deref().map(|pc| pc.media_url.as_str()),
+                        &self.settings.media,
+                    ),
+                    media_playing: crate::folderstorm::nearby_media::playing(&self.media, &self.settings.media), // Folderstorm
                 };
+                self.folderstorm_nearby_media_publish(&ctx); // Folderstorm: the Nearby media panel's rows
                 let aurora = self.notifications_aurora();
                 let bell = ui::bars::BellState {
                     unread: if aurora {
