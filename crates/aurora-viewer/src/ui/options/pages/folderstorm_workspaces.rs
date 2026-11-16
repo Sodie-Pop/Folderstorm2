@@ -95,12 +95,11 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-layouts-group"), |cx| {
         cx.note(tr!("fs-layouts-intro"));
         // (the search words of Folderstorm (C++): "dual monitor", "layout")
-        words(cx, &["fs-search-layouts", "fs-search-layouts-list", "fs-search-layouts-background"]).section_body().row(
-            tr!("fs-layouts-list"),
-            tr!("fs-layouts-list-help"),
-            &Nothing,
-            |ui, s| list(ui, &p, s),
-        );
+        words(cx, &["fs-search-layouts", "fs-search-layouts-list", "fs-search-layouts-background"])
+            .section_body()
+            .row(tr!("fs-layouts-list"), tr!("fs-layouts-list-help"), &Nothing, |ui, s| {
+                list(ui, &p, s)
+            });
     });
     cx.group(tr!("fs-layouts-save-group"), |cx| {
         words(cx, &["fs-search-layouts", "fs-search-layouts-save"]).section_body().row(
