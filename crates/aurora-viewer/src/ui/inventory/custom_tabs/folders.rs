@@ -53,67 +53,98 @@ pub fn status(inv: &Inventory, id: Uuid) -> Status {
     Status::Live
 }
 
-/// Why a selection cannot become a scope (the tooltip of a greyed entry).
+/// Why a selection cannot go into a tab (the tooltip of a greyed entry).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     /// Nothing is selected.
     Empty,
-    /// The selection holds an item: only folders make a scope.
-    Item,
-    /// The inventory's root, the Library, the Trash or a folder in it (or
-    /// one not in the inventory).
+    /// A link in the selection points to nothing loaded.
+    Broken,
+    /// The inventory's root, the Library, the Trash or what it holds (or an
+    /// entry not in the inventory).
     NotAllowed,
     /// More than `MAX_FOLDERS` folders.
     TooMany,
+    /// More than `items::MAX_ITEMS` items.
+    TooManyItems,
 }
 
-/// The folders of a selection that may become a scope, in the order of
-/// their paths; refused unless every entry is a live folder (an item in the
-/// selection, the Trash or the Library refuses it all, as
-/// `FSInventoryCustomTabs::selectedFolders` does), nor over `MAX_FOLDERS`.
-pub fn check(inv: &Inventory, selection: &[Uuid]) -> Result<Vec<Uuid>, Refusal> {
+/// What a selection gives a tab (feature 2.13): its folders join the
+/// scope, its items are pinned. A link gives what it points to.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Chosen {
+    /// In the order of their paths.
+    pub folders: Vec<Uuid>,
+    /// In the order of their paths.
+    pub items: Vec<Uuid>,
+}
+
+impl Chosen {
+    pub fn is_empty(&self) -> bool {
+        self.folders.is_empty() && self.items.is_empty()
+    }
+
+    /// Every folder and item, folders first.
+    pub fn all(&self) -> impl Iterator<Item = Uuid> + '_ {
+        self.folders.iter().chain(&self.items).copied()
+    }
+}
+
+/// What a selection may give a tab, folders and items in the order of
+/// their paths; refused unless every entry is live (the Trash or the
+/// Library refuses it all, as `FSInventoryCustomTabs::selectedFolders`
+/// does for folders), nor over `MAX_FOLDERS` folders or
+/// `items::MAX_ITEMS` items. A link gives its original (a folder link its
+/// folder), as `items::resolve` says.
+pub fn check(inv: &Inventory, selection: &[Uuid]) -> Result<Chosen, Refusal> {
     if selection.is_empty() {
         return Err(Refusal::Empty);
     }
-    if selection.iter().any(|id| inv.items.contains_key(id)) {
-        return Err(Refusal::Item);
+    let mut folders = Vec::new();
+    let mut items = Vec::new();
+    for id in selection {
+        match super::items::resolve(inv, *id) {
+            None if inv.items.contains_key(id) => return Err(Refusal::Broken),
+            None => return Err(Refusal::NotAllowed),
+            Some(super::items::Target::Folder(folder)) => {
+                if status(inv, folder) != Status::Live {
+                    return Err(Refusal::NotAllowed);
+                }
+                folders.push(folder);
+            }
+            Some(super::items::Target::Item(item)) => {
+                if super::items::status(inv, item) != Status::Live {
+                    return Err(Refusal::NotAllowed);
+                }
+                items.push(item);
+            }
+        }
     }
-    if selection.iter().any(|id| status(inv, *id) != Status::Live) {
-        return Err(Refusal::NotAllowed);
-    }
-    if selection.len() > MAX_FOLDERS {
+    let by_path = |ids: Vec<Uuid>| {
+        let mut ids: Vec<(String, Uuid)> = ids
+            .into_iter()
+            .map(|id| (super::super::inventory_path(inv, id).to_lowercase(), id))
+            .collect();
+        ids.sort();
+        ids.dedup_by_key(|(_, id)| *id);
+        ids.into_iter().map(|(_, id)| id).collect::<Vec<_>>()
+    };
+    let chosen = Chosen {
+        folders: by_path(folders),
+        items: by_path(items),
+    };
+    if chosen.folders.len() > MAX_FOLDERS {
         return Err(Refusal::TooMany);
     }
-    let mut ids: Vec<(String, Uuid)> = selection
-        .iter()
-        .map(|id| (super::super::inventory_path(inv, *id).to_lowercase(), *id))
-        .collect();
-    ids.sort();
-    ids.dedup_by_key(|(_, id)| *id);
-    Ok(ids.into_iter().map(|(_, id)| id).collect())
+    if chosen.items.len() > super::items::MAX_ITEMS {
+        return Err(Refusal::TooManyItems);
+    }
+    Ok(chosen)
 }
 
-/// `check`, without the reason: none when refused.
-pub fn choosable(inv: &Inventory, selection: &[Uuid]) -> Vec<Uuid> {
+/// `check`, without the reason: nothing when refused.
+pub fn choosable(inv: &Inventory, selection: &[Uuid]) -> Chosen {
     check(inv, selection).unwrap_or_default()
-}
-
-/// What adding chosen folders to a tab did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Added {
-    /// Folders the tab did not have.
-    pub new: usize,
-    /// Folders it had already (not repeated).
-    pub already: usize,
-}
-
-/// The tab's folders once `chosen` join its `current` ones (the folders it
-/// has already are not repeated), and how many were new.
-pub fn add_to(current: &[Uuid], chosen: &[Uuid]) -> Result<(Vec<Uuid>, Added), TooMany> {
-    let already = chosen.iter().filter(|id| current.contains(id)).count();
-    let out = change(current, chosen, Change::Add)?;
-    let new = out.len() - current.len();
-    Ok((out, Added { new, already }))
 }
 
 /// How the tab's folders change (the three entries of Folderstorm's tab
@@ -128,12 +159,17 @@ pub enum Change {
     Clear,
 }
 
-/// Over `MAX_FOLDERS`: nothing changes.
+/// Over the limit (`MAX_FOLDERS`, or `items::MAX_ITEMS`): nothing changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TooMany;
 
 /// The tab's new folders, from its `current` ones and the `chosen` ones.
 pub fn change(current: &[Uuid], chosen: &[Uuid], how: Change) -> Result<Vec<Uuid>, TooMany> {
+    change_within(current, chosen, how, MAX_FOLDERS)
+}
+
+/// `change`, with at most `limit` in the list.
+pub fn change_within(current: &[Uuid], chosen: &[Uuid], how: Change, limit: usize) -> Result<Vec<Uuid>, TooMany> {
     let mut out = match how {
         Change::Clear => return Ok(Vec::new()),
         Change::Replace => Vec::new(),
@@ -144,7 +180,7 @@ pub fn change(current: &[Uuid], chosen: &[Uuid], how: Change) -> Result<Vec<Uuid
             out.push(*id);
         }
     }
-    if out.len() > MAX_FOLDERS {
+    if out.len() > limit {
         return Err(TooMany);
     }
     Ok(out)
@@ -164,18 +200,26 @@ pub fn set(tab: &mut CustomTab, account: Uuid, folders: Vec<Uuid>) {
     }
 }
 
-/// The tab is scoped on another account only: here it shows everything.
+/// The tab is scoped (folders or pinned items) on another account only:
+/// here it shows everything.
 pub fn elsewhere(tab: &CustomTab, account: Uuid) -> bool {
-    !tab.folders.is_empty() && of(tab, account).is_empty()
+    (!tab.folders.is_empty() || !tab.items.is_empty()) && !scoped(tab, account)
+}
+
+/// The tab has folders or pinned items on this account: it shows only
+/// those.
+pub fn scoped(tab: &CustomTab, account: Uuid) -> bool {
+    !of(tab, account).is_empty() || !super::items::of(tab, account).is_empty()
 }
 
 /// The folders the search keeps for this tab on this account: None when it
-/// is not scoped, else its live folders (maybe none: then nothing shows).
+/// is not scoped, else its live folders (maybe none: then nothing shows but
+/// its pinned items).
 pub fn search_roots(inv: &Inventory, tab: &CustomTab, account: Uuid) -> Option<Vec<Uuid>> {
-    let saved = of(tab, account);
-    if saved.is_empty() {
+    if !scoped(tab, account) {
         return None;
     }
+    let saved = of(tab, account);
     Some(saved.iter().copied().filter(|id| status(inv, *id) == Status::Live).collect())
 }
 
@@ -183,6 +227,11 @@ pub fn search_roots(inv: &Inventory, tab: &CustomTab, account: Uuid) -> Option<V
 /// to `MAX_FOLDERS`, empty lists and the nil account removed. Returns
 /// whether anything changed.
 pub fn normalize(folders: &mut BTreeMap<Uuid, Vec<Uuid>>) -> bool {
+    normalize_within(folders, MAX_FOLDERS)
+}
+
+/// `normalize`, each list cut to `limit` (folders or pinned items).
+pub fn normalize_within(folders: &mut BTreeMap<Uuid, Vec<Uuid>>, limit: usize) -> bool {
     let mut changed = folders.remove(&Uuid::nil()).is_some();
     for ids in folders.values_mut() {
         let before = ids.len();
@@ -194,7 +243,7 @@ pub fn normalize(folders: &mut BTreeMap<Uuid, Vec<Uuid>>) -> bool {
                 at += 1;
             }
         }
-        ids.truncate(MAX_FOLDERS);
+        ids.truncate(limit);
         changed |= ids.len() != before;
     }
     let before = folders.len();
@@ -203,4 +252,4 @@ pub fn normalize(folders: &mut BTreeMap<Uuid, Vec<Uuid>>) -> bool {
 }
 
 #[cfg(test)]
-pub(super) mod tests;
+pub(in crate::ui::inventory) mod tests;

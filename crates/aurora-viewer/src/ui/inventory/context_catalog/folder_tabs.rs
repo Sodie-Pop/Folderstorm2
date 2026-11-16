@@ -1,14 +1,15 @@
-//! Folderstorm: a folder's right-click menu › "Create tab" and "Add to ›"
-//! (folder-scoped Inventory tabs, feature 2.2). What may be chosen and the
-//! changes are in `custom_tabs/folder_ui.rs`; this builds the entries of the
-//! shared menu, so both Inventory styles have them.
+//! Folderstorm: the right-click menu of folders and items › "Create tab" and
+//! "Add to ›" (folder-scoped Inventory tabs, feature 2.2; items are pinned,
+//! feature 2.13). What may be chosen and the changes are in
+//! `custom_tabs/folder_ui.rs`; this builds the entries of the shared menu,
+//! so both Inventory styles have them.
 use super::*;
 use crate::ui::inventory::custom_tabs::folder_ui;
 
 pub(in crate::ui::inventory) enum Command {
-    /// A new custom tab scoped to these folders.
+    /// A new custom tab scoped to these folders (and pinning these items).
     Create(Vec<Uuid>),
-    /// These folders join the custom tab with this id.
+    /// These folders (and items) join the custom tab with this id.
     AddTo(u64, Vec<Uuid>),
 }
 
@@ -21,7 +22,7 @@ fn tab_entry(id: u64) -> String {
     format!("{ADD}:{id}")
 }
 
-/// After "Review bulk changes", on folders: "Create tab", then "Add to ›"
+/// After "Review bulk changes", on folders and items: "Create tab", then "Add to ›"
 /// listing the custom tabs (a check mark on those that have the folders
 /// already) and "New tab…". A greyed entry says why in its tooltip.
 pub(super) fn entries(c: &mut Catalog, inv: &Inventory, st: &InventoryUi, prefs: &InventoryPreferences, facts: &Facts, ids: &[Uuid]) {

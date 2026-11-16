@@ -58,7 +58,7 @@ Behaviour (as in Folderstorm (C++) unless marked **differs**):
 | Several folders | Ctrl+click and Shift+click select them (Aurora's own selection); the menu and the drag take the whole selection |
 | Greyed entries | Say why on hover (an item selected, the root, Trash or Library, 32 folders, 10 tabs) |
 | Change a tab's folders | Right click on a custom tab › *Add selected folders* / *Use only selected folders* / *Show all folders*; also in *Customize tab…* (**adds**: a *Folders* part listing each folder by path, with a remove button) |
-| What can be chosen | Folders only; not the root, the Trash or what it holds, the Library; up to 32 |
+| What can be chosen | Folders only; not the root, the Trash or what it holds, the Library; up to 32 (row 2.13 adds single items, pinned: [plan](inventory-quick-access.md)) |
 | Sub-folders | Included, at any depth; the parents are shown as the path only |
 | Filters and search | Apply inside the scope; *Reset* in the filter editor keeps the scope |
 | Deleted / Trash | Skipped but kept; a note above the list says how many, with *Remove them* |

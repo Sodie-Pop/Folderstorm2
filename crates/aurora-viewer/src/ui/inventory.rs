@@ -76,6 +76,8 @@ pub(crate) mod task_selection;
 pub mod thumbnail;
 pub(crate) mod tree;
 pub(crate) mod view;
+// Folderstorm: pin and quiet mode of every Inventory window
+pub(crate) mod window_mode;
 pub use aurora::{DEMO_FOLDER_WINDOW as AURORA_DEMO_FOLDER_WINDOW, demo_place as aurora_demo};
 
 /// A demo scenario written for the Legacy Viewer's window (its tabs, its
@@ -507,6 +509,8 @@ pub struct InventoryUi {
     pub preferences_dirty: bool,
     // Folderstorm: custom Inventory tabs
     custom_tabs: custom_tabs::State,
+    // Folderstorm: this window's pin and quiet mode this frame (window_mode.rs)
+    window_mode: window_mode::Mode,
     was_open: bool,
     focus_search: bool,
     bulk_permissions: bulk_permissions::State,
@@ -777,7 +781,8 @@ impl InventoryUi {
     /// RLVa's @showinv closes the additional window with the main one
     /// (RlvBehaviourToggleHandler<RLV_BHVR_SHOWINV>, rlvhandler.cpp).
     pub fn close_additional_window(&mut self) {
-        for w in self.windows.iter_mut().filter(|w| w.additional) {
+        // Folderstorm: the custom tabs' windows too (custom_tabs/window.rs)
+        for w in self.windows.iter_mut().filter(|w| w.additional || custom_tabs::window::is(w)) {
             w.open = false;
         }
     }
@@ -1382,6 +1387,10 @@ fn folder_window_contents(
     facts: &Facts,
     actions: &mut Vec<InvAction>,
 ) {
+    if window_mode::quiet(st) {
+        // Folderstorm: quiet mode, the list alone (window_mode.rs)
+        return window_mode::legacy_folder_list(ui, p, icons, inv, root, st, prefs, facts, actions);
+    }
     controls::toolbar(ui, p, st, prefs);
     controls::search(ui, p, inv, st, prefs, aurora_i18n::tr!("ui-inventory-filter-inventory-folder"));
     next_owner_control(ui, p, st);
@@ -1692,7 +1701,7 @@ fn search_rows(
             );
             st.result_width = st.result_width.max(width);
         }
-        ui.horizontal(|ui| {
+        let drawn = ui.horizontal(|ui| {
             ui.set_min_height(rows::row_height(st));
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.add_space(row.depth.min(24) as f32 * ui.spacing().indent);
@@ -1706,6 +1715,7 @@ fn search_rows(
                 item_row(ui, p, icons, inv, &row.id, st, prefs, facts, actions);
             }
         });
+        custom_tabs::flat::row_path(ui, p, inv, st, row.id, drawn.response.rect); // Folderstorm: a flat tab's folder path
     }
 }
 
@@ -2075,6 +2085,10 @@ fn inventory_contents(
     facts: &Facts,
     actions: &mut Vec<InvAction>,
 ) {
+    if window_mode::quiet(st) {
+        // Folderstorm: quiet mode, the list alone (window_mode.rs)
+        return window_mode::legacy_list(ui, p, icons, inv, st, prefs, facts, actions);
+    }
     controls::toolbar(ui, p, st, prefs);
     controls::search(ui, p, inv, st, prefs, aurora_i18n::tr!("ui-inventory-filter-inventory"));
     ui.add_space(3.0);
@@ -2239,6 +2253,7 @@ pub fn show(
             facts.names.insert(*id, world.social.name_of(id));
         }
     }
+    custom_tabs::window::open_requested(ctx, st, prefs); // Folderstorm: a custom tab in its own window
     let inv = &mut world.inventory;
     context_catalog::process_deferred(inv, st, prefs, &facts, &mut actions);
     bulk_permissions::show(ctx, p, inv, st, world.agent_id, &mut actions);
@@ -2269,6 +2284,9 @@ pub fn show(
     )
     .compact_header()
     .help(aurora_i18n::tr!("ui-inventory-right-click-item-actions-ctrl-shift-multi-select"));
+    // Folderstorm: the pin and quiet mode buttons (window_mode.rs)
+    let mut mode_clicks = window_mode::Clicks::default();
+    floater = window_mode::decorate(floater, st, prefs, Some(window_mode::Key::Main), &mut mode_clicks);
     let mut widen = false;
     if classic {
         st.aurora = None;
@@ -2295,6 +2313,7 @@ pub fn show(
             aurora::widen(ctx, "inventory");
         }
     }
+    window_mode::apply(ctx, "inventory", *open, mode_clicks, prefs, Some(window_mode::Key::Main)); // Folderstorm: pin and quiet mode
     st.hover.show(p, inv, prefs, hover_images, &mut st.wanted_hover_images);
     st.was_open = *open && !super::widgets::floater_minimized(ctx, "inventory");
     controls::dialogs(ctx, p, st, prefs);
@@ -2367,7 +2386,16 @@ pub fn show(
         w.state.playing = st.playing;
         let before = (w.state.clipboard.clone(), w.state.cut);
         let window_id = floater_id(w.id);
-        let floater = if w.additional {
+        // Folderstorm: a custom tab in its own window (custom_tabs/window.rs)
+        let tab_window = custom_tabs::window::title(&w.state, prefs);
+        let floater = if let Some(title) = &tab_window {
+            super::widgets::Floater::new(
+                &window_id,
+                title.as_str(),
+                screen.center() - custom_tabs::window::SIZE / 2.0,
+                custom_tabs::window::SIZE,
+            )
+        } else if w.additional {
             fetch_whole_inventory(&mut world.inventory, &mut w.state);
             super::widgets::Floater::new(
                 &window_id,
@@ -2384,10 +2412,14 @@ pub fn show(
             )
         }
         .compact_header();
+        // Folderstorm: the pin and quiet mode buttons (window_mode.rs)
+        let mode_key = window_mode::Key::of_window(w);
+        let mut mode_clicks = window_mode::Clicks::default();
+        let floater = window_mode::decorate(floater, &mut w.state, prefs, mode_key, &mut mode_clicks);
         if classic {
             w.state.aurora = None;
             floater.show(ctx, p, &mut w.open, |ui| {
-                if w.additional {
+                if w.additional || tab_window.is_some() {
                     inventory_contents(ui, p, icons, &mut world.inventory, &mut w.state, prefs, &facts, &mut actions);
                 } else {
                     folder_window_contents(
@@ -2419,7 +2451,8 @@ pub fn show(
                     floater = floater.title_state(dot, text);
                 }
             }
-            if layout == aurora::Layout::Compact {
+            if layout == aurora::Layout::Compact && tab_window.is_none() && !window_mode::quiet(&w.state) {
+                // Folderstorm: not in a tab window nor in quiet mode, always narrow
                 floater = floater.action("arrow-autofit-width-filled", aurora_i18n::tr!("inventory-widen"), &mut widen);
             }
             floater.show(ctx, p, &mut w.open, |ui| {
@@ -2439,6 +2472,8 @@ pub fn show(
                 aurora::widen(ctx, &window_id);
             }
         }
+        window_mode::apply(ctx, &window_id, w.open, mode_clicks, prefs, mode_key); // Folderstorm: pin and quiet mode
+        custom_tabs::window::after(w, prefs); // Folderstorm: a tab window closes with its tab
         w.state
             .hover
             .show(p, &world.inventory, prefs, hover_images, &mut w.state.wanted_hover_images);
