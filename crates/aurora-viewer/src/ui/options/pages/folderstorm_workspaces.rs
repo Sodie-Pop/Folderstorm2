@@ -880,6 +880,42 @@ mod tests {
         /// A pretend viewer window over two pretend monitors, when the
         /// test has one (`Window::with_viewer`).
         viewer: Option<Pretend>,
+        /// The account and its HUDs, as the app tells the workspaces.
+        shell: HudShell,
+    }
+
+    /// The viewer as far as a workspace's HUDs go (row 1.7): the account
+    /// logged in, the HUDs worn, the names of the Inventory's items. No
+    /// window is open or opened.
+    #[derive(Default)]
+    struct HudShell {
+        account: Option<uuid::Uuid>,
+        huds: Vec<crate::folderstorm::workspaces::context::Hud>,
+        names: std::collections::BTreeMap<uuid::Uuid, String>,
+    }
+
+    impl apply::Shell for HudShell {
+        fn is_open(&self, _: &crate::folderstorm::workspaces::windows::Window) -> bool {
+            false
+        }
+
+        fn open(&mut self, _: &egui::Context, _: &crate::folderstorm::workspaces::windows::Window) -> bool {
+            false
+        }
+
+        fn close(&mut self, _: &egui::Context, _: &crate::folderstorm::workspaces::windows::Window) {}
+
+        fn account(&self) -> Option<uuid::Uuid> {
+            self.account
+        }
+
+        fn worn_huds(&self) -> Vec<crate::folderstorm::workspaces::context::Hud> {
+            self.huds.clone()
+        }
+
+        fn item_name(&self, item: uuid::Uuid) -> Option<String> {
+            self.names.get(&item).cloned()
+        }
     }
 
     const MONITORS: [[i32; 4]; 2] = [[0, 0, 1920, 1080], [1920, 0, 1920, 1080]];
@@ -914,6 +950,7 @@ mod tests {
                 st,
                 changed: false,
                 viewer: None,
+                shell: HudShell::default(),
             };
             window.run(Vec::new());
             // the two windows out of the way of Preferences, at known places
@@ -944,7 +981,7 @@ mod tests {
                 &ctx,
                 &mut Live::of(&mut self.s),
                 self.viewer.as_ref().map(|viewer| viewer.seen),
-                &mut apply::NoShell,
+                &mut self.shell,
             );
             self.changed |= outcome.save;
             if let Some(viewer) = &mut self.viewer {
@@ -996,6 +1033,30 @@ mod tests {
                 Vec::new(),
             ] {
                 self.run(events);
+            }
+        }
+
+        /// Scrolls the page down, with the wheel over it, until `text` is
+        /// shown (at most a few turns).
+        fn reveal(&mut self, text: &str) {
+            for _ in 0..12 {
+                if self.shows(text) {
+                    return;
+                }
+                let at = pos2(700.0, 500.0);
+                self.run(vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -80.0),
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Unknown,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                for _ in 0..10 {
+                    self.run(Vec::new());
+                }
             }
         }
 
@@ -1601,7 +1662,21 @@ mod tests {
     }
 
     /// [`drawn`], with `query` typed in the window's search.
-    fn drawn_found(name: &str, tab: usize, mut s: Settings, cogs: bool, query: &str) -> Vec<String> {
+    fn drawn_found(name: &str, tab: usize, s: Settings, cogs: bool, query: &str) -> Vec<String> {
+        drawn_scrolled(name, tab, s, cogs, query, None, 0.0)
+    }
+
+    /// [`drawn_found`], with what the app says of HUDs (`huds`) and the
+    /// page scrolled down by `scroll` points with the wheel.
+    fn drawn_scrolled(
+        name: &str,
+        tab: usize,
+        mut s: Settings,
+        cogs: bool,
+        query: &str,
+        huds: Option<crate::folderstorm::workspaces::context::HudView>,
+        scroll: f32,
+    ) -> Vec<String> {
         let theme = crate::theme::Theme::default();
         let p = theme.skin_palette();
         let ctx = egui::Context::default();
@@ -1617,11 +1692,30 @@ mod tests {
         let mut pixels = vec![0u32; (width * height) as usize];
         let mut painter = crate::crash::software::Painter::default();
         let mut texts = Vec::new();
-        for frame in 0..8 {
+        if let Some(huds) = huds {
+            crate::folderstorm::workspaces::context::set_view(&ctx, huds);
+        }
+        let frames = if scroll > 0.0 { 60 } else { 8 };
+        for frame in 0..frames {
+            let at = egui::pos2(700.0, 500.0);
+            let events = match frame {
+                2 if scroll > 0.0 => vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -scroll),
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Unknown,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                _ => Vec::new(),
+            };
             let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(window),
                     time: Some(frame as f64 / 60.0),
+                    events,
                     ..Default::default()
                 },
                 |ui| {

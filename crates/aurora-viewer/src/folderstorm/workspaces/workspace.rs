@@ -13,6 +13,7 @@
 //! by a newer version, or one that breaks a limit, is kept exactly as it
 //! was read, shown as such, never applied and written back unchanged.
 
+use super::context::{self, Camera, Context, Huds};
 use super::store::{
     Favorite, Frame, Kept, MAX_WINDOWS, NameError, Placement, SCHEMA, Store, StoreError, Unusable, name_error, same_name, tidy,
 };
@@ -46,7 +47,7 @@ pub fn switchable() -> impl Iterator<Item = &'static Window> {
 pub const MAX_FOLDERS: usize = 16;
 
 /// An id as the file has it: its usual text.
-mod id_text {
+pub(super) mod id_text {
     use serde::{Deserialize, Deserializer, Serializer};
     use uuid::Uuid;
 
@@ -108,6 +109,14 @@ pub struct Workspace {
     /// windows are left alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folders: Option<Folders>,
+    /// Its context (row 1.7, [`super::context`]): a graphics profile by
+    /// name, a camera view or preset, HUDs to add. None: left as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphics: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera: Option<Camera>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub huds: Option<Huds>,
     /// What this version does not know of the entry, kept as read.
     #[serde(flatten)]
     pub other: BTreeMap<String, serde_json::Value>,
@@ -123,6 +132,9 @@ impl Workspace {
             layout: layout.map(|layout| tidy(layout).to_owned()),
             open: open.into_iter().filter(|id| switched(id)).collect(),
             folders: None,
+            graphics: None,
+            camera: None,
+            huds: None,
             other: BTreeMap::new(),
         }
     }
@@ -144,11 +156,24 @@ impl Workspace {
             && self.layout.as_deref().is_none_or(|layout| name_error(layout).is_none())
             && self.open.len() <= MAX_WINDOWS
             && self.folders.as_ref().is_none_or(Folders::ok)
+            && self.graphics.as_deref().is_none_or(context::name_ok)
+            && self.camera.as_ref().is_none_or(Camera::ok)
+            && self.huds.as_ref().is_none_or(Huds::ok)
             && self
                 .open
                 .iter()
                 .all(|id| !id.is_empty() && id.chars().count() <= MAX_ID && !id.chars().any(char::is_control));
         if ok { Ok(()) } else { Err(Unusable::Invalid) }
+    }
+
+    /// Its context: each part it has.
+    pub fn context(&self) -> Context {
+        Context {
+            graphics: self.graphics.clone(),
+            camera: self.camera.clone(),
+            huds: self.huds.clone(),
+            take_off: None,
+        }
     }
 
     /// The windows it opens that this version knows, in the allowlist's
@@ -272,7 +297,7 @@ impl Store {
         self.workspaces.get(index).and_then(Record::workspace)
     }
 
-    fn workspace_mut(&mut self, index: usize) -> Option<&mut Workspace> {
+    pub(super) fn workspace_mut(&mut self, index: usize) -> Option<&mut Workspace> {
         match self.workspaces.get_mut(index) {
             Some(Record::Workspace(workspace)) => Some(workspace),
             _ => None,

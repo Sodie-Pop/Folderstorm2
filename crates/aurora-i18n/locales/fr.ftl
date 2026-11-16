@@ -1788,6 +1788,73 @@ fs-workspaces-folders-missing = { $count ->
     }
 fs-workspaces-folders-blocked = L'inventaire est masqué par RLVa : ses fenêtres de dossier n'ont pas été ouvertes.
 fs-workspaces-folders-other-account = Ses dossiers d'inventaire ont été enregistrés par un autre compte et ont été ignorés.
+fs-context-section = Graphismes, caméra et HUD
+fs-context-section-set = Graphismes, caméra et HUD (choisis)
+fs-context-graphics = Profil graphique
+fs-context-graphics-keep = Laisser les graphismes tels quels
+fs-context-graphics-help = Un profil graphique enregistré dans Préférences › Graphismes, choisi par son nom : appliquer l'espace de travail le sélectionne, comme le choisir là-bas. Une modification du profil est prise en compte la fois suivante. Jamais la fenêtre ni le plein écran.
+fs-context-camera = Caméra
+fs-context-camera-keep = Laisser la caméra telle quelle
+fs-context-camera-help = L'une des quatre vues des commandes de caméra, ou un préréglage de caméra que vous avez enregistré, choisi par son nom. Non appliqué tant que RLVa verrouille la caméra, ni en vue subjective.
+fs-context-camera-preset = préréglage de caméra « { $name } »
+fs-context-gone = { $name } (introuvable)
+fs-context-huds = HUD qu'il porte :
+fs-context-huds-help = Cochez un HUD que vous portez : appliquer l'espace de travail le remet au même point HUD s'il n'est pas porté, avec les règles de la tenue (RLVa, la limite d'attachements). Passer ensuite à un autre espace de travail qui a des HUD enlève ceux que cet espace de travail a mis, sauf si l'autre les porte aussi ; un HUD que vous portiez déjà ou que vous avez mis vous-même n'est jamais enlevé. Arrangement précédent les remet comme avant. Seulement pour le compte qui les a choisis ; l'espace de travail garde l'objet, jamais son contenu.
+fs-context-huds-none = Portez un HUD pour le choisir ici.
+fs-context-hud-gone = Un objet absent de l'inventaire
+fs-context-huds-other = { $count ->
+    [one] { $count } HUD choisi par un autre compte.
+   *[other] { $count } HUD choisis par un autre compte.
+    }
+fs-context-huds-forget = Les oublier
+fs-context-holds-graphics = Profil graphique « { $name } ».
+fs-context-holds-camera = Caméra : { $camera }.
+fs-context-holds-huds = { $count ->
+    [one] Porte { $count } HUD.
+   *[other] Porte { $count } HUD.
+    }
+fs-context-restored = Graphismes et caméra remis comme avant.
+fs-context-graphics-done = Profil graphique « { $name } » sélectionné.
+fs-context-graphics-missing = Le profil graphique « { $name } » est introuvable : les graphismes n'ont pas changé.
+fs-context-camera-done = Caméra : { $camera }.
+fs-context-camera-missing = Le { $camera } est introuvable : la caméra n'a pas changé.
+fs-context-camera-locked = RLVa verrouille la caméra : elle n'a pas changé.
+fs-context-camera-mouselook = En vue subjective, la caméra n'a pas changé.
+fs-context-camera-failed = Caméra : { $why }
+fs-context-huds-asked = { $count ->
+    [one] { $count } HUD demandé.
+   *[other] { $count } HUD demandés.
+    }
+fs-context-huds-worn = { $count ->
+    [one] { $count } HUD était déjà porté.
+   *[other] { $count } HUD étaient déjà portés.
+    }
+fs-context-huds-missing = { $count ->
+    [one] { $count } HUD est introuvable dans l'inventaire (supprimé, ou pas encore chargé) et a été ignoré.
+   *[other] { $count } HUD sont introuvables dans l'inventaire (supprimés, ou pas encore chargés) et ont été ignorés.
+    }
+fs-context-huds-not-wearable = { $count ->
+    [one] { $count } objet ne peut pas être porté (pas un objet, ou dans la Bibliothèque ou la Corbeille) et a été ignoré.
+   *[other] { $count } objets ne peuvent pas être portés (pas des objets, ou dans la Bibliothèque ou la Corbeille) et ont été ignorés.
+    }
+fs-context-huds-blocked = { $count ->
+    [one] { $count } HUD est refusé par RLVa et a été ignoré.
+   *[other] { $count } HUD sont refusés par RLVa et ont été ignorés.
+    }
+fs-context-huds-other-account = Ses HUD ont été choisis par un autre compte et ont été ignorés.
+fs-context-huds-busy = Un changement de tenue était en cours : aucun HUD n'a été mis ni enlevé. Appliquez-le de nouveau dans un instant.
+fs-context-huds-refused = Aucun HUD n'a été mis ni enlevé : { $why }
+fs-context-huds-refused-plain = le changement de tenue a été refusé.
+fs-context-huds-taken-off = { $count ->
+    [one] { $count } HUD mis par un espace de travail a été enlevé.
+   *[other] { $count } HUD mis par un espace de travail ont été enlevés.
+    }
+fs-context-huds-stuck = { $count ->
+    [one] { $count } HUD mis par un espace de travail n'a pas pu être enlevé (RLVa le garde).
+   *[other] { $count } HUD mis par un espace de travail n'ont pas pu être enlevés (RLVa les garde).
+    }
+fs-context-take-off = Enlever les HUD de l'espace de travail précédent
+fs-context-take-off-help = Quand vous passez à un espace de travail qui a des HUD, ceux que l'espace de travail précédent a mis sont enlevés, sauf si le nouveau les porte aussi. Seulement les HUD mis par un espace de travail : un HUD que vous portiez déjà, ou que vous avez mis vous-même, n'est jamais enlevé ; RLVa peut en garder un. Arrangement précédent les remet. Désactivez pour ne faire qu'ajouter des HUD.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message

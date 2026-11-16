@@ -15,9 +15,11 @@ use super::{
     Ask, BUTTON_H, ICON_CANCEL, ICON_CHECK, ICON_DELETE, ICON_DOWN, ICON_RENAME, ICON_SAVE, ICON_STAR, ICON_UP, LIST_W, PICKER_W, entry,
     muted, warning,
 };
+use crate::camera::CameraPreset;
 use crate::folderstorm::workspaces::apply::{self, Live};
+use crate::folderstorm::workspaces::context::{self, Camera, Hud};
 use crate::folderstorm::workspaces::store::{MAX_NAME, StoreError, Unusable};
-use crate::folderstorm::workspaces::words::{report_text, workspace_holds, workspace_refusal};
+use crate::folderstorm::workspaces::words::{camera_words, report_text, workspace_holds, workspace_refusal};
 use crate::folderstorm::workspaces::workspace::{self, Record};
 use crate::settings::Settings;
 use crate::theme::Palette;
@@ -70,7 +72,7 @@ pub(super) fn groups(cx: &mut Cx) {
     cx.group(tr!("fs-workspaces-group"), |cx| {
         cx.note(tr!("fs-workspaces-intro"));
         // (the search word of Folderstorm (C++): "workspace")
-        cx.keywords("workspace workspaces windows open close activity sorting exploring")
+        cx.keywords("workspace workspaces windows open close activity sorting exploring graphics profile camera preset view hud huds")
             .section_body()
             .row(tr!("fs-workspaces-list"), tr!("fs-workspaces-list-help"), &Nothing, |ui, s| {
                 list(ui, &p, s)
@@ -81,6 +83,15 @@ pub(super) fn groups(cx: &mut Cx) {
             &Nothing,
             |ui, s| save_new(ui, &p, s),
         );
+        // (row 1.7: on until unticked; the store keeps the opposite, so
+        // that a file without it takes them off)
+        cx.keywords("workspace hud huds take off detach remove attachment previous switch")
+            .row(tr!("fs-context-take-off"), tr!("fs-context-take-off-help"), &Nothing, |ui, s| {
+                let mut on = !s.folderstorm_workspaces.keep_huds;
+                let changed = super::super::super::toggle(ui, &p, &mut on);
+                s.folderstorm_workspaces.keep_huds = !on;
+                changed
+            });
     });
 }
 
@@ -402,7 +413,187 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
         changed |= layout_picker(ui, s, index);
         changed |= window_boxes(ui, p, s, index);
         changed |= folders_box(ui, p, s, index);
+        changed |= context_section(ui, p, s, index, &name);
     }
+    changed
+}
+
+/// The workspace's context (row 1.7), folded until it has one (C++: every
+/// group "Do not change" by default, its save section collapsed): the
+/// graphics profile, the camera, the HUDs it wears. True when changed.
+fn context_section(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, name: &str) -> bool {
+    let has = s
+        .folderstorm_workspaces
+        .workspace(index)
+        .is_some_and(|workspace| !workspace.context().is_empty());
+    let title = match has {
+        true => tr!("fs-context-section-set"),
+        false => tr!("fs-context-section"),
+    };
+    widgets::collapsing(ui, p, ("folderstorm-workspace-context", name), title, has, |ui| {
+        // (the two pickers in a grid: their boxes line up)
+        let mut changed = egui::Grid::new("folderstorm-workspace-context-pickers")
+            .num_columns(2)
+            .show(ui, |ui| {
+                let changed = graphics_picker(ui, s, index);
+                ui.end_row();
+                let changed = camera_picker(ui, s, index) | changed;
+                ui.end_row();
+                changed
+            })
+            .inner;
+        changed |= hud_boxes(ui, p, s, index);
+        changed
+    })
+    .body
+    .unwrap_or(false)
+}
+
+/// The graphics profile applied with the workspace at `index` (row 1.7):
+/// "leave the graphics as they are", or a profile of Preferences ›
+/// Graphics, by name: its label and its box, two cells of a grid. True
+/// when the choice changed.
+fn graphics_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
+    let chosen = s
+        .folderstorm_workspaces
+        .workspace(index)
+        .and_then(|workspace| workspace.graphics.clone());
+    let gone = chosen.clone().filter(|name| !s.graphics_saved.contains_key(name));
+    let keep_label = tr!("fs-context-graphics-keep");
+    let shown = match (&chosen, &gone) {
+        (None, _) => keep_label.to_owned(),
+        (Some(name), Some(_)) => tr!("fs-context-gone", name = name.as_str()),
+        (Some(name), None) => name.clone(),
+    };
+    let mut pick = chosen.clone();
+    ui.label(tr!("fs-context-graphics")).on_hover_text(tr!("fs-context-graphics-help"));
+    egui::ComboBox::from_id_salt("folderstorm-workspace-graphics")
+        .width(PICKER_W)
+        .selected_text(shown)
+        .truncate()
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut pick, None, keep_label);
+            if let Some(name) = &gone {
+                ui.selectable_value(&mut pick, Some(name.clone()), tr!("fs-context-gone", name = name.as_str()));
+            }
+            for name in s.graphics_saved.keys() {
+                ui.selectable_value(&mut pick, Some(name.clone()), name.as_str());
+            }
+        });
+    pick != chosen && s.folderstorm_workspaces.set_workspace_graphics(index, pick.as_deref())
+}
+
+/// The camera chosen with the workspace at `index` (row 1.7): "leave the
+/// camera as it is", one of the four views, or a camera preset by name.
+/// Its label and its box, two cells of a grid. True when the choice
+/// changed.
+fn camera_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
+    let chosen = s
+        .folderstorm_workspaces
+        .workspace(index)
+        .and_then(|workspace| workspace.camera.clone());
+    let mut choices: Vec<(Option<Camera>, String)> = vec![(None, tr!("fs-context-camera-keep").to_owned())];
+    choices.extend(
+        CameraPreset::ALL
+            .into_iter()
+            .filter(|view| *view != CameraPreset::Custom)
+            .map(|view| (Some(Camera::View(view)), view.label().to_owned())),
+    );
+    for shot in &s.camera_shots {
+        let camera = Some(Camera::Preset(shot.name.trim().to_owned()));
+        if context::name_ok(&shot.name) && !choices.iter().any(|(value, _)| *value == camera) {
+            choices.push((camera, camera_words(&Camera::Preset(shot.name.trim().to_owned()))));
+        }
+    }
+    if let Some(Camera::Preset(name)) = &chosen
+        && !choices.iter().any(|(value, _)| value.as_ref() == chosen.as_ref())
+    {
+        choices.push((
+            chosen.clone(),
+            tr!("fs-context-gone", name = camera_words(&Camera::Preset(name.clone()))),
+        ));
+    }
+    let shown = choices
+        .iter()
+        .find(|(value, _)| *value == chosen)
+        .map_or_else(String::new, |(_, label)| label.clone());
+    let mut pick = chosen.clone();
+    ui.label(tr!("fs-context-camera")).on_hover_text(tr!("fs-context-camera-help"));
+    egui::ComboBox::from_id_salt("folderstorm-workspace-camera")
+        .width(PICKER_W)
+        .selected_text(shown)
+        .truncate()
+        .show_ui(ui, |ui| {
+            for (value, label) in &choices {
+                ui.selectable_value(&mut pick, value.clone(), label.as_str());
+            }
+        });
+    pick != chosen && s.folderstorm_workspaces.set_workspace_camera(index, pick)
+}
+
+/// The HUDs the workspace at `index` wears (row 1.7): a box per HUD it
+/// holds (ticked) and per HUD worn now (unticked: tick to add it, with its
+/// point). HUDs chosen by another account are counted, with *Forget them*.
+/// True when changed.
+fn hud_boxes(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) -> bool {
+    let view = context::view(ui.ctx());
+    let Some(huds) = s.folderstorm_workspaces.workspace(index).map(|workspace| workspace.huds.clone()) else {
+        return false;
+    };
+    let mut changed = false;
+    ui.add(egui::Label::new(egui::RichText::new(tr!("fs-context-huds")).size(11.5).color(p.muted)).wrap())
+        .on_hover_text(tr!("fs-context-huds-help"));
+    if let Some(other) = huds.as_ref().filter(|huds| Some(huds.account) != view.account) {
+        ui.horizontal_wrapped(|ui| {
+            muted(ui, p, tr!("fs-context-huds-other", count = other.items.len()));
+            if widgets::action_button(
+                ui,
+                p,
+                ICON_DELETE,
+                tr!("fs-context-huds-forget"),
+                ActionKind::Flat,
+                vec2(0.0, BUTTON_H),
+            )
+            .clicked()
+            {
+                changed |= s.folderstorm_workspaces.set_workspace_huds(index, None);
+            }
+        });
+        return changed;
+    }
+    let Some(account) = view.account else {
+        return false;
+    };
+    let held: Vec<Hud> = huds.map(|huds| huds.items).unwrap_or_default();
+    let worn_name = |item: uuid::Uuid| view.worn.iter().find(|(hud, _)| hud.item == item).map(|(_, name)| name.clone());
+    let others: Vec<&(Hud, String)> = view
+        .worn
+        .iter()
+        .filter(|(hud, _)| !held.iter().any(|h| h.item == hud.item))
+        .collect();
+    if held.is_empty() && others.is_empty() {
+        muted(ui, p, tr!("fs-context-huds-none"));
+    }
+    ui.horizontal_wrapped(|ui| {
+        for hud in &held {
+            let name = view
+                .names
+                .get(&hud.item)
+                .cloned()
+                .or_else(|| worn_name(hud.item))
+                .unwrap_or_else(|| tr!("fs-context-hud-gone").to_owned());
+            let mut on = true;
+            if widgets::checkbox(ui, p, &mut on, name).changed() && !on {
+                changed |= s.folderstorm_workspaces.set_workspace_hud(index, account, *hud, false);
+            }
+        }
+        for (hud, name) in others {
+            let mut on = false;
+            if widgets::checkbox(ui, p, &mut on, name.as_str()).changed() && on {
+                changed |= s.folderstorm_workspaces.set_workspace_hud(index, account, *hud, true);
+            }
+        }
+    });
     changed
 }
 

@@ -10,6 +10,7 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod context;
 mod folders;
 mod open;
 mod strip;
@@ -59,6 +60,16 @@ struct Viewer {
     /// Each frame drawn with the software painter, for the pictures
     /// (`Viewer::painted`). None: not drawn.
     paint: Option<Box<Paint>>,
+    /// What `apply::frame` asked the app to do with a context (row 1.7),
+    /// in order.
+    asked: Vec<super::context::Ask>,
+    /// The HUDs worn now and the names of the Inventory's items, as the
+    /// app has them.
+    huds: Vec<super::context::Hud>,
+    names: std::collections::BTreeMap<uuid::Uuid, String>,
+    /// What the outfit has on (worn or linked), as the app has it; None:
+    /// not known.
+    on: Option<BTreeSet<uuid::Uuid>>,
 }
 
 /// The pixels of the last frame and what draws them, with the icons and
@@ -106,6 +117,9 @@ struct Windows<'a> {
     open: &'a mut BTreeSet<&'static str>,
     blocked: &'a BTreeSet<&'static str>,
     inventory: &'a mut Folders,
+    huds: &'a [super::context::Hud],
+    names: &'a std::collections::BTreeMap<uuid::Uuid, String>,
+    on: &'a Option<BTreeSet<uuid::Uuid>>,
 }
 
 impl apply::Shell for Windows<'_> {
@@ -141,6 +155,18 @@ impl apply::Shell for Windows<'_> {
     fn close_folder(&mut self, window: &str) {
         self.inventory.windows.retain(|(id, _)| id != window);
     }
+
+    fn worn_huds(&self) -> Vec<super::context::Hud> {
+        self.huds.to_vec()
+    }
+
+    fn item_name(&self, item: uuid::Uuid) -> Option<String> {
+        self.names.get(&item).cloned()
+    }
+
+    fn huds_on(&self) -> Option<BTreeSet<uuid::Uuid>> {
+        self.on.clone()
+    }
 }
 
 impl Viewer {
@@ -166,6 +192,10 @@ impl Viewer {
             inventory: Folders::default(),
             bars: None,
             paint: None,
+            asked: Vec::new(),
+            huds: Vec::new(),
+            names: Default::default(),
+            on: None,
         }
     }
 
@@ -251,6 +281,9 @@ impl Viewer {
             open: &mut self.open,
             blocked: &self.blocked,
             inventory: &mut self.inventory,
+            huds: &self.huds,
+            names: &self.names,
+            on: &self.on,
         };
         let mut live = Live {
             store: &mut self.store,
@@ -259,6 +292,7 @@ impl Viewer {
         let outcome = apply::frame(&ctx, &mut live, seen, &mut shell);
         self.saved |= outcome.save;
         self.preferences |= outcome.preferences;
+        self.asked.extend(outcome.context);
         if let Some(window) = &mut self.window {
             window.send(&outcome.commands);
             window.frame();

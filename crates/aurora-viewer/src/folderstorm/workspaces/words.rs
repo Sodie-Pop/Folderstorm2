@@ -3,6 +3,7 @@
 //! holds.
 
 use super::apply::Report;
+use super::context::{Camera, Part, Told};
 use super::store::{Layout, MAX_LAYOUTS, MAX_NAME, NameError, StoreError, WindowFrame};
 use super::windows;
 use super::workspace::{MAX_WORKSPACES, Workspace};
@@ -44,13 +45,100 @@ pub fn workspace_holds(workspace: &Workspace) -> String {
     } else {
         tr!("fs-workspaces-holds-opens", names = names.join(", "))
     };
-    match &workspace.folders {
+    let mut text = match &workspace.folders {
         Some(folders) => format!(
             "{layout} {opens} {}",
             tr!("fs-workspaces-holds-folders", count = folders.windows.len())
         ),
         None => format!("{layout} {opens}"),
+    };
+    if let Some(context) = context_holds(workspace) {
+        text.push(' ');
+        text.push_str(&context);
     }
+    text
+}
+
+/// A camera choice, in a few words.
+pub fn camera_words(camera: &Camera) -> String {
+    match camera {
+        Camera::View(view) => view.label().to_owned(),
+        Camera::Preset(name) => tr!("fs-context-camera-preset", name = name.as_str()),
+    }
+}
+
+/// What a workspace's context holds, in a sentence; None without one.
+pub fn context_holds(workspace: &Workspace) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(name) = &workspace.graphics {
+        parts.push(tr!("fs-context-holds-graphics", name = name.as_str()));
+    }
+    if let Some(camera) = &workspace.camera {
+        parts.push(tr!("fs-context-holds-camera", camera = camera_words(camera)));
+    }
+    if let Some(huds) = workspace.huds.as_ref().filter(|huds| !huds.items.is_empty()) {
+        parts.push(tr!("fs-context-holds-huds", count = huds.items.len()));
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
+/// What the app did with a workspace's context, in sentences.
+pub fn context_text(told: &Told) -> Vec<String> {
+    let mut text = Vec::new();
+    if told.restored {
+        text.push(tr!("fs-context-restored").to_owned());
+    }
+    if let Some((name, part)) = &told.graphics {
+        let name = name.as_str();
+        text.push(match part {
+            Part::Done => tr!("fs-context-graphics-done", name = name),
+            // (a profile is never locked nor refused)
+            _ => tr!("fs-context-graphics-missing", name = name),
+        });
+    }
+    if let Some((camera, part)) = &told.camera {
+        let camera = camera_words(camera);
+        text.push(match part {
+            Part::Done => tr!("fs-context-camera-done", camera = camera),
+            Part::Missing => tr!("fs-context-camera-missing", camera = camera),
+            Part::Locked => tr!("fs-context-camera-locked").to_owned(),
+            Part::Mouselook => tr!("fs-context-camera-mouselook").to_owned(),
+            Part::Failed(why) => tr!("fs-context-camera-failed", why = why.as_str()),
+        });
+    }
+    if let Some(huds) = &told.huds {
+        if huds.other_account {
+            text.push(tr!("fs-context-huds-other-account").to_owned());
+        }
+        if huds.busy {
+            text.push(tr!("fs-context-huds-busy").to_owned());
+        }
+        if let Some(why) = &huds.refused {
+            text.push(tr!("fs-context-huds-refused", why = why.as_str()));
+        }
+        if huds.asked > 0 {
+            text.push(tr!("fs-context-huds-asked", count = huds.asked));
+        }
+        if huds.taken_off > 0 {
+            text.push(tr!("fs-context-huds-taken-off", count = huds.taken_off));
+        }
+        if huds.stuck > 0 {
+            text.push(tr!("fs-context-huds-stuck", count = huds.stuck));
+        }
+        if huds.worn > 0 {
+            text.push(tr!("fs-context-huds-worn", count = huds.worn));
+        }
+        if huds.missing > 0 {
+            text.push(tr!("fs-context-huds-missing", count = huds.missing));
+        }
+        if huds.not_wearable > 0 {
+            text.push(tr!("fs-context-huds-not-wearable", count = huds.not_wearable));
+        }
+        if huds.blocked > 0 {
+            text.push(tr!("fs-context-huds-blocked", count = huds.blocked));
+        }
+    }
+    text
 }
 
 /// What the last apply did, in a sentence or two.
@@ -102,6 +190,9 @@ pub fn report_text(report: &Report, waiting: usize) -> String {
     }
     if report.folders_other_account {
         add(tr!("fs-workspaces-folders-other-account").to_owned());
+    }
+    for sentence in report.context.iter().flat_map(context_text) {
+        add(sentence);
     }
     if waiting > 0 {
         add(tr!("fs-layouts-waiting", count = waiting));
