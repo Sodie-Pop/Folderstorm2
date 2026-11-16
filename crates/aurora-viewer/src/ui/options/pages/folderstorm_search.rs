@@ -40,10 +40,18 @@ pub(super) fn in_language(language: &str, key: &'static str) -> String {
 }
 
 /// A keyboard action of Preferences › Shortcuts: the Folderstorm ones (the
-/// layouts' switcher and its toggle) are found as the layouts are.
+/// layouts' switcher and its toggle) are found as the layouts are, those
+/// of the margins' desktop as the desktop is.
 pub(super) fn shortcut(cx: &mut Cx, action: Action) {
-    if matches!(action, Action::Folderstorm(_)) {
-        words(cx, &["fs-search-layouts", "fs-search-layouts-quick"]);
+    use crate::folderstorm::keys::Key;
+    match action {
+        Action::Folderstorm(Key::DesktopShortcuts | Key::DesktopFocus) => {
+            words(cx, &["fs-search-desktop"]);
+        }
+        Action::Folderstorm(_) => {
+            words(cx, &["fs-search-layouts", "fs-search-layouts-quick"]);
+        }
+        _ => {}
     }
 }
 

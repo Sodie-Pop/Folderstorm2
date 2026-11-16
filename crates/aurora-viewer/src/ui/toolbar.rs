@@ -403,6 +403,7 @@ impl ToolbarUi {
             {
                 self.movelock_options = true;
             }
+            crate::folderstorm::desktop::toolbar_menu(ui, p, button.map(|b| b.command.as_str())); // Folderstorm: *Add to desktop*
             // the Conversations button: open the window, leave nearby chat
             // out of its flash
             if button.is_some_and(|b| b.command == "conversations") {
@@ -471,6 +472,12 @@ impl ToolbarUi {
     /// where it can go (LLToolBarView::draw, isToolDragged).
     pub fn dragging(ctx: &egui::Context) -> bool {
         egui::DragAndDrop::has_payload_of_type::<Drag>(ctx)
+    }
+
+    // Folderstorm: the command of the button being dragged, for a drop on
+    // the margins' desktop (the payload is private)
+    pub(crate) fn carried_command(ctx: &egui::Context) -> Option<String> {
+        egui::DragAndDrop::payload::<Drag>(ctx).map(|drag| drag.button.command.clone())
     }
 
     /// `response` covers the toolbar `bar` whose buttons stand at `rects`:

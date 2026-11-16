@@ -39,6 +39,8 @@ struct Bench {
     /// RLVa hides the Inventory (`@showinv`).
     no_inventory: bool,
     hidden: bool,
+    /// The key action *Focus the desktop* was pressed: for the next frame.
+    focus: bool,
     /// A window drawn over that rectangle, above the desktops.
     window: Option<Rect>,
     /// A label of the world painted over that rectangle, before the end of
@@ -81,6 +83,12 @@ fn world_labels_cut(primitives: &mut Vec<egui::ClippedPrimitive>, world: Option<
 
 /// The account logged in.
 const ME: Uuid = Uuid::from_u128(1);
+
+/// Where a test puts the command of a toolbar button being dragged (the
+/// toolbar's own payload is private to `ui/toolbar.rs`).
+pub(super) fn toolbar_cargo_id() -> egui::Id {
+    egui::Id::unique("folderstorm_desktop_test_toolbar_cargo")
+}
 
 /// Three monitors of 640 × 400 side by side under a window over the three.
 fn three_monitors() -> MonitorLayout {
@@ -127,6 +135,7 @@ impl Bench {
             },
             no_inventory: false,
             hidden: false,
+            focus: false,
             window: None,
             label: None,
             out: Vec::new(),
@@ -196,6 +205,7 @@ impl Bench {
             .world
             .map(|[x, y, w, h]| Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)));
         let (window, label, hidden, facts, p) = (self.window, self.label, self.hidden, self.facts, self.p);
+        let focus = std::mem::take(&mut self.focus);
         let (desktop, icons) = (&mut self.desktop, &self.icons);
         let folders = Folders {
             inv: &self.inv,
@@ -229,6 +239,7 @@ impl Bench {
                     facts,
                     folders,
                     hidden,
+                    focus,
                 };
                 out = super::show(&ctx, desktop, &env);
                 // a window, drawn after the desktops as before them: its

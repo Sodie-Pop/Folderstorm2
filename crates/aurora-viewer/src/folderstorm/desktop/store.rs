@@ -473,6 +473,67 @@ impl Desktop {
         let at = self.shortcuts.iter().position(|s| s.id == id).ok_or(Error::Missing)?;
         Ok(self.shortcuts.remove(at))
     }
+
+    /// Gives the shortcut `id` the name `text` ([`clean_name`]); an empty
+    /// one gives it its target's own name back. Never renames what it
+    /// opens. True when its name changed.
+    pub fn rename(&mut self, id: u32, text: &str) -> bool {
+        let name = Some(clean_name(text)).filter(|name| !name.is_empty());
+        match self.shortcut_mut(id) {
+            Some(shortcut) if shortcut.name != name => {
+                shortcut.name = name;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Gives the shortcut `id` the icon `icon` (a Tabler name); None gives
+    /// it its target's own back. True when its icon changed.
+    pub fn set_icon(&mut self, id: u32, icon: Option<&str>) -> bool {
+        let icon = icon.map(clean_name).filter(|icon| !icon.is_empty());
+        match self.shortcut_mut(id) {
+            Some(shortcut) if shortcut.icon != icon => {
+                shortcut.icon = icon;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Puts the shortcuts `order` of `slot` in a grid of `rows` rows, from
+    /// its first cell, down then right (*Arrange by name*: the surface
+    /// gives the order, which reads names this record does not keep). True
+    /// when one moved.
+    pub fn arrange(&mut self, slot: u8, order: &[u32], rows: u16) -> bool {
+        let rows = u32::from(rows.max(1));
+        let mut changed = false;
+        let mut n = 0u32;
+        for id in order {
+            let Some(shortcut) = self.shortcuts.iter_mut().find(|s| s.id == *id && s.slot == slot) else {
+                continue;
+            };
+            let to = ((n / rows).min(u32::from(MAX_CELL - 1)) as u16, (n % rows) as u16);
+            n += 1;
+            changed |= shortcut.cell() != to;
+            (shortcut.col, shortcut.row) = to;
+        }
+        changed
+    }
+
+    /// How many shortcuts stand on a slot that is not one of `live` (the
+    /// slots that have a room now): kept, not shown.
+    pub fn unused(&self, live: &[u8]) -> usize {
+        self.shortcuts.iter().filter(|s| !live.contains(&s.slot)).count()
+    }
+
+    /// Removes every shortcut of the account logged in (what this version
+    /// could not read is kept). How many went.
+    pub fn clear(&mut self) -> usize {
+        let count = self.shortcuts.len();
+        self.shortcuts.clear();
+        count
+    }
 }
 
 #[cfg(test)]
@@ -482,6 +543,63 @@ mod tests {
 
     fn written(desktop: &Desktop) -> serde_json::Value {
         serde_json::to_value(desktop).expect("written")
+    }
+
+    #[test]
+    fn a_shortcut_is_renamed_given_an_icon_and_arranged() {
+        let mut d = Desktop::default();
+        d.sign_in(Uuid::from_u128(1));
+        let people = d.add(Target::command("people"), 0, (3, 1)).expect("added");
+        let build = d.add(Target::command("build"), 0, (0, 5)).expect("added");
+        let other = d.add(Target::command("people"), 2, (4, 4)).expect("added");
+        // a name is cleaned; an empty one gives the target's own back
+        assert!(d.rename(people, "  My\tfriends  "));
+        assert_eq!(d.shortcut(people).and_then(|s| s.name.clone()), Some("My friends".to_owned()));
+        assert!(!d.rename(people, "My friends"), "the same name: nothing changed");
+        assert!(d.rename(people, &"x".repeat(200)));
+        assert_eq!(
+            d.shortcut(people).and_then(|s| s.name.as_ref()).map(|n| n.chars().count()),
+            Some(MAX_NAME)
+        );
+        assert!(d.rename(people, "   "));
+        assert_eq!(d.shortcut(people).and_then(|s| s.name.clone()), None);
+        assert!(!d.rename(999, "nobody"));
+        // an icon, and the target's own back
+        assert!(d.set_icon(build, Some("star-filled")));
+        assert!(!d.set_icon(build, Some("star-filled")));
+        assert_eq!(d.shortcut(build).and_then(|s| s.icon.clone()), Some("star-filled".to_owned()));
+        assert!(d.set_icon(build, None));
+        assert_eq!(d.shortcut(build).and_then(|s| s.icon.clone()), None);
+        // arranged: down then right, the other slot's untouched
+        assert!(d.arrange(0, &[build, other, people], 1));
+        assert_eq!(d.shortcut(build).map(Shortcut::cell), Some((0, 0)));
+        assert_eq!(d.shortcut(people).map(Shortcut::cell), Some((1, 0)));
+        assert_eq!(d.shortcut(other).map(Shortcut::cell), Some((4, 4)));
+        assert!(d.arrange(0, &[people, build], 4));
+        assert_eq!(d.shortcut(people).map(Shortcut::cell), Some((0, 0)));
+        assert_eq!(d.shortcut(build).map(Shortcut::cell), Some((0, 1)));
+        assert!(!d.arrange(0, &[people, build], 4), "already so");
+        // what stands on a slot without a room
+        assert_eq!(d.unused(&[0, 2]), 0);
+        assert_eq!(d.unused(&[0]), 1);
+        assert_eq!(d.unused(&[]), 3);
+    }
+
+    #[test]
+    fn removing_all_takes_this_account_s_shortcuts_only() {
+        let (first, second) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let mut d = Desktop::default();
+        d.sign_in(first);
+        d.add(Target::command("people"), 0, (0, 0)).expect("added");
+        d.sign_in(second);
+        d.add(Target::command("build"), 0, (0, 0)).expect("added");
+        d.add(Target::command("people"), 0, (0, 1)).expect("added");
+        d.kept.push(json!({ "id": 9, "target": { "landmark": "abc" } }));
+        assert_eq!(d.clear(), 2);
+        assert!(d.shortcuts.is_empty());
+        assert_eq!(d.kept.len(), 1, "what this version cannot read is kept");
+        d.sign_in(first);
+        assert_eq!(d.shortcuts.len(), 1, "the other account's desktop is untouched");
     }
 
     #[test]

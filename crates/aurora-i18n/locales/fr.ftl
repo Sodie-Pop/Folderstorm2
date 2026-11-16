@@ -1802,11 +1802,13 @@ fs-switcher-command = Dispositions et espaces de travail
 fs-switcher-toggle-command = Changer de disposition
 fs-switcher-toggle-to = Passer à la disposition « { $name } »
 fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions et espaces de travail (un clic l'ouvre).
-fs-keys-section = Dispositions
+fs-keys-section = Dispositions et bureau
 fs-keys-layout-switcher = Fenêtre Dispositions et espaces de travail
 fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
 fs-keys-next-favorite = Disposition favorite suivante
 fs-keys-previous-favorite = Disposition favorite précédente
+fs-keys-desktop-shortcuts = Afficher ou masquer les raccourcis du bureau
+fs-keys-desktop-focus = Donner le clavier au bureau
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Tableau de gestes
@@ -2140,6 +2142,31 @@ fs-desktop-left-out =
     }
 fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Disposition › Barres et fenêtres).
 fs-desktop-added-hidden = Ils s'affichent quand la fenêtre laisse de la place autour du monde.
+fs-desktop-rename = Renommer
+fs-desktop-icon = Icône
+fs-desktop-icon-default = Par défaut
+fs-desktop-move-to = Déplacer vers
+fs-desktop-monitor = Écran { $number }
+fs-desktop-arrange = Ranger par nom
+fs-desktop-command-added = Raccourci ajouté au bureau.
+fs-desktop-single-click = Ouvrir d'un simple clic
+fs-desktop-single-click-help = Un simple clic ouvre un raccourci, comme pour un bouton de la barre d'outils. Désactivé : un clic le sélectionne et un double clic l'ouvre, pour qu'un clic égaré ne vous téléporte jamais chez vous ni ne vous fasse asseoir.
+fs-desktop-unused =
+    { $count ->
+        [one] Un raccourci est sur un écran qui n'est pas utilisé
+       *[other] { $count } raccourcis sont sur un écran qui n'est pas utilisé
+    }
+fs-desktop-unused-help = Un raccourci reste sur l'écran où il a été posé. Quand la fenêtre ne couvre plus cet écran, ou que le monde le remplit, le raccourci est conservé mais pas affiché.
+fs-desktop-bring = Les amener ici
+fs-desktop-clear = Retirer tous les raccourcis…
+fs-desktop-clear-help = Retire tous les raccourcis des bureaux de ce compte. Seuls les raccourcis disparaissent : les dossiers et les barres d'outils restent tels quels.
+fs-desktop-clear-button = Tout retirer…
+fs-desktop-clear-ask =
+    { $count ->
+        [one] Retirer le raccourci de ce compte ?
+       *[other] Retirer les { $count } raccourcis de ce compte ?
+    }
+fs-desktop-clear-confirm = Tout retirer
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message

@@ -1700,11 +1700,13 @@ fs-switcher-command = レイアウトとワークスペース
 fs-switcher-toggle-command = レイアウトを切り替え
 fs-switcher-toggle-to = レイアウト「{ $name }」に切り替え
 fs-switcher-toggle-unset = ２つのレイアウトを 初期設定 › レイアウト › レイアウトとワークスペース で選んでください（クリックで開きます）。
-fs-keys-section = レイアウト
+fs-keys-section = レイアウトとデスクトップ
 fs-keys-layout-switcher = 「レイアウトとワークスペース」ウィンドウ
 fs-keys-layout-toggle = ２つのレイアウトを切り替え
 fs-keys-next-favorite = 次のお気に入りレイアウト
 fs-keys-previous-favorite = 前のお気に入りレイアウト
+fs-keys-desktop-shortcuts = デスクトップのショートカットを表示／非表示
+fs-keys-desktop-focus = デスクトップにフォーカス
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = ジェスチャーボード
@@ -1960,6 +1962,23 @@ fs-desktop-limit = デスクトップに置けるショートカットは最大 
 fs-desktop-left-out = { $count } 個の項目は追加されませんでした。ショートカットにできるのは自分のインベントリのフォルダだけです。
 fs-desktop-added-on = 余白のショートカットをオンにしました（環境設定 › レイアウト › バーとウィンドウ）。
 fs-desktop-added-hidden = ウィンドウがワールドの周りに余白を残すと表示されます。
+fs-desktop-rename = 名前を変更
+fs-desktop-icon = アイコン
+fs-desktop-icon-default = 既定
+fs-desktop-move-to = 移動先
+fs-desktop-monitor = モニター { $number }
+fs-desktop-arrange = 名前順に整列
+fs-desktop-command-added = ショートカットをデスクトップに追加しました。
+fs-desktop-single-click = シングルクリックで開く
+fs-desktop-single-click-help = ツールバーのボタンと同じように、シングルクリックでショートカットを開きます。オフの場合はクリックで選択、ダブルクリックで開くので、誤ってクリックしてもホームにテレポートしたり座ったりすることはありません。
+fs-desktop-unused = { $count } 個のショートカットが使用されていないモニターにあります
+fs-desktop-unused-help = ショートカットは置いたモニターに残ります。ウィンドウがそのモニターにかからなくなったとき、またはワールドがそのモニター全体を使うときは、保持されますが表示されません。
+fs-desktop-bring = ここに移動
+fs-desktop-clear = すべてのショートカットを削除…
+fs-desktop-clear-help = このアカウントのデスクトップにあるショートカットをすべて削除します。削除されるのはショートカットだけで、フォルダとツールバーはそのままです。
+fs-desktop-clear-button = すべて削除…
+fs-desktop-clear-ask = このアカウントの { $count } 個のショートカットを削除しますか？
+fs-desktop-clear-confirm = すべて削除
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります

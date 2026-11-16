@@ -11,7 +11,10 @@
 //! *Open in a new window* does), one window per folder, and never while
 //! RLVa hides the Inventory (`@showinv`). Folders come from the Inventory's
 //! menu (*Add to desktop*, `InvAction::FolderstormDesktopAdd`) or are
-//! dropped on a desktop; only their ids are kept.
+//! dropped on a desktop; only their ids are kept. A toolbar button's menu
+//! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
+//! is run here), and two keyboard actions of `crate::folderstorm::keys`
+//! show or hide the shortcuts and give the desktop the keyboard.
 
 use super::*;
 use crate::folderstorm::desktop::{self, Facts, Folders, Request, place, targets};
@@ -85,6 +88,14 @@ impl App {
     pub(super) fn folderstorm_desktop(&mut self, ctx: &egui::Context, p: &crate::theme::Palette, a: &mut UiActions) {
         self.desktop_demo(ctx);
         self.desktop_sign_in();
+        // what a toolbar button's menu and the keyboard asked
+        let mut focus = false;
+        for ask in desktop::take_asks(ctx) {
+            match ask {
+                desktop::Ask::AddCommand(command) => self.desktop_add_command(ctx, &command),
+                desktop::Ask::Focus => focus = true,
+            }
+        }
         if !self.settings.folderstorm_desktop.shortcuts_on {
             return;
         }
@@ -104,6 +115,7 @@ impl App {
                 colors: prefs.folder_colors_enabled.then_some(&prefs.folder_colors),
             },
             hidden: mouselook || self.interface.hidden || self.interface.immersive || ui::widgets::interface_hidden(ctx),
+            focus,
         };
         let mut requests = desktop::show(ctx, &mut self.settings.folderstorm_desktop, &env);
         requests.extend(self.desktop_demo_frame(ctx));
@@ -139,6 +151,9 @@ impl App {
                     self.options_ui.open(ui::options::Page::Layout, 0);
                     self.options_ui.reveal = Some((ui::options::Page::Layout, 0, aurora_i18n::tr!("fs-desktop-shortcuts")));
                 }
+                // (Aurora's window of every command: one is dragged from
+                // it onto a desktop)
+                Request::ToolbarButtons => self.toolbar_ui.open = true,
             }
         }
         // saved once the pointer is up, as the gesture boards are
@@ -174,6 +189,47 @@ impl App {
         }
         if let Some(text) = desktop::added_notice(&added, picked.left_out, turned_on, !rooms.is_empty()) {
             self.world.system_notice(text, Topic::Items);
+        }
+    }
+
+    /// *Add to desktop* of a toolbar button's menu: a shortcut to
+    /// `command` in the first free cell of the first desktop. As for a
+    /// folder, it turns the shortcuts on when they are off, and says what
+    /// it did (the desktop may be on another monitor, or not shown now).
+    fn desktop_add_command(&mut self, ctx: &egui::Context, command: &str) {
+        let d = &mut self.settings.folderstorm_desktop;
+        let rooms = desktop::rooms(ctx, d.size);
+        let added = desktop::surface::add_command_first(d, &rooms, command);
+        let new = matches!(added, desktop::surface::CommandAdded::New(_));
+        let turned_on = new && !d.shortcuts_on;
+        if let desktop::surface::CommandAdded::New(id) | desktop::surface::CommandAdded::Existing(id) = added {
+            desktop::surface::select(ctx, id);
+        }
+        if new {
+            d.shortcuts_on = true;
+            self.settings.save();
+        }
+        let text = desktop::command_notice(added, turned_on, !rooms.is_empty());
+        self.world.system_notice(text, Topic::Items);
+    }
+
+    /// One of the desktop's keyboard actions (Preferences › Shortcuts;
+    /// none has a default key). False for a key that is not the desktop's.
+    pub(super) fn folderstorm_desktop_key(&mut self, key: crate::folderstorm::keys::Key) -> bool {
+        use crate::folderstorm::keys::Key;
+        match key {
+            Key::DesktopShortcuts => {
+                let d = &mut self.settings.folderstorm_desktop;
+                d.shortcuts_on = !d.shortcuts_on;
+                self.settings.save();
+                true
+            }
+            // (run by the next frame, where the shortcuts are drawn)
+            Key::DesktopFocus => {
+                desktop::ask(&self.egui_ctx, desktop::Ask::Focus);
+                true
+            }
+            _ => false,
         }
     }
 

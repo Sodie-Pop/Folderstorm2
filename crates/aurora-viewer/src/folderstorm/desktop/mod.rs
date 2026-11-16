@@ -11,13 +11,18 @@
 //! new window*), one window per folder; it keeps the folder's id, nothing else.
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
-//! profile's. Renaming and the taskbar are the plan's next
-//! checkpoints; the record ([`store`]) already has their fields.
+//! profile's. A shortcut can be renamed, given another icon ([`icons`]),
+//! moved to another monitor and arranged by name; a toolbar button is
+//! dropped on a desktop, or sent there from its menu ([`toolbar_menu`]).
+//! The taskbar is the plan's next checkpoint; the record ([`store`])
+//! already has its fields.
 //!
 //! - [`store`]: what `settings.json` keeps (field `folderstorm_desktop`).
 //! - [`place`]: slots, rooms and cells (pure maths).
 //! - [`targets`]: what a shortcut shows, and the gates of a command.
-//! - [`surface`]: the areas, the shortcuts' faces, clicks, drags and menus.
+//! - [`surface`]: the areas, the shortcuts' faces, clicks, drags, menus,
+//!   the rename field and the keyboard.
+//! - [`icons`]: the icons a shortcut can be given.
 //! - [`demo`]: the demo, `AURORA_DEMO_DESKTOP`.
 //!
 //! Drawing order: each desktop is an `egui::Area` of `Order::Background`.
@@ -29,6 +34,7 @@
 //! is off or the world fills the window.
 
 pub mod demo;
+pub mod icons;
 pub mod place;
 pub mod store;
 pub mod surface;
@@ -59,6 +65,9 @@ pub struct Env<'a> {
     /// The interface is hidden (its shortcut, immersive mode, mouselook
     /// without the interface): no desktop.
     pub hidden: bool,
+    /// The keyboard goes to the desktop now (the key action *Focus the
+    /// desktop*): to the selected shortcut, else to the first one.
+    pub focus: bool,
 }
 
 /// What the desktops ask the app.
@@ -77,6 +86,97 @@ pub enum Request {
     Changed,
     /// Open Preferences on the desktop's group.
     Settings,
+    /// Open Aurora's *Toolbar buttons* window, to drag a command from.
+    ToolbarButtons,
+}
+
+/// What another part of the viewer asks the desktops: taken by the app's
+/// glue at its next frame ([`take_asks`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Ask {
+    /// A shortcut to this command of the toolbar catalogue, in the first
+    /// free cell of the first desktop (*Add to desktop* of a toolbar
+    /// button's menu).
+    AddCommand(String),
+    /// The keyboard to the desktop (the key action *Focus the desktop*).
+    Focus,
+}
+
+fn asks_id() -> egui::Id {
+    egui::Id::unique("folderstorm_desktop_asks")
+}
+
+pub fn ask(ctx: &egui::Context, ask: Ask) {
+    ctx.data_mut(|d| d.get_temp_mut_or_default::<Vec<Ask>>(asks_id()).push(ask));
+}
+
+pub fn take_asks(ctx: &egui::Context) -> Vec<Ask> {
+    ctx.data_mut(|d| d.remove_temp::<Vec<Ask>>(asks_id())).unwrap_or_default()
+}
+
+/// The icon of *Add to desktop* (the Inventory's entry has the same).
+pub const ICON_ADD_TO_DESKTOP: &str = "device-desktop-filled";
+
+/// *Add to desktop* in the right-click menu of a toolbar button (the hook
+/// of `ToolbarUi::context`; `command`: the button's, None on the toolbar
+/// itself). Greyed, with the reason, for a command that never opens from a
+/// shortcut (its button is its control, or Aurora cannot run it yet).
+pub fn toolbar_menu(ui: &mut egui::Ui, p: &Palette, command: Option<&str>) {
+    let Some(command) = command else {
+        return;
+    };
+    let refused = targets::refuses_adding(command);
+    let why = refused.map_or("", |why| why.text());
+    if crate::ui::menu::item_tip(ui, p, ICON_ADD_TO_DESKTOP, tr!("fs-desktop-add"), refused.is_none(), why) {
+        ask(ui.ctx(), Ask::AddCommand(command.to_owned()));
+    }
+}
+
+/// The command of the toolbar button being dragged (from a toolbar or
+/// from the *Toolbar buttons* window), for a drop on a desktop.
+pub(crate) fn toolbar_cargo(ctx: &egui::Context) -> Option<String> {
+    #[cfg(test)]
+    if let Some(command) = ctx.data(|d| d.get_temp::<String>(tests::toolbar_cargo_id())) {
+        return Some(command);
+    }
+    crate::ui::toolbar::ToolbarUi::carried_command(ctx)
+}
+
+/// What to say after a command was added from a toolbar button's menu.
+/// `turned_on`: the shortcuts were off and this turned them on; `shown`: a
+/// desktop shows now.
+pub fn command_notice(added: surface::CommandAdded, turned_on: bool, shown: bool) -> String {
+    match added {
+        surface::CommandAdded::New(_) => {
+            let mut parts = vec![tr!("fs-desktop-command-added").to_owned()];
+            if turned_on {
+                parts.push(tr!("fs-desktop-added-on").to_owned());
+            }
+            if !shown {
+                parts.push(tr!("fs-desktop-added-hidden").to_owned());
+            }
+            parts.join(" ")
+        }
+        surface::CommandAdded::Existing(_) => tr!("fs-desktop-add-existing").to_owned(),
+        surface::CommandAdded::Refused(why) => why.text(),
+        surface::CommandAdded::Never(why) => why.text().to_owned(),
+    }
+}
+
+/// How many shortcuts of the account stand on a monitor that has no room
+/// now, while another has one (Preferences' note, with *Bring them here*).
+/// None of them counts while no desktop shows at all: they are all kept
+/// for when the window leaves room around the world.
+pub fn unused(ctx: &egui::Context, desktop: &Desktop) -> usize {
+    let live: Vec<u8> = rooms(ctx, desktop.size).iter().map(|room| room.slot).collect();
+    if live.is_empty() { 0 } else { desktop.unused(&live) }
+}
+
+/// *Bring them here*: the shortcuts of the monitors not in use go to the
+/// first desktop that shows.
+pub fn bring_here(ctx: &egui::Context, desktop: &mut Desktop) -> surface::Brought {
+    let rooms = rooms(ctx, desktop.size);
+    surface::bring_here(desktop, &rooms)
 }
 
 /// Where the bars are this frame, for the rooms: confined to the world
