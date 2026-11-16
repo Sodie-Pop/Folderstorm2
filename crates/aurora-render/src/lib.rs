@@ -23,6 +23,7 @@ pub use device_lost::{GPU_WORK_NONE, GPU_WORK_VERDICTS, in_guarded_poll, is_loss
 mod dof;
 mod drawn_pick;
 mod exposure;
+mod folderstorm_hud_underlay; // Folderstorm: the margins' background under the HUD attachments
 pub mod frame_priority;
 mod fsr;
 pub mod gpu_alloc;
@@ -112,6 +113,7 @@ pub use bloom::tile_reach as bloom_tile_reach;
 pub use contact_shadows::tile_reach as contact_tile_reach;
 pub use dof::tile_reach as dof_tile_reach;
 pub use drawn_pick::{Drawn, DrawnFace, DrawnMode};
+pub use folderstorm_hud_underlay::{end_hud_underlay, take_end as take_hud_underlay_end}; // Folderstorm
 pub use gpu_cull::set_whole_chunk_uploads;
 pub use histogram::HISTOGRAM_BINS;
 pub use hud::HudView;

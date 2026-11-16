@@ -14,7 +14,8 @@
 //! - [`import`]: the copy of a chosen picture, and its decoding.
 //! - [`paint`]: the texture, and the shapes put under the interface,
 //!   right after the world's labels (two hooks in `app.rs`: the mark in
-//!   the pass, the shapes after it).
+//!   the pass, the shapes after it), and under the HUD attachments unless
+//!   the user chose otherwise (`aurora_render::end_hud_underlay`).
 //! - [`demo`]: the demo, `AURORA_DEMO_BACKGROUND`.
 //!
 //! The world is never covered: only the window minus the world viewport is
@@ -72,7 +73,8 @@ pub fn mark(ctx: &egui::Context) {
 
 /// The background in effect painted under the interface this frame (the
 /// app's hook, after the pass): its shapes go where [`mark`] was in
-/// `frame`, else first.
+/// `frame`, else first; under the HUD attachments unless the user chose
+/// the background over them.
 pub fn underlay(ctx: &egui::Context, store: &Store, frame: &mut Vec<egui::epaint::ClippedShape>) {
-    paint::underlay_in(ctx, in_effect(store), &import::folder(), frame);
+    paint::underlay_in(ctx, in_effect(store), !store.background_over_huds, &import::folder(), frame);
 }

@@ -84,6 +84,20 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             crate::folderstorm::backgrounds::record::BRIGHTNESS,
             " %",
         );
+        // (on until unticked; the store keeps the opposite, so that a file
+        // without it keeps the HUDs on top)
+        cx.greyed(kind == Kind::None);
+        super::super::folderstorm_search::words(cx, &["fs-search-background-huds"]).row(
+            tr!("fs-background-huds-over"),
+            tr!("fs-background-huds-over-help"),
+            &field!(folderstorm_workspaces.background_over_huds),
+            |ui, s| {
+                let mut on = !s.folderstorm_workspaces.background_over_huds;
+                let changed = super::super::super::toggle(ui, &p, &mut on);
+                s.folderstorm_workspaces.background_over_huds = !on;
+                changed
+            },
+        );
         cx.greyed(false);
     });
 }
