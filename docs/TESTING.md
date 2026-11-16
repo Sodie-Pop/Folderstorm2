@@ -11369,7 +11369,9 @@ separate searches enabled and disabled; that preference controls only the text.
   one with its cross and click again: that one comes back, afresh, where it
   was. Right click the button: *New Inventory window*, *Close all additional
   windows* (closes the numbered windows only, not a folder or tab window).
-  Ctrl+Shift+I does the same as the button. `extra-windows-full`: all 16
+  Folder windows and custom-tab windows have the same button (beside "+" in
+  the Legacy style, in the tools row in the Aurora style), except in quiet
+  mode where their toolbar is hidden. Ctrl+Shift+I does the same as the button. `extra-windows-full`: all 16
   open in a cascade, the status line says that all 16 are open (again at
   about frame 400), the button greyed with the same tooltip, and its menu
   open at about frame 40 with *New Inventory window* greyed. Under RLVa's

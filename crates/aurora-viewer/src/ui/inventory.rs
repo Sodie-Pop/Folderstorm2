@@ -1543,10 +1543,9 @@ fn status(
 /// the Legacy Viewer's `new_inv_btn`, lit while that window is open; the
 /// other windows have none.
 fn additional_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
-    // Folderstorm: in every additional window too, opens the next one (extra_windows.rs)
-    if let Some(rect) = extra_windows::legacy_button(ui, p, st) {
-        additional_button_drawn(ui, rect);
-    }
+    // Folderstorm: in every Inventory window, opens the next additional one (extra_windows.rs)
+    let rect = extra_windows::legacy_button(ui, p, st);
+    additional_button_drawn(ui, rect);
 }
 
 /// Where the additional window's button was drawn, for the tests to click.
