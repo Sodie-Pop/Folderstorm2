@@ -1183,6 +1183,62 @@ inventory-custom-tab-delete-question = Delete the custom tab “{ $name }”? It
 inventory-custom-tab-clone-name = { $name } copy
 inventory-custom-tab-demo-media = Textures and sounds
 inventory-custom-tab-demo-named = Demo items
+inventory-folder-tab-create = Create tab
+inventory-folder-tab-add-to = Add to
+inventory-folder-tab-new = New tab…
+inventory-folder-tab-has-tip = Already in this tab.
+inventory-folder-tab-why-empty = Select folders or items first.
+inventory-folder-tab-why-refused = The inventory's root, the Library, the Trash and what it holds cannot go into a tab.
+inventory-folder-tab-why-loading = The inventory is not loaded yet.
+inventory-folder-tab-why-window = A window opened on one folder has no custom tabs.
+inventory-folder-tab-added-one = Added “{ $folder }” to “{ $tab }”.
+inventory-folder-tab-added-many = { $count ->
+    [one] Added { $count } entry to “{ $tab }”.
+   *[other] Added { $count } entries to “{ $tab }”.
+    }
+inventory-folder-tab-added-already = { $count ->
+    [one] { $count } was already there.
+   *[other] { $count } were already there.
+    }
+inventory-folder-tab-already-one = “{ $folder }” is already in “{ $tab }”.
+inventory-folder-tab-already-many = These are already in “{ $tab }”.
+inventory-folder-tab-add = Add the selection
+inventory-folder-tab-replace = Use only the selection
+inventory-folder-tab-clear = Show everything
+inventory-folder-tab-clear-tip = Show the whole inventory in this tab again: no folders, no pinned items. Its filters and search stay.
+inventory-folder-tab-select-tip = Select folders or items in the Inventory list first: up to { $count } folders, not the Trash or the Library.
+inventory-folder-tab-limit = A tab can show up to { $count } folders.
+inventory-folder-tab-heading = Folders and pinned items
+inventory-folder-tab-all = All folders
+inventory-folder-tab-elsewhere = This tab's folders and items were chosen on another account: here it shows all folders.
+inventory-folder-tab-help = The tab shows these folders and everything inside them, and the pinned items at the top, with its filters and search. Select folders (up to { $count }) or items in the Inventory list, then add them.
+inventory-folder-tab-remove = Remove from the tab
+inventory-folder-tab-deleted-folder = Deleted folder
+inventory-folder-tab-status-missing = deleted
+inventory-folder-tab-status-trash = in the Trash
+inventory-folder-tab-status-refused = not allowed
+inventory-folder-tab-note-gone = { $count ->
+    [one] { $count } folder or item of this tab is deleted or in the Trash.
+   *[other] { $count } folders or items of this tab are deleted or in the Trash.
+    }
+inventory-folder-tab-note-remove = Remove from tab
+inventory-folder-tab-note-remove-tip = Forget them in this tab. What is restored from the Trash would not come back in it.
+inventory-folder-tab-demo-name = Clothing and body
+inventory-folder-tab-demo-other = Everyday
+inventory-folder-tab-why-broken = A link in the selection points to nothing: it cannot go into a tab.
+inventory-folder-tab-item-limit = A tab can pin up to { $count } items.
+inventory-folder-tab-deleted-item = Deleted item
+inventory-quick-pinned = Pinned item
+inventory-quick-open-window = Open in a window
+inventory-quick-open-window-tip = Show this tab in a small window of its own.
+inventory-quick-flat = Flat list
+inventory-quick-flat-tip = List every item of this tab without folders, each with its folder.
+inventory-quick-in-folder = In { $path }
+inventory-quick-pin = Pin: keep this window above the others
+inventory-quick-unpin = Unpin: let other windows cover it
+inventory-quick-quiet = Simple view: only the list
+inventory-quick-full = Full view: search, tabs and tools
+inventory-quick-demo-name = Quick access
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations
@@ -1547,9 +1603,9 @@ folderstorm-viewport-too-small = Too little of this monitor is under the viewer 
 folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
 
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
-fs-layouts-tab = Layouts
+fs-layouts-tab = Layouts & workspaces
 fs-layouts-group = Saved layouts
-fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. It never opens or closes a window, and never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
+fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. Applying it opens the windows it was saved with open and closes none (closing is what a workspace does), and it never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
 fs-layouts-list = Layouts
 fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the viewer window, the world, the bars and the windows where the layout has them. What you move afterwards is only saved when you choose Update.
 fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
@@ -1590,6 +1646,14 @@ fs-layouts-applied-unknown = { $count ->
     [one] { $count } window of this layout is not known to this version and was left alone.
    *[other] { $count } windows of this layout are not known to this version and were left alone.
     }
+fs-layouts-applied-opened = { $count ->
+    [one] { $count } window that was open in this layout was opened.
+   *[other] { $count } windows that were open in this layout were opened.
+    }
+fs-layouts-applied-blocked = { $count ->
+    [one] { $count } window of this layout cannot be opened right now and was left closed.
+   *[other] { $count } windows of this layout cannot be opened right now and were left closed.
+    }
 fs-layouts-waiting = { $count ->
     [one] { $count } closed window will take its place when you open it.
    *[other] { $count } closed windows will take their places when you open them.
@@ -1615,7 +1679,7 @@ fs-layouts-reset = Reset bars and world
 fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
 fs-layouts-reset-button = Reset
 fs-layouts-menu = Layouts
-fs-layouts-menu-open = Layouts…
+fs-layouts-menu-open = Layouts & workspaces…
 fs-layouts-part-window = Viewer window
 fs-layouts-lock = Lock the window size
 fs-layouts-locked = Locked
@@ -1655,22 +1719,22 @@ fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlo
 fs-layouts-monitors-later = Not now
 fs-layouts-favorite = Favorite
 fs-layouts-quick = Quick switch
-fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts window (World › Layouts › Layouts…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts, and are the ones the shortcuts Next and Previous favorite layout go round.
+fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts & workspaces window (World › Layouts › Layouts & workspaces…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts & workspaces” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts; the favorite layouts are the ones the shortcuts Next and Previous favorite layout go round.
 fs-layouts-toggle-first = First layout
 fs-layouts-toggle-second = Second layout
 fs-layouts-toggle-help = The two layouts the “Switch layout” toolbar button and its shortcut switch between, for example “2 monitors” and “1 monitor”: the second when the first is in use, the first otherwise.
 fs-layouts-toggle-none = Not chosen
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
-fs-switcher-title = Layouts
-fs-switcher-help = Type part of a layout's name: the list keeps the layouts that have it, favorites first. Up and Down choose, Enter applies the chosen layout and closes this window, Esc closes it. A click on a star makes a layout a favorite. The picture shows what the chosen layout would give on the monitors connected now. Update saves the arrangement of now in the layout in use; Save new… keeps it under another name.
-fs-switcher-hint = Type a layout's name, then Enter
+fs-switcher-title = Layouts & workspaces
+fs-switcher-help = Type part of a name: the list keeps the workspaces and the layouts that have it, favorites first. Up and Down choose, Enter applies the chosen entry and closes this window, Esc closes it. A click on a star makes a favorite. A layout says where things go: the picture shows what it would give on the monitors connected now. A workspace says which windows are open: applying it opens them and closes the others, on its layout if it names one. Update saves the arrangement of now in the layout in use, or the windows open now in the workspace in use; Save new… keeps them under another name.
+fs-switcher-hint = Type a name, then Enter
 fs-switcher-favorites = Favorites
-fs-switcher-layouts = Other layouts
+fs-switcher-layouts = Layouts
 fs-switcher-star = Add to the favorites
 fs-switcher-unstar = Remove from the favorites
-fs-switcher-empty = No layout saved yet. Arrange the world and your windows as you like them, then choose Save new….
-fs-switcher-no-match = No layout has this in its name.
+fs-switcher-empty = Nothing saved yet. Arrange the world and your windows as you like them, then choose Save new….
+fs-switcher-no-match = No layout or workspace has this in its name.
 fs-switcher-picture-help = What applying this layout would give on the monitors connected now: the viewer window (outlined), the world (lit) and the windows the layout places. A monitor of the layout that is not connected is dashed.
 fs-switcher-note-missing = { $count ->
     [one] { $count } monitor of this layout is not connected.
@@ -1687,17 +1751,157 @@ fs-switcher-note-fitted = { $count ->
 fs-switcher-update = Update “{ $name }”
 fs-switcher-update-help = Saves the arrangement of now in the layout in use, for the parts it holds. Asks first.
 fs-switcher-save-new = Save new…
-fs-switcher-preferences-help = Rename, delete and reorder the layouts, edit a layout's viewer window, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts.
+fs-switcher-preferences-help = Rename, delete and reorder the layouts and the workspaces, edit a layout's viewer window or the windows of a workspace, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts & workspaces.
 fs-switcher-keys = Up and Down choose, Enter applies and closes, Esc closes.
-fs-switcher-command = Layouts
+fs-switcher-command = Layouts & workspaces
 fs-switcher-toggle-command = Switch layout
 fs-switcher-toggle-to = Switch to the layout “{ $name }”
-fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts (a click opens it).
+fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts & workspaces (a click opens it).
 fs-keys-section = Layouts
-fs-keys-layout-switcher = Layouts window
+fs-keys-layout-switcher = Layouts & workspaces window
 fs-keys-layout-toggle = Switch between the two layouts
 fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
+
+# Folderstorm: workspaces (folderstorm/workspaces/workspace.rs, checkpoint 6)
+fs-switcher-workspaces = Workspaces
+fs-workspaces-one = Workspace
+fs-workspaces-closes = Applying it closes the other windows. Conversations stays as it is.
+fs-workspaces-save-layout = Layout
+fs-workspaces-save-workspace = Workspace
+fs-workspaces-name-hint = Name, for example Sorting
+fs-workspaces-with-layout = Always use the layout “{ $name }” with it
+fs-workspaces-with-no-layout = Always use the layout in use with it (none is in use)
+fs-workspaces-save-help = Saves which windows are open now under a new name. Applying the workspace opens them and closes the others, wherever the layout in use puts them; tick the box to make it also apply the layout in use now. It never holds what a window shows.
+fs-workspaces-save-new = Save as a new workspace
+fs-workspaces-save = Save workspace
+fs-workspaces-ask-update = Replace the windows of the workspace “{ $name }” with the ones open now?
+fs-workspaces-ask-delete = Delete the workspace “{ $name }”?
+fs-workspaces-update-help = Saves the windows open now in the workspace. Its layout choice is kept. Asks first.
+fs-workspaces-error-empty = Give the workspace a name.
+fs-workspaces-error-taken = Another workspace already has this name.
+fs-workspaces-error-full = There are already { $count } workspaces: delete one first.
+fs-workspaces-error-invalid = The workspace could not be saved. Try again in a moment.
+fs-workspaces-holds-layout = Uses the layout “{ $name }”.
+fs-workspaces-holds-no-layout = Keeps the layout in use.
+fs-workspaces-holds-none = Opens no window.
+fs-workspaces-holds-opens = Opens: { $names }.
+fs-workspaces-applied = Workspace “{ $name }” applied.
+fs-workspaces-applied-no-layout = Its layout cannot be used: the layout in use was kept.
+fs-workspaces-applied-opened = { $count ->
+    [one] { $count } window opened.
+   *[other] { $count } windows opened.
+    }
+fs-workspaces-applied-closed = { $count ->
+    [one] { $count } window closed.
+   *[other] { $count } windows closed.
+    }
+fs-workspaces-applied-blocked = { $count ->
+    [one] { $count } window cannot be opened right now and was left closed.
+   *[other] { $count } windows cannot be opened right now and were left closed.
+    }
+fs-workspaces-group = Saved workspaces
+fs-workspaces-intro = A workspace remembers which windows are open, for an activity: “Sorting” with both Inventory windows, “Exploring” with the maps. Applying it opens those windows and closes the others; where they go is the layout's business, so a workspace works on any layout. It can also name a layout to apply with it. Conversations is never opened or closed, and nothing a window shows is saved.
+fs-workspaces-list = Workspaces
+fs-workspaces-list-help = Click a workspace to select it, then Apply; a double click applies it at once. Applying opens the windows ticked below and closes the others, after its layout if it has one. Update saves the windows open now in it.
+fs-workspaces-empty = No workspace saved yet. Open the windows you want for an activity, then save them below.
+fs-workspaces-newer-help = This workspace was made by a newer version of the viewer. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-workspaces-invalid-help = This entry of the settings file is not a workspace this version can read. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
+fs-workspaces-layout = Layout applied with it
+fs-workspaces-layout-keep = Keep the layout in use
+fs-workspaces-windows = Windows it opens (the others are closed; Conversations stays as it is):
+fs-workspaces-remember-folders = Remember Inventory folders
+fs-strip-show = Favorites strip
+fs-strip-show-help = Shows your favorite layouts and workspaces under the top bar, one click to apply: at the right end of the favourites' row when it is shown (Interface › Favourites access › Row below the top bar), in a small bar of their own otherwise. What does not fit is in More…, with the Layouts & workspaces window and Previous arrangement. Hidden in mouselook. Give a layout or a workspace its star in the Layouts & workspaces window.
+fs-strip-box = Show the favorites strip
+fs-strip-hide = Hide the favorites strip
+fs-strip-more = { $n } more
+fs-strip-more-tip = More…
+fs-strip-layout = Layout
+fs-strip-workspace = Workspace
+fs-strip-pill-hint = Click to apply
+fs-workspaces-remember-folders-help = Also keeps the Inventory folder windows open now (Open in a new window): each one's folder and its place, up to 16. Applying the workspace reopens them and closes the other folder windows. Only for the account that saved them; never what a folder contains.
+fs-workspaces-remember-folders-now = { $count ->
+    [one] Remember Inventory folders ({ $count } folder window open now)
+   *[other] Remember Inventory folders ({ $count } folder windows open now)
+    }
+fs-workspaces-holds-folders = { $count ->
+    [one] Remembers { $count } Inventory folder window.
+   *[other] Remembers { $count } Inventory folder windows.
+    }
+fs-workspaces-folders-missing = { $count ->
+    [one] { $count } Inventory folder of this workspace was not found (deleted, or the Inventory is not loaded yet) and was skipped.
+   *[other] { $count } Inventory folders of this workspace were not found (deleted, or the Inventory is not loaded yet) and were skipped.
+    }
+fs-workspaces-folders-blocked = Inventory is hidden by RLVa: its folder windows were not opened.
+fs-workspaces-folders-other-account = Its Inventory folders were saved by another account and were skipped.
+fs-context-section = Graphics, camera and HUDs
+fs-context-section-set = Graphics, camera and HUDs (chosen)
+fs-context-graphics = Graphics profile
+fs-context-graphics-keep = Leave the graphics as they are
+fs-context-graphics-help = A graphics profile saved in Preferences › Graphics, chosen by its name: applying the workspace selects it, as choosing it there does. A change to the profile is used the next time. Never the window or full screen.
+fs-context-camera = Camera
+fs-context-camera-keep = Leave the camera as it is
+fs-context-camera-help = One of the four views of the camera controls, or a camera preset you saved, chosen by its name. Not applied while RLVa locks the camera, or in mouselook.
+fs-context-camera-preset = camera preset “{ $name }”
+fs-context-gone = { $name } (not found)
+fs-context-huds = HUDs it wears:
+fs-context-huds-help = Tick a HUD you are wearing: applying the workspace wears it again at the same HUD point when it is not worn, with the outfit's own rules (RLVa, the attachment limit). Switching then to another workspace that has HUDs takes off the ones this workspace put on, unless that one wears them too; a HUD you were already wearing or put on yourself is never taken off. Previous arrangement puts them back as they were. Only for the account that chose them; the workspace keeps the item, never what it contains.
+fs-context-huds-none = Wear a HUD to choose it here.
+fs-context-hud-gone = An item that is not in the Inventory
+fs-context-huds-other = { $count ->
+    [one] { $count } HUD chosen by another account.
+   *[other] { $count } HUDs chosen by another account.
+    }
+fs-context-huds-forget = Forget them
+fs-context-holds-graphics = Graphics profile “{ $name }”.
+fs-context-holds-camera = Camera: { $camera }.
+fs-context-holds-huds = { $count ->
+    [one] Wears { $count } HUD.
+   *[other] Wears { $count } HUDs.
+    }
+fs-context-restored = Graphics and camera put back as they were.
+fs-context-graphics-done = Graphics profile “{ $name }” selected.
+fs-context-graphics-missing = The graphics profile “{ $name }” was not found: the graphics were left as they were.
+fs-context-camera-done = Camera: { $camera }.
+fs-context-camera-missing = The { $camera } was not found: the camera was left as it was.
+fs-context-camera-locked = RLVa locks the camera: it was left as it was.
+fs-context-camera-mouselook = In mouselook, the camera was left as it was.
+fs-context-camera-failed = Camera: { $why }
+fs-context-huds-asked = { $count ->
+    [one] { $count } HUD asked to be worn.
+   *[other] { $count } HUDs asked to be worn.
+    }
+fs-context-huds-worn = { $count ->
+    [one] { $count } HUD was already worn.
+   *[other] { $count } HUDs were already worn.
+    }
+fs-context-huds-missing = { $count ->
+    [one] { $count } HUD was not found in the Inventory (deleted, or not loaded yet) and was skipped.
+   *[other] { $count } HUDs were not found in the Inventory (deleted, or not loaded yet) and were skipped.
+    }
+fs-context-huds-not-wearable = { $count ->
+    [one] { $count } item cannot be worn (not an object, or in the Library or the Trash) and was skipped.
+   *[other] { $count } items cannot be worn (not objects, or in the Library or the Trash) and were skipped.
+    }
+fs-context-huds-blocked = { $count ->
+    [one] { $count } HUD is refused by RLVa and was skipped.
+   *[other] { $count } HUDs are refused by RLVa and were skipped.
+    }
+fs-context-huds-other-account = Its HUDs were chosen by another account and were skipped.
+fs-context-huds-busy = An outfit change was under way: no HUD was worn or taken off. Apply it again in a moment.
+fs-context-huds-refused = No HUD was worn or taken off: { $why }
+fs-context-huds-refused-plain = the outfit change was refused.
+fs-context-huds-taken-off = { $count ->
+    [one] { $count } HUD put on by a workspace was taken off.
+   *[other] { $count } HUDs put on by a workspace were taken off.
+    }
+fs-context-huds-stuck = { $count ->
+    [one] { $count } HUD put on by a workspace could not be taken off (RLVa keeps it on).
+   *[other] { $count } HUDs put on by a workspace could not be taken off (RLVa keeps them on).
+    }
+fs-context-take-off = Take off the previous workspace's HUDs
+fs-context-take-off-help = When you switch to a workspace that has HUDs, the HUDs the workspace before put on are taken off, unless the new one wears them too. Only HUDs a workspace put on: a HUD you were already wearing, or put on yourself, is never taken off; RLVa can keep one on. Previous arrangement puts them back. Turn off to only ever add HUDs.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
@@ -1763,6 +1967,24 @@ fs-chat-upload-max-help = Larger images are refused before anything is sent. Fol
 fs-chat-upload-confirm = Ask before each upload
 fs-chat-upload-confirm-help = Shows the image, its size and the host, and waits for Upload. Off, an image is uploaded as soon as it is pasted or chosen. A dropped file always asks first: the viewer cannot tell exactly which field it was dropped on.
 fs-chat-upload-public = On Folderstorm's host, images are kept up to 180 days, or less when the host needs room. They are not listed publicly, but anyone with a link can view the image.
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = activity history log receipts operations stop
+fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
+fs-search-photo = photo mode snapshot picture camera
+fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
+fs-search-layouts-list = favorite favorites star apply rename delete
+fs-search-layouts-save = save new capture
+fs-search-layouts-previous = undo back restore revert
+fs-search-layouts-lock = lock unlock window size borderless full screen
+fs-search-layouts-monitors = unplug plug screens monitors changed
+fs-search-layouts-reset = default reset bars viewport
+fs-search-layouts-quick = quick switch switcher toggle toolbar button shortcut keyboard hotkey favorite favorites
+fs-search-characters = multiple accounts alts alt characters character multibox session host background monitors
+fs-search-chat-upload = image upload picture photo screenshot paste drop share link Zipline host
+fs-search-outfit-safety = outfit safety wear misclick replace protect
+
 ui-options-place-bar-stretch = Stretch the place bar to the right
 ui-options-place-bar-stretch-help = The place island reaches the account island; off, it is as wide as what it shows.
 ui-options-place-bar-rights-text = Name the parcel rights

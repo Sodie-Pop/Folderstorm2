@@ -48,7 +48,8 @@ pub struct Frame {
 }
 
 /// One window's place: its top-left corner from the interface's, its size
-/// (the expanded one when it is minimized), in points.
+/// (the expanded one when it is minimized), in points; and whether it was
+/// open.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Placement {
     pub x: f32,
@@ -57,6 +58,11 @@ pub struct Placement {
     pub height: f32,
     #[serde(default)]
     pub minimized: bool,
+    /// The window was open when the layout was saved: applying the layout
+    /// opens it if it is closed. Absent (a layout saved before the field
+    /// existed) reads as closed: such a layout opens nothing.
+    #[serde(default)]
+    pub open: bool,
 }
 
 /// The *Window positions* part of a layout.
@@ -198,6 +204,8 @@ impl MonitorPolicy {
 pub enum Favorite {
     /// The layout of this name.
     Layout(String),
+    /// The workspace of this name (checkpoint 6).
+    Workspace(String),
     /// An entry of a kind this version does not know, kept as it was read
     /// and never shown.
     Kept(serde_json::Value),
@@ -206,10 +214,15 @@ pub enum Favorite {
 impl Serialize for Favorite {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            Favorite::Layout(name) => {
+            Favorite::Layout(name) | Favorite::Workspace(name) => {
                 use serde::ser::SerializeMap;
+                let kind = if matches!(self, Favorite::Layout(_)) {
+                    "layout"
+                } else {
+                    "workspace"
+                };
                 let mut map = serializer.serialize_map(Some(1))?;
-                map.serialize_entry("layout", name)?;
+                map.serialize_entry(kind, name)?;
                 map.end()
             }
             Favorite::Kept(raw) => raw.serialize(serializer),
@@ -218,15 +231,19 @@ impl Serialize for Favorite {
 }
 
 impl Favorite {
-    /// Reads one entry of the file: `{ "layout": "name" }`, or something
-    /// else to keep. None for what is not an entry at all.
+    /// Reads one entry of the file: `{ "layout": "name" }` or
+    /// `{ "workspace": "name" }`, or something else to keep. None for what
+    /// is not an entry at all.
     fn read(raw: serde_json::Value) -> Option<Self> {
         let entry = raw.as_object()?;
-        match entry.get("layout") {
-            Some(name) if entry.len() == 1 => name
-                .as_str()
+        let named = |name: &serde_json::Value| {
+            name.as_str()
                 .filter(|name| name_error(name).is_none())
-                .map(|name| Favorite::Layout(tidy(name).to_owned())),
+                .map(|name| tidy(name).to_owned())
+        };
+        match (entry.get("layout"), entry.get("workspace")) {
+            (Some(name), None) if entry.len() == 1 => named(name).map(Favorite::Layout),
+            (None, Some(name)) if entry.len() == 1 => named(name).map(Favorite::Workspace),
             _ => Some(Favorite::Kept(raw)),
         }
     }
@@ -235,7 +252,15 @@ impl Favorite {
     pub fn layout(&self) -> Option<&str> {
         match self {
             Favorite::Layout(name) => Some(name),
-            Favorite::Kept(_) => None,
+            Favorite::Workspace(_) | Favorite::Kept(_) => None,
+        }
+    }
+
+    /// The workspace it names, if it names one.
+    pub fn workspace(&self) -> Option<&str> {
+        match self {
+            Favorite::Workspace(name) => Some(name),
+            Favorite::Layout(_) | Favorite::Kept(_) => None,
         }
     }
 }
@@ -285,7 +310,7 @@ pub struct Kept {
     /// Its name if it has a usable one, for the list.
     pub name: Option<String>,
     pub why: Unusable,
-    raw: serde_json::Value,
+    pub(super) raw: serde_json::Value,
 }
 
 /// One entry of the list.
@@ -516,6 +541,21 @@ pub struct Store {
     /// The two layouts the toolbar's toggle switches between.
     #[serde(skip_serializing_if = "toggle_unset")]
     pub toggle: Toggle,
+    /// The workspaces, in the user's order (`super::workspace`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub workspaces: Vec<super::workspace::Record>,
+    /// The workspace last applied, saved or updated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_workspace: Option<String>,
+    /// The favorites strip is shown (`super::strip`). The user's choice
+    /// for the viewer, not a part of a layout or of a workspace.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub strip: bool,
+    /// A switch to another workspace leaves on the HUDs the workspace
+    /// before put on (row 1.7): *Take off the previous workspace's HUDs*
+    /// unticked. Off (they are taken off) until chosen.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub keep_huds: bool,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -530,6 +570,10 @@ struct Raw {
     on_monitor_change: serde_json::Value,
     favorites: serde_json::Value,
     toggle: serde_json::Value,
+    workspaces: serde_json::Value,
+    active_workspace: Option<String>,
+    strip: serde_json::Value,
+    keep_huds: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -574,14 +618,33 @@ impl From<Raw> for Store {
             on_monitor_change: raw.on_monitor_change.as_str().map(MonitorPolicy::read).unwrap_or_default(),
             favorites: Vec::new(),
             toggle: Toggle::default(),
+            workspaces: super::workspace::read_list(raw.workspaces),
+            active_workspace: raw.active_workspace,
+            // (anything but `true` reads as off, as an entry is read on its own)
+            strip: raw.strip.as_bool().unwrap_or(false),
+            keep_huds: raw.keep_huds.as_bool().unwrap_or(false),
         };
+        if store.active_workspace().is_none() {
+            store.active_workspace = None;
+        }
+        // a workspace names a layout of the list, or none
+        let named: Vec<String> = store
+            .workspaces
+            .iter()
+            .filter_map(|record| record.workspace()?.layout.clone())
+            .filter(|name| !store.listed(name))
+            .collect();
+        for name in named {
+            store.workspaces_follow_layout(&name, None);
+        }
         // a favorite, a layout of the toggle: only of an entry of the list
         // (one this version cannot use keeps its star and its place)
         if let serde_json::Value::Array(entries) = raw.favorites {
             for favorite in entries.into_iter().filter_map(Favorite::read).take(MAX_FAVORITES) {
-                let keep = match favorite.layout() {
-                    Some(name) => store.listed(name) && !store.is_favorite(name),
-                    None => true,
+                let keep = match &favorite {
+                    Favorite::Layout(name) => store.listed(name) && !store.is_favorite(name),
+                    Favorite::Workspace(name) => store.workspace_listed(name) && !store.is_favorite_workspace(name),
+                    Favorite::Kept(_) => true,
                 };
                 if keep {
                     store.favorites.push(favorite);
@@ -793,13 +856,15 @@ impl Store {
                 .iter_mut()
                 .filter_map(|favorite| match favorite {
                     Favorite::Layout(name) => Some(name),
-                    Favorite::Kept(_) => None,
+                    Favorite::Workspace(_) | Favorite::Kept(_) => None,
                 })
                 .chain(self.toggle.iter_mut().flatten())
                 .filter(|name| same_name(name, &old));
             for name in renamed {
                 name.clone_from(&new);
             }
+            // and the workspaces that name it
+            self.workspaces_follow_layout(&old, Some(&new));
         }
         Ok(())
     }
@@ -820,6 +885,8 @@ impl Store {
             for place in &mut self.toggle {
                 place.take_if(|chosen| same_name(chosen, name));
             }
+            // a workspace that named it keeps the layout in use from now on
+            self.workspaces_follow_layout(name, None);
         }
         true
     }
@@ -866,6 +933,7 @@ mod tests {
             width,
             height,
             minimized: false,
+            open: false,
         }
     }
 
@@ -957,7 +1025,7 @@ mod tests {
         assert_eq!(keys(&value["windows"]), ["frame", "windows"]);
         assert_eq!(keys(&value["windows"]["frame"]), ["height", "pixels_per_point", "width"]);
         for (id, window) in value["windows"]["windows"].as_object().expect("windows") {
-            assert_eq!(keys(window), ["height", "minimized", "width", "x", "y"], "{id}");
+            assert_eq!(keys(window), ["height", "minimized", "open", "width", "x", "y"], "{id}");
             assert!(
                 window
                     .as_object()
@@ -1007,6 +1075,7 @@ mod tests {
         // written back with them
         let mut expected = value;
         expected["windows"]["windows"]["a_window_of_later"]["minimized"] = json!(false);
+        expected["windows"]["windows"]["a_window_of_later"]["open"] = json!(false);
         assert_eq!(serde_json::to_value(&store).expect("saved")["layouts"][0], expected);
     }
 
@@ -1520,7 +1589,7 @@ mod tests {
         let store = read(json!({
             "layouts": [wide(), single(), { "schema": 7, "name": "Later" }],
             "favorites": [
-                { "workspace": "Sorting" },
+                { "board": "Sorting" },
                 { "layout": "Wide" },
                 { "layout": "wide" },
                 { "layout": "Gone" },
@@ -1534,7 +1603,7 @@ mod tests {
         assert_eq!(
             store.favorites,
             [
-                Favorite::Kept(json!({ "workspace": "Sorting" })),
+                Favorite::Kept(json!({ "board": "Sorting" })),
                 Favorite::Layout("Wide".to_owned()),
                 // one this version cannot use keeps its star for the version that can
                 Favorite::Layout("Later".to_owned()),
@@ -1547,7 +1616,7 @@ mod tests {
         assert!(!store.is_favorite("Single") && !store.is_favorite("Sorting"));
         assert_eq!(store.toggle, [None, Some("single".to_owned())]);
         let saved = serde_json::to_value(&store).expect("saved");
-        assert_eq!(saved["favorites"][0], json!({ "workspace": "Sorting" }));
+        assert_eq!(saved["favorites"][0], json!({ "board": "Sorting" }));
         assert_eq!(saved["favorites"][3], json!({ "layout": "Single", "pinned": true }));
         // not a list at all: nothing, and nothing lost of the rest
         let odd = read(json!({ "layouts": [wide()], "favorites": "Wide", "toggle": { "a": 1 } }));

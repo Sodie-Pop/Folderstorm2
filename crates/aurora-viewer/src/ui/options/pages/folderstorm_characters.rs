@@ -5,13 +5,14 @@
 //! shares the main profile's cache.
 
 use super::super::cx::{Cx, field};
+use super::folderstorm_search::words;
 use ::folderstorm_session::behind::{self, Behind3d};
 
 pub(super) fn group(cx: &mut Cx) {
     use aurora_i18n::tr;
     let product = folderstorm_brand::PRODUCT;
     cx.group(&tr!("folderstorm-characters", product = product), |cx| {
-        cx.unfolded().combo(
+        words(cx, &["fs-search-characters"]).unfolded().combo(
             &tr!("folderstorm-behind-3d", product = product),
             &tr!("folderstorm-behind-3d-help", product = product),
             &field!(folderstorm_characters.behind_3d),
@@ -23,7 +24,7 @@ pub(super) fn group(cx: &mut Cx) {
         );
         let off = cx.s.folderstorm_characters.behind_3d == Behind3d::Normal;
         cx.subs(off, |cx| {
-            cx.slider(
+            words(cx, &["fs-search-characters"]).slider(
                 tr!("folderstorm-behind-fps"),
                 tr!("folderstorm-behind-fps-help"),
                 &field!(folderstorm_characters.behind_fps),
@@ -33,7 +34,7 @@ pub(super) fn group(cx: &mut Cx) {
         });
         // a named profile only: the main profile's cache is its own
         if crate::folderstorm_characters::profile::current().is_some() {
-            cx.toggle(
+            words(cx, &["fs-search-characters"]).toggle(
                 tr!("folderstorm-share-main-cache"),
                 tr!("folderstorm-share-main-cache-help"),
                 &field!(folderstorm_characters.share_main_cache),

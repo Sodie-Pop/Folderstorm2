@@ -6,6 +6,7 @@
 
 use super::super::cx::{Cx, Nothing, field};
 use super::super::{segmented, toggle};
+use super::folderstorm_search::words;
 use crate::mcp_bridge::{self, setup};
 use crate::ui::widgets;
 use folderstorm_mcp_bridge::server::Outcome;
@@ -63,19 +64,17 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
 
         // access, saved or for this session only
         if session.is_none() {
-            cx.keywords("MCP assistant --mcp-api")
-                .toggle(tr!("fs-mcp-allow"), tr!("fs-mcp-allow-hint"), &field!(local_assistant.enabled));
+            words(cx, &["fs-search-mcp"]).toggle(tr!("fs-mcp-allow"), tr!("fs-mcp-allow-hint"), &field!(local_assistant.enabled));
         } else {
-            cx.keywords("MCP assistant --mcp-api")
-                .row(tr!("fs-mcp-allow"), tr!("fs-mcp-allow-hint"), &Nothing, |ui, s| {
-                    let mut new = current;
-                    if toggle(ui, &p, &mut new.enabled) {
-                        store(s, session, new);
-                    }
-                    false
-                });
+            words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-allow"), tr!("fs-mcp-allow-hint"), &Nothing, |ui, s| {
+                let mut new = current;
+                if toggle(ui, &p, &mut new.enabled) {
+                    store(s, session, new);
+                }
+                false
+            });
         }
-        cx.row(tr!("fs-mcp-session-only"), tr!("fs-mcp-session-only-hint"), &Nothing, |ui, s| {
+        words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-session-only"), tr!("fs-mcp-session-only-hint"), &Nothing, |ui, s| {
             let mut only = session.is_some();
             if toggle(ui, &p, &mut only) {
                 mcp_bridge::set_session(only.then_some(s.local_assistant));
@@ -97,7 +96,8 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
         ];
         let saved_permissions = field!(local_assistant.permissions);
         let track: &dyn super::super::cx::Track = if session.is_none() { &saved_permissions } else { &Nothing };
-        cx.wide()
+        words(cx, &["fs-search-mcp"])
+            .wide()
             .row(tr!("fs-mcp-permissions"), tr!("fs-mcp-permissions-hint"), track, |ui, s| {
                 let mut preset = shown;
                 if !segmented(ui, &p, &mut preset, &choices) || preset == shown {
@@ -202,7 +202,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 }
                 levels.push((Level::Never, tr!("fs-mcp-level-never"), false));
                 let track: &dyn super::super::cx::Track = if session.is_none() { &saved } else { &Nothing };
-                cx.row(label, hint, track, |ui, s| {
+                words(cx, &["fs-search-mcp"]).row(label, hint, track, |ui, s| {
                     let mut level = current.permissions.level(class);
                     if !segmented(ui, &p, &mut level, &levels) {
                         return false;
@@ -217,7 +217,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
 
         // what the bridge does now
         let status = mcp_bridge::status();
-        cx.row(tr!("fs-mcp-status"), tr!("fs-mcp-status-hint"), &Nothing, |ui, _| {
+        words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-status"), tr!("fs-mcp-status-hint"), &Nothing, |ui, _| {
             let (text, color) = match (status.port, &status.failure) {
                 (Some(port), _) => (tr!("fs-mcp-status-ready", port = port.to_string()), p.success),
                 (None, Some(reason)) if current.enabled => (tr!("fs-mcp-status-failed", reason = reason.clone()), p.danger),
@@ -228,8 +228,11 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
         });
         // the label above, one entry per line across the whole row (in the
         // control column each entry wrapped over several lines)
-        cx.below()
-            .row(tr!("fs-mcp-activity"), tr!("fs-mcp-activity-hint"), &Nothing, |ui, _| {
+        words(cx, &["fs-search-mcp", "fs-search-mcp-activity"]).below().row(
+            tr!("fs-mcp-activity"),
+            tr!("fs-mcp-activity-hint"),
+            &Nothing,
+            |ui, _| {
                 ui.vertical(|ui| {
                     ui.set_width(ui.available_width());
                     // Folderstorm: a change still under way has no activity
@@ -297,7 +300,8 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     }
                 });
                 false
-            });
+            },
+        );
 
         // Setup: the entry for an assistant's MCP settings, and a check
         let clients = [
@@ -305,18 +309,18 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             (setup::Client::Cursor, "Cursor", false),
             (setup::Client::Codex, "Codex", false),
         ];
-        cx.keywords("Claude Code Cursor Codex MCP")
-            .row(tr!("fs-mcp-setup-client"), tr!("fs-mcp-setup-client-hint"), &Nothing, |ui, _| {
-                let mut chosen = client();
-                if segmented(ui, &p, &mut chosen, &clients) {
-                    set_client(chosen);
-                    COPIED.store(false, Ordering::Relaxed);
-                }
-                false
-            });
+        words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-setup-client"), tr!("fs-mcp-setup-client-hint"), &Nothing, |ui, _| {
+            let mut chosen = client();
+            if segmented(ui, &p, &mut chosen, &clients) {
+                set_client(chosen);
+                COPIED.store(false, Ordering::Relaxed);
+            }
+            false
+        });
         let sidecar = setup::sidecar_path();
         let present = sidecar.as_ref().is_some_and(|path| path.is_file());
-        cx.wide()
+        words(cx, &["fs-search-mcp"])
+            .wide()
             .row(tr!("fs-mcp-setup-copy"), tr!("fs-mcp-setup-copy-hint"), &Nothing, |ui, _| {
                 ui.horizontal_wrapped(|ui| {
                     let copy = widgets::action_button_if(
@@ -349,43 +353,45 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 false
             });
         let running = status.port.is_some();
-        cx.wide().row(tr!("fs-mcp-check"), tr!("fs-mcp-check-hint"), &Nothing, |ui, _| {
-            ui.horizontal_wrapped(|ui| {
-                let check = setup::check();
-                let busy = check == setup::Check::Running;
-                let clicked = widgets::action_button_if(
-                    ui,
-                    &p,
-                    "refresh",
-                    tr!("fs-mcp-check"),
-                    widgets::ActionKind::Flat,
-                    egui::Vec2::new(0.0, 24.0),
-                    running && !busy,
-                )
-                .clicked();
-                if clicked {
-                    setup::start_check(mcp_bridge::discovery_dir());
-                }
-                let (text, color) = match &check {
-                    _ if !running => (tr!("fs-mcp-check-off").to_owned(), p.muted),
-                    setup::Check::NotRun => (String::new(), p.muted),
-                    setup::Check::Running => (tr!("fs-mcp-check-running").to_owned(), p.muted),
-                    setup::Check::Passed { logged_in: true } => (tr!("fs-mcp-check-passed").to_owned(), p.success),
-                    setup::Check::Passed { logged_in: false } => (tr!("fs-mcp-check-passed-logged-out").to_owned(), p.success),
-                    setup::Check::Failed(setup::Failure::Missing) => (tr!("fs-mcp-check-missing").to_owned(), p.danger),
-                    setup::Check::Failed(setup::Failure::Launch) => (tr!("fs-mcp-check-launch").to_owned(), p.danger),
-                    setup::Check::Failed(setup::Failure::Timeout) => (tr!("fs-mcp-check-timeout").to_owned(), p.danger),
-                    setup::Check::Failed(setup::Failure::Stage(stage)) => (tr!("fs-mcp-check-failed", stage = stage.clone()), p.danger),
-                };
-                if !text.is_empty() {
-                    ui.label(egui::RichText::new(text).size(12.0).color(color));
-                }
-                if busy {
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
-                }
+        words(cx, &["fs-search-mcp"])
+            .wide()
+            .row(tr!("fs-mcp-check"), tr!("fs-mcp-check-hint"), &Nothing, |ui, _| {
+                ui.horizontal_wrapped(|ui| {
+                    let check = setup::check();
+                    let busy = check == setup::Check::Running;
+                    let clicked = widgets::action_button_if(
+                        ui,
+                        &p,
+                        "refresh",
+                        tr!("fs-mcp-check"),
+                        widgets::ActionKind::Flat,
+                        egui::Vec2::new(0.0, 24.0),
+                        running && !busy,
+                    )
+                    .clicked();
+                    if clicked {
+                        setup::start_check(mcp_bridge::discovery_dir());
+                    }
+                    let (text, color) = match &check {
+                        _ if !running => (tr!("fs-mcp-check-off").to_owned(), p.muted),
+                        setup::Check::NotRun => (String::new(), p.muted),
+                        setup::Check::Running => (tr!("fs-mcp-check-running").to_owned(), p.muted),
+                        setup::Check::Passed { logged_in: true } => (tr!("fs-mcp-check-passed").to_owned(), p.success),
+                        setup::Check::Passed { logged_in: false } => (tr!("fs-mcp-check-passed-logged-out").to_owned(), p.success),
+                        setup::Check::Failed(setup::Failure::Missing) => (tr!("fs-mcp-check-missing").to_owned(), p.danger),
+                        setup::Check::Failed(setup::Failure::Launch) => (tr!("fs-mcp-check-launch").to_owned(), p.danger),
+                        setup::Check::Failed(setup::Failure::Timeout) => (tr!("fs-mcp-check-timeout").to_owned(), p.danger),
+                        setup::Check::Failed(setup::Failure::Stage(stage)) => (tr!("fs-mcp-check-failed", stage = stage.clone()), p.danger),
+                    };
+                    if !text.is_empty() {
+                        ui.label(egui::RichText::new(text).size(12.0).color(color));
+                    }
+                    if busy {
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+                    }
+                });
+                false
             });
-            false
-        });
         if !running {
             setup::forget_check();
         }

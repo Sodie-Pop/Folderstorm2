@@ -199,6 +199,14 @@ the first time they are shown; one moved by hand or restored from the saved
 layout stays where it was. The notification toasts,
 the chat lines, the media bar and the banners under the top bar follow the
 bars: inside the world, or over the whole window with `bars-window`.
+The build tools stay in the world too: with
+`AURORA_DEMO_VIEWPORT=right-half AURORA_WINDOW_SIZE=3840,1080` and
+`AURORA_DEMO_BUILD=move,object:151` (or `rotate,…`, `stretch,…`), the
+selection outline and the arrows, rings or stretch boxes sit on the object,
+the coordinates readout is at the top of the world, and a handle dragged by
+the script (or by hand) moves the object along its axis under the cursor.
+Add `AURORA_DEMO_BUILD_EDGE=left` to see the camera pan when the dragged
+handle reaches the world's left edge, not the window's.
 
 **Photo mode in the world viewport (Folderstorm2).** `right-half` and
 `left-half` keep the right or the left half of the window for the world, as on
@@ -278,7 +286,10 @@ Preferences › Layout › Layouts. "Wide" has the world on the right half of th
 window with the bars around it and the three windows in the left margin;
 "Single" has no viewport and the windows over the world. `apply-wide` applies
 "Wide" by itself at frame 180; `apply-single` applies "Wide" then, at frame
-360, "Single". Try it on a wide window:
+360, "Single"; `reopen` closes Inventory and the world map at frame 120 and
+applies "Wide" at frame 180, which opens them again where it has them (a
+layout opens the windows it was saved with open, and closes none). Try it on
+a wide window:
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=1 AURORA_WINDOW_SIZE=3840,1080 \
@@ -293,14 +304,18 @@ second of moving one of its windows or changing the viewport, until Update
 (which asks first) or another Apply; that "Previous arrangement" goes back and
 forth; that "Save as a new layout" refuses an empty or taken name and saves
 only the ticked parts; that Rename, Delete (asks first) and the arrows work;
-that a window closed when a layout is applied takes its place when opened; and
+that a window closed when a layout is applied is opened at its place if the
+layout was saved with it open, and otherwise takes its place when opened; and
 that "Reset bars and world" turns the viewport off without moving a window.
 Preferences itself is never moved. The bars' three places are under
 Preferences › Layout › Bars and windows › World viewport › Bars;
 `AURORA_DEMO_VIEWPORT=bars-around` shows "Around the world" alone: the world
 on the right two thirds with an eighth of the height free above and below, the
-top bars above the world, the bottom bar below it and a side toolbar (add one
-with `AURORA_DEMO_TOOLBAR=side`) in the left margin.
+top bars above the world, the bottom bar below it, both as wide as the world,
+and a side toolbar (add one with `AURORA_DEMO_TOOLBAR=side`) in the left
+margin, just outside the world's edge and centred on the world's height. A
+side toolbar with no room outside (the world against the window's edge) stays
+inside the world at that edge.
 
 The viewer window in a layout needs a window the demo may move: run these
 three **without** `AURORA_WINDOW_SIZE` (under a forced size, as in a capture,
@@ -344,6 +359,47 @@ AURORA_DEMO=1 AURORA_DEMO_SWITCHER=1 AURORA_WINDOW_SIZE=3840,1080 \
 AURORA_DEMO=1 AURORA_DEMO_SWITCHER=toggle cargo run -p aurora-viewer -- --title "Test switcher toggle"
 ```
 
+**Workspaces (Folderstorm2).** `AURORA_DEMO_WORKSPACES=1` seeds the same as
+`AURORA_DEMO_SWITCHER=1` and two workspaces, both favorites: "Sorting"
+(Inventory, the additional Inventory window and People, with the layout
+"Single") and "Exploring" (mini-map, world map and Places, on whichever layout
+is in use), and opens the switcher (now *Layouts & workspaces*). Applying one
+opens its windows and closes the others; Conversations is left as it is.
+`apply` also applies "Sorting" after three seconds and "Exploring" three
+seconds later. `folders` opens windows on the first two folders of the demo's
+Inventory, saves them as the workspace "Folders" (*Remember Inventory
+folders*), closes them, then applies "Folders": they come back at their
+places. `context` (row 1.7) adds the demo's graphics profiles, a workspace
+"Photos" with "My photo profile", the Front view and two objects of the demo's
+Inventory as HUDs, and a workspace "Studio" with a third object as its HUD;
+opens Preferences on the tab, applies "Photos" after three seconds (the line
+under the list says what was done), "Studio" two seconds later (the HUDs
+"Photos" put on are taken off, "Studio"'s put on) and goes back with
+*Previous arrangement* two seconds after that (Photos' HUDs back on,
+Studio's off):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=1 cargo run -p aurora-viewer -- --title "Test workspaces"
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=apply cargo run -p aurora-viewer -- --title "Test workspaces apply"
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=folders cargo run -p aurora-viewer -- --title "Test workspaces folders"
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=context cargo run -p aurora-viewer -- --title "Test workspace context"
+```
+
+**The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
+as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
+closed: the four favorites stand in a small bar under the top bar, each one
+click to apply, with *More…* at the end (the switcher, *Previous
+arrangement*, *Hide the favorites strip*). `row` also shows the favourites'
+row under the top bar (Interface › Favourites access): the strip stands at its
+right end, after a divider. `many` adds five favorite layouts so that some go
+to *More…*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_STRIP=1 cargo run -p aurora-viewer -- --title "Test strip"
+AURORA_DEMO=1 AURORA_DEMO_STRIP=row cargo run -p aurora-viewer -- --title "Test strip row"
+AURORA_DEMO=1 AURORA_DEMO_STRIP=many cargo run -p aurora-viewer -- --title "Test strip many"
+```
+
 Check that the field has the keyboard when the window opens; that typing
 keeps the layouts with those letters, favorites first; that Up and Down
 choose, Enter applies the chosen layout and closes the window, and Esc closes
@@ -359,6 +415,23 @@ it goes to (dimmed, and opening Preferences, until its two layouts are chosen
 under Preferences › Layout › Layouts › Quick switch). In Preferences ›
 Shortcuts › Other, give the five *Layouts* actions a key each: none has one by
 default.
+
+**Settings search keywords (Folderstorm2).** The Preferences search finds the
+Folderstorm rows by words that are not in their labels
+(`ui/options/pages/folderstorm_search.rs`): `AURORA_DEMO_OPTIONS` opens the
+window with a search typed.
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_OPTIONS="layout:search=dual monitor" cargo run -p aurora-viewer -- --title "Test search keywords"
+```
+
+Check that "dual monitor" lists the world viewport's and the layouts' rows;
+that "MCP" lists the local assistant's rows, "workspace" the layouts and the
+five *Layouts* shortcuts, "undo" *Previous arrangement*, "photo mode" *Photo
+mode uses the whole window*, "alts" the *Other Folderstorm2 windows* rows,
+"screenshot" the image uploads and "outfit safety" the *Wear* switch of
+Inventory. In French and Japanese the same English words still find them, and
+so do the catalogue's own words ("double écran", "マルチモニター").
 
 **Saved graphics profiles (#1218).** `AURORA_DEMO_BARS=profiles` installs three
 demo profiles, including two with identical quality; add `AURORA_DEMO_OPTIONS=graphics` to inspect
@@ -6153,8 +6226,10 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_VIEWPORT=1\|middle\|bars-window\|mouselook-full\|inventory\|right-half\|left-half\|photo-window` (Folderstorm2) | Custom world viewport: the world in part of the window, the bars inside it, windows free over the whole window and sized against it (`inventory`: Inventory in a margin, wider than the world; `right-half`, `left-half`: the world on one of two monitors, for photo mode in it with `AURORA_DEMO_SNAPSHOT=viewfinder`; `photo-window`: photo mode given the whole window); dialogs centred in the world |
 | `AURORA_DEMO_BARS=<words>` | Top and bottom bars: islands and dock, Legacy bars, place island, favourites, menus, balance, clock, hidden interface, immersive mode, chat autohide; `profiles` / `fpspresets`: saved graphics fixtures / FPS hover card |
 | `AURORA_DEMO_MONITORS=WxH[+X+Y][@scale],…[,window+X+Y]\|wayland` (Folderstorm2) | Pretend monitors under the viewer window for the world viewport's diagram and "Fit to a monitor": unequal, left of or above the main one, mixed scales, or no window position |
-| `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
+| `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|reopen\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself; `reopen` closes two windows then applies "Wide", which opens them. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
+| `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
+| `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
@@ -7029,6 +7104,52 @@ failure. Grid validation and any paid upload are performed by the human.
   focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
   a custom tab with that tab's finder and search. The `aurora-` mode starts with
   the narrow window; widen it to see the shortcuts column.
+- **`AURORA_DEMO_INVENTORY=folder-tabs|aurora-folder-tabs`** (Folderstorm2):
+  a custom tab "Clothing and body" scoped to the demo's Clothing and Body
+  folders and to a deleted one, shown with its "Customize tab…" dialog open.
+  Check that the list holds those two folders and what is inside them, under
+  their path (My inventory / A — Personal folder) and nothing else; that a
+  note above the list says one folder is deleted or in the Trash, and "Remove
+  from tab" forgets it; that the dialog's Folders part lists each folder by
+  path (the deleted one marked), with a remove button. Select folders in the
+  list (from the Inventory tab), then right-click the custom tab: "Add
+  the selection", "Use only the selection" (greyed while the selection
+  holds something in the Trash or the Library), "Show everything". On the
+  Inventory tab, select folders (Ctrl+click, Shift+click for a range) and
+  right-click them: "Create tab" makes a new tab named after the first, its
+  Rename dialog open; "Add to ›" lists every custom tab (a check mark on one
+  that has them all already) and "New tab…"; picking a tab adds the folders to
+  it, and the status line says so, or that they were already there. Both are
+  greyed, with the reason on hover, while the selection holds the
+  root, the Trash or a Library folder. Dragging folders onto a custom tab's
+  button adds them the same way (a red outline refuses). With
+  `AURORA_DEMO_FOLDER_TABS=menu`, a second tab "Everyday", and the Inventory
+  tab with Clothing and Body selected and their right-click menu open at
+  about frame 650 (hover "Add to" to see the tabs; the menu closes in a
+  window without focus, as under xvfb). Filters and search
+  apply inside the folders; moving a scoped folder elsewhere keeps it in the
+  tab; moving it to the Trash takes it out (and the note appears).
+- **`AURORA_DEMO_INVENTORY=quick-access|aurora-quick-access`** (Folderstorm2,
+  Inventory quick access): a custom tab "Quick access" scoped to the demo's
+  Body folder, pinning the demo gesture, the demo object (the link "Link to
+  object" pins what it points to) and a deleted item; shown in the main
+  window, and opened in its own small window, pinned and in quiet mode. Check
+  that the pinned items head the tab's list above the folders, once each;
+  that the note above the list counts the deleted pin and "Remove from tab"
+  forgets it; that the tab's window shows only its list (no search box, tab
+  strip or status line) and stays above the other windows, even after a click
+  on another window; that its title bar's arrows button brings the full view
+  back (without a tab strip: the tab only) and the pin button unpins it; that
+  both buttons are on the main, additional and folder windows too, in both
+  styles, and are remembered after a restart, per window. Right-click items
+  (Ctrl+click for several, folders too): "Create tab" makes a tab named after
+  the first folder or item; "Add to ›" pins them in a tab (and adds the
+  folders). Right-click a custom tab: "Open in a window" (again: the same
+  window comes to the front), "Flat list" (every item of the tab, no folder
+  rows, the pins first, each row's folder in its tooltip). A search typed in the tab's window shows in the main
+  window on the same tab, and the other way round. Deleting the tab closes
+  its window; RLVa's `@showinv` closes it with the other Inventory windows.
+  With `AURORA_DEMO_QUICK_ACCESS=flat`, the tab starts as a flat list.
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory
