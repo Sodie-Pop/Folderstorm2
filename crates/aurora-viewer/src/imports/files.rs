@@ -764,6 +764,21 @@ impl Imports {
         self.select_type(Choice::Bulk);
         self.load_files(jobs, ctx, options, Choice::Bulk, false, Selection::Folder);
     }
+    /// Folderstorm: a folder chosen elsewhere, through the same loader
+    /// (folderstorm/folder_upload).
+    pub fn add_folder_path(
+        &mut self,
+        path: PathBuf,
+        jobs: &crate::scene::jobs::Jobs,
+        ctx: &egui::Context,
+        options: import_texture::Options,
+    ) {
+        if self.busy() || self.pending_files.is_some() {
+            return;
+        }
+        self.select_type(Choice::Bulk);
+        self.load_files(jobs, ctx, options, Choice::Bulk, false, Selection::Paths(vec![path]));
+    }
     /// The texture picker's Local tab "Add" (LLFloaterTexturePicker::onBtnAdd,
     /// indra/newview/lltexturectrl.cpp): images, or the materials of glTF
     /// files, kept as local previews. Local entries never join an upload, so

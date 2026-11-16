@@ -295,6 +295,7 @@ impl App {
         if self.demo && self.imports.demo_mode == "animation-own" && !self.imports.demo_animation_positioned {
             self.settings.imports.preview_on_avatar = true;
         }
+        self.folderstorm_folder_upload_frame(ctx); // Folderstorm: folder upload, its routing not saved
         let before = self.settings.imports.clone();
         let active_before: std::collections::HashSet<_> = self.imports.active_ids().collect();
         if self.imports.any_window_open() {
