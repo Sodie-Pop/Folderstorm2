@@ -1,5 +1,6 @@
 //! The *Saved workspaces* group of the tab (checkpoint 6), found by the
-//! window's search so that it is drawn alone, above the fold.
+//! window's search (a word of its own, "exploring": "workspace" also finds
+//! the layouts) so that it is drawn alone, above the fold.
 
 use super::*;
 use crate::folderstorm::workspaces::words::workspace_holds;
@@ -9,7 +10,7 @@ use crate::folderstorm::workspaces::words::workspace_holds;
 fn searched() -> Window {
     let mut w = Window::new();
     w.save_as("Wide");
-    w.st.query = "workspace".into();
+    w.st.query = "exploring".into();
     w.settle();
     w
 }
@@ -125,7 +126,7 @@ fn the_workspaces_group_is_drawn() {
         ..Default::default()
     };
     let sorting = s.folderstorm_workspaces.workspace(0).expect("read").clone();
-    let texts = drawn_found("preferences-workspaces", 3, s, false, "workspace");
+    let texts = drawn_found("preferences-workspaces", 3, s, false, "exploring");
     for expected in [
         tr!("fs-workspaces-list").to_owned(),
         "Sorting".to_owned(),
@@ -299,7 +300,7 @@ mod context {
             )],
             names: [(radar().item, "Radar".to_owned())].into_iter().collect(),
         };
-        let texts = drawn_scrolled("preferences-workspace-context", 3, s, false, "workspace", Some(huds), 420.0);
+        let texts = drawn_scrolled("preferences-workspace-context", 3, s, false, "exploring", Some(huds), 420.0);
         for expected in [
             tr!("fs-context-section-set").to_owned(),
             tr!("fs-context-graphics").to_owned(),

@@ -11,6 +11,7 @@
 //! and "Reset this page" never deletes a workspace.
 
 use super::super::super::cx::{Cx, Nothing};
+use super::super::folderstorm_search::words;
 use super::{
     Ask, BUTTON_H, ICON_CANCEL, ICON_CHECK, ICON_DELETE, ICON_DOWN, ICON_RENAME, ICON_SAVE, ICON_STAR, ICON_UP, LIST_W, PICKER_W, entry,
     muted, warning,
@@ -72,26 +73,29 @@ pub(super) fn groups(cx: &mut Cx) {
     cx.group(tr!("fs-workspaces-group"), |cx| {
         cx.note(tr!("fs-workspaces-intro"));
         // (the search word of Folderstorm (C++): "workspace")
-        cx.keywords("workspace workspaces windows open close activity sorting exploring graphics profile camera preset view hud huds")
+        words(cx, &["fs-search-workspaces", "fs-search-workspaces-list"])
             .section_body()
             .row(tr!("fs-workspaces-list"), tr!("fs-workspaces-list-help"), &Nothing, |ui, s| {
                 list(ui, &p, s)
             });
-        cx.keywords("workspace save windows open").section_body().row(
-            tr!("fs-workspaces-save-new"),
-            tr!("fs-workspaces-save-help"),
-            &Nothing,
-            |ui, s| save_new(ui, &p, s),
-        );
+        words(cx, &["fs-search-workspaces", "fs-search-workspaces-save"])
+            .section_body()
+            .row(tr!("fs-workspaces-save-new"), tr!("fs-workspaces-save-help"), &Nothing, |ui, s| {
+                save_new(ui, &p, s)
+            });
         // (row 1.7: on until unticked; the store keeps the opposite, so
         // that a file without it takes them off)
-        cx.keywords("workspace hud huds take off detach remove attachment previous switch")
-            .row(tr!("fs-context-take-off"), tr!("fs-context-take-off-help"), &Nothing, |ui, s| {
+        words(cx, &["fs-search-workspaces", "fs-search-workspaces-huds"]).row(
+            tr!("fs-context-take-off"),
+            tr!("fs-context-take-off-help"),
+            &Nothing,
+            |ui, s| {
                 let mut on = !s.folderstorm_workspaces.keep_huds;
                 let changed = super::super::super::toggle(ui, &p, &mut on);
                 s.folderstorm_workspaces.keep_huds = !on;
                 changed
-            });
+            },
+        );
     });
 }
 
