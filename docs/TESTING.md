@@ -483,7 +483,18 @@ Esc cancels), and gives the first folder shortcut a name and an icon of its
 own at frame 300 ("Everyday outfits", a hanger); `unused` adds two
 shortcuts on a monitor the window does not have and opens Preferences on
 the desktop's group at frame 200, with its note "2 shortcuts are on a
-monitor that is not in use" and *Bring them here*. The
+monitor that is not in use" and *Bring them here*; `taskbar` turns on the
+taskbar of the margins on the third monitor (an island along its bottom,
+"No collapsed windows" at first), opens and collapses the Inventory and a
+folder's window at frame 200 (no title bar: each is a button of the
+taskbar) and opens People (open, so not listed), then restores the
+Inventory at frame 300 as a click on its button does (where it was);
+`overflow` collapses twenty folder windows at frame 200: more than the
+taskbar has room for, so the buttons are their icon alone and, on a
+monitor too narrow for twenty of them (the second command below), the
+rest are in *More* at its right end. The taskbar needs the third
+monitor: without pretend monitors there is none, and collapsed windows
+are title bars. The
 world viewport is turned on (the world in the middle third) unless
 `AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
 wallpaper under the shortcuts. Without pretend monitors the window is one
@@ -508,6 +519,10 @@ AURORA_DEMO=1 AURORA_DEMO_DESKTOP=edit AURORA_WINDOW_SIZE=5760,1080 \
   AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop edit"
 AURORA_DEMO=1 AURORA_DEMO_DESKTOP=unused AURORA_WINDOW_SIZE=5760,1080 \
   AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop unused"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=taskbar AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop taskbar"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=overflow AURORA_WINDOW_SIZE=1920,720 \
+  AURORA_DEMO_MONITORS=640x720,640x720,640x720 cargo run -p aurora-viewer -- --title "Test desktop overflow"
 ```
 
 Check that a shortcut is never drawn over the world nor cut at its edge,
@@ -6463,7 +6478,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
-| `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single\|edit\|unused` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); a name edited in place at frame 200, a folder shortcut given a name and an icon at 300 (`edit`); two shortcuts on a monitor not in use and Preferences on the desktop's group at frame 200 (`unused`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single\|edit\|unused\|taskbar\|overflow` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); a name edited in place at frame 200, a folder shortcut given a name and an icon at 300 (`edit`); two shortcuts on a monitor not in use and Preferences on the desktop's group at frame 200 (`unused`); the taskbar on the third monitor, the Inventory and a folder's window collapsed into it at frame 200, the Inventory restored at 300 (`taskbar`); twenty windows collapsed into it at frame 200, icon buttons and *More* (`overflow`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |

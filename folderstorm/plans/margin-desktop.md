@@ -363,7 +363,7 @@ All new, ours:
 | `app/inventory.rs` | 302 | its arm, one line | 2, **done** |
 | `ui/toolbar.rs` | 477, beside `dragging` | `pub(crate) fn carried_command(ctx) -> Option<String>` (5 lines: the payload is private) | 3, **done** |
 | `ui/toolbar.rs` (`context`) | 406 | one line in a button's menu: `crate::folderstorm::desktop::toolbar_menu(ui, p, button.map(…));` | 3, **done** |
-| `ui/widgets.rs` (`Floater::show`) | 596, after `toggle_min` is known | 5 lines, the shape of the `window_hidden` block above it: `if crate::folderstorm::desktop::taskbar::holds(ctx, &self, workspace::window_icon(self.id), minimized && !compact && !close && !toggle_min) { if self.cascade.is_some() { cascade::hidden(…) } return None; }` | 4 |
+| `ui/widgets.rs` (`Floater::show`) | 596–603, after `toggle_min` is known | 8 lines, the shape of the `window_hidden` block above it: `let collapsed = minimized && !compact && !close && !toggle_min; if crate::folderstorm::desktop::taskbar::holds(ctx, &self, workspace::window_icon(self.id), collapsed) { if self.cascade.is_some() { cascade::hidden(…) } return None; }` | 4, **done** |
 | `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | the `fs-` block | `fs-desktop-*`, `fs-taskbar-*` (about 60 keys in all; 19 with checkpoint 1) | each |
 | `docs/TESTING.md` | after the backgrounds' paragraph (438), and its row in the table | `AURORA_DEMO_DESKTOP` | 1 (**done**), then each |
 
@@ -508,7 +508,7 @@ Sizes are added lines, tests and translations included.
 | 1 | **Command shortcuts.** The store, slots, rooms and cells; the desktops drawn and taking the pointer; *Add a command ›* from the desktop's menu; open (double click), move by drag with snapping, remove; the switch and icon size in Preferences; `AURORA_DEMO_DESKTOP=1` | `app.rs` (2), `click_pick.rs`, `settings.rs` | ~1,900 |
 | 2 | **Folder shortcuts.** *Add to desktop* in the Inventory menu, the drop from Inventory, one window per folder placed beside the shortcut, gone and other-account folders, `@showinv`; *Show in Inventory* | `ui/inventory.rs`, `app/inventory.rs` | ~1,000 |
 | 3 | **Editing and the toolbar** (built, section 22)**.** Rename, the icon list, *Arrange by name*, single-click switch, the unused-monitor note; drag and *Add to desktop* from a toolbar; keyboard (focus, arrows, F2, Delete) and the two desktop key actions | `ui/toolbar.rs` (2) | ~1,000 |
-| 4 | **The taskbar.** The windows seen, held windows, the island, clicks and menus, overflow, attention, its Preferences rows, its key action; demos `taskbar`, `overflow` | `ui/widgets.rs` | ~1,200 |
+| 4 | **The taskbar** (built, section 23)**.** The windows seen, held windows, the island, clicks and menus, overflow, attention, its Preferences rows, its key action; demos `taskbar`, `overflow` | `ui/widgets.rs` | ~1,200 |
 | 5 | **Item shortcuts** (asked by the human). In this order: landmarks (opening teleports, `InvAction::TeleportLandmark`), notecards (its window), outfits (through outfit safety, row 2.7), then wearables, whose shortcut **adds** the item to what is worn (*Add*, never *Replace*). Each kind through `world::inventory::actions` (`agent_mask`, as the gesture boards): an item id is kept, never an asset id. The record already keeps a target it cannot read (`kept`), so a build without them loses nothing | to be planned (the Inventory's menu entry is ours already) | to be planned |
 | 6 | **Later, each on request.** A layout's own desktop and taskbar choices; *Keep the taskbar above the windows*; several selected at once; lit while open; a colour of its own for a shortcut; the menu key on a focused shortcut; MCP tools | to be planned | – |
 
@@ -905,3 +905,128 @@ against the sections above, and what it decided.
   hook, `desktop/taskbar.rs`, its Preferences rows, *Focus the taskbar*,
   demos `taskbar` and `overflow`). **Checkpoint 5**: item shortcuts
   (section 15).
+
+## 23. Checkpoint 4 as built
+
+The taskbar, on `claude/margin-desktop-taskbar` (over checkpoint 3). What
+the build changed against the sections above, and what it decided.
+
+- **The island** (`desktop/taskbar.rs`, `show`): one of Aurora's islands
+  (`ui::bars::islands::area`, 36 points high) along the bottom of one
+  room, on the windows' layer. A window dragged over it covers it and a
+  click on it brings it back; the windows keep their title bar clear of
+  it, as of the dock (`islands::area` tells `layout::island_drawn`). With
+  nothing to list it says "No collapsed windows" (or "No open windows").
+- **Where**: *Automatic* is the widest room, the first of two as wide
+  (`place::taskbar_slot`). A chosen monitor without a room gives **no
+  taskbar**, not another monitor's. The strip is taken out of that
+  monitor's desktop (`place::taskbar_strip`, `desktop::rooms`): its last
+  rows of cells go, and a shortcut stored there is shown in the nearest
+  free cell, its stored cell kept (the rule of a blocked cell).
+- **The hook** in `Floater::show` (`ui/widgets.rs:596–603`, 8 lines, the
+  only upstream change of the checkpoint besides the translations): every
+  open floater tells `taskbar::holds` its id, title, icon, attention and
+  whether it is collapsed; held, it returns before anything is laid out,
+  after `cascade::hidden` for a window of a cascade group (risk 2). With
+  the taskbar off, `holds` is one read of egui's memory and false.
+- **Held** means collapsed, the taskbar standing, a window of the normal
+  layer (`Order::Middle`), not closing, not expanding, and without a
+  compact body when minimized (Performance). Its place, size and collapsed
+  state stay where Aurora keeps them: restored, it is where it was; the
+  taskbar turned off, or the margin gone, it is Aurora's title bar where
+  it stood. The settings keep nothing but the three choices
+  (`store::Taskbar`: `on`, `slot`, `all_windows`).
+- **The windows are read as the hook saw them**: those drawn before the
+  taskbar in the frame (most: the call is at `app.rs:18160`), and those of
+  the last frame for the ones drawn after it. A window not heard of for a
+  frame is forgotten.
+- **The order**: the collapsed ones in the order they were collapsed;
+  with *All open windows*, every floater in the order it was first seen.
+  A window closed, or hidden with the interface, and back takes a new
+  place at the end.
+- **A button**: the window's icon (`workspace::window_icon`, or the
+  header's own) and its title, cut with "…", the whole title in the
+  tooltip; `Role::Button`, spoken "…, collapsed" or "…, in front"; the
+  attention mark of `widgets::attention_mark` with the window's own
+  flash. With *All open windows* the front window is lit and a collapsed
+  one is muted.
+- **Clicks** (`taskbar::click`): collapsed → restored and brought forward
+  (`widgets::bring_floater_front`); with *All open windows*, the one in
+  front → collapsed (`minimize_floater`), another → to the front. Middle
+  click closes (`close_floater`: the window's own questions run). Right
+  click: *Restore*, or *Bring to front* (greyed for the one in front) and
+  *Collapse*; then *Close*. Enter or Space on a focused button is a click.
+- **Too many** (`taskbar::fit`): the buttons share the room, 180 points
+  wide at most; under 96 points each they are their icon alone (32
+  points); those that still do not fit go in *More* at the right end,
+  with their count, a menu of their icons and titles where a click does
+  what the button would.
+- **The key action** *Focus the taskbar* (`folderstorm/keys.rs`,
+  `Key::DesktopTaskbar`, no default key) gives the keyboard to the first
+  button; Tab goes on from there.
+- **Preferences** (*Desktop in the margins*, after the shortcuts' rows):
+  *Taskbar in a margin* and, behind its cog, *Monitor* (*Automatic* and
+  the numbers of the monitors that have a room now, plus the chosen one
+  even when it has none) and *All open windows*. Three tracked fields;
+  search words `fs-search-taskbar`.
+- **Hidden with the interface** (its shortcut, immersive mode, mouselook
+  without *Show the interface in mouselook*): no island, the windows stay
+  held. In mouselook with the viewport dropped (no margin) they stay held
+  too, and come back as buttons after it.
+
+Decided in the build, beyond the plan:
+
+- **A held window that was on top hands the front over** to the next
+  window that is drawn (`hand_the_front_over`). Aurora's Ctrl+W closes the
+  topmost window, collapsed or not: without this it would close a window
+  that is not on the screen.
+- **"In front" is the topmost floater that is not held**, read from
+  egui's layers, not `widgets::floater_is_front`: a click on the taskbar
+  puts the taskbar's own island on top.
+- **A window of another layer is never held** (the poser's, over the
+  photo viewfinder): it is a tool of what is under it. It is listed with
+  *All open windows*.
+- **The frame of title bar of risk 3 is taken off the screen** for the
+  windows drawn before the taskbar: a held window being restored or
+  closed is drawn collapsed once by `Floater::show`, and the taskbar moves
+  that frame's shapes of its layer away. **Left**: a window drawn after
+  the taskbar in the frame (those of `app.rs` after line 18160) may show
+  its title bar for one frame on its way out. To look at on a real
+  screen; the plan's remedy (the hook taking `open`) stays possible.
+- **`desktop::rooms` takes the desktop, not its size** (it needs the
+  taskbar's choices): its callers in `app/folderstorm_desktop.rs` and the
+  tests follow.
+- **No hook in `ui_takes_pointer`**: an island already counts as
+  interface, and the island senses clicks between its buttons.
+- **Not done**: *Keep the taskbar above the windows* and a layout's own
+  taskbar choice (checkpoint 6, as planned). The Preferences rows are not
+  drawn in a test (their words are searched, their fields are tracked).
+
+**Upstream hooks**: `ui/widgets.rs:596–603` (above), and the keys of
+`crates/aurora-i18n/locales/{en,fr,ja}.ftl` (15 each: 13 `fs-taskbar-*`,
+`fs-keys-desktop-taskbar`, `fs-search-taskbar`). Nothing in `app.rs`: the
+taskbar is drawn from checkpoint 1's line (`app.rs:18160`, through
+`app/folderstorm_desktop.rs:106`), and its key action goes through the
+arm of `Action::Folderstorm` that the layouts added (`app.rs:5012`).
+
+**Demo**: `taskbar` (the taskbar on the third monitor; at frame 200 the
+Inventory and a folder's window are opened and collapsed, People is
+opened and not listed; at frame 300 the Inventory is restored as a click
+on its button does) and `overflow` (twenty folder windows collapsed at
+frame 200: icon buttons and, when the monitor is too narrow for twenty,
+*More*). Both in `docs/TESTING.md`.
+
+**Tests**: `taskbar.rs` (the click rule, the widths and *More*, the two
+orders), `place.rs` (the slot, the strip), `taskbar_tests.rs` (frames,
+with real `Floater` windows, one drawn after the taskbar: held and
+restored where it was at its size; off, or without a margin, title bars
+again; a cascade window keeps its place; a compact one is never held; the
+menu, the middle click; *All open windows*; the front handed over; narrow
+buttons and *More*; hidden with the interface and in mouselook; the key
+action and Enter; the attention; the strip out of the desktop's room; the
+demo's seed; the icons embedded), `folderstorm_search.rs` (the rows and
+the key action found in three languages), `keys.rs` and
+`workspaces/tests/switcher.rs` (the third action, without a key). The
+frame tests fail if the hook is lost at an upstream merge.
+
+**Left for checkpoint 5**: item shortcuts (section 15).
