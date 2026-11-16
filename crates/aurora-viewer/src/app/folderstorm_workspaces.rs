@@ -12,19 +12,138 @@ use crate::folderstorm::viewport;
 use crate::folderstorm::workspaces::apply;
 use crate::folderstorm::workspaces::window::{Command, Seen};
 
+/// The viewer's windows for the layouts (`apply::Shell`): which of the
+/// allowlisted windows are open, and Aurora's own way of opening each (the
+/// path of its menu entry or toolbar button: `ui::bars::run_command`,
+/// `ui::controls::request`, `InventoryUi::open_additional_window`).
+struct Windows<'a> {
+    panels: &'a mut ui::Panels,
+    inventory: &'a mut ui::inventory::InventoryUi,
+    /// The camera and movement controls are Legacy's two windows.
+    classic_controls: bool,
+    /// Contacts is a window of its own, not a tab of Conversations.
+    contacts_torn_off: bool,
+    /// RLVa hides Inventory (@showinv), the mini-map, the world map.
+    no_inventory: bool,
+    no_minimap: bool,
+    no_world_map: bool,
+}
+
+/// The `Panels` flag of an allowlisted window that has one of its own.
+macro_rules! window_flag {
+    ($panels:expr, $id:expr, $($borrow:tt)+) => {
+        match $id {
+            "inventory" => Some($($borrow)+ $panels.inventory),
+            "conversations" => Some($($borrow)+ $panels.chat),
+            ui::people::WINDOW => Some($($borrow)+ $panels.people),
+            "contacts" => Some($($borrow)+ $panels.contacts),
+            "places" => Some($($borrow)+ $panels.places),
+            ui::search::WINDOW => Some($($borrow)+ $panels.search),
+            "minimap" => Some($($borrow)+ $panels.minimap),
+            "worldmap" => Some($($borrow)+ $panels.world_map),
+            "perf" => Some($($borrow)+ $panels.perf),
+            ui::controls::CLASSIC_CAMERA => Some($($borrow)+ $panels.camera_controls),
+            ui::controls::CLASSIC_MOVEMENT => Some($($borrow)+ $panels.movement_controls),
+            "gestures" => Some($($borrow)+ $panels.gestures),
+            "appearance" => Some($($borrow)+ $panels.appearance),
+            "ao" => Some($($borrow)+ $panels.ao),
+            ui::region_tracker::WINDOW => Some($($borrow)+ $panels.region_tracker),
+            ui::area_search::WINDOW => Some($($borrow)+ $panels.area_search),
+            ui::quick_prefs::WINDOW => Some($($borrow)+ $panels.quick_prefs),
+            ui::destinations::WINDOW => Some($($borrow)+ $panels.destinations),
+            ui::money_tracker::WINDOW => Some($($borrow)+ $panels.money_tracker),
+            _ => None,
+        }
+    };
+}
+
+impl Windows<'_> {
+    /// Whether the viewer has the window `id` as things are: not while
+    /// RLVa hides it, and not a window of the other look of the controls
+    /// or a Contacts window while Contacts is a tab of Conversations.
+    fn available(&self, id: &str) -> bool {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        match id {
+            "inventory" | ADDITIONAL_INVENTORY => !self.no_inventory,
+            "minimap" => !self.no_minimap,
+            "worldmap" => !self.no_world_map,
+            "contacts" => self.contacts_torn_off,
+            ui::controls::WINDOW => !self.classic_controls,
+            ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT => self.classic_controls,
+            _ => true,
+        }
+    }
+}
+
+impl apply::Shell for Windows<'_> {
+    fn is_open(&self, window: &crate::folderstorm::workspaces::windows::Window) -> bool {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        let id = window.id;
+        match id {
+            ADDITIONAL_INVENTORY => self.inventory.additional_open(),
+            // Aurora's one window for the camera and the movement controls
+            ui::controls::WINDOW => !self.classic_controls && (self.panels.camera_controls || self.panels.movement_controls),
+            ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT if !self.classic_controls => false,
+            _ => window_flag!(self.panels, id, &).is_some_and(|open| *open),
+        }
+    }
+
+    fn open(&mut self, ctx: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) -> bool {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        let id = window.id;
+        if !self.available(id) {
+            return false;
+        }
+        match id {
+            ADDITIONAL_INVENTORY => self.inventory.open_additional_window(ctx),
+            // on its Camera tab, as the View button opens it
+            ui::controls::WINDOW => ui::controls::request(
+                ctx,
+                &mut self.panels.camera_controls,
+                &mut self.panels.movement_controls,
+                false,
+                false,
+                false,
+            ),
+            // (the mini-map has no title bar: its flag alone, as its
+            // toolbar button)
+            "minimap" => self.panels.minimap = true,
+            _ => match window_flag!(self.panels, id, &mut) {
+                Some(open) => ui::widgets::open_floater(ctx, id, open),
+                // a window of the allowlist this file does not know
+                None => return false,
+            },
+        }
+        true
+    }
+}
+
 impl App {
     /// Each frame, before the interface's pass: a layout's viewer window
     /// is put in place and kept locked, the windows of a layout applied in
     /// the last frames take their places, the monitors are watched, and
     /// the active layout is marked modified when something of it was moved
-    /// since (`apply::frame`).
+    /// since (`apply::frame`). The windows a layout was saved with open
+    /// are opened through [`Windows`].
     pub(super) fn folderstorm_workspaces_frame(&mut self, window: &Window) {
         if !matches!(self.screen, Screen::World) {
             return;
         }
         let seen = self.folderstorm_viewer_window(window);
         self.layouts_demo(seen.as_ref());
-        let outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen);
+        let rlva = &self.world.rlva;
+        let mut windows = Windows {
+            panels: &mut self.panels,
+            inventory: &mut self.inventory_ui,
+            // as `request_controls` has it
+            classic_controls: self.settings.classic_controls && self.camera.free().is_none(),
+            contacts_torn_off: self.settings.contacts.torn_off,
+            // what `app/rlva.rs` closes every frame is not opened
+            no_inventory: rlva.has("showinv"),
+            no_minimap: rlva.has("showminimap"),
+            no_world_map: rlva.has("showworldmap"),
+        };
+        let outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen, &mut windows);
         for command in &outcome.commands {
             self.folderstorm_viewer_command(window, *command);
         }
@@ -125,7 +244,9 @@ impl App {
     /// "Single": no viewport, the windows over the world. `1` only seeds
     /// them; `apply-wide` applies "Wide" at frame 180; `apply-single`
     /// applies "Wide" then, at frame 360, "Single" (windows made small in
-    /// the margin get their sizes back).
+    /// the margin get their sizes back); `reopen` closes Inventory and the
+    /// world map at frame 120 and applies "Wide" at frame 180, which opens
+    /// them where it has them.
     ///
     /// With a viewer window to move (`seen`: not under a forced size):
     /// `toggle` gives "Wide" the window as it is and "Single" its left
@@ -166,6 +287,8 @@ impl App {
                 width: w.round(),
                 height: h.round(),
                 minimized: false,
+                // (saved with its windows open: an apply opens them)
+                open: true,
             };
             let monitors = capture::monitors(&ctx);
             let frame = seen
@@ -262,6 +385,14 @@ impl App {
         };
         match mode.as_str() {
             "apply-wide" | "lock" => apply_at(0, 180, self),
+            // Inventory and the world map closed, then "Wide": it opens them
+            "reopen" => {
+                if self.frame_count == 120 {
+                    self.panels.inventory = false;
+                    self.panels.world_map = false;
+                }
+                apply_at(0, 180, self);
+            }
             "apply-single" => {
                 apply_at(0, 180, self);
                 apply_at(1, 360, self);
@@ -286,21 +417,104 @@ impl App {
 
     /// The bars' area this frame, in points: inside the custom world
     /// viewport `world` (the renderer's, in window pixels, already under
-    /// the session host's bar), or around it, each side's bars in the
-    /// margin when it has room (`viewport::bars`). None leaves the bars on
-    /// the whole window of `size` pixels.
+    /// the session host's bar), or around it: the top and bottom bars
+    /// above and below the world, the side toolbars in its left and right
+    /// margins, each where it has room (`viewport::bars`). None leaves the
+    /// bars on the whole window of `size` pixels.
     pub(super) fn folderstorm_bars_rect(&self, ctx: &egui::Context, world: Option<[u32; 4]>, size: (u32, u32)) -> Option<egui::Rect> {
         let s = &self.settings.folderstorm_viewport;
-        let inside = viewport::bars_rect(s, world, ctx.pixels_per_point())?;
-        if !s.bars_around {
-            return Some(inside);
-        }
+        let inside = viewport::bars_rect(s, world, ctx.pixels_per_point()).filter(|_| s.bars_around);
+        let Some(inside) = inside else {
+            viewport::bars::set_sides(ctx, None);
+            return viewport::bars_rect(s, world, ctx.pixels_per_point());
+        };
         let mut bars = viewport::bars::thickness(ctx, self.interface.last_room.map(|(room, _)| room));
         // the session host's bar is docked over the world's top
         // (`app/folderstorm_characters/bar.rs`): the top bars stay under it
         if self.whole_world_viewport(size) != world {
             bars.top = 0.0;
         }
-        Some(viewport::bars::around(inside, ctx.content_rect(), bars))
+        let areas = viewport::bars::Areas::around(inside, ctx.content_rect(), bars);
+        viewport::bars::set_sides(ctx, Some((inside, areas.sides)));
+        Some(areas.rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::folderstorm::workspaces::apply::Shell;
+    use crate::folderstorm::workspaces::windows;
+
+    fn closed() -> ui::Panels {
+        let mut panels = ui::Panels::from_settings(&crate::settings::Settings::default());
+        for window in windows::all() {
+            if let Some(open) = window_flag!(panels, window.id, &mut) {
+                *open = false;
+            }
+        }
+        panels
+    }
+
+    /// Every window of the allowlist has its way of being opened here: a
+    /// window added to the list without one fails this test.
+    #[test]
+    fn every_allowlisted_window_is_opened_the_app_s_way() {
+        for classic_controls in [false, true] {
+            let ctx = egui::Context::default();
+            let mut panels = closed();
+            let mut inventory = ui::inventory::InventoryUi::default();
+            let mut shell = Windows {
+                panels: &mut panels,
+                inventory: &mut inventory,
+                classic_controls,
+                contacts_torn_off: true,
+                no_inventory: false,
+                no_minimap: false,
+                no_world_map: false,
+            };
+            for window in windows::all() {
+                assert!(!shell.is_open(window), "{}", window.id);
+                // the controls of the other look are not windows of now
+                let other_look = match window.id {
+                    ui::controls::WINDOW => classic_controls,
+                    ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT => !classic_controls,
+                    _ => false,
+                };
+                assert_eq!(shell.open(&ctx, window), !other_look, "{}", window.id);
+                assert_eq!(shell.is_open(window), !other_look, "{}", window.id);
+            }
+            assert!(panels.inventory && panels.chat && panels.minimap && panels.world_map && panels.money_tracker);
+            assert!(inventory.additional_open());
+            assert_eq!(
+                panels.movement_controls, classic_controls,
+                "Aurora's window opens on its Camera tab"
+            );
+        }
+    }
+
+    #[test]
+    fn what_rlva_hides_or_the_settings_do_not_have_is_left_closed() {
+        let ctx = egui::Context::default();
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let mut shell = Windows {
+            panels: &mut panels,
+            inventory: &mut inventory,
+            classic_controls: false,
+            contacts_torn_off: false,
+            no_inventory: true,
+            no_minimap: true,
+            no_world_map: true,
+        };
+        for id in ["inventory", windows::ADDITIONAL_INVENTORY, "minimap", "worldmap", "contacts"] {
+            let window = windows::find(id).expect("on the list");
+            assert!(!shell.open(&ctx, window), "{id}");
+            assert!(!shell.is_open(window), "{id}");
+        }
+        // the others still open
+        assert!(shell.open(&ctx, windows::find("places").expect("on the list")));
+        assert!(!panels.inventory && !panels.minimap && !panels.world_map && !panels.contacts && panels.places);
+        assert!(!inventory.additional_open());
     }
 }

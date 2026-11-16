@@ -6,8 +6,11 @@
 //! says where things go, in three optional parts: the viewer window (its
 //! place and size, full screen or borderless over monitors, optionally
 //! locked), the world viewport with the bars' place, and the position and
-//! size of each window of an allowlist. Which windows are open is a
-//! workspace's business (a later checkpoint).
+//! size of each window of an allowlist, with whether it was open: applying
+//! a layout opens the windows it was saved with open (never an arbitrary
+//! one: the allowlist, through the app's own way of opening each), and
+//! closes none. Closing the others is a workspace's business (a later
+//! checkpoint).
 //!
 //! - [`store`]: what `settings.json` keeps, its limits, the list.
 //! - [`windows`]: the allowlist.

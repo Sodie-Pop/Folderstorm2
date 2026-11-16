@@ -48,7 +48,8 @@ pub struct Frame {
 }
 
 /// One window's place: its top-left corner from the interface's, its size
-/// (the expanded one when it is minimized), in points.
+/// (the expanded one when it is minimized), in points; and whether it was
+/// open.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Placement {
     pub x: f32,
@@ -57,6 +58,11 @@ pub struct Placement {
     pub height: f32,
     #[serde(default)]
     pub minimized: bool,
+    /// The window was open when the layout was saved: applying the layout
+    /// opens it if it is closed. Absent (a layout saved before the field
+    /// existed) reads as closed: such a layout opens nothing.
+    #[serde(default)]
+    pub open: bool,
 }
 
 /// The *Window positions* part of a layout.
@@ -866,6 +872,7 @@ mod tests {
             width,
             height,
             minimized: false,
+            open: false,
         }
     }
 
@@ -957,7 +964,7 @@ mod tests {
         assert_eq!(keys(&value["windows"]), ["frame", "windows"]);
         assert_eq!(keys(&value["windows"]["frame"]), ["height", "pixels_per_point", "width"]);
         for (id, window) in value["windows"]["windows"].as_object().expect("windows") {
-            assert_eq!(keys(window), ["height", "minimized", "width", "x", "y"], "{id}");
+            assert_eq!(keys(window), ["height", "minimized", "open", "width", "x", "y"], "{id}");
             assert!(
                 window
                     .as_object()
@@ -1007,6 +1014,7 @@ mod tests {
         // written back with them
         let mut expected = value;
         expected["windows"]["windows"]["a_window_of_later"]["minimized"] = json!(false);
+        expected["windows"]["windows"]["a_window_of_later"]["open"] = json!(false);
         assert_eq!(serde_json::to_value(&store).expect("saved")["layouts"][0], expected);
     }
 

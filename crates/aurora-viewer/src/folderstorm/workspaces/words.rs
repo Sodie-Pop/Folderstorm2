@@ -36,6 +36,12 @@ pub fn report_text(report: &Report, waiting: usize) -> String {
     if report.unknown > 0 {
         add(tr!("fs-layouts-applied-unknown", count = report.unknown));
     }
+    if report.opened > 0 {
+        add(tr!("fs-layouts-applied-opened", count = report.opened));
+    }
+    if report.blocked > 0 {
+        add(tr!("fs-layouts-applied-blocked", count = report.blocked));
+    }
     if waiting > 0 {
         add(tr!("fs-layouts-waiting", count = waiting));
     }
