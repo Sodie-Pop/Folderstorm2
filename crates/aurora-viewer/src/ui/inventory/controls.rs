@@ -402,6 +402,7 @@ pub fn dialogs(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &m
             .max_height(height)
             .auto_shrink([false, true])
             .show(ui, |ui| {
+                super::custom_tabs::folder_ui::editor(ui, p, st, prefs); // Folderstorm: a custom tab's folders
                 if st.advanced {
                     super::smart_builder::show(ui, p, st);
                     return;
