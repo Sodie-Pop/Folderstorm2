@@ -466,10 +466,17 @@ once, a desktop of shortcuts in the margins around the world (row 1.10):
 `1` puts eight command shortcuts on the first monitor (Conversations,
 People, Inventory, the world map renamed "Where am I?" with a compass,
 Photo, Home, then two greyed ones: Favorites, which only works from its
-toolbar button, and a command the catalogue no longer has) and two on the
-third monitor (Preferences, Build); `open` does the same and opens the
-People shortcut at frame 200, as a double click does; `single` seeds the
-same shortcuts with the world filling the window, so nothing shows. The
+toolbar button, and a command the catalogue no longer has), four folder
+shortcuts in its second column (three folders of the demo inventory, and
+one whose folder is gone, greyed) and two commands on the third monitor
+(Preferences, Build); `open` does the same, opens the first folder
+shortcut at frame 200 as a double click does (its window beside it) and
+the People shortcut at frame 300; `drop` adds a folder at frame 200 where
+a drop from the Inventory would put it (third column) and moves it to the
+third monitor at frame 300; `rlva` puts `@showinv` in force: the folder
+shortcuts are locked and unnamed, and the one opened at frame 200 is
+refused with RLVa's notice; `single` seeds the same shortcuts with the
+world filling the window, so nothing shows. The
 world viewport is turned on (the world in the middle third) unless
 `AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
 wallpaper under the shortcuts. Without pretend monitors the window is one
@@ -483,6 +490,11 @@ AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
 AURORA_DEMO=1 AURORA_DEMO_DESKTOP=open AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
   AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
   cargo run -p aurora-viewer -- --title "Test desktop open"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=drop AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop drop"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=rlva AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
+  cargo run -p aurora-viewer -- --title "Test desktop rlva"
 AURORA_DEMO=1 AURORA_DEMO_DESKTOP=single cargo run -p aurora-viewer -- --title "Test desktop single"
 ```
 
@@ -494,6 +506,17 @@ opens what the toolbar button opens, that a drag snaps to the grid, swaps
 with the shortcut it is dropped on and goes to another monitor, and that
 the right-click menus add a command and remove a shortcut. The shortcuts
 go away with the interface (hidden, immersive mode, mouselook).
+
+For the folder shortcuts, by hand (the demo's `drop` only places one):
+open the Inventory, right-click a folder › *Add to desktop* (greyed, with
+the reason, on an item, the Trash and the Library; in both Inventory
+styles), and drag folders from the Inventory onto a desktop (the desktop
+is outlined, the cursor says copy, the shortcut lands in the cell under
+the pointer; an item alone is refused, the items of a mixed selection are
+counted in a notice, nothing is rezzed or moved). A double click on a
+folder shortcut opens that folder's own window beside it; a second one
+brings the same window to the front. Its menu has *Show in inventory*.
+Delete the folder: its shortcut turns grey and can only be removed.
 
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
@@ -6399,7 +6422,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
-| `AURORA_DEMO_DESKTOP=1\|open\|single` (Folderstorm2) | The margins' desktop: command shortcuts on the first and third monitors of the window, two of them greyed (`1`); the People shortcut opened at frame 200 (`open`); the same shortcuts with the world filling the window, nothing shown (`single`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |

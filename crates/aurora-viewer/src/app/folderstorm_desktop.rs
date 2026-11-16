@@ -6,10 +6,63 @@
 //! through Aurora's own path: a command through `ui::bars::run_command`,
 //! its action handed to the app in the frame's one slot (`UiActions::bar`),
 //! exactly as a toolbar button does, so every check the app makes on that
-//! action (RLVa, the region's rights) is made here too.
+//! action (RLVa, the region's rights) is made here too. A folder shortcut
+//! opens the folder's own window (`InventoryUi::open_folder_window`, as
+//! *Open in a new window* does), one window per folder, and never while
+//! RLVa hides the Inventory (`@showinv`). Folders come from the Inventory's
+//! menu (*Add to desktop*, `InvAction::FolderstormDesktopAdd`) or are
+//! dropped on a desktop; only their ids are kept.
 
 use super::*;
-use crate::folderstorm::desktop::{self, Facts, Request, targets};
+use crate::folderstorm::desktop::{self, Facts, Folders, Request, place, targets};
+use crate::world::notice_topics::Topic;
+use uuid::Uuid;
+
+/// The size a folder's window opens with (Aurora's own, `ui/inventory.rs`).
+const FOLDER_WINDOW: egui::Vec2 = egui::vec2(420.0, 440.0);
+
+/// What opening a folder shortcut did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Opened {
+    /// RLVa hides the Inventory: no window on a part of it either.
+    Refused,
+    /// The folder is not one a shortcut opens (gone since it was drawn).
+    Gone,
+    /// Its window was open: brought to the front (the floater's id).
+    Front(String),
+    /// A new window, placed beside the shortcut.
+    New(String),
+}
+
+/// Opens the window of `folder`, or brings it to the front when it is open:
+/// one window per folder. A new one goes beside the shortcut (`cell`) in
+/// its `room`.
+fn open_folder(
+    ctx: &egui::Context,
+    windows: &mut ui::inventory::InventoryUi,
+    inv: &crate::world::inventory::Inventory,
+    folder: Uuid,
+    no_inventory: bool,
+    cell: egui::Rect,
+    room: egui::Rect,
+) -> Opened {
+    if no_inventory {
+        return Opened::Refused;
+    }
+    if targets::folder_state(inv, folder) != targets::FolderState::Live {
+        return Opened::Gone;
+    }
+    if let Some((window, _)) = windows.folderstorm_folder_windows().into_iter().find(|(_, root)| *root == folder) {
+        // (expanded when it was collapsed)
+        ui::widgets::bring_floater_front(ctx, &window);
+        return Opened::Front(window);
+    }
+    let Some(window) = windows.folderstorm_open_folder(folder) else {
+        return Opened::Gone;
+    };
+    ui::widgets::place_floater(ctx, &window, place::beside(cell, room, FOLDER_WINDOW), FOLDER_WINDOW);
+    Opened::New(window)
+}
 
 /// The desktop changed and is not saved yet.
 fn dirty_id() -> egui::Id {
@@ -35,22 +88,25 @@ impl App {
             return;
         }
         let facts = self.desktop_facts(ctx);
+        // (RlvBehaviourToggleHandler<RLV_BHVR_SHOWINV>: the Inventory is hidden)
+        let no_inventory = self.world.rlva.has("showinv");
+        let prefs = &self.settings.inventory;
         // hidden with the interface, and in mouselook as the bars are
         let mouselook = self.camera.mouselook() && !self.settings.camera.show_interface_in_mouselook;
         let env = desktop::Env {
             p,
             icons: &self.skin.icons,
             facts,
-            account: self.world.agent_id,
+            folders: Folders {
+                inv: &self.world.inventory,
+                account: self.world.agent_id,
+                no_inventory,
+                colors: prefs.folder_colors_enabled.then_some(&prefs.folder_colors),
+            },
             hidden: mouselook || self.interface.hidden || self.interface.immersive || ui::widgets::interface_hidden(ctx),
         };
         let mut requests = desktop::show(ctx, &mut self.settings.folderstorm_desktop, &env);
-        if self.demo
-            && self.frame_count == desktop::demo::OPEN_FRAME
-            && std::env::var("AURORA_DEMO_DESKTOP").is_ok_and(|mode| mode == "open")
-        {
-            requests.push(Request::Run(desktop::demo::OPENED.to_owned()));
-        }
+        requests.extend(self.desktop_demo_frame(ctx));
         for request in requests {
             match request {
                 Request::Run(command) => {
@@ -59,6 +115,22 @@ impl App {
                         a.bar = action;
                     }
                 }
+                Request::OpenFolder { folder, cell, room } => {
+                    let opened = open_folder(ctx, &mut self.inventory_ui, &self.world.inventory, folder, no_inventory, cell, room);
+                    if opened == Opened::Refused {
+                        self.world.system_notice(aurora_i18n::tr!("rlva-blocked"), Topic::Warning);
+                    }
+                }
+                Request::ShowFolder(folder) => {
+                    if no_inventory {
+                        self.world.system_notice(aurora_i18n::tr!("rlva-blocked"), Topic::Warning);
+                    } else if targets::folder_state(&self.world.inventory, folder) == targets::FolderState::Live {
+                        self.panels.inventory = true;
+                        self.inventory_ui.show_folder(&self.world.inventory, folder);
+                        ui::widgets::bring_floater_front(ctx, "inventory");
+                    }
+                }
+                Request::Notice(text) => self.world.system_notice(text, Topic::Items),
                 Request::Changed => {
                     ctx.data_mut(|d| d.insert_temp(dirty_id(), true));
                 }
@@ -74,6 +146,34 @@ impl App {
         if dirty && !ctx.input(|i| i.pointer.any_down()) {
             ctx.data_mut(|d| d.insert_temp(dirty_id(), false));
             self.settings.save();
+        }
+    }
+
+    /// *Add to desktop* of the Inventory's menu
+    /// (`InvAction::FolderstormDesktopAdd`): a shortcut to each folder of
+    /// `ids`, in the first free cells of the first desktop. It turns the
+    /// shortcuts on when they are off, and says so.
+    pub(super) fn folderstorm_desktop_add(&mut self, ids: Vec<Uuid>) {
+        let ctx = self.egui_ctx.clone();
+        let no_inventory = self.world.rlva.has("showinv");
+        let picked = match targets::offer(&self.world.inventory, &ids, no_inventory) {
+            Ok(picked) => picked,
+            Err(why) => {
+                self.world.system_notice(why.text(), Topic::Warning);
+                return;
+            }
+        };
+        let account = self.world.agent_id;
+        let d = &mut self.settings.folderstorm_desktop;
+        let rooms = desktop::rooms(&ctx, d.size);
+        let added = desktop::add_folders(d, &rooms, account, &picked.folders, None, None);
+        let turned_on = added.added > 0 && !d.shortcuts_on;
+        if added.added > 0 {
+            d.shortcuts_on = true;
+            self.settings.save();
+        }
+        if let Some(text) = desktop::added_notice(&added, picked.left_out, turned_on, !rooms.is_empty()) {
+            self.world.system_notice(text, Topic::Items);
         }
     }
 
@@ -113,6 +213,62 @@ impl App {
         let s = &mut self.settings;
         if !desktop::demo::seed(&mode, &mut s.folderstorm_desktop, &mut s.folderstorm_viewport, width) {
             log::warn!("AURORA_DEMO_DESKTOP={mode}: not a mode of the demo");
+            return;
+        }
+        // the demo inventory, for the folder shortcuts
+        let agent = self.world.agent_id;
+        crate::world::inventory::demo::seed(&mut self.world.inventory, agent);
+        desktop::demo::seed_folders(&mut s.folderstorm_desktop, agent);
+        if mode == "rlva" {
+            self.settings.rlva_enabled = true;
+            self.world.rlva_configure(true);
+            self.rlva_demo_message("@showinv=n".to_owned());
+        }
+    }
+
+    /// What the demo asks at this frame, as a shortcut would: `open` opens
+    /// a folder shortcut then a command, `drop` adds a folder where a drop
+    /// from the Inventory would then moves it to the third monitor, `rlva`
+    /// tries to open a folder shortcut under `@showinv`.
+    fn desktop_demo_frame(&mut self, ctx: &egui::Context) -> Vec<Request> {
+        use desktop::demo;
+        if !self.demo || ![demo::OPEN_FRAME, demo::SECOND_FRAME].contains(&self.frame_count) {
+            return Vec::new();
+        }
+        let Ok(mode) = std::env::var("AURORA_DEMO_DESKTOP") else {
+            return Vec::new();
+        };
+        let first = self.frame_count == demo::OPEN_FRAME;
+        let d = &mut self.settings.folderstorm_desktop;
+        let rooms = desktop::rooms(ctx, d.size);
+        match (mode.as_str(), first) {
+            ("open" | "rlva", true) => {
+                let Some(room) = rooms.first() else {
+                    return Vec::new();
+                };
+                vec![Request::OpenFolder {
+                    folder: demo::folder(0),
+                    cell: room.grid.rect(demo::FOLDERS_AT),
+                    room: room.rect,
+                }]
+            }
+            ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
+            ("drop", true) => {
+                desktop::add_folders(d, &rooms, self.world.agent_id, &[demo::DROPPED], Some(0), Some(demo::DROPPED_AT));
+                Vec::new()
+            }
+            ("drop", false) => {
+                let dropped = d
+                    .shortcuts
+                    .iter()
+                    .find(|s| matches!(s.target, desktop::store::Target::Folder { folder, .. } if folder == demo::DROPPED))
+                    .map(|s| s.id);
+                if let Some(id) = dropped {
+                    d.place(id, demo::MOVED_TO.0, demo::MOVED_TO.1);
+                }
+                Vec::new()
+            }
+            _ => Vec::new(),
         }
     }
 }
@@ -168,5 +324,40 @@ mod tests {
         for id in ["favorites", "vr_view", "speak", "flickr", "no-such-command"] {
             assert!(matches!(run(&ctx, id, &Facts::default(), &mut p), BarAction::None), "{id}");
         }
+    }
+
+    #[test]
+    fn a_folder_shortcut_opens_one_window_and_then_brings_it_forward() {
+        let ctx = egui::Context::default();
+        let mut inv = crate::world::inventory::Inventory::default();
+        crate::world::inventory::demo::seed(&mut inv, Uuid::from_u128(42));
+        let (mine, sub) = (Uuid::from_u128(8000), Uuid::from_u128(8001));
+        let mut windows = ui::inventory::InventoryUi::default();
+        let room = egui::Rect::from_min_size(egui::pos2(8.0, 8.0), egui::vec2(1900.0, 1000.0));
+        let cell = egui::Rect::from_min_size(room.min, egui::vec2(92.0, 84.0));
+        // @showinv: no window on a part of the Inventory
+        assert_eq!(open_folder(&ctx, &mut windows, &inv, mine, true, cell, room), Opened::Refused);
+        assert!(windows.folderstorm_folder_windows().is_empty());
+        // a new window
+        let Opened::New(first) = open_folder(&ctx, &mut windows, &inv, mine, false, cell, room) else {
+            panic!("a new window");
+        };
+        assert_eq!(windows.folderstorm_folder_windows(), [(first.clone(), mine)]);
+        // again: the same window, to the front (expanded when collapsed)
+        ui::widgets::minimize_floater(&ctx, &first);
+        assert_eq!(open_folder(&ctx, &mut windows, &inv, mine, false, cell, room), Opened::Front(first.clone()));
+        assert_eq!(windows.folderstorm_folder_windows().len(), 1, "one window per folder");
+        // another folder: its own window
+        assert!(matches!(open_folder(&ctx, &mut windows, &inv, sub, false, cell, room), Opened::New(_)));
+        assert_eq!(windows.folderstorm_folder_windows().len(), 2);
+        // closed with its cross: a new one next time
+        windows.folderstorm_close_folder(&first);
+        assert!(matches!(open_folder(&ctx, &mut windows, &inv, mine, false, cell, room), Opened::New(_)));
+        // gone since the shortcut was drawn, the Library, the root: nothing
+        let before = windows.folderstorm_folder_windows().len();
+        for folder in [Uuid::from_u128(123_456), inv.lib_root, inv.root] {
+            assert_eq!(open_folder(&ctx, &mut windows, &inv, folder, false, cell, room), Opened::Gone);
+        }
+        assert_eq!(windows.folderstorm_folder_windows().len(), before);
     }
 }

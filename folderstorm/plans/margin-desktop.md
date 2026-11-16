@@ -2,9 +2,10 @@
 
 Plan for [FEATURES.md](../FEATURES.md) row **1.10**. Branch
 `claude/margin-desktop`. **Checkpoint 1 is built** (command shortcuts, the
-desktops, Preferences, the demo); checkpoints 2 to 4 are not. What
-checkpoint 1 changed against this plan is in section 19. The human's
-request (2026-11-16):
+desktops, Preferences, the demo), and **checkpoint 2** on
+`claude/margin-desktop-folders` (folder shortcuts); checkpoints 3 and 4
+are not. What they changed against this plan is in sections 19 and 20.
+The human's request (2026-11-16):
 
 > On a 2nd or 3rd monitor, which we've been referring to as margins (where
 > we recently worked on a background image fix), I'd like a big feature
@@ -338,8 +339,8 @@ All new, ours:
 | `app.rs` (`draw_ui`) | 18160, after the gesture boards' line | one line: `self.folderstorm_desktop(&ctx, &p, &mut a);` (not at 17346 as first planned: section 19) | 1, **done** |
 | `app/click_pick.rs` (`ui_takes_pointer`) | 295–296 | the position named, and one more term: `\|\| crate::folderstorm::desktop::takes_pointer(&self.egui_ctx, pos)` | 1, **done** |
 | `settings.rs` | 526, 2051, 3322 | the field, its default, kept by the reset | 1, **done** |
-| `ui/inventory.rs` (`InvAction`) | 151 | one variant, `FolderstormDesktopAdd(Vec<Uuid>)` | 2 |
-| `app/inventory.rs` | 301 | its arm, one line | 2 |
+| `ui/inventory.rs` (`InvAction`) | 152 | one variant, `FolderstormDesktopAdd(Vec<Uuid>)` | 2, **done** |
+| `app/inventory.rs` | 302 | its arm, one line | 2, **done** |
 | `ui/toolbar.rs` | 473, beside `dragging` | `pub(crate) fn carried_command(ctx) -> Option<String>` (5 lines: the payload is private) | 3 |
 | `ui/toolbar.rs` (`context`) | 387 | one line in a button's menu: `crate::folderstorm::desktop::toolbar_menu(ui, p, button);` | 3 |
 | `ui/widgets.rs` (`Floater::show`) | 596, after `toggle_min` is known | 5 lines, the shape of the `window_hidden` block above it: `if crate::folderstorm::desktop::taskbar::holds(ctx, &self, workspace::window_icon(self.id), minimized && !compact && !close && !toggle_min) { if self.cascade.is_some() { cascade::hidden(…) } return None; }` | 4 |
@@ -628,3 +629,79 @@ What the build changed against the sections above, and what it found.
   `folderstorm/desktop/tests.rs` (frames, with the renderer's cut of the
   world's labels), `app/folderstorm_desktop.rs` (a command reaches
   `run_command`, the gates).
+
+## 20. Checkpoint 2 as built
+
+Folder shortcuts, on `claude/margin-desktop-folders`. What the build
+changed against the sections above, and what it decided.
+
+- **A folder of another account is shown greyed, not hidden** ("This
+  folder is in another account's inventory", *Remove* in its menu), by
+  the main session's brief for this checkpoint; sections 5 and 6 said "not
+  shown". Nothing of the folder is read for it: it wears the generic name
+  "Inventory folder" (or the name the user typed). `Desktop::visible` is
+  gone. To hide them again: one filter in `surface::show`.
+- **Open question 8 as the plan's default**: under `@showinv` a folder
+  shortcut wears a lock and "Inventory folder"; its folder's name, its
+  path, its colour and even the name the user gave the shortcut are
+  hidden (that name is often the folder's). It does not open, *Show in
+  inventory* is greyed, a drop is refused, and the app's arm of *Add to
+  desktop* refuses too (the Inventory is closed then anyway).
+- **Open question 9 as the plan's default**: a folder shortcut opens the
+  folder's own window. One window per folder is the glue's rule
+  (`app/folderstorm_desktop.rs` `open_folder`): an open window of that
+  folder is brought to the front (expanded when collapsed) instead of a
+  second one. A folder window has a new id each time it is opened, so
+  every new one is placed beside its shortcut (`place::beside`: to its
+  right, else to its left, kept in the room), at Aurora's size for such a
+  window (420 × 440).
+- **The folder rule** is `targets::folder_state`: live (under the
+  agent's root, out of the Trash), gone (not in the inventory, in the
+  Trash, or the Trash itself), refused (the root, the Library and what it
+  holds), unknown (the inventory's root is not known yet: greyed "Not
+  available yet", never "gone"). A link to a folder gives the folder.
+- **One reason for every refusal to add**: "Only folders of your own
+  inventory, out of the Trash, can be desktop shortcuts." (an item, the
+  Library, the Trash, the root).
+- ***Add to desktop* needs no new menu command**: the entry is added by
+  our `context_catalog/folder_tabs.rs` (called for folders and items in
+  both Inventory styles) as `Command::Invoke(InvAction::…)`. Its entry id
+  for the menu layouts is `desktop-add`. On a selection with folders and
+  items it is offered, and the items are counted in the notice.
+- **From the menu**: the folders go to the first free cells of the first
+  room; the switch is turned on when it was off and the notice says so;
+  without a margin they are kept (slot 0, columns of 8) and the notice
+  says when they show. The settings are saved at once.
+- **A drop** lands in the cell under the pointer; a taken cell, and the
+  other folders of a selection, take the nearest free cells. A drop that
+  worked says nothing (it is seen); what was left out, already there or
+  without room is said in a notice (the chat's notices, topic Items). The
+  payload is cleared in every case, so nothing reaches the world's own
+  drop.
+- **Notices, not a toast in the margin**: the desktop has no place of its
+  own for a message, and Aurora's notices are where the Inventory's own
+  refusals go.
+- **A folder's colour** is read from the Inventory's preferences
+  (`folder_colors`, when they are on) without a hook; a greyed shortcut
+  is never tinted.
+- **The tooltip of a folder shortcut** is its path in the Inventory,
+  built only while the tooltip shows. No tooltip while Inventory is
+  dragged over the desktop.
+- **Demo**: `1` now has four folder shortcuts (three of the demo
+  inventory, one gone); `open` opens a folder at frame 200 and People at
+  300; `drop` adds a folder as a drop would at frame 200 (the pointer
+  cannot be played) and moves it to the third monitor at 300; `rlva`.
+  The demo seeds the demo inventory itself.
+- **Not done in checkpoint 2**: a drop is not offered on a slot without a
+  room (there is nothing to drop on); *Move to ›* a slot from the menu
+  (checkpoint 3, with the keyboard); folder windows already open when
+  `@showinv` starts are left to Aurora (risk 13).
+- **Tests**: `targets.rs` (the folder rule, what a selection gives, a
+  folder's face under each state), `place.rs` (`beside`), `store.rs` (a
+  folder kept with its account), `tests.rs` (frames: a folder shortcut's
+  name, its request and its menu; gone and other-account folders;
+  `@showinv`; drops of a folder, a mixed selection, the same folder, an
+  item, the Library, over the world; adding without a room and in a full
+  one), `app/folderstorm_desktop.rs` (one window per folder, refused
+  under `@showinv`, gone folders),
+  `ui/inventory/context_catalog/folder_tabs.rs` (the menu entry).

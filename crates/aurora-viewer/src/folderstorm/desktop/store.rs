@@ -76,8 +76,8 @@ pub struct Taskbar {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Target {
-    /// An Inventory folder of one account (checkpoint 2 of the plan opens
-    /// it; until then it is kept and not shown).
+    /// An Inventory folder of one account: its id there, never an asset
+    /// id nor its name. Another account of the profile sees it greyed.
     Folder { folder: Uuid, account: Uuid },
     /// A command of the toolbar catalogue, by its id.
     Command { command: String },
@@ -219,14 +219,6 @@ impl Desktop {
 
     fn shortcut_mut(&mut self, id: u32) -> Option<&mut Shortcut> {
         self.shortcuts.iter_mut().find(|s| s.id == id)
-    }
-
-    /// The shortcuts `account` sees: the commands, and its own folders.
-    pub fn visible(&self, account: Uuid) -> impl Iterator<Item = &Shortcut> {
-        self.shortcuts.iter().filter(move |s| match &s.target {
-            Target::Command { .. } => true,
-            Target::Folder { account: owner, .. } => *owner == account,
-        })
     }
 
     /// A new shortcut to `target` in `slot`, at `cell`. Refused when the
@@ -428,19 +420,20 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_of_another_account_is_left_out() {
+    fn a_folder_is_kept_with_its_account() {
         let (me, other) = (Uuid::from_u128(1), Uuid::from_u128(2));
         let mut d = Desktop::default();
-        let command = d.add(Target::command("people"), 0, (0, 0)).expect("added");
         let folder = |n: u128, account| Target::Folder {
             folder: Uuid::from_u128(n),
             account,
         };
         let mine = d.add(folder(10, me), 0, (0, 1)).expect("added");
+        // the same folder twice in one desktop: refused
+        assert_eq!(d.add(folder(10, me), 0, (0, 2)), Err(Error::Existing(mine)));
+        // the same id on another account is another folder
         let theirs = d.add(folder(10, other), 0, (0, 2)).expect("added");
-        let seen: Vec<u32> = d.visible(me).map(|s| s.id).collect();
-        assert_eq!(seen, vec![command, mine]);
-        let seen: Vec<u32> = d.visible(other).map(|s| s.id).collect();
-        assert_eq!(seen, vec![command, theirs]);
+        assert_ne!(mine, theirs);
+        let read: Desktop = serde_json::from_value(written(&d)).expect("read");
+        assert_eq!(read.shortcut(theirs).map(|s| &s.target), Some(&folder(10, other)));
     }
 }

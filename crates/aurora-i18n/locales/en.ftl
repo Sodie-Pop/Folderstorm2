@@ -2093,7 +2093,7 @@ fs-background-shows = Shows
 fs-desktop-group = Desktop in the margins
 fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
-fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; double-click a shortcut to open it, drag it to move it.
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop Inventory folders on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it.
 fs-desktop-size = Icon size
 fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
 fs-desktop-size-small = Small
@@ -2108,6 +2108,28 @@ fs-desktop-folder = Inventory folder
 fs-desktop-greyed-gone = This command no longer exists.
 fs-desktop-greyed-button-only = This one only works from its toolbar button.
 fs-desktop-greyed-rlva = Blocked by RLVa.
+fs-desktop-greyed-folder-gone = This folder is no longer in your inventory.
+fs-desktop-greyed-other-account = This folder is in another account's inventory.
+fs-desktop-add = Add to desktop
+fs-desktop-add-refused = Only folders of your own inventory, out of the Trash, can be desktop shortcuts.
+fs-desktop-added =
+    { $count ->
+        [one] Folder added to the desktop.
+       *[other] { $count } folders added to the desktop.
+    }
+fs-desktop-add-existing = Already on the desktop.
+fs-desktop-add-full =
+    { $count ->
+        [one] The desktop has no room for one folder.
+       *[other] The desktop has no room for { $count } folders.
+    }
+fs-desktop-left-out =
+    { $count ->
+        [one] One entry left out: only folders of your own inventory can be shortcuts.
+       *[other] { $count } entries left out: only folders of your own inventory can be shortcuts.
+    }
+fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Layout › Bars and windows).
+fs-desktop-added-hidden = They show when the window leaves room around the world.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
@@ -2237,7 +2259,7 @@ fs-folder-upload-receipt-failed = Failed: { $names }.
 fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activity history log receipts operations stop
 fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
-fs-search-desktop = desktop shortcut shortcuts icon icons launcher margin margins monitor monitors
+fs-search-desktop = desktop shortcut shortcuts icon icons launcher folder folders margin margins monitor monitors
 fs-search-photo = photo mode snapshot picture camera
 fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
 fs-search-layouts-list = favorite favorites star apply rename delete
