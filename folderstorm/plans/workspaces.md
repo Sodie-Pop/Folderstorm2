@@ -2497,7 +2497,13 @@ As planned above, with these details:
   the HUDs on top. Renderer hooks: one line taking the marker after
   `ui_world::take_end` in the frame and in `interface_alone`, and the
   short draw before the HUD pass, after the scene capture (a photo without
-  the interface has no background, as before).
+  the interface has no background, as before). Tests: the three parts in
+  `aurora-render` (`folderstorm_hud_underlay`, 3), a frame test drawing a
+  HUD between the parts as the renderer does, for both switch values, the
+  store's field, the search words. Demo: `AURORA_DEMO_BACKGROUND=hud` /
+  `hud-over` (a HUD on the world's left edge, half in the margin); checked
+  with lavapipe under Xvfb: the HUD's left half shows over the picture,
+  and is covered by it with `hud-over`.
 - **Status** for Preferences (`paint::status`): loading, shown, missing,
   unreadable, as far as the painting tried the picture; `paint::forget`
   reads it again after it is chosen again.
