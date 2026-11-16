@@ -5,6 +5,7 @@
 use super::apply::Report;
 use super::store::{Layout, MAX_LAYOUTS, MAX_NAME, NameError, StoreError, WindowFrame};
 use super::windows;
+use super::workspace::{MAX_WORKSPACES, Workspace};
 use aurora_i18n::tr;
 
 /// The text of a refusal.
@@ -19,27 +20,72 @@ pub fn refusal(error: StoreError) -> String {
     }
 }
 
+/// The text of a refusal about a workspace.
+pub fn workspace_refusal(error: StoreError) -> String {
+    match error {
+        StoreError::Name(NameError::Empty) => tr!("fs-workspaces-error-empty").to_owned(),
+        StoreError::Name(NameError::Taken) => tr!("fs-workspaces-error-taken").to_owned(),
+        StoreError::Full => tr!("fs-workspaces-error-full", count = MAX_WORKSPACES),
+        StoreError::Invalid | StoreError::Missing => tr!("fs-workspaces-error-invalid").to_owned(),
+        other => refusal(other),
+    }
+}
+
+/// What a workspace does, in a line or two: the layout that goes with it,
+/// and the windows it opens by name.
+pub fn workspace_holds(workspace: &Workspace) -> String {
+    let layout = match &workspace.layout {
+        Some(name) => tr!("fs-workspaces-holds-layout", name = name.as_str()),
+        None => tr!("fs-workspaces-holds-no-layout").to_owned(),
+    };
+    let names: Vec<&str> = workspace.opens().map(windows::Window::label).collect();
+    let opens = if names.is_empty() {
+        tr!("fs-workspaces-holds-none").to_owned()
+    } else {
+        tr!("fs-workspaces-holds-opens", names = names.join(", "))
+    };
+    format!("{layout} {opens}")
+}
+
 /// What the last apply did, in a sentence or two.
 pub fn report_text(report: &Report, waiting: usize) -> String {
-    let mut text = match &report.name {
-        Some(name) if report.windows > 0 => tr!("fs-layouts-applied-windows", name = name.as_str(), count = report.windows),
-        Some(name) => tr!("fs-layouts-applied", name = name.as_str()),
-        None => tr!("fs-layouts-previous-done").to_owned(),
+    let layout = match &report.name {
+        Some(name) if report.windows > 0 => Some(tr!("fs-layouts-applied-windows", name = name.as_str(), count = report.windows)),
+        Some(name) => Some(tr!("fs-layouts-applied", name = name.as_str())),
+        None => None,
+    };
+    let mut text = match (&report.workspace, layout) {
+        (Some(workspace), Some(layout)) => format!("{} {layout}", tr!("fs-workspaces-applied", name = workspace.as_str())),
+        (Some(workspace), None) => tr!("fs-workspaces-applied", name = workspace.as_str()),
+        (None, Some(layout)) => layout,
+        (None, None) => tr!("fs-layouts-previous-done").to_owned(),
     };
     let mut add = |more: String| {
         text.push(' ');
         text.push_str(&more);
     };
+    if report.no_layout {
+        add(tr!("fs-workspaces-applied-no-layout").to_owned());
+    }
     if report.fitted > 0 {
         add(tr!("fs-layouts-applied-fitted", count = report.fitted));
     }
     if report.unknown > 0 {
         add(tr!("fs-layouts-applied-unknown", count = report.unknown));
     }
-    if report.opened > 0 {
+    // (a workspace's windows, or the ones its layout was saved with open)
+    let listed = report.workspace.is_some() || (report.name.is_none() && report.closed > 0);
+    if report.opened > 0 && listed {
+        add(tr!("fs-workspaces-applied-opened", count = report.opened));
+    } else if report.opened > 0 {
         add(tr!("fs-layouts-applied-opened", count = report.opened));
     }
-    if report.blocked > 0 {
+    if report.closed > 0 {
+        add(tr!("fs-workspaces-applied-closed", count = report.closed));
+    }
+    if report.blocked > 0 && listed {
+        add(tr!("fs-workspaces-applied-blocked", count = report.blocked));
+    } else if report.blocked > 0 {
         add(tr!("fs-layouts-applied-blocked", count = report.blocked));
     }
     if waiting > 0 {

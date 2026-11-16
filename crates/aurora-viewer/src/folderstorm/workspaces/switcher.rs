@@ -6,10 +6,12 @@
 //! appear first. Preview… shows the selected workspace before you apply
 //! it. To keep your current arrangement, open Save, enter a new name,
 //! choose what to capture, and click Save new" (doc/help.md "Workspaces").
-//! Here it lists layouts; checkpoint 6 adds the workspaces.
+//! Here it lists the favorites, then the workspaces, then the layouts
+//! (checkpoint 6): a workspace opens and closes windows, a layout says
+//! where things go.
 //!
 //! The search field has the keyboard when the window opens: ↑ ↓ select,
-//! Enter applies the selected layout and closes the window, Esc closes it.
+//! Enter applies the selected entry and closes the window, Esc closes it.
 //! Those keys are read only while the field has the keyboard, when Aurora
 //! sends no plain key to the world.
 //!
@@ -20,15 +22,17 @@
 
 use super::apply::{self, Parts};
 use super::menu::{self, Request};
-use super::pick::{self, Entry};
+use super::pick::{self, Entry, Kind};
 use super::preview;
-use super::store::{Layout, MAX_LAYOUTS, MAX_NAME, Store, StoreError, WindowFrame, same_name};
+use super::store::{Layout, MAX_LAYOUTS, MAX_NAME, Store, StoreError, WindowFrame};
 use super::words;
+use super::workspace::{MAX_WORKSPACES, Workspace};
 use crate::folderstorm::viewport::ViewportSettings;
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind, Floater};
 use aurora_i18n::tr;
 use egui::{Sense, Vec2, pos2, vec2};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// The window's id. Not on the allowlist (`super::windows`): a layout
@@ -58,12 +62,19 @@ const SHORT_NAME: usize = 18;
 pub struct Shown {
     pub store: Store,
     pub world: ViewportSettings,
+    /// The windows open now that a workspace switches: whether the
+    /// workspace in use still describes them.
+    pub open: BTreeSet<String>,
 }
 
 /// *Save new…*, open in the window.
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SaveForm {
     name: String,
+    /// A workspace is saved, not a layout.
+    workspace: bool,
+    /// The workspace names the layout in use.
+    with_layout: bool,
     parts: Parts,
     /// The form was just opened: its field takes the keyboard.
     fresh: bool,
@@ -79,12 +90,13 @@ struct State {
     fresh: bool,
     /// What is typed in the search field.
     typed: String,
-    /// The layout chosen with the arrows or a click, by its name. None:
-    /// the first choice (`pick::first_choice`).
-    chosen: Option<String>,
+    /// The entry chosen with the arrows or a click, by its kind and name.
+    /// None: the first choice (`pick::first_choice`).
+    chosen: Option<(Kind, String)>,
     save: Option<SaveForm>,
-    /// *Update* has asked its question, for the layout of this name.
-    ask_update: Option<String>,
+    /// *Update* has asked its question, for the layout or the workspace of
+    /// this name.
+    ask_update: Option<(Kind, String)>,
 }
 
 fn state_id() -> egui::Id {
@@ -142,18 +154,19 @@ pub fn toggle(ctx: &egui::Context) {
 
 /// Keeps the window's copy of the store up to date while it is open, and
 /// lets it go when it is closed (the frame call's part).
-pub(super) fn publish(ctx: &egui::Context, store: &Store, world: &ViewportSettings) {
+pub(super) fn publish(ctx: &egui::Context, store: &Store, world: &ViewportSettings, open: &BTreeSet<String>) {
     if !is_open(ctx) {
         ctx.data_mut(|d| d.remove::<Arc<Shown>>(shown_id()));
         return;
     }
     let current = ctx.data(|d| d.get_temp::<Arc<Shown>>(shown_id()));
-    if current.is_some_and(|shown| shown.store == *store && shown.world == *world) {
+    if current.is_some_and(|shown| shown.store == *store && shown.world == *world && shown.open == *open) {
         return;
     }
     let shown = Arc::new(Shown {
         store: store.clone(),
         world: world.clone(),
+        open: open.clone(),
     });
     ctx.data_mut(|d| d.insert_temp(shown_id(), shown));
 }
@@ -203,12 +216,32 @@ struct LineAsk {
     star: bool,
 }
 
+/// What a line shows of its entry.
+struct LineOf<'a> {
+    kind: Kind,
+    name: &'a str,
+    /// A layout that locks the viewer window.
+    locked: bool,
+    favorite: bool,
+    selected: bool,
+    note: &'a str,
+}
+
 /// One line of the list: the star, the name, a lock for a layout that
-/// locks the viewer window, "In use" or "In use · modified".
-fn line(ui: &mut egui::Ui, p: &Palette, layout: &Layout, favorite: bool, selected: bool, note: &str) -> (LineAsk, egui::Response) {
+/// locks the viewer window or the mark of a workspace, "In use" or "In
+/// use · modified".
+fn line(ui: &mut egui::Ui, p: &Palette, of: &LineOf) -> (LineAsk, egui::Response) {
+    let LineOf {
+        kind,
+        name,
+        locked,
+        favorite,
+        selected,
+        note,
+    } = *of;
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
     let star_rect = egui::Rect::from_min_size(rect.min, vec2(28.0, rect.height()));
-    let star = ui.interact(star_rect, ui.scope_id().with(("star", layout.name.as_str())), Sense::click());
+    let star = ui.interact(star_rect, ui.scope_id().with(("star", kind, name)), Sense::click());
     let fill = if selected {
         p.violet.gamma_multiply(0.35)
     } else if response.hovered() || star.hovered() {
@@ -233,16 +266,20 @@ fn line(ui: &mut egui::Ui, p: &Palette, layout: &Layout, favorite: bool, selecte
             .galley(pos2(right, rect.center().y - note_galley.size().y / 2.0), note_galley, p.muted);
         right -= 8.0;
     }
-    let locked = layout.window.as_ref().is_some_and(WindowFrame::locked);
-    if locked {
+    let mark = match kind {
+        Kind::Workspace => Some(menu::ICON_WORKSPACE),
+        Kind::Layout if locked => Some(ICON_LOCK),
+        Kind::Layout => None,
+    };
+    if let Some(mark) = mark {
         right -= 7.0;
-        icon(ui, ICON_LOCK, pos2(right, rect.center().y), 13.0, p.muted);
+        icon(ui, mark, pos2(right, rect.center().y), 13.0, p.muted);
         right -= 13.0;
     }
     let left = star_rect.right() + 2.0;
     widgets::paint_elided(
         ui,
-        &layout.name,
+        name,
         pos2(left, rect.center().y),
         (right - left).max(1.0),
         egui::FontId::proportional(13.0),
@@ -254,9 +291,13 @@ fn line(ui: &mut egui::Ui, p: &Palette, layout: &Layout, favorite: bool, selecte
         tr!("fs-switcher-star")
     };
     let star = star.on_hover_text(star_tip);
-    star.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, favorite, format!("{star_tip}: {}", layout.name)));
-    let lock = if locked { tr!("fs-layouts-locked") } else { "" };
-    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{} {lock} {note}", layout.name)));
+    star.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, favorite, format!("{star_tip}: {name}")));
+    let what = match kind {
+        Kind::Workspace => tr!("fs-workspaces-one"),
+        Kind::Layout if locked => tr!("fs-layouts-locked"),
+        Kind::Layout => "",
+    };
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{name} {what} {note}")));
     let ask = LineAsk {
         select: response.clicked() && !star.clicked(),
         apply: response.double_clicked() && !star.hovered(),
@@ -271,13 +312,55 @@ fn heading(ui: &mut egui::Ui, p: &Palette, text: &str) {
 }
 
 /// The note at the right of a line.
-fn note(shown: &Shown, index: usize) -> &'static str {
-    if !shown.store.is_active(index) {
+fn note(shown: &Shown, entry: &Entry) -> &'static str {
+    let modified = match entry.kind {
+        Kind::Layout => apply::modified(&shown.store, &shown.world),
+        Kind::Workspace => apply::workspace_modified(&shown.store, &shown.open),
+    };
+    if !entry.in_use(&shown.store) {
         ""
-    } else if apply::modified(&shown.store, &shown.world) {
+    } else if modified {
         tr!("fs-layouts-modified")
     } else {
         tr!("fs-layouts-active")
+    }
+}
+
+/// The entry of a line: a layout or a workspace of the copy.
+#[derive(Clone, Copy)]
+enum Selected<'a> {
+    Layout(&'a Layout),
+    Workspace(&'a Workspace),
+}
+
+impl<'a> Selected<'a> {
+    fn of(store: &'a Store, entry: &Entry) -> Option<Self> {
+        match entry.kind {
+            Kind::Layout => store.layout(entry.index).map(Selected::Layout),
+            Kind::Workspace => store.workspace(entry.index).map(Selected::Workspace),
+        }
+    }
+
+    fn kind(&self) -> Kind {
+        match self {
+            Selected::Layout(_) => Kind::Layout,
+            Selected::Workspace(_) => Kind::Workspace,
+        }
+    }
+
+    fn name(&self) -> &'a str {
+        match self {
+            Selected::Layout(layout) => &layout.name,
+            Selected::Workspace(workspace) => &workspace.name,
+        }
+    }
+
+    /// The request that applies it.
+    fn apply(&self) -> Request {
+        match self {
+            Selected::Layout(layout) => Request::Apply(layout.name.clone()),
+            Selected::Workspace(workspace) => Request::ApplyWorkspace(workspace.name.clone()),
+        }
     }
 }
 
@@ -323,13 +406,14 @@ pub(super) fn notes(notes: &preview::Notes) -> Vec<String> {
 }
 
 /// The right side: the picture of the selected layout, what it holds, and
-/// what will not be as saved.
-fn side(ui: &mut egui::Ui, p: &Palette, shown: &Shown, layout: Option<&Layout>) {
-    let Some(layout) = layout else {
+/// what will not be as saved; for a workspace, the picture of its layout
+/// when it names one, and what it opens.
+fn side(ui: &mut egui::Ui, p: &Palette, shown: &Shown, selected: Option<Selected>) {
+    let Some(selected) = selected else {
         muted(
             ui,
             p,
-            if shown.store.layouts.is_empty() {
+            if shown.store.layouts.is_empty() && shown.store.workspaces.is_empty() {
                 tr!("fs-switcher-empty")
             } else {
                 tr!("fs-switcher-no-match")
@@ -337,17 +421,39 @@ fn side(ui: &mut egui::Ui, p: &Palette, shown: &Shown, layout: Option<&Layout>) 
         );
         return;
     };
-    let picture = picture(ui.ctx(), shown, layout);
-    preview::show(ui, p, &picture).on_hover_text(tr!("fs-switcher-picture-help"));
-    ui.add(egui::Label::new(egui::RichText::new(&layout.name).size(13.0).strong().color(p.ink)).truncate());
-    muted(ui, p, words::holds(layout));
-    for line in notes(&picture.notes) {
+    let layout = match selected {
+        Selected::Layout(layout) => Some(layout),
+        Selected::Workspace(workspace) => workspace
+            .layout
+            .as_deref()
+            .and_then(|name| shown.store.find(name))
+            .map(|(_, layout)| layout),
+    };
+    let picture = layout.map(|layout| picture(ui.ctx(), shown, layout));
+    if let Some(picture) = &picture {
+        preview::show(ui, p, picture).on_hover_text(tr!("fs-switcher-picture-help"));
+    }
+    ui.add(egui::Label::new(egui::RichText::new(selected.name()).size(13.0).strong().color(p.ink)).truncate());
+    match selected {
+        Selected::Layout(layout) => muted(ui, p, words::holds(layout)),
+        Selected::Workspace(workspace) => {
+            muted(ui, p, words::workspace_holds(workspace));
+            muted(ui, p, tr!("fs-workspaces-closes"));
+        }
+    }
+    for line in picture.iter().flat_map(|picture| notes(&picture.notes)) {
         warning(ui, p, line);
     }
 }
 
 /// What is wrong with saving under `name` now, known from the copy.
 fn save_error(store: &Store, form: &SaveForm, readable: bool) -> Option<StoreError> {
+    if form.workspace {
+        if let Some(error) = store.workspace_name_error(&form.name, None) {
+            return Some(StoreError::Name(error));
+        }
+        return (store.workspaces.len() >= MAX_WORKSPACES).then_some(StoreError::Full);
+    }
     if !(form.parts.window && readable) && !form.parts.world && !form.parts.windows {
         return Some(StoreError::Invalid);
     }
@@ -357,19 +463,33 @@ fn save_error(store: &Store, form: &SaveForm, readable: bool) -> Option<StoreErr
     (store.layouts.len() >= MAX_LAYOUTS).then_some(StoreError::Full)
 }
 
-/// *Save new…*: the name, the parts, Save and Cancel. True when the form
-/// is to be closed.
+/// *Save new…*: a layout or a workspace, the name, the parts, Save and
+/// Cancel. True when the form is to be closed.
 fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm, out: &mut Vec<Request>) -> bool {
     let mut close = false;
     let mut save = false;
     // (no viewer window to read under a forced size or a capture)
     let readable = apply::has_viewer_window(ui.ctx());
     ui.horizontal(|ui| {
+        let mut kind = usize::from(form.workspace);
+        let kinds = [
+            (tr!("fs-workspaces-save-layout"), true),
+            (tr!("fs-workspaces-save-workspace"), true),
+        ];
+        if widgets::segmented(ui, p, &mut kind, &kinds) {
+            form.workspace = kind == 1;
+            form.refused = None;
+        }
+        let hint = if form.workspace {
+            tr!("fs-workspaces-name-hint")
+        } else {
+            tr!("fs-layouts-name-hint")
+        };
         let field = ui.add(
             egui::TextEdit::singleline(&mut form.name)
-                .desired_width(220.0)
+                .desired_width(190.0)
                 .char_limit(MAX_NAME * 2)
-                .hint_text(tr!("fs-layouts-name-hint")),
+                .hint_text(hint),
         );
         if std::mem::take(&mut form.fresh) {
             field.request_focus();
@@ -382,31 +502,53 @@ fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm,
         save |= widgets::action_button(ui, p, ICON_SAVE, tr!("fs-layouts-save"), ActionKind::Primary, vec2(0.0, BUTTON_H)).clicked();
         close |= widgets::action_button(ui, p, ICON_CANCEL, tr!("common-cancel"), ActionKind::Flat, vec2(0.0, BUTTON_H)).clicked();
     });
-    ui.horizontal_wrapped(|ui| {
-        ui.add_enabled_ui(readable, |ui| {
-            let mut window = form.parts.window && readable;
-            if widgets::checkbox(ui, p, &mut window, tr!("fs-layouts-part-window")).changed() {
-                form.parts.window = window;
-            }
+    if form.workspace {
+        // the windows open now, and the layout in use if wanted
+        let layout = shown.store.active().map(|layout| layout.name.as_str());
+        ui.horizontal_wrapped(|ui| {
+            ui.add_enabled_ui(layout.is_some(), |ui| {
+                let mut with = form.with_layout && layout.is_some();
+                let label = match layout {
+                    Some(name) => tr!("fs-workspaces-with-layout", name = short(name)),
+                    None => tr!("fs-workspaces-with-no-layout").to_owned(),
+                };
+                if widgets::checkbox(ui, p, &mut with, label).changed() {
+                    form.with_layout = with;
+                }
+            });
         });
-        widgets::checkbox(ui, p, &mut form.parts.world, tr!("fs-layouts-part-world"));
-        widgets::checkbox(ui, p, &mut form.parts.windows, tr!("fs-layouts-part-windows"));
-        let with_window = form.parts.window && readable;
-        ui.add_enabled_ui(with_window, |ui| {
-            let mut lock = form.parts.lock && with_window;
-            if widgets::checkbox(ui, p, &mut lock, tr!("fs-layouts-lock")).changed() {
-                form.parts.lock = lock;
-            }
+        muted(ui, p, tr!("fs-workspaces-save-help"));
+    } else {
+        ui.horizontal_wrapped(|ui| {
+            ui.add_enabled_ui(readable, |ui| {
+                let mut window = form.parts.window && readable;
+                if widgets::checkbox(ui, p, &mut window, tr!("fs-layouts-part-window")).changed() {
+                    form.parts.window = window;
+                }
+            });
+            widgets::checkbox(ui, p, &mut form.parts.world, tr!("fs-layouts-part-world"));
+            widgets::checkbox(ui, p, &mut form.parts.windows, tr!("fs-layouts-part-windows"));
+            let with_window = form.parts.window && readable;
+            ui.add_enabled_ui(with_window, |ui| {
+                let mut lock = form.parts.lock && with_window;
+                if widgets::checkbox(ui, p, &mut lock, tr!("fs-layouts-lock")).changed() {
+                    form.parts.lock = lock;
+                }
+            });
         });
-    });
+    }
     if save {
         form.refused = save_error(&shown.store, form, readable);
         if form.refused.is_none() {
-            out.push(Request::SaveNew(form.name.clone(), form.parts));
+            out.push(match form.workspace {
+                true => Request::SaveWorkspace(form.name.clone(), form.with_layout && shown.store.active().is_some()),
+                false => Request::SaveNew(form.name.clone(), form.parts),
+            });
             close = true;
         }
     }
     match form.refused {
+        Some(error) if form.workspace => refused(ui, p, words::workspace_refusal(error)),
         // (the parts, not the arrangement: the tab's sentence for it)
         Some(StoreError::Invalid) => refused(ui, p, tr!("fs-layouts-error-parts")),
         Some(error) => refused(ui, p, words::refusal(error)),
@@ -417,20 +559,23 @@ fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm,
 
 /// The window's footer: the question of *Update*, or *Save new…*, or the
 /// buttons; and one line for what was last done.
-fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selected: Option<&Layout>, out: &mut Vec<Request>) {
+fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selected: Option<Selected>, out: &mut Vec<Request>) {
     let ctx = ui.ctx().clone();
     let size = vec2(0.0, BUTTON_H);
     ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
     widgets::divider(ui, p);
-    if let Some(name) = st.ask_update.clone() {
+    if let Some((kind, name)) = st.ask_update.clone() {
         ui.horizontal_wrapped(|ui| {
-            ui.label(
-                egui::RichText::new(tr!("fs-layouts-ask-update", name = name.as_str()))
-                    .size(12.5)
-                    .color(p.ink),
-            );
+            let question = match kind {
+                Kind::Layout => tr!("fs-layouts-ask-update", name = name.as_str()),
+                Kind::Workspace => tr!("fs-workspaces-ask-update", name = name.as_str()),
+            };
+            ui.label(egui::RichText::new(question).size(12.5).color(p.ink));
             if widgets::action_button(ui, p, ICON_UPDATE, tr!("fs-layouts-update"), ActionKind::Primary, size).clicked() {
-                out.push(Request::Update(name.clone()));
+                out.push(match kind {
+                    Kind::Layout => Request::Update(name.clone()),
+                    Kind::Workspace => Request::UpdateWorkspace(name.clone()),
+                });
                 st.ask_update = None;
             }
             if widgets::action_button(ui, p, ICON_CANCEL, tr!("common-cancel"), ActionKind::Flat, size).clicked() {
@@ -445,7 +590,15 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
         }
         return;
     }
-    let active = shown.store.active().map(|layout| layout.name.clone());
+    // *Update* is for what is in use: the workspace when a workspace is
+    // selected, the layout otherwise
+    let active = match selected.map(|selected| selected.kind()) {
+        Some(Kind::Workspace) => shown
+            .store
+            .active_workspace()
+            .map(|workspace| (Kind::Workspace, workspace.name.clone())),
+        _ => shown.store.active().map(|layout| (Kind::Layout, layout.name.clone())),
+    };
     ui.horizontal_wrapped(|ui| {
         if widgets::action_button_if(
             ui,
@@ -457,17 +610,22 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
             selected.is_some(),
         )
         .clicked()
-            && let Some(layout) = selected
+            && let Some(selected) = selected
         {
-            out.push(Request::Apply(layout.name.clone()));
+            out.push(selected.apply());
         }
-        // the layout in use takes the arrangement of now (section 8.1)
+        // the layout in use takes the arrangement of now (section 8.1),
+        // the workspace in use the windows open now
         let update = match &active {
-            Some(name) => tr!("fs-switcher-update", name = short(name)),
+            Some((_, name)) => tr!("fs-switcher-update", name = short(name)),
             None => tr!("fs-layouts-update").to_owned(),
         };
+        let update_help = match &active {
+            Some((Kind::Workspace, _)) => tr!("fs-workspaces-update-help"),
+            _ => tr!("fs-switcher-update-help"),
+        };
         let asked = widgets::action_button_if(ui, p, ICON_UPDATE, &update, ActionKind::Flat, size, active.is_some())
-            .on_hover_text(tr!("fs-switcher-update-help"))
+            .on_hover_text(update_help)
             .clicked();
         if asked {
             st.ask_update = active.clone();
@@ -478,6 +636,9 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
         {
             st.save = Some(SaveForm {
                 fresh: true,
+                // (a workspace selected: another workspace, most likely)
+                workspace: matches!(selected, Some(Selected::Workspace(_))),
+                with_layout: false,
                 ..Default::default()
             });
         }
@@ -511,9 +672,9 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
     }
 }
 
-/// The name of the layout of a line.
-fn name_at<'a>(store: &'a Store, lines: &[Entry], at: Option<usize>) -> Option<&'a Layout> {
-    at.and_then(|at| lines.get(at)).and_then(|line| store.layout(line.index))
+/// The entry of a line.
+fn entry_at<'a>(store: &'a Store, lines: &[Entry], at: Option<usize>) -> Option<Selected<'a>> {
+    at.and_then(|at| lines.get(at)).and_then(|line| Selected::of(store, line))
 }
 
 /// The window's body. True when it is to be closed.
@@ -521,16 +682,13 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
     let store = &shown.store;
     let mut close = false;
     let lines = pick::filtered(store, &st.typed);
-    let place = |chosen: &Option<String>| {
+    let place = |chosen: &Option<(Kind, String)>| {
         chosen
-            .as_deref()
-            .and_then(|name| {
-                lines
-                    .iter()
-                    .position(|line| store.layout(line.index).is_some_and(|layout| same_name(&layout.name, name)))
-            })
+            .as_ref()
+            .and_then(|(kind, name)| lines.iter().position(|line| line.is(store, *kind, name)))
             .or_else(|| pick::first_choice(store, &lines, &st.typed))
     };
+    let chosen_at = |at: Option<usize>| entry_at(store, &lines, at).map(|entry| (entry.kind(), entry.name().to_owned()));
     let mut at = place(&st.chosen);
     // the list's keys, read before the field (which would lose the
     // keyboard on Enter) and only while it has it
@@ -547,7 +705,7 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
         });
         if down || up {
             at = pick::step(lines.len(), at, down);
-            st.chosen = name_at(store, &lines, at).map(|layout| layout.name.clone());
+            st.chosen = chosen_at(at);
             reveal = true;
         }
         if down || up || enter {
@@ -558,8 +716,8 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
                 m.move_focus(egui::FocusDirection::None);
             });
         }
-        if enter && let Some(layout) = name_at(store, &lines, at) {
-            out.push(Request::Apply(layout.name.clone()));
+        if enter && let Some(entry) = entry_at(store, &lines, at) {
+            out.push(entry.apply());
             close = true;
         }
     }
@@ -592,7 +750,7 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
     } else {
         at
     };
-    let selected = name_at(store, &lines, at);
+    let selected = entry_at(store, &lines, at);
     ui.add_space(4.0);
     let (mut above, foot) = widgets::above_footer(ui);
     let mut clicked = None;
@@ -604,31 +762,52 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
                 .id_salt("fs-switcher-list")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    let headings = lines.iter().any(|line| line.favorite);
+                    // the headings when there is more than one section
+                    let section_of = |entry: &Entry| (!entry.favorite).then_some(entry.kind);
+                    let headings = lines.iter().any(|line| section_of(line) != lines.first().and_then(section_of))
+                        || lines.first().is_some_and(|line| line.favorite);
                     let mut section = None;
                     for (n, entry) in lines.iter().enumerate() {
-                        let Some(layout) = store.layout(entry.index) else { continue };
-                        if headings && section != Some(entry.favorite) {
-                            section = Some(entry.favorite);
-                            let title = if entry.favorite {
-                                tr!("fs-switcher-favorites")
-                            } else {
-                                tr!("fs-switcher-layouts")
+                        let Some(of) = Selected::of(store, entry) else { continue };
+                        if headings && section != Some(section_of(entry)) {
+                            section = Some(section_of(entry));
+                            let title = match section_of(entry) {
+                                None => tr!("fs-switcher-favorites"),
+                                Some(Kind::Workspace) => tr!("fs-switcher-workspaces"),
+                                Some(Kind::Layout) => tr!("fs-switcher-layouts"),
                             };
                             heading(ui, p, title);
                         }
-                        let (ask, response) = line(ui, p, layout, entry.favorite, at == Some(n), note(shown, entry.index));
+                        let locked = match of {
+                            Selected::Layout(layout) => layout.window.as_ref().is_some_and(WindowFrame::locked),
+                            Selected::Workspace(_) => false,
+                        };
+                        let (ask, response) = line(
+                            ui,
+                            p,
+                            &LineOf {
+                                kind: entry.kind,
+                                name: of.name(),
+                                locked,
+                                favorite: entry.favorite,
+                                selected: at == Some(n),
+                                note: note(shown, entry),
+                            },
+                        );
                         if reveal && at == Some(n) {
                             response.scroll_to_me(None);
                         }
                         if ask.star {
-                            out.push(Request::Star(layout.name.clone(), !entry.favorite));
+                            out.push(match entry.kind {
+                                Kind::Layout => Request::Star(of.name().to_owned(), !entry.favorite),
+                                Kind::Workspace => Request::StarWorkspace(of.name().to_owned(), !entry.favorite),
+                            });
                         }
                         if ask.select || ask.apply {
-                            clicked = Some(layout.name.clone());
+                            clicked = Some((entry.kind, of.name().to_owned()));
                         }
                         if ask.apply {
-                            out.push(Request::Apply(layout.name.clone()));
+                            out.push(of.apply());
                         }
                     }
                 });
@@ -643,8 +822,8 @@ fn body(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, out: &mut
                 .show(ui, |ui| side(ui, p, shown, selected));
         });
     });
-    if let Some(name) = clicked {
-        st.chosen = Some(name);
+    if let Some(chosen) = clicked {
+        st.chosen = Some(chosen);
         // the keyboard goes back to the field: the arrows and Enter carry on
         // from the line clicked
         ui.memory_mut(|m| m.request_focus(field));

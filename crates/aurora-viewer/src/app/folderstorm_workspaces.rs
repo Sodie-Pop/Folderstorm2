@@ -1,4 +1,4 @@
-//! Folderstorm: layouts in the app (the rules are in
+//! Folderstorm: layouts and workspaces in the app (the rules are in
 //! `crate::folderstorm::workspaces` and `crate::folderstorm::viewport::bars`;
 //! folderstorm/plans/workspaces.md, checkpoints 3 to 5).
 //!
@@ -12,10 +12,12 @@ use crate::folderstorm::viewport;
 use crate::folderstorm::workspaces::apply;
 use crate::folderstorm::workspaces::window::{Command, Seen};
 
-/// The viewer's windows for the layouts (`apply::Shell`): which of the
-/// allowlisted windows are open, and Aurora's own way of opening each (the
-/// path of its menu entry or toolbar button: `ui::bars::run_command`,
-/// `ui::controls::request`, `InventoryUi::open_additional_window`).
+/// The viewer's windows for the layouts and the workspaces
+/// (`apply::Shell`): which of the allowlisted windows are open, Aurora's
+/// own way of opening each (the path of its menu entry or toolbar button:
+/// `ui::bars::run_command`, `ui::controls::request`,
+/// `InventoryUi::open_additional_window`), and of closing one (a workspace
+/// closes the windows it does not list).
 struct Windows<'a> {
     panels: &'a mut ui::Panels,
     inventory: &'a mut ui::inventory::InventoryUi,
@@ -115,6 +117,26 @@ impl apply::Shell for Windows<'_> {
             },
         }
         true
+    }
+
+    fn close(&mut self, _: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        let id = window.id;
+        match id {
+            // as `app/rlva.rs` closes it under @showinv
+            ADDITIONAL_INVENTORY => self.inventory.close_additional_window(),
+            // Aurora's one window for the camera and the movement controls
+            ui::controls::WINDOW => {
+                self.panels.camera_controls = false;
+                self.panels.movement_controls = false;
+            }
+            // the flag alone, as the window's own cross leaves it
+            _ => {
+                if let Some(open) = window_flag!(self.panels, id, &mut) {
+                    *open = false;
+                }
+            }
+        }
     }
 }
 
@@ -261,6 +283,13 @@ impl App {
     /// and opens the switcher instead of Preferences; `=toggle` also gives
     /// them the viewer window as `AURORA_DEMO_LAYOUTS=toggle` does, and
     /// asks for the toggle every 300 frames, as its toolbar button would.
+    ///
+    /// `AURORA_DEMO_WORKSPACES=1` (checkpoint 6) seeds the same as
+    /// `AURORA_DEMO_SWITCHER=1` and two workspaces, both favorites:
+    /// "Sorting" (Inventory, the additional Inventory window, People; with
+    /// the layout "Single") and "Exploring" (mini-map, world map, Places;
+    /// any layout). `=apply` also applies "Sorting" at frame 180 and
+    /// "Exploring" at frame 360.
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
@@ -268,12 +297,19 @@ impl App {
         if !self.demo {
             return;
         }
-        let mode = match (std::env::var("AURORA_DEMO_LAYOUTS"), std::env::var("AURORA_DEMO_SWITCHER")) {
-            (Ok(mode), _) => mode,
-            (_, Ok(switcher)) if switcher == "toggle" => "switcher-toggle".to_owned(),
-            (_, Ok(_)) => "switcher".to_owned(),
+        let mode = match (
+            std::env::var("AURORA_DEMO_LAYOUTS"),
+            std::env::var("AURORA_DEMO_SWITCHER"),
+            std::env::var("AURORA_DEMO_WORKSPACES"),
+        ) {
+            (Ok(mode), _, _) => mode,
+            (_, Ok(switcher), _) if switcher == "toggle" => "switcher-toggle".to_owned(),
+            (_, Ok(_), _) => "switcher".to_owned(),
+            (_, _, Ok(workspaces)) if workspaces == "apply" => "switcher-workspaces-apply".to_owned(),
+            (_, _, Ok(_)) => "switcher-workspaces".to_owned(),
             _ => return,
         };
+        let workspaces = mode.starts_with("switcher-workspaces");
         let switcher = mode.starts_with("switcher");
         // the modes that flip the viewer window between the two layouts
         let flips = matches!(mode.as_str(), "toggle" | "switcher-toggle");
@@ -370,6 +406,26 @@ impl App {
                     store.set_favorite(name, true);
                     store.set_toggle(place, Some(name));
                 }
+                if workspaces {
+                    use crate::folderstorm::workspaces::workspace::Workspace;
+                    let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
+                    let seeded = [
+                        Workspace::new(
+                            "Sorting",
+                            Some("Single"),
+                            ids(&["inventory", windows::ADDITIONAL_INVENTORY, crate::ui::people::WINDOW]),
+                        ),
+                        Workspace::new("Exploring", None, ids(&["minimap", "worldmap", "places"])),
+                    ];
+                    for workspace in seeded {
+                        let name = workspace.name.clone();
+                        if let Err(error) = store.add_workspace(workspace) {
+                            log::warn!("AURORA_DEMO_WORKSPACES: workspace not seeded: {error:?}");
+                        }
+                        store.set_favorite_workspace(&name, true);
+                    }
+                    store.active_workspace = None;
+                }
                 crate::folderstorm::workspaces::switcher::open(&ctx);
             } else {
                 self.panels.settings = true;
@@ -404,6 +460,16 @@ impl App {
             // as a click on the toolbar's toggle: "Wide", then "Single", …
             "switcher-toggle" if self.frame_count >= 180 && (self.frame_count - 180).is_multiple_of(300) => {
                 crate::folderstorm::workspaces::menu::ask(&ctx, crate::folderstorm::workspaces::menu::Request::Toggle);
+            }
+            // "Sorting" (with its layout), then "Exploring" (on the same one)
+            "switcher-workspaces-apply" => {
+                for (index, frame) in [(0, 180), (1, 360)] {
+                    if self.frame_count == frame
+                        && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
+                    {
+                        log::warn!("AURORA_DEMO_WORKSPACES: workspace not applied: {error:?}");
+                    }
+                }
             }
             "unplug" => {
                 apply_at(0, 180, self);
@@ -490,6 +556,34 @@ mod tests {
                 panels.movement_controls, classic_controls,
                 "Aurora's window opens on its Camera tab"
             );
+        }
+    }
+
+    /// A workspace closes every window it switches the app's way.
+    #[test]
+    fn every_allowlisted_window_is_closed_the_app_s_way() {
+        for classic_controls in [false, true] {
+            let ctx = egui::Context::default();
+            let mut panels = closed();
+            let mut inventory = ui::inventory::InventoryUi::default();
+            let mut shell = Windows {
+                panels: &mut panels,
+                inventory: &mut inventory,
+                classic_controls,
+                contacts_torn_off: true,
+                no_inventory: false,
+                no_minimap: false,
+                no_world_map: false,
+            };
+            for window in windows::all() {
+                if shell.open(&ctx, window) {
+                    assert!(shell.is_open(window), "{}", window.id);
+                    shell.close(&ctx, window);
+                }
+                assert!(!shell.is_open(window), "{}", window.id);
+            }
+            assert!(!panels.inventory && !panels.minimap && !panels.camera_controls && !panels.movement_controls);
+            assert!(!inventory.additional_open());
         }
     }
 

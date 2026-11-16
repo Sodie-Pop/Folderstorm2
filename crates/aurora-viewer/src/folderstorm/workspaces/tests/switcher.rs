@@ -14,12 +14,12 @@ use aurora_i18n::tr;
 impl Viewer {
     /// Something asked as the menu, a button or a key would, and the
     /// frames for it to be run and drawn.
-    fn ask(&mut self, request: Request) {
+    pub(super) fn ask(&mut self, request: Request) {
         menu::ask(&self.ctx, request);
         self.frames(3);
     }
 
-    fn key(&mut self, key: egui::Key) {
+    pub(super) fn key(&mut self, key: egui::Key) {
         let event = |pressed| egui::Event::Key {
             key,
             physical_key: None,
@@ -33,12 +33,12 @@ impl Viewer {
         }
     }
 
-    fn type_text(&mut self, text: &str) {
+    pub(super) fn type_text(&mut self, text: &str) {
         self.events = vec![egui::Event::Text(text.to_owned())];
         self.frames(2);
     }
 
-    fn click_at(&mut self, at: Pos2) {
+    pub(super) fn click_at(&mut self, at: Pos2) {
         let button = |pressed| egui::Event::PointerButton {
             pos: at,
             button: egui::PointerButton::Primary,
@@ -57,7 +57,7 @@ impl Viewer {
     }
 
     /// Where the first text `label` was drawn.
-    fn text_rect(&self, label: &str) -> Rect {
+    pub(super) fn text_rect(&self, label: &str) -> Rect {
         self.texts
             .iter()
             .find(|(shown, _)| shown == label)
@@ -66,7 +66,7 @@ impl Viewer {
     }
 
     /// Clicks the star of the switcher's line of `name`.
-    fn click_star(&mut self, name: &str) {
+    pub(super) fn click_star(&mut self, name: &str) {
         let at = self.text_rect(name);
         self.click_at(pos2(at.left() - 16.0, at.center().y));
     }
@@ -75,7 +75,11 @@ impl Viewer {
         self.store.active_layout.as_deref()
     }
 
-    fn open_switcher(&mut self) {
+    pub(super) fn active_layout(&self) -> Option<&str> {
+        self.active()
+    }
+
+    pub(super) fn open_switcher(&mut self) {
         self.ask(Request::Switcher);
         assert!(switcher::is_open(&self.ctx));
     }
@@ -589,6 +593,20 @@ fn the_switcher_is_drawn() {
     store.set_active(Some("1 monitor".to_owned()));
     store.set_favorite("2 monitors", true);
     store.set_favorite("1 monitor", true);
+    // two workspaces (checkpoint 6): after the favorites, before the layouts
+    {
+        use crate::folderstorm::workspaces::workspace::Workspace;
+        let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
+        let sorting = Workspace::new(
+            "Sorting",
+            Some("2 monitors"),
+            ids(&[INVENTORY, windows::ADDITIONAL_INVENTORY, PEOPLE]),
+        );
+        store.add_workspace(sorting).expect("added");
+        store
+            .add_workspace(Workspace::new("Exploring", None, ids(&[MINIMAP, MAP, "places"])))
+            .expect("added");
+    }
     let mut world = ViewportSettings::default();
     let mut window = Pretend::new(320, 140, 1280, 800);
     let (width, height) = (1280u32, 800u32);
@@ -676,7 +694,10 @@ fn the_switcher_is_drawn() {
     for expected in [
         tr!("fs-switcher-title").to_owned(),
         tr!("fs-switcher-favorites").to_uppercase(),
+        tr!("fs-switcher-workspaces").to_uppercase(),
         tr!("fs-switcher-layouts").to_uppercase(),
+        "Sorting".to_owned(),
+        "Exploring".to_owned(),
         "2 monitors".to_owned(),
         "1 monitor".to_owned(),
         "Photos".to_owned(),
@@ -701,6 +722,7 @@ fn the_switcher_is_drawn() {
         switcher::ICON_PREFERENCES,
         menu::ICON_PREVIOUS,
         menu::ICON_UNLOCK,
+        menu::ICON_WORKSPACE,
     ] {
         assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
     }
@@ -745,5 +767,51 @@ fn the_switcher_is_drawn() {
         tr!("fs-layouts-lock"),
     ] {
         assert!(shown(&texts, expected), "“{expected}” is drawn");
+    }
+    // a workspace selected: the picture of its layout, what it opens
+    // (`switcher-workspace.png`), then *Save new…* as a workspace
+    // (`switcher-save-workspace.png`)
+    let mut click = |label: &str, name: &str, events: &mut Vec<egui::Event>, store: &mut Store, texts: &mut Vec<(String, Rect)>| {
+        let at = texts
+            .iter()
+            .find(|(drawn, _)| drawn == label)
+            .unwrap_or_else(|| panic!("“{label}” is drawn"))
+            .1
+            .center();
+        let button = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        for step in [vec![egui::Event::PointerMoved(at)], vec![button(true)], vec![button(false)]] {
+            *events = step;
+            draw(name, 1, events, store, texts);
+        }
+        draw(name, 3, events, store, texts);
+    };
+    click(tr!("common-cancel"), "switcher-workspace", &mut events, &mut store, &mut texts);
+    click("Sorting", "switcher-workspace", &mut events, &mut store, &mut texts);
+    let sorting = store.find_workspace("Sorting").expect("added").1.clone();
+    for expected in [
+        crate::folderstorm::workspaces::words::workspace_holds(&sorting),
+        tr!("fs-workspaces-closes").to_owned(),
+    ] {
+        assert!(shown(&texts, &expected), "“{expected}” is drawn");
+    }
+    click(
+        tr!("fs-switcher-save-new"),
+        "switcher-save-workspace",
+        &mut events,
+        &mut store,
+        &mut texts,
+    );
+    for expected in [
+        tr!("fs-workspaces-save-layout").to_owned(),
+        tr!("fs-workspaces-save-workspace").to_owned(),
+        tr!("fs-workspaces-with-layout", name = "1 monitor"),
+        tr!("fs-workspaces-save-help").to_owned(),
+    ] {
+        assert!(shown(&texts, &expected), "“{expected}” is drawn");
     }
 }

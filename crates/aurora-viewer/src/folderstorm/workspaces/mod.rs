@@ -9,11 +9,14 @@
 //! size of each window of an allowlist, with whether it was open: applying
 //! a layout opens the windows it was saved with open (never an arbitrary
 //! one: the allowlist, through the app's own way of opening each), and
-//! closes none. Closing the others is a workspace's business (a later
-//! checkpoint).
+//! closes none. A **workspace** says what is open ([`workspace`]): the
+//! windows of the allowlist it has open, and optionally the layout applied
+//! with it; applying it opens those windows and closes the others
+//! (Conversations aside).
 //!
 //! - [`store`]: what `settings.json` keeps, its limits, the list.
-//! - [`windows`]: the allowlist.
+//! - [`windows`]: the allowlist. [`workspace`]: the workspaces and their
+//!   list.
 //! - [`fit`]: a saved place in an interface of another size or scale.
 //! - [`monitors`]: monitor setups, and a saved viewer window on the
 //!   monitors of now.
@@ -47,6 +50,7 @@ pub mod viewer;
 pub mod window;
 pub mod windows;
 pub mod words;
+pub mod workspace;
 
 #[cfg(test)]
 mod tests;
