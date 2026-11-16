@@ -54,6 +54,7 @@ pub fn page(cx: &mut Cx) {
         // the colors themselves, given from a folder's menu
         cx.track(&field!(inventory.folder_colors));
         // Folderstorm: outfit safety (ui/inventory/outfit_safety.rs)
+        super::folderstorm_search::words(cx, &["fs-search-outfit-safety"]);
         cx.toggle(
             tr!("inventory-context-wear"),
             tr!("inventory-context-wear-help"),

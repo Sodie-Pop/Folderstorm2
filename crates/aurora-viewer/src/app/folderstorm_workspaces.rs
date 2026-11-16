@@ -1,4 +1,4 @@
-//! Folderstorm: layouts in the app (the rules are in
+//! Folderstorm: layouts and workspaces in the app (the rules are in
 //! `crate::folderstorm::workspaces` and `crate::folderstorm::viewport::bars`;
 //! folderstorm/plans/workspaces.md, checkpoints 3 to 5).
 //!
@@ -12,21 +12,224 @@ use crate::folderstorm::viewport;
 use crate::folderstorm::workspaces::apply;
 use crate::folderstorm::workspaces::window::{Command, Seen};
 
+mod context;
+
+/// The viewer's windows for the layouts and the workspaces
+/// (`apply::Shell`): which of the allowlisted windows are open, Aurora's
+/// own way of opening each (the path of its menu entry or toolbar button:
+/// `ui::bars::run_command`, `ui::controls::request`,
+/// `InventoryUi::open_additional_window`), and of closing one (a workspace
+/// closes the windows it does not list).
+struct Windows<'a> {
+    panels: &'a mut ui::Panels,
+    inventory: &'a mut ui::inventory::InventoryUi,
+    /// The camera and movement controls are Legacy's two windows.
+    classic_controls: bool,
+    /// Contacts is a window of its own, not a tab of Conversations.
+    contacts_torn_off: bool,
+    /// RLVa hides Inventory (@showinv), the mini-map, the world map.
+    no_inventory: bool,
+    no_minimap: bool,
+    no_world_map: bool,
+    /// The account logged in, and its Inventory: a workspace's folder
+    /// windows are for one account and for folders that still exist.
+    account: uuid::Uuid,
+    folders: Option<&'a crate::world::inventory::Inventory>,
+    /// The HUDs worn now (row 1.7), while Preferences may show them.
+    huds: Vec<crate::folderstorm::workspaces::context::Hud>,
+    /// What the outfit has on, for the HUDs the workspaces put on.
+    outfit: Option<&'a crate::world::World>,
+}
+
+/// The `Panels` flag of an allowlisted window that has one of its own.
+macro_rules! window_flag {
+    ($panels:expr, $id:expr, $($borrow:tt)+) => {
+        match $id {
+            "inventory" => Some($($borrow)+ $panels.inventory),
+            "conversations" => Some($($borrow)+ $panels.chat),
+            ui::people::WINDOW => Some($($borrow)+ $panels.people),
+            "contacts" => Some($($borrow)+ $panels.contacts),
+            "places" => Some($($borrow)+ $panels.places),
+            ui::search::WINDOW => Some($($borrow)+ $panels.search),
+            "minimap" => Some($($borrow)+ $panels.minimap),
+            "worldmap" => Some($($borrow)+ $panels.world_map),
+            "perf" => Some($($borrow)+ $panels.perf),
+            ui::controls::CLASSIC_CAMERA => Some($($borrow)+ $panels.camera_controls),
+            ui::controls::CLASSIC_MOVEMENT => Some($($borrow)+ $panels.movement_controls),
+            "gestures" => Some($($borrow)+ $panels.gestures),
+            "appearance" => Some($($borrow)+ $panels.appearance),
+            "ao" => Some($($borrow)+ $panels.ao),
+            ui::region_tracker::WINDOW => Some($($borrow)+ $panels.region_tracker),
+            ui::area_search::WINDOW => Some($($borrow)+ $panels.area_search),
+            ui::quick_prefs::WINDOW => Some($($borrow)+ $panels.quick_prefs),
+            ui::destinations::WINDOW => Some($($borrow)+ $panels.destinations),
+            ui::money_tracker::WINDOW => Some($($borrow)+ $panels.money_tracker),
+            _ => None,
+        }
+    };
+}
+
+impl Windows<'_> {
+    /// Whether the viewer has the window `id` as things are: not while
+    /// RLVa hides it, and not a window of the other look of the controls
+    /// or a Contacts window while Contacts is a tab of Conversations.
+    fn available(&self, id: &str) -> bool {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        match id {
+            "inventory" | ADDITIONAL_INVENTORY => !self.no_inventory,
+            "minimap" => !self.no_minimap,
+            "worldmap" => !self.no_world_map,
+            "contacts" => self.contacts_torn_off,
+            ui::controls::WINDOW => !self.classic_controls,
+            ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT => self.classic_controls,
+            _ => true,
+        }
+    }
+}
+
+impl apply::Shell for Windows<'_> {
+    fn is_open(&self, window: &crate::folderstorm::workspaces::windows::Window) -> bool {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        let id = window.id;
+        match id {
+            ADDITIONAL_INVENTORY => self.inventory.additional_open(),
+            // Aurora's one window for the camera and the movement controls
+            ui::controls::WINDOW => !self.classic_controls && (self.panels.camera_controls || self.panels.movement_controls),
+            ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT if !self.classic_controls => false,
+            _ => window_flag!(self.panels, id, &).is_some_and(|open| *open),
+        }
+    }
+
+    fn open(&mut self, ctx: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) -> bool {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        let id = window.id;
+        if !self.available(id) {
+            return false;
+        }
+        match id {
+            ADDITIONAL_INVENTORY => self.inventory.open_additional_window(ctx),
+            // on its Camera tab, as the View button opens it
+            ui::controls::WINDOW => ui::controls::request(
+                ctx,
+                &mut self.panels.camera_controls,
+                &mut self.panels.movement_controls,
+                false,
+                false,
+                false,
+            ),
+            // (the mini-map has no title bar: its flag alone, as its
+            // toolbar button)
+            "minimap" => self.panels.minimap = true,
+            _ => match window_flag!(self.panels, id, &mut) {
+                Some(open) => ui::widgets::open_floater(ctx, id, open),
+                // a window of the allowlist this file does not know
+                None => return false,
+            },
+        }
+        true
+    }
+
+    fn close(&mut self, _: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) {
+        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
+        let id = window.id;
+        match id {
+            // as `app/rlva.rs` closes it under @showinv
+            ADDITIONAL_INVENTORY => self.inventory.close_additional_window(),
+            // Aurora's one window for the camera and the movement controls
+            ui::controls::WINDOW => {
+                self.panels.camera_controls = false;
+                self.panels.movement_controls = false;
+            }
+            // the flag alone, as the window's own cross leaves it
+            _ => {
+                if let Some(open) = window_flag!(self.panels, id, &mut) {
+                    *open = false;
+                }
+            }
+        }
+    }
+
+    fn account(&self) -> Option<uuid::Uuid> {
+        Some(self.account)
+    }
+
+    fn folder_windows(&self) -> Vec<(String, uuid::Uuid)> {
+        self.inventory.folderstorm_folder_windows()
+    }
+
+    fn has_folder(&self, folder: uuid::Uuid) -> bool {
+        self.folders.is_some_and(|inventory| inventory.folders.contains_key(&folder))
+    }
+
+    fn open_folder(&mut self, _: &egui::Context, folder: uuid::Uuid) -> Option<String> {
+        // (@showinv hides the Inventory: no window on a part of it either)
+        if self.no_inventory {
+            return None;
+        }
+        self.inventory.folderstorm_open_folder(folder)
+    }
+
+    fn close_folder(&mut self, window: &str) {
+        self.inventory.folderstorm_close_folder(window);
+    }
+
+    fn worn_huds(&self) -> Vec<crate::folderstorm::workspaces::context::Hud> {
+        self.huds.clone()
+    }
+
+    fn item_name(&self, item: uuid::Uuid) -> Option<String> {
+        self.folders?.items.get(&item).map(|item| item.name.clone())
+    }
+
+    fn huds_on(&self) -> Option<std::collections::BTreeSet<uuid::Uuid>> {
+        context::huds_on(self.outfit?)
+    }
+}
+
 impl App {
     /// Each frame, before the interface's pass: a layout's viewer window
     /// is put in place and kept locked, the windows of a layout applied in
     /// the last frames take their places, the monitors are watched, and
     /// the active layout is marked modified when something of it was moved
-    /// since (`apply::frame`).
+    /// since (`apply::frame`). The windows a layout was saved with open
+    /// are opened through [`Windows`].
     pub(super) fn folderstorm_workspaces_frame(&mut self, window: &Window) {
         if !matches!(self.screen, Screen::World) {
+            // (the HUDs the workspaces put on are for one login)
+            apply::logged_out(&self.egui_ctx);
             return;
         }
         let seen = self.folderstorm_viewer_window(window);
         self.layouts_demo(seen.as_ref());
-        let outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen);
+        // (looked for only while Preferences, where they are chosen, is open)
+        let huds = if self.panels.settings {
+            context::worn_huds(&self.world)
+        } else {
+            Vec::new()
+        };
+        let rlva = &self.world.rlva;
+        let mut windows = Windows {
+            panels: &mut self.panels,
+            inventory: &mut self.inventory_ui,
+            // as `request_controls` has it
+            classic_controls: self.settings.classic_controls && self.camera.free().is_none(),
+            contacts_torn_off: self.settings.contacts.torn_off,
+            // what `app/rlva.rs` closes every frame is not opened
+            no_inventory: rlva.has("showinv"),
+            no_minimap: rlva.has("showminimap"),
+            no_world_map: rlva.has("showworldmap"),
+            account: self.world.agent_id,
+            folders: Some(&self.world.inventory),
+            huds,
+            outfit: Some(&self.world),
+        };
+        let mut outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen, &mut windows);
         for command in &outcome.commands {
             self.folderstorm_viewer_command(window, *command);
+        }
+        // a workspace's graphics, camera and HUDs (row 1.7)
+        if let Some(ask) = outcome.context.take() {
+            self.folderstorm_workspace_context(ask);
         }
         // (not in mouselook or with the interface put away, where a key may
         // have asked: no window shows)
@@ -125,7 +328,9 @@ impl App {
     /// "Single": no viewport, the windows over the world. `1` only seeds
     /// them; `apply-wide` applies "Wide" at frame 180; `apply-single`
     /// applies "Wide" then, at frame 360, "Single" (windows made small in
-    /// the margin get their sizes back).
+    /// the margin get their sizes back); `reopen` closes Inventory and the
+    /// world map at frame 120 and applies "Wide" at frame 180, which opens
+    /// them where it has them.
     ///
     /// With a viewer window to move (`seen`: not under a forced size):
     /// `toggle` gives "Wide" the window as it is and "Single" its left
@@ -140,6 +345,29 @@ impl App {
     /// and opens the switcher instead of Preferences; `=toggle` also gives
     /// them the viewer window as `AURORA_DEMO_LAYOUTS=toggle` does, and
     /// asks for the toggle every 300 frames, as its toolbar button would.
+    ///
+    /// `AURORA_DEMO_WORKSPACES=1` (checkpoint 6) seeds the same as
+    /// `AURORA_DEMO_SWITCHER=1` and two workspaces, both favorites:
+    /// "Sorting" (Inventory, the additional Inventory window, People; with
+    /// the layout "Single") and "Exploring" (mini-map, world map, Places;
+    /// any layout). `=apply` also applies "Sorting" at frame 180 and
+    /// "Exploring" at frame 360. `=folders` (part 2) opens windows on the
+    /// first two folders of the demo's Inventory at frame 120, saves them
+    /// at frame 240 as the workspace "Folders" (*Remember Inventory
+    /// folders*), closes them at frame 300 and applies "Folders" at frame
+    /// 420: they come back at their places. `=context` (row 1.7) adds the
+    /// demo's graphics profiles and the workspace "Photos" (the world map,
+    /// "My photo profile", the Front view, two object items of the demo's
+    /// Inventory as HUDs) and "Studio" (Inventory, a third object as its
+    /// HUD), opens Preferences on the tab, applies "Photos" at frame 180,
+    /// "Studio" at frame 300 (the HUDs "Photos" put on are taken off) and
+    /// goes back with *Previous arrangement* at frame 420.
+    ///
+    /// `AURORA_DEMO_STRIP=1` (row 1.6) seeds the same as
+    /// `AURORA_DEMO_WORKSPACES=1` with the favorites strip on, the switcher
+    /// closed; `=row` also shows the favourites' row under the top bar
+    /// (the strip at its right end); `=many` adds favorite layouts until
+    /// some go to *More…*.
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
@@ -147,12 +375,26 @@ impl App {
         if !self.demo {
             return;
         }
-        let mode = match (std::env::var("AURORA_DEMO_LAYOUTS"), std::env::var("AURORA_DEMO_SWITCHER")) {
-            (Ok(mode), _) => mode,
-            (_, Ok(switcher)) if switcher == "toggle" => "switcher-toggle".to_owned(),
-            (_, Ok(_)) => "switcher".to_owned(),
+        let mode = match (
+            std::env::var("AURORA_DEMO_LAYOUTS"),
+            std::env::var("AURORA_DEMO_SWITCHER"),
+            std::env::var("AURORA_DEMO_WORKSPACES"),
+            std::env::var("AURORA_DEMO_STRIP"),
+        ) {
+            (Ok(mode), _, _, _) => mode,
+            (_, Ok(switcher), _, _) if switcher == "toggle" => "switcher-toggle".to_owned(),
+            (_, Ok(_), _, _) => "switcher".to_owned(),
+            (_, _, Ok(workspaces), _) if workspaces == "apply" => "switcher-workspaces-apply".to_owned(),
+            (_, _, Ok(workspaces), _) if workspaces == "folders" => "switcher-workspaces-folders".to_owned(),
+            (_, _, Ok(workspaces), _) if workspaces == "context" => "switcher-workspaces-context".to_owned(),
+            (_, _, Ok(_), _) => "switcher-workspaces".to_owned(),
+            (_, _, _, Ok(strip)) if strip == "row" => "switcher-workspaces-strip-row".to_owned(),
+            (_, _, _, Ok(strip)) if strip == "many" => "switcher-workspaces-strip-many".to_owned(),
+            (_, _, _, Ok(_)) => "switcher-workspaces-strip".to_owned(),
             _ => return,
         };
+        let workspaces = mode.starts_with("switcher-workspaces");
+        let strip = mode.starts_with("switcher-workspaces-strip");
         let switcher = mode.starts_with("switcher");
         // the modes that flip the viewer window between the two layouts
         let flips = matches!(mode.as_str(), "toggle" | "switcher-toggle");
@@ -166,6 +408,8 @@ impl App {
                 width: w.round(),
                 height: h.round(),
                 minimized: false,
+                // (saved with its windows open: an apply opens them)
+                open: true,
             };
             let monitors = capture::monitors(&ctx);
             let frame = seen
@@ -247,10 +491,50 @@ impl App {
                     store.set_favorite(name, true);
                     store.set_toggle(place, Some(name));
                 }
-                crate::folderstorm::workspaces::switcher::open(&ctx);
+                if workspaces {
+                    use crate::folderstorm::workspaces::workspace::Workspace;
+                    let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>();
+                    let seeded = [
+                        Workspace::new(
+                            "Sorting",
+                            Some("Single"),
+                            ids(&["inventory", windows::ADDITIONAL_INVENTORY, crate::ui::people::WINDOW]),
+                        ),
+                        Workspace::new("Exploring", None, ids(&["minimap", "worldmap", "places"])),
+                    ];
+                    for workspace in seeded {
+                        let name = workspace.name.clone();
+                        if let Err(error) = store.add_workspace(workspace) {
+                            log::warn!("AURORA_DEMO_WORKSPACES: workspace not seeded: {error:?}");
+                        }
+                        store.set_favorite_workspace(&name, true);
+                    }
+                    store.active_workspace = None;
+                }
+                if strip {
+                    store.strip = true;
+                    if mode.ends_with("-many") {
+                        for name in ["Photos", "Building at the sandbox", "Streaming", "Events", "Shopping"] {
+                            let world = Some(viewport::ViewportSettings::default());
+                            if let Err(error) = store.add(Layout::new(name, world, None, Vec::new())) {
+                                log::warn!("AURORA_DEMO_STRIP: layout not seeded: {error:?}");
+                            }
+                            store.set_favorite(name, true);
+                        }
+                    }
+                    if mode.ends_with("-row") {
+                        self.settings.favorites_access = crate::settings::FavoritesAccess::Row;
+                        self.settings.favorites_row_folded = false;
+                    }
+                } else if mode != "switcher-workspaces-context" {
+                    crate::folderstorm::workspaces::switcher::open(&ctx);
+                }
             } else {
                 self.panels.settings = true;
                 self.options_ui.open(ui::options::Page::Layout, 3);
+            }
+            if mode == "switcher-workspaces-context" {
+                self.workspace_context_demo_seed();
             }
         }
         let apply_at = |index: usize, frame: u64, app: &mut Self| {
@@ -262,6 +546,14 @@ impl App {
         };
         match mode.as_str() {
             "apply-wide" | "lock" => apply_at(0, 180, self),
+            // Inventory and the world map closed, then "Wide": it opens them
+            "reopen" => {
+                if self.frame_count == 120 {
+                    self.panels.inventory = false;
+                    self.panels.world_map = false;
+                }
+                apply_at(0, 180, self);
+            }
             "apply-single" => {
                 apply_at(0, 180, self);
                 apply_at(1, 360, self);
@@ -274,6 +566,72 @@ impl App {
             "switcher-toggle" if self.frame_count >= 180 && (self.frame_count - 180).is_multiple_of(300) => {
                 crate::folderstorm::workspaces::menu::ask(&ctx, crate::folderstorm::workspaces::menu::Request::Toggle);
             }
+            // "Sorting" (with its layout), then "Exploring" (on the same one)
+            "switcher-workspaces-apply" => {
+                for (index, frame) in [(0, 180), (1, 360)] {
+                    if self.frame_count == frame
+                        && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
+                    {
+                        log::warn!("AURORA_DEMO_WORKSPACES: workspace not applied: {error:?}");
+                    }
+                }
+            }
+            "switcher-workspaces-folders" => {
+                let places = [egui::pos2(40.0, 80.0), egui::pos2(480.0, 120.0)];
+                match self.frame_count {
+                    120 => {
+                        let inventory = &self.world.inventory;
+                        let children = inventory.folders.get(&inventory.root).map(|root| root.children.clone());
+                        for (folder, at) in children.unwrap_or_default().into_iter().zip(places) {
+                            if let Some(window) = self.inventory_ui.folderstorm_open_folder(folder) {
+                                ui::widgets::place_floater(&ctx, &window, at, egui::vec2(420.0, 440.0));
+                            }
+                        }
+                    }
+                    240 => {
+                        let keep = apply::Keep {
+                            layout: false,
+                            folders: true,
+                        };
+                        if let Err(error) = apply::save_new_workspace(&ctx, &mut apply::Live::of(&mut self.settings), "Folders", keep) {
+                            log::warn!("AURORA_DEMO_WORKSPACES: folders not saved: {error:?}");
+                        }
+                    }
+                    300 => {
+                        for (window, _) in self.inventory_ui.folderstorm_folder_windows() {
+                            self.inventory_ui.folderstorm_close_folder(&window);
+                        }
+                    }
+                    420 => {
+                        let index = self
+                            .settings
+                            .folderstorm_workspaces
+                            .find_workspace("Folders")
+                            .map(|(index, _)| index);
+                        if let Some(index) = index
+                            && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
+                        {
+                            log::warn!("AURORA_DEMO_WORKSPACES: workspace not applied: {error:?}");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // "Photos" (its graphics profile, the Front view, two HUDs), then
+            // "Studio" (its HUD; Photos' taken off), then Previous arrangement
+            "switcher-workspaces-context" => match self.frame_count {
+                180 | 300 => {
+                    let name = if self.frame_count == 180 { "Photos" } else { "Studio" };
+                    let index = self.settings.folderstorm_workspaces.find_workspace(name).map(|(index, _)| index);
+                    if let Some(index) = index
+                        && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
+                    {
+                        log::warn!("AURORA_DEMO_WORKSPACES: workspace not applied: {error:?}");
+                    }
+                }
+                420 => crate::folderstorm::workspaces::menu::ask(&ctx, crate::folderstorm::workspaces::menu::Request::Previous),
+                _ => {}
+            },
             "unplug" => {
                 apply_at(0, 180, self);
                 if self.frame_count == 600 {
@@ -286,21 +644,218 @@ impl App {
 
     /// The bars' area this frame, in points: inside the custom world
     /// viewport `world` (the renderer's, in window pixels, already under
-    /// the session host's bar), or around it, each side's bars in the
-    /// margin when it has room (`viewport::bars`). None leaves the bars on
-    /// the whole window of `size` pixels.
+    /// the session host's bar), or around it: the top and bottom bars
+    /// above and below the world, the side toolbars in its left and right
+    /// margins, each where it has room (`viewport::bars`). None leaves the
+    /// bars on the whole window of `size` pixels.
     pub(super) fn folderstorm_bars_rect(&self, ctx: &egui::Context, world: Option<[u32; 4]>, size: (u32, u32)) -> Option<egui::Rect> {
         let s = &self.settings.folderstorm_viewport;
-        let inside = viewport::bars_rect(s, world, ctx.pixels_per_point())?;
-        if !s.bars_around {
-            return Some(inside);
-        }
+        let inside = viewport::bars_rect(s, world, ctx.pixels_per_point()).filter(|_| s.bars_around);
+        let Some(inside) = inside else {
+            viewport::bars::set_sides(ctx, None);
+            return viewport::bars_rect(s, world, ctx.pixels_per_point());
+        };
         let mut bars = viewport::bars::thickness(ctx, self.interface.last_room.map(|(room, _)| room));
         // the session host's bar is docked over the world's top
         // (`app/folderstorm_characters/bar.rs`): the top bars stay under it
         if self.whole_world_viewport(size) != world {
             bars.top = 0.0;
         }
-        Some(viewport::bars::around(inside, ctx.content_rect(), bars))
+        let areas = viewport::bars::Areas::around(inside, ctx.content_rect(), bars);
+        viewport::bars::set_sides(ctx, Some((inside, areas.sides)));
+        Some(areas.rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::folderstorm::workspaces::apply::Shell;
+    use crate::folderstorm::workspaces::windows;
+
+    fn closed() -> ui::Panels {
+        let mut panels = ui::Panels::from_settings(&crate::settings::Settings::default());
+        for window in windows::all() {
+            if let Some(open) = window_flag!(panels, window.id, &mut) {
+                *open = false;
+            }
+        }
+        panels
+    }
+
+    /// Every window of the allowlist has its way of being opened here: a
+    /// window added to the list without one fails this test.
+    #[test]
+    fn every_allowlisted_window_is_opened_the_app_s_way() {
+        for classic_controls in [false, true] {
+            let ctx = egui::Context::default();
+            let mut panels = closed();
+            let mut inventory = ui::inventory::InventoryUi::default();
+            let mut shell = Windows {
+                panels: &mut panels,
+                inventory: &mut inventory,
+                classic_controls,
+                contacts_torn_off: true,
+                no_inventory: false,
+                no_minimap: false,
+                no_world_map: false,
+                account: uuid::Uuid::nil(),
+                folders: None,
+                huds: Vec::new(),
+                outfit: None,
+            };
+            for window in windows::all() {
+                assert!(!shell.is_open(window), "{}", window.id);
+                // the controls of the other look are not windows of now
+                let other_look = match window.id {
+                    ui::controls::WINDOW => classic_controls,
+                    ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT => !classic_controls,
+                    _ => false,
+                };
+                assert_eq!(shell.open(&ctx, window), !other_look, "{}", window.id);
+                assert_eq!(shell.is_open(window), !other_look, "{}", window.id);
+            }
+            assert!(panels.inventory && panels.chat && panels.minimap && panels.world_map && panels.money_tracker);
+            assert!(inventory.additional_open());
+            assert_eq!(
+                panels.movement_controls, classic_controls,
+                "Aurora's window opens on its Camera tab"
+            );
+        }
+    }
+
+    /// A workspace closes every window it switches the app's way.
+    #[test]
+    fn every_allowlisted_window_is_closed_the_app_s_way() {
+        for classic_controls in [false, true] {
+            let ctx = egui::Context::default();
+            let mut panels = closed();
+            let mut inventory = ui::inventory::InventoryUi::default();
+            let mut shell = Windows {
+                panels: &mut panels,
+                inventory: &mut inventory,
+                classic_controls,
+                contacts_torn_off: true,
+                no_inventory: false,
+                no_minimap: false,
+                no_world_map: false,
+                account: uuid::Uuid::nil(),
+                folders: None,
+                huds: Vec::new(),
+                outfit: None,
+            };
+            for window in windows::all() {
+                if shell.open(&ctx, window) {
+                    assert!(shell.is_open(window), "{}", window.id);
+                    shell.close(&ctx, window);
+                }
+                assert!(!shell.is_open(window), "{}", window.id);
+            }
+            assert!(!panels.inventory && !panels.minimap && !panels.camera_controls && !panels.movement_controls);
+            assert!(!inventory.additional_open());
+        }
+    }
+
+    /// A workspace's folder windows go through the Inventory's own way of
+    /// opening one; none while RLVa hides the Inventory, and only on a
+    /// folder the Inventory has.
+    #[test]
+    fn folder_windows_are_opened_listed_and_closed_through_the_inventory() {
+        let ctx = egui::Context::default();
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let world = crate::world::inventory::Inventory::default();
+        let folder = uuid::Uuid::from_u128(8000);
+        for no_inventory in [false, true] {
+            let mut shell = Windows {
+                panels: &mut panels,
+                inventory: &mut inventory,
+                classic_controls: false,
+                contacts_torn_off: false,
+                no_inventory,
+                no_minimap: false,
+                no_world_map: false,
+                account: uuid::Uuid::from_u128(7),
+                folders: Some(&world),
+                huds: Vec::new(),
+                outfit: None,
+            };
+            assert_eq!(shell.account(), Some(uuid::Uuid::from_u128(7)));
+            assert!(!shell.has_folder(folder), "not in this Inventory");
+            if no_inventory {
+                assert_eq!(shell.open_folder(&ctx, folder), None, "@showinv");
+                continue;
+            }
+            let window = shell.open_folder(&ctx, folder).expect("opened");
+            assert_eq!(shell.folder_windows(), [(window.clone(), folder)]);
+            shell.close_folder(&window);
+            assert!(shell.folder_windows().is_empty());
+        }
+    }
+
+    /// What Preferences shows of a workspace's HUDs (row 1.7): the HUDs
+    /// worn now, and the names of the Inventory's items.
+    #[test]
+    fn the_huds_worn_and_the_names_of_items_are_told() {
+        use crate::folderstorm::workspaces::context::Hud;
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let mut world = crate::world::inventory::Inventory::default();
+        let radar = uuid::Uuid::from_u128(9001);
+        world.items.insert(
+            radar,
+            aurora_net::inventory::InvItem {
+                id: radar,
+                name: "Radar".into(),
+                asset_type: 6,
+                ..Default::default()
+            },
+        );
+        let worn = vec![Hud { item: radar, point: 35 }];
+        let shell = Windows {
+            panels: &mut panels,
+            inventory: &mut inventory,
+            classic_controls: false,
+            contacts_torn_off: false,
+            no_inventory: false,
+            no_minimap: false,
+            no_world_map: false,
+            account: uuid::Uuid::from_u128(7),
+            folders: Some(&world),
+            huds: worn.clone(),
+            outfit: None,
+        };
+        assert_eq!(shell.worn_huds(), worn);
+        assert_eq!(shell.item_name(radar).as_deref(), Some("Radar"));
+        assert_eq!(shell.item_name(uuid::Uuid::from_u128(1)), None, "not in this Inventory");
+    }
+
+    #[test]
+    fn what_rlva_hides_or_the_settings_do_not_have_is_left_closed() {
+        let ctx = egui::Context::default();
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let mut shell = Windows {
+            panels: &mut panels,
+            inventory: &mut inventory,
+            classic_controls: false,
+            contacts_torn_off: false,
+            no_inventory: true,
+            no_minimap: true,
+            no_world_map: true,
+            account: uuid::Uuid::nil(),
+            folders: None,
+            huds: Vec::new(),
+            outfit: None,
+        };
+        for id in ["inventory", windows::ADDITIONAL_INVENTORY, "minimap", "worldmap", "contacts"] {
+            let window = windows::find(id).expect("on the list");
+            assert!(!shell.open(&ctx, window), "{id}");
+            assert!(!shell.is_open(window), "{id}");
+        }
+        // the others still open
+        assert!(shell.open(&ctx, windows::find("places").expect("on the list")));
+        assert!(!panels.inventory && !panels.minimap && !panels.world_map && !panels.contacts && panels.places);
+        assert!(!inventory.additional_open());
     }
 }

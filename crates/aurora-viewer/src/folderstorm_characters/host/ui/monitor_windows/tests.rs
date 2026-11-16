@@ -942,6 +942,183 @@ fn the_monitors_page_has_the_defaults_and_the_cycling_monitor() {
     assert_eq!(app.host.desk.monitors().cycling.spec, large);
 }
 
+/// A monitor's body under its header, for a window of that size.
+fn body(width: f32, height: f32) -> Rect {
+    Rect::from_min_max(egui::pos2(0.0, HEADER as f32), egui::pos2(width, height))
+}
+
+#[test]
+fn the_room_the_picture_does_not_use_goes_to_the_chat_part() {
+    let wide = Some([480, 270]);
+    // chat off: the picture's room is the whole body (centred letterbox)
+    assert_eq!(split(body(480.0, 740.0), false, CHAT as f32, wide), (body(480.0, 740.0), None));
+    // a tall window: the picture at the top at its own height, the chat
+    // part has all the rest
+    let (picture, chat) = split(body(480.0, 740.0), true, CHAT as f32, wide);
+    assert_eq!(picture, Rect::from_min_max(egui::pos2(0.0, 30.0), egui::pos2(480.0, 300.0)));
+    assert_eq!(chat, Some(Rect::from_min_max(egui::pos2(0.0, 300.0), egui::pos2(480.0, 740.0))));
+    // a window of the natural size: as before, the picture whole and the
+    // chat part its own height
+    let (picture, chat) = split(body(480.0, 490.0), true, CHAT as f32, wide);
+    assert_eq!((picture.height(), chat.map(|c| c.height())), (270.0, Some(190.0)));
+    // no picture (a reason in its place): the least room for the reason
+    let (picture, chat) = split(body(480.0, 740.0), true, CHAT as f32, None);
+    assert_eq!(picture.height(), MIN_PICTURE as f32);
+    assert_eq!(chat.map(|c| c.height()), Some(710.0 - MIN_PICTURE as f32));
+    // wider than the picture: the bands stay at the sides, the chat part
+    // keeps its height under the picture
+    let (picture, chat) = split(body(900.0, 400.0), true, CHAT as f32, wide);
+    assert_eq!((picture.height(), chat.map(|c| c.height())), (180.0, Some(190.0)));
+    // a very wide picture in a narrow window: never under the least room
+    let (picture, _) = split(body(240.0, 600.0), true, CHAT as f32, Some([1000, 100]));
+    assert_eq!(picture.height(), MIN_PICTURE as f32);
+    // the "+N" list or a sheet asks for the whole body:
+    // the least picture is left
+    let (picture, chat) = split(body(480.0, 740.0), true, 710.0, wide);
+    assert_eq!(
+        (picture.height(), chat.map(|c| c.height())),
+        (MIN_PICTURE as f32, Some(710.0 - MIN_PICTURE as f32))
+    );
+    // too low for both: the picture keeps the window
+    assert_eq!(split(body(320.0, 150.0), true, CHAT as f32, wide), (body(320.0, 150.0), None));
+    // every split fills the body exactly
+    for (w, h) in [(220.0, 216.0), (300.0, 900.0), (640.0, 480.0), (1200.0, 300.0)] {
+        for picture in [wide, None, Some([360, 270])] {
+            if let (room, Some(chat)) = split(body(w, h), true, CHAT as f32, picture) {
+                assert_eq!((room.min, chat.max, room.bottom()), (body(w, h).min, body(w, h).max, chat.top()));
+                assert!(room.height() >= MIN_PICTURE as f32 && chat.height() >= MIN_CHAT, "{w}×{h}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_tall_monitor_window_gives_the_chat_part_what_the_picture_leaves() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, 2, now);
+    let seat = Seat::Slot(1);
+    open(&mut app, seat);
+    act(&mut app, Act::Chat(seat, true), now);
+    for number in 1..=12 {
+        nearby(&mut app, 1, number, &format!("line number {number}."));
+    }
+    app.host.test_picture(1, [480, 270], RED, now);
+    report(&mut app, 1, State::Live, Instant::now());
+    let (width, height) = (480, 740);
+    draw_in(&mut app, Which::Monitor(1), width, height);
+    let (drawn, pixels) = draw_in(&mut app, Which::Monitor(1), width, height);
+    keep("monitor-480x740-chat", &pixels, width, height);
+    // the picture whole, right under the header: no band above it
+    assert_eq!(count(&pixels, RED), 480 * 270);
+    let at = |x: u32, y: u32| pixels[(y * width + x) as usize];
+    let red = u32::from_be_bytes([0, RED.r(), RED.g(), RED.b()]);
+    assert_eq!((at(240, HEADER + 1), at(240, HEADER + 269)), (red, red));
+    // no band under it either: the navy behind a picture is not seen
+    assert!(count(&pixels, app.palette.navy) < 480 * 4, "{}", count(&pixels, app.palette.navy));
+    // the chat part shows more lines than its own height held
+    let lines = (1..=12).filter(|n| shows(&drawn, &format!("line number {n}."))).count();
+    assert!(lines >= 10, "{lines} lines: {drawn:?}");
+    // and its box is still the window's last row
+    click_field(&mut app, Which::Monitor(1), (width, height));
+    type_text(&mut app, Which::Monitor(1), (width, height), "typed");
+    assert_eq!(app.host.chat.draft(1, Conversation::Nearby), "typed");
+    // the chat part hidden: the picture centred in the whole window again
+    act(&mut app, Act::Chat(seat, false), now);
+    let (_, pixels) = draw_in(&mut app, Which::Monitor(1), width, height);
+    let at = |x: u32, y: u32| pixels[(y * width + x) as usize];
+    assert_ne!(at(240, HEADER + 1), red, "bands above and under");
+    assert_eq!(at(240, HEADER + (height - HEADER) / 2), red);
+}
+
+#[test]
+fn without_a_picture_the_reason_leaves_the_room_to_the_chat_part() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, 2, now);
+    // the character in front: its monitor shows no picture, only why
+    let seat = Seat::Slot(0);
+    open(&mut app, seat);
+    act(&mut app, Act::Chat(seat, true), now);
+    assert_eq!(app.host.desk.watch(0), Watch::InFront);
+    for number in 1..=12 {
+        nearby(&mut app, 0, number, &format!("line number {number}."));
+    }
+    let (width, height) = (480, 740);
+    draw_in(&mut app, Which::Monitor(0), width, height);
+    let (drawn, pixels) = draw_in(&mut app, Which::Monitor(0), width, height);
+    keep("monitor-480x740-in-front", &pixels, width, height);
+    assert!(shows(&drawn, tr!("folderstorm-monitor-in-front")), "{drawn:?}");
+    // the reason's room is the least picture's; the chat part the rest
+    let navy = count(&pixels, app.palette.navy);
+    assert!(
+        navy <= 480 * MIN_PICTURE as usize && navy > 480 * (MIN_PICTURE as usize - 20),
+        "{navy}"
+    );
+    let lines = (1..=12).filter(|n| shows(&drawn, &format!("line number {n}."))).count();
+    assert!(lines >= 10, "{lines} lines: {drawn:?}");
+}
+
+/// The link's question in a monitor's chat part at that size: drawn whole
+/// under the header and inside the window, its buttons with it.
+fn asked_whole(app: &mut Window_, (width, height): (u32, u32), why: Option<&'static str>) {
+    let seat = Seat::Slot(1);
+    let ask = chat_ui::LinkAsk {
+        target: "https://example.com/a/rather/long/address/that/does/not/fit".to_owned(),
+        why,
+    };
+    app.monitors.test_link(seat, Some(ask));
+    let (drawn, pixels) = draw_in(app, Which::Monitor(1), width, height);
+    let name = format!("monitor-{width}x{height}-link{}", if why.is_some() { "-danger" } else { "" });
+    keep(&name, &pixels, width, height);
+    let at = app
+        .monitors
+        .test_asked_at(seat)
+        .unwrap_or_else(|| panic!("{name}: no question drawn: {drawn:?}"));
+    assert!(
+        at.top() >= HEADER as f32 && at.bottom() <= height as f32 && at.left() >= 0.0 && at.right() <= width as f32,
+        "{name}: {at:?}"
+    );
+    assert!(at.height() > 40.0, "{name}: {at:?}");
+    for text in [
+        tr!("folderstorm-chat-link-question"),
+        tr!("folderstorm-chat-link-open"),
+        tr!("common-cancel"),
+    ] {
+        assert!(shows(&drawn, text), "{name}: {text} not drawn: {drawn:?}");
+    }
+    // a button on its last row answers it: the question goes
+    click(
+        app,
+        Which::Monitor(1),
+        (width, height),
+        egui::pos2(at.left() + 24.0, at.bottom() - 16.0),
+    );
+    assert!(app.monitors.pane(seat).link.is_none(), "{name}: not answered");
+}
+
+#[test]
+fn a_link_s_question_in_a_monitor_s_chat_is_seen_whole_at_every_size() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, 2, now);
+    let seat = Seat::Slot(1);
+    open(&mut app, seat);
+    act(&mut app, Act::Chat(seat, true), now);
+    for number in 1..=6 {
+        nearby(&mut app, 1, number, &format!("line number {number} https://example.com/{number}"));
+    }
+    app.host.test_picture(1, [480, 270], RED, now);
+    report(&mut app, 1, State::Live, Instant::now());
+    for size in [(480, 740), (480, 490), (320, 400), (260, 300), (220, 216)] {
+        asked_whole(&mut app, size, None);
+        asked_whole(&mut app, size, Some("This address imitates a well-known site."));
+    }
+    // the chat part as it was once answered: the box at the bottom
+    let (drawn, _) = draw_in(&mut app, Which::Monitor(1), 320, 400);
+    assert!(!shows(&drawn, tr!("folderstorm-chat-link-question")), "{drawn:?}");
+}
+
 /// Every icon this file names is one the viewer embeds.
 #[test]
 fn the_monitors_icons_exist() {
