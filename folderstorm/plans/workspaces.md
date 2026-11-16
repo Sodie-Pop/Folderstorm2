@@ -2457,8 +2457,14 @@ As planned above, with these details:
   `backgrounds::referenced` (the default, each layout's own, and the
   entries kept unread) does not name; only names of our own form.
 - **Painting** (`backgrounds::paint`): `underlay_in` runs after the pass,
-  from the one hook in `app.rs`, and `splice`s its shapes at the start of
-  the frame's list. The margins come from `viewport::world_area` (new:
+  from a hook in `app.rs`, and `splice`s its shapes where `paint::mark`
+  left its marker in the frame's list (a second hook, in the pass, right
+  after `aurora_render::end_world_labels`), else at the start. The first
+  build put them at the start: before the end of the world's labels, so
+  the renderer took them for labels and cut them to the world viewport,
+  and nothing showed in the margins (fixed on
+  `claude/fix-workspace-backgrounds`; the frame tests now cut the labels
+  as the renderer does). The margins come from `viewport::world_area` (new:
   the world's part in points, this frame or the last; `dialog_area` now
   uses it), the monitors from `viewport::monitors`. The picture is decoded
   on a thread (`import::decode`) at `side_for` the window (its pixels
