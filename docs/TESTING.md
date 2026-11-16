@@ -406,6 +406,32 @@ AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=folders cargo run -p aurora-viewer -- --tit
 AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=context cargo run -p aurora-viewer -- --title "Test workspace context"
 ```
 
+**Workspace backgrounds (Folderstorm2).** `AURORA_DEMO_BACKGROUND=<mode>`
+chooses, once, a background for the margins around the world (row 1.8): a
+picture made by the demo (a dusk with an arrow pointing up and a light frame,
+480 × 270), copied into the demo's settings folder as a chosen picture is,
+fitted with `1` / `fill`, `fit`, `stretch`, `centre` or `tile`; `span` puts
+one picture over the whole window, `dim` shows it at 40 %, `colour` shows a
+colour alone, `missing` points at a picture that is not there (its colour is
+shown and Preferences says so), `layout` adds a layout "Wall" with its own
+tiled background, in use. The world viewport is turned on (the world in the
+middle third) unless `AURORA_DEMO_VIEWPORT` sets it. Pretend monitors show
+the per-monitor fit; Preferences › Layout › Bars and windows has the group
+*Background around the world*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test backgrounds"
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=tile AURORA_DEMO_VIEWPORT=right-half AURORA_DEMO_OPTIONS=layout/0 \
+  cargo run -p aurora-viewer -- --title "Test backgrounds tile"
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=layout/3 \
+  cargo run -p aurora-viewer -- --title "Test backgrounds layout"
+```
+
+Check that nothing is ever drawn over the world, that windows, bars, chat
+lines and HUD labels stay over the picture, and that the margins go black
+again when the viewport is turned off.
+
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
 closed: the four favorites stand in a small bar under the top bar, each one
@@ -6309,6 +6335,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|reopen\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself; `reopen` closes two windows then applies "Wide", which opens them. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
+| `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |

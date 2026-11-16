@@ -290,6 +290,15 @@ pub struct Layout {
     /// The monitors it was saved on (none where the system does not tell).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub monitors: Vec<Monitor>,
+    /// Its own background in the margins (row 1.8); None: the default
+    /// (`Store::background`). One that cannot be read is dropped, the
+    /// layout kept.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::folderstorm::backgrounds::record::lenient_own"
+    )]
+    pub background: Option<crate::folderstorm::backgrounds::Background>,
     /// What this version does not know of the entry, kept as read.
     #[serde(flatten)]
     pub other: BTreeMap<String, serde_json::Value>,
@@ -311,6 +320,13 @@ pub struct Kept {
     pub name: Option<String>,
     pub why: Unusable,
     pub(super) raw: serde_json::Value,
+}
+
+impl Kept {
+    /// The entry as it was read.
+    pub fn raw(&self) -> &serde_json::Value {
+        &self.raw
+    }
 }
 
 /// One entry of the list.
@@ -475,6 +491,7 @@ impl Layout {
             world,
             windows,
             monitors,
+            background: None,
             other: BTreeMap::new(),
         }
     }
@@ -551,6 +568,10 @@ pub struct Store {
     /// for the viewer, not a part of a layout or of a workspace.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub strip: bool,
+    /// The background of the margins for the layouts without their own
+    /// (row 1.8, `crate::folderstorm::backgrounds`).
+    #[serde(skip_serializing_if = "crate::folderstorm::backgrounds::Background::is_default")]
+    pub background: crate::folderstorm::backgrounds::Background,
     /// A switch to another workspace leaves on the HUDs the workspace
     /// before put on (row 1.7): *Take off the previous workspace's HUDs*
     /// unticked. Off (they are taken off) until chosen.
@@ -573,6 +594,7 @@ struct Raw {
     workspaces: serde_json::Value,
     active_workspace: Option<String>,
     strip: serde_json::Value,
+    background: serde_json::Value,
     keep_huds: serde_json::Value,
 }
 
@@ -622,6 +644,7 @@ impl From<Raw> for Store {
             active_workspace: raw.active_workspace,
             // (anything but `true` reads as off, as an entry is read on its own)
             strip: raw.strip.as_bool().unwrap_or(false),
+            background: crate::folderstorm::backgrounds::Background::read(raw.background),
             keep_huds: raw.keep_huds.as_bool().unwrap_or(false),
         };
         if store.active_workspace().is_none() {
@@ -809,12 +832,28 @@ impl Store {
             // a windows part that cannot be read now keeps the saved one
             windows: old.windows.as_ref().map(|saved| windows.unwrap_or_else(|| saved.clone())),
             monitors: if unread { old.monitors.clone() } else { monitors },
+            background: old.background.clone(),
             other: old.other.clone(),
         };
         new.check().map_err(|_| StoreError::Invalid)?;
         self.set_active(Some(new.name.clone()));
         self.layouts[index] = Record::Layout(new);
         Ok(())
+    }
+
+    /// Gives the layout at `index` its own background, or the default
+    /// (None) (row 1.8). True when it changed. It is in effect at once
+    /// while the layout is active; the "modified" mark is not concerned.
+    pub fn set_layout_background(&mut self, index: usize, background: Option<crate::folderstorm::backgrounds::Background>) -> bool {
+        let Some(Record::Layout(layout)) = self.layouts.get_mut(index) else {
+            return false;
+        };
+        let background = background.map(crate::folderstorm::backgrounds::Background::sanitized);
+        if layout.background == background {
+            return false;
+        }
+        layout.background = background;
+        true
     }
 
     /// Puts another *Viewer window* in the layout at `index` (the tab's
@@ -1066,11 +1105,12 @@ mod tests {
     #[test]
     fn unknown_fields_of_a_layout_are_kept_and_unknown_windows_too() {
         let mut value = serde_json::to_value(wide()).expect("saved");
-        value["background"] = json!({ "image": "margins.png", "dim": 0.5 });
+        // (not "background": row 1.8 uses that name)
+        value["later_part"] = json!({ "image": "margins.png", "dim": 0.5 });
         value["windows"]["windows"]["a_window_of_later"] = json!({ "x": 1.0, "y": 2.0, "width": 300.0, "height": 200.0 });
         let store = read(json!({ "layouts": [value.clone()], "active_layout": "Wide" }));
         let layout = store.layout(0).expect("usable");
-        assert_eq!(layout.other["background"]["dim"], 0.5);
+        assert_eq!(layout.other["later_part"]["dim"], 0.5);
         assert!(layout.windows.as_ref().expect("windows").windows.contains_key("a_window_of_later"));
         // written back with them
         let mut expected = value;

@@ -211,13 +211,18 @@ fn dialog_rect(world: Option<egui::Rect>, window: egui::Rect) -> egui::Rect {
 /// world viewport (set this frame or the last; a screen with no world, as
 /// the login, leaves none behind), the window when the world fills it.
 pub fn dialog_area(ctx: &egui::Context) -> egui::Rect {
+    dialog_rect(world_area(ctx), ctx.content_rect())
+}
+
+/// The world's part of the window in points, set this frame or the last;
+/// None when the world fills the window or no world is shown (the
+/// backgrounds of the margins, `crate::folderstorm::backgrounds`).
+pub fn world_area(ctx: &egui::Context) -> Option<egui::Rect> {
     let now = ctx.cumulative_frame_nr();
-    let world = ctx
-        .data(|d| d.get_temp::<WorldArea>(world_area_id()))
+    ctx.data(|d| d.get_temp::<WorldArea>(world_area_id()))
         .filter(|area| area.frame.saturating_add(1) >= now)
         .and_then(|area| area.rect)
-        .map(|rect| in_points(rect, ctx.pixels_per_point()));
-    dialog_rect(world, ctx.content_rect())
+        .map(|rect| in_points(rect, ctx.pixels_per_point()))
 }
 
 /// What moves a point at `align` of `window` to the same point of `area`:

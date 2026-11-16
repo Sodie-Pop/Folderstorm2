@@ -95,7 +95,7 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-layouts-group"), |cx| {
         cx.note(tr!("fs-layouts-intro"));
         // (the search words of Folderstorm (C++): "dual monitor", "layout")
-        words(cx, &["fs-search-layouts", "fs-search-layouts-list"]).section_body().row(
+        words(cx, &["fs-search-layouts", "fs-search-layouts-list", "fs-search-layouts-background"]).section_body().row(
             tr!("fs-layouts-list"),
             tr!("fs-layouts-list-help"),
             &Nothing,
@@ -622,6 +622,10 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             Err(error) => tab.refused = Some(Refused::Selected(error)),
         }
     }
+    // its own background, or the default (row 1.8)
+    if tab.rename.is_none() && tab.ask.is_none() && usable {
+        changed |= super::folderstorm_viewport::background::layout_part(ui, p, s, index);
+    }
     changed
 }
 
@@ -867,6 +871,7 @@ mod tests {
     use crate::ui::widgets::elide_tests::{Frames, Text};
     use egui::Rect;
 
+    mod background;
     mod workspaces;
 
     /// Preferences on the Layouts tab, over a viewer with two windows open.

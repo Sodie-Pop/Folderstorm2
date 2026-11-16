@@ -2,7 +2,10 @@
 //! (`crate::folderstorm::viewport`). Folderstorm (C++) had these under
 //! Move & View › Layout. The diagram (`crate::folderstorm::diagram`) shows
 //! under the switch as soon as the viewport is on; the margin sliders stay
-//! behind the cog as the keyboard route and edit the same settings.
+//! behind the cog as the keyboard route and edit the same settings. The
+//! background of the margins follows ([`background`]).
+
+pub(super) mod background;
 
 use super::super::cx::{Cx, field, fields};
 use super::folderstorm_search::words;
@@ -112,6 +115,8 @@ pub(super) fn group(cx: &mut Cx) {
             );
         }
     });
+    // what the margins show (row 1.8)
+    background::group(cx);
 }
 
 /// One button per monitor under the window: its margins put the world on it.
