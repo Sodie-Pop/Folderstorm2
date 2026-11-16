@@ -111,6 +111,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
         Work::Content(_) => panic!("not run here (content_tests)"),
         Work::Object(_) => panic!("not run here (objects_tests)"),
         Work::TaskScript(_) => panic!("not run here (task_scripts_tests)"),
+        Work::Interact(_) | Work::ScriptTest(_) => panic!("not run here (script_testing_tests)"),
     }
 }
 

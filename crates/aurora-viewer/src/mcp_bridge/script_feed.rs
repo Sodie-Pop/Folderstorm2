@@ -267,6 +267,55 @@ pub fn poll(args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
     })
 }
 
+/// Folderstorm: one line of the feed, for the test runs
+/// (mcp-script-testing.md).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Seen {
+    pub seq: u64,
+    pub error: bool,
+    pub object: Uuid,
+    pub text: String,
+}
+
+impl Feed {
+    /// The lines from sequence `from` on, how many of them were lost, and
+    /// the sequence the next line takes.
+    fn since(&self, from: u64) -> (Vec<Seen>, u64, u64) {
+        let oldest = self.lines.front().map_or(self.next, |l| l.seq);
+        let lines = self
+            .lines
+            .iter()
+            .filter(|l| l.seq >= from)
+            .map(|l| Seen {
+                seq: l.seq,
+                error: l.error,
+                object: l.object,
+                text: l.text.clone(),
+            })
+            .collect();
+        (lines, oldest.saturating_sub(from), self.next)
+    }
+}
+
+/// Folderstorm: where the feed stands now (its epoch and the sequence of
+/// the next line), None while it does not capture: a test run's mark.
+pub fn mark() -> Option<(String, u64)> {
+    if !CAPTURING.with(Cell::get) {
+        return None;
+    }
+    FEED.with(|feed| feed.borrow().as_ref().map(|f| (f.epoch.clone(), f.next)))
+}
+
+/// Folderstorm: the lines since `from` of the feed of epoch `epoch`, the
+/// lines lost among them and the next sequence; None when that feed is
+/// gone (access off, Read changed, another login).
+pub fn since(epoch: &str, from: u64) -> Option<(Vec<Seen>, u64, u64)> {
+    if !CAPTURING.with(Cell::get) {
+        return None;
+    }
+    FEED.with(|feed| feed.borrow().as_ref().filter(|f| f.epoch == epoch).map(|f| f.since(from)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
