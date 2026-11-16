@@ -1281,6 +1281,12 @@ inventory-quick-unpin = Unpin: let other windows cover it
 inventory-quick-quiet = Simple view: only the list
 inventory-quick-full = Full view: search, tabs and tools
 inventory-quick-demo-name = Quick access
+# Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
+inventory-windows-title = Inventory { $number }
+inventory-windows-new = New Inventory window
+inventory-windows-new-tip = New Inventory window ({ $open } of { $max } open)
+inventory-windows-close-all = Close all additional windows
+inventory-windows-all-open = All { $max } additional Inventory windows are open. Close one first.
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations

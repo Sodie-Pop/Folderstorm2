@@ -239,7 +239,7 @@ fn window_boxes(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) 
         for window in workspace::switchable() {
             let store = &mut s.folderstorm_workspaces;
             let mut on = store.workspace(index).is_some_and(|workspace| workspace.open.contains(window.id));
-            if widgets::checkbox(ui, p, &mut on, window.label()).changed() {
+            if widgets::checkbox(ui, p, &mut on, window.label().as_ref()).changed() {
                 changed |= store.set_workspace_window(index, window.id, on);
             }
         }

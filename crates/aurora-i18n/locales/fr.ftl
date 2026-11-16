@@ -1284,6 +1284,15 @@ inventory-quick-unpin = Désépingler : laisser d'autres fenêtres la couvrir
 inventory-quick-quiet = Vue simple : la liste seule
 inventory-quick-full = Vue complète : recherche, onglets et outils
 inventory-quick-demo-name = Accès rapide
+# Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
+inventory-windows-title = Inventaire { $number }
+inventory-windows-new = Nouvelle fenêtre d’inventaire
+inventory-windows-new-tip = Nouvelle fenêtre d’inventaire ({ $open ->
+    [one] { $open } ouverte
+   *[other] { $open } ouvertes
+    } sur { $max })
+inventory-windows-close-all = Fermer toutes les fenêtres d’inventaire supplémentaires
+inventory-windows-all-open = Les { $max } fenêtres d’inventaire supplémentaires sont ouvertes. Fermez-en une d’abord.
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar
