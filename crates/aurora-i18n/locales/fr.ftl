@@ -2111,7 +2111,7 @@ fs-background-shows = Affiche
 fs-desktop-group = Bureau dans les marges
 fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
-fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer.
+fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y des dossiers de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer.
 fs-desktop-size = Taille des icônes
 fs-desktop-size-help = La taille des raccourcis et de la grille qui les porte.
 fs-desktop-size-small = Petite
@@ -2126,6 +2126,28 @@ fs-desktop-folder = Dossier de l'inventaire
 fs-desktop-greyed-gone = Cette commande n'existe plus.
 fs-desktop-greyed-button-only = Celle-ci ne fonctionne que depuis son bouton de la barre d'outils.
 fs-desktop-greyed-rlva = Bloqué par RLVa.
+fs-desktop-greyed-folder-gone = Ce dossier n'est plus dans votre inventaire.
+fs-desktop-greyed-other-account = Ce dossier est dans l'inventaire d'un autre compte.
+fs-desktop-add = Ajouter au bureau
+fs-desktop-add-refused = Seuls les dossiers de votre propre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
+fs-desktop-added =
+    { $count ->
+        [one] Dossier ajouté au bureau.
+       *[other] { $count } dossiers ajoutés au bureau.
+    }
+fs-desktop-add-existing = Déjà sur le bureau.
+fs-desktop-add-full =
+    { $count ->
+        [one] Le bureau n'a plus de place pour un dossier.
+       *[other] Le bureau n'a plus de place pour { $count } dossiers.
+    }
+fs-desktop-left-out =
+    { $count ->
+        [one] Un élément laissé de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
+       *[other] { $count } éléments laissés de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
+    }
+fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Disposition › Barres et fenêtres).
+fs-desktop-added-hidden = Ils s'affichent quand la fenêtre laisse de la place autour du monde.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
@@ -2255,7 +2277,7 @@ fs-folder-upload-receipt-failed = En échec : { $names }.
 fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter
 fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
-fs-search-desktop = bureau raccourci raccourcis icône icônes lanceur marge marges écran écrans moniteur
+fs-search-desktop = bureau raccourci raccourcis icône icônes lanceur dossier dossiers marge marges écran écrans moniteur
 fs-search-photo = mode photo capture image appareil
 fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
 fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer

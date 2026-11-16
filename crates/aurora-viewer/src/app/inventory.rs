@@ -299,6 +299,7 @@ impl App {
         match action {
             InvAction::DefaultPermissions => self.inventory_ui.default_permissions_open = true,
             InvAction::FolderstormUploadFolder(folder) => self.folderstorm_upload_folder(folder), // Folderstorm
+            InvAction::FolderstormDesktopAdd(ids) => self.folderstorm_desktop_add(ids),           // Folderstorm: the margins' desktop
             InvAction::ExportMenuNotecard { name, text } => {
                 if let Some(command) = ui::inventory::context_notecards::export(&mut self.inventory_ui, &self.world.inventory, name, text) {
                     self.send(command);

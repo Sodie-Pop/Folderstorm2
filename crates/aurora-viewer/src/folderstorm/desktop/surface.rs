@@ -1,6 +1,7 @@
 //! The desktops as drawn: one area per room, on the layer between the
 //! margins' background and the windows, its shortcuts on the grid, their
-//! hover, selection, drag between cells and menus
+//! hover, selection, drag between cells and menus, and the Inventory
+//! folders dropped on it
 //! (folderstorm/plans/margin-desktop.md, "Drawing order and input").
 
 use super::place::Grid;
@@ -12,6 +13,7 @@ use crate::ui::icons::Icons;
 use crate::ui::menu;
 use aurora_i18n::tr;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, vec2};
+use uuid::Uuid;
 
 /// A slot's room and its cells.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -48,6 +50,19 @@ pub(super) fn state(ctx: &egui::Context) -> State {
 /// What the pointer and the menus asked this frame.
 enum Op {
     Open(u32),
+    /// Open a folder's window beside its shortcut.
+    OpenFolder {
+        folder: Uuid,
+        cell: Rect,
+        room: Rect,
+    },
+    ShowFolder(Uuid),
+    /// Inventory dropped on a room: the folders it gives, or why none.
+    DropFolders {
+        slot: u8,
+        cell: Option<(u16, u16)>,
+        offer: Result<targets::Picked, targets::Refusal>,
+    },
     Remove(u32),
     Add {
         command: &'static str,
@@ -70,10 +85,88 @@ const ICON_REMOVE: &str = "trash-filled";
 const ICON_ADD: &str = "plus";
 const ICON_SIZE: &str = "dimensions";
 const ICON_SETTINGS: &str = "settings-filled";
+const ICON_SHOW: &str = "folder-open-filled";
 
 /// The icons this module names, for the test that they are embedded.
 #[cfg(test)]
-pub(super) const ICONS: &[&str] = &[ICON_OPEN, ICON_REMOVE, ICON_ADD, ICON_SIZE, ICON_SETTINGS];
+pub(super) const ICONS: &[&str] = &[ICON_OPEN, ICON_REMOVE, ICON_ADD, ICON_SIZE, ICON_SETTINGS, ICON_SHOW];
+
+/// What adding folders to a desktop did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Added {
+    /// New shortcuts.
+    pub added: usize,
+    /// Folders that desktop has a shortcut to already.
+    pub existing: usize,
+    /// Folders left out: no free cell, or the profile's limit.
+    pub no_room: usize,
+    /// The first shortcut added, else the first one found there already.
+    pub first: Option<u32>,
+}
+
+/// Without a room (the world fills the window), shortcuts are kept in
+/// columns of this many cells; a room shows them where they fit.
+const UNSEEN_ROWS: u16 = 8;
+
+/// Adds a shortcut to each of `folders` (of `account`) in the desktop of
+/// `slot` (None: the first room's): from `cell` when one is given, each in
+/// the free cell nearest to it; else in the first free cells. Without a
+/// room for that slot they are kept for when it has one.
+pub fn add_folders(
+    desktop: &mut Desktop,
+    rooms: &[Room],
+    account: Uuid,
+    folders: &[Uuid],
+    slot: Option<u8>,
+    cell: Option<(u16, u16)>,
+) -> Added {
+    let slot = slot.or(rooms.first().map(|room| room.slot)).unwrap_or(0);
+    let grid = rooms.iter().find(|room| room.slot == slot).map(|room| room.grid);
+    let mut out = Added::default();
+    for (n, folder) in folders.iter().enumerate() {
+        let stored: Vec<_> = desktop
+            .shortcuts
+            .iter()
+            .filter(|s| s.slot == slot)
+            .map(|s| (s.id, s.cell()))
+            .collect();
+        let free = match &grid {
+            Some(grid) => {
+                let taken: Vec<_> = super::place::shown(&stored, grid).into_iter().map(|(_, at)| at).collect();
+                match cell {
+                    Some(cell) => grid.nearest_free(cell, &taken),
+                    None => grid.first_free(&taken),
+                }
+            }
+            None => (0..super::store::MAX_CELL)
+                .flat_map(|col| (0..UNSEEN_ROWS).map(move |row| (col, row)))
+                .find(|at| !stored.iter().any(|(_, taken)| taken == at)),
+        };
+        let Some(free) = free else {
+            out.no_room += folders.len() - n;
+            break;
+        };
+        let target = Target::Folder { folder: *folder, account };
+        match desktop.add(target, slot, free) {
+            Ok(id) => {
+                out.added += 1;
+                // (the new one, rather than one that was there)
+                if out.added == 1 {
+                    out.first = Some(id);
+                }
+            }
+            Err(Error::Existing(id)) => {
+                out.existing += 1;
+                out.first.get_or_insert(id);
+            }
+            Err(Error::Full | Error::Missing) => {
+                out.no_room += folders.len() - n;
+                break;
+            }
+        }
+    }
+    out
+}
 
 /// The label of a size.
 pub fn size_label(size: Size) -> &'static str {
@@ -93,7 +186,8 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
         .iter()
         .map(|room| {
             let stored: Vec<_> = desktop
-                .visible(env.account)
+                .shortcuts
+                .iter()
                 .filter(|s| s.slot == room.slot)
                 .map(|s| (s.id, s.cell()))
                 .collect();
@@ -101,6 +195,8 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
         })
         .collect();
     let pointer = ctx.input(|i| i.pointer.latest_pos());
+    // Inventory being dragged (an item, a folder or a selection)
+    let cargo = crate::ui::inventory::drag::carried_ids(ctx);
     let mut ops = Vec::new();
     let mut dragged = None;
     for (room, cells) in rooms.iter().zip(&shown) {
@@ -123,8 +219,17 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                 room_menu(&back, env.p, desktop.size, room.slot, state.menu_cell, &mut ops);
                 for &(id, cell) in cells {
                     let Some(shortcut) = desktop.shortcut(id) else { continue };
-                    let face = targets::face(shortcut, &env.facts);
+                    let face = targets::face(shortcut, &env.facts, &env.folders);
+                    let is_folder = matches!(shortcut.target, Target::Folder { .. });
                     let rect = room.grid.rect(cell);
+                    let open = || match face.folder {
+                        Some(folder) => Op::OpenFolder {
+                            folder,
+                            cell: rect,
+                            room: room.rect,
+                        },
+                        None => Op::Open(id),
+                    };
                     let response = ui.interact(rect, area_id(room.slot).with(("shortcut", id)), Sense::click_and_drag());
                     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, face.greyed.is_none(), &face.name));
                     let by_pointer = response.clicked_by(egui::PointerButton::Primary);
@@ -140,7 +245,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                             response.double_clicked()
                         };
                     if opened && face.greyed.is_none() {
-                        ops.push(Op::Open(id));
+                        ops.push(open());
                     }
                     if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
                         ops.push(Op::Remove(id));
@@ -166,16 +271,49 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         dim: dragging,
                     };
                     paint_face(ui.painter(), ui.style(), env.p, env.icons, rect, &face, desktop.size, look);
-                    shortcut_menu(&response, env.p, id, &face, &mut ops);
-                    if state.drag.is_none() {
-                        // (built only while it shows)
+                    shortcut_menu(&response, env.p, id, &face, is_folder, open, &mut ops);
+                    if state.drag.is_none() && cargo.is_none() {
+                        // (built only while it shows; a folder's path too)
                         response.on_hover_ui(|ui| {
-                            ui.label(face.tip());
+                            ui.label(match face.folder {
+                                Some(folder) => face.tip_of(&crate::ui::inventory::inventory_path(env.folders.inv, folder)),
+                                None => face.tip(),
+                            });
                         });
                     }
                 }
-                // where the dragged shortcut would land
-                if state.drag.is_some()
+                // Inventory held over this desktop: what a drop would do
+                let over = pointer.filter(|pos| room.rect.contains(*pos) && ctx.layer_id_at(*pos) == Some(ui.layer_id()));
+                let mut dropping = false;
+                if let (Some(ids), Some(pos)) = (&cargo, over) {
+                    let offer = targets::offer(env.folders.inv, ids, env.folders.no_inventory);
+                    dropping = offer.is_ok();
+                    crate::ui::inventory::drag::feedback(
+                        ctx,
+                        if dropping {
+                            egui::CursorIcon::Copy
+                        } else {
+                            egui::CursorIcon::NotAllowed
+                        },
+                    );
+                    ui.painter().rect_stroke(
+                        room.rect.shrink(1.0),
+                        ui.visuals().widgets.inactive.corner_radius,
+                        Stroke::new(1.5, if dropping { env.p.violet_light } else { env.p.danger }),
+                        StrokeKind::Inside,
+                    );
+                    if ui.input(|i| i.pointer.any_released()) {
+                        // taken here: nothing of it reaches the world
+                        egui::DragAndDrop::clear_payload(ctx);
+                        ops.push(Op::DropFolders {
+                            slot: room.slot,
+                            cell: room.grid.cell_at(pos),
+                            offer,
+                        });
+                    }
+                }
+                // where the dragged shortcut, or the folder dropped, would land
+                if (state.drag.is_some() || dropping)
                     && let Some(cell) = pointer.and_then(|pos| room.grid.cell_at(pos))
                 {
                     ui.painter().rect_stroke(
@@ -204,8 +342,23 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
         match op {
             Op::Open(id) => match desktop.shortcut(id).map(|s| &s.target) {
                 Some(Target::Command { command }) => out.push(Request::Run(command.clone())),
-                // (folders open with checkpoint 2 of the plan)
+                // (a folder that can open asks with `Op::OpenFolder`)
                 Some(Target::Folder { .. }) | None => {}
+            },
+            Op::OpenFolder { folder, cell, room } => out.push(Request::OpenFolder { folder, cell, room }),
+            Op::ShowFolder(folder) => out.push(Request::ShowFolder(folder)),
+            Op::DropFolders { slot, cell, offer } => match offer {
+                Ok(picked) => {
+                    let added = add_folders(desktop, rooms, env.folders.account, &picked.folders, Some(slot), cell);
+                    changed |= added.added > 0;
+                    if added.first.is_some() {
+                        state.selected = added.first;
+                    }
+                    if let Some(text) = super::added_notice(&added, picked.left_out, false, true) {
+                        out.push(Request::Notice(text));
+                    }
+                }
+                Err(why) => out.push(Request::Notice(why.text().to_owned())),
             },
             Op::Remove(id) => {
                 changed |= desktop.remove(id).is_ok();
@@ -273,12 +426,15 @@ fn cell_under(rooms: &[Room], pos: Pos2) -> Option<(u8, (u16, u16))> {
     rooms.iter().find_map(|room| room.grid.cell_at(pos).map(|cell| (room.slot, cell)))
 }
 
-/// The menu of a shortcut.
-fn shortcut_menu(response: &egui::Response, p: &Palette, id: u32, face: &Face, ops: &mut Vec<Op>) {
+/// The menu of a shortcut; `open` is what opening it asks.
+fn shortcut_menu(response: &egui::Response, p: &Palette, id: u32, face: &Face, is_folder: bool, open: impl Fn() -> Op, ops: &mut Vec<Op>) {
     menu::context_menu(response, p, |ui| {
         let why = face.greyed.map_or("", |why| why.text());
         if menu::item_tip(ui, p, ICON_OPEN, tr!("fs-desktop-open"), face.greyed.is_none(), why) {
-            ops.push(Op::Open(id));
+            ops.push(open());
+        }
+        if is_folder && menu::item_tip(ui, p, ICON_SHOW, tr!("ui-context-show-in-inventory"), face.folder.is_some(), why) {
+            ops.extend(face.folder.map(Op::ShowFolder));
         }
         menu::separator(ui, p);
         if menu::item(ui, p, ICON_REMOVE, tr!("fs-desktop-remove")) {
@@ -348,7 +504,9 @@ fn paint_face(painter: &egui::Painter, style: &egui::Style, p: &Palette, icons: 
     let greyed = face.greyed.is_some();
     let side = size.icon();
     let icon = Rect::from_min_size(egui::pos2(rect.center().x - side / 2.0, rect.top() + 8.0), vec2(side, side));
-    let tint = if greyed { p.muted_dim } else { p.violet_light };
+    // a folder wears the colour the user gave it in the Inventory
+    let own = face.tint.map(|[r, g, b]| egui::Color32::from_rgb(r, g, b));
+    let tint = if greyed { p.muted_dim } else { own.unwrap_or(p.violet_light) };
     match icons.get(&face.icon).cloned().or_else(|| crate::ui::icons::global(&face.icon)) {
         Some(texture) => {
             let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
