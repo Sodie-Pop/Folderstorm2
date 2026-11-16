@@ -1,8 +1,10 @@
 # Margin desktop and taskbar: plan
 
 Plan for [FEATURES.md](../FEATURES.md) row **1.10**. Branch
-`claude/margin-desktop`. Nothing is built yet. The human's request
-(2026-11-16):
+`claude/margin-desktop`. **Checkpoint 1 is built** (command shortcuts, the
+desktops, Preferences, the demo); checkpoints 2 to 4 are not. What
+checkpoint 1 changed against this plan is in section 19. The human's
+request (2026-11-16):
 
 > On a 2nd or 3rd monitor, which we've been referring to as margins (where
 > we recently worked on a background image fix), I'd like a big feature
@@ -331,18 +333,18 @@ All new, ours:
 
 | File | About line | Change | Checkpoint |
 |---|---|---|---|
-| `folderstorm/mod.rs` (ours) | 5 | `pub mod desktop;` | 1 |
-| `app.rs` | 69 | `mod folderstorm_desktop;` | 1 |
-| `app.rs` (`draw_ui`) | 17346, after the bars' lap, before "overlays" | one line: `self.folderstorm_desktop(&ctx, &p, icons, &mut a);` | 1 |
-| `app/click_pick.rs` (`ui_takes_pointer`) | 295 | one more term: `\|\| crate::folderstorm::desktop::takes_pointer(&self.egui_ctx, pos)` | 1 |
-| `settings.rs` | 524, 2048, 3318 | the field, its default, kept by the reset | 1 |
+| `folderstorm/mod.rs` (ours) | 7 | `pub mod desktop;` | 1, **done** |
+| `app.rs` | 66 | `mod folderstorm_desktop;` | 1, **done** |
+| `app.rs` (`draw_ui`) | 18160, after the gesture boards' line | one line: `self.folderstorm_desktop(&ctx, &p, &mut a);` (not at 17346 as first planned: section 19) | 1, **done** |
+| `app/click_pick.rs` (`ui_takes_pointer`) | 295–296 | the position named, and one more term: `\|\| crate::folderstorm::desktop::takes_pointer(&self.egui_ctx, pos)` | 1, **done** |
+| `settings.rs` | 526, 2051, 3322 | the field, its default, kept by the reset | 1, **done** |
 | `ui/inventory.rs` (`InvAction`) | 151 | one variant, `FolderstormDesktopAdd(Vec<Uuid>)` | 2 |
 | `app/inventory.rs` | 301 | its arm, one line | 2 |
 | `ui/toolbar.rs` | 473, beside `dragging` | `pub(crate) fn carried_command(ctx) -> Option<String>` (5 lines: the payload is private) | 3 |
 | `ui/toolbar.rs` (`context`) | 387 | one line in a button's menu: `crate::folderstorm::desktop::toolbar_menu(ui, p, button);` | 3 |
 | `ui/widgets.rs` (`Floater::show`) | 596, after `toggle_min` is known | 5 lines, the shape of the `window_hidden` block above it: `if crate::folderstorm::desktop::taskbar::holds(ctx, &self, workspace::window_icon(self.id), minimized && !compact && !close && !toggle_min) { if self.cascade.is_some() { cascade::hidden(…) } return None; }` | 4 |
-| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | the `fs-` block | `fs-desktop-*`, `fs-taskbar-*` (about 60 keys in all) | each |
-| `docs/TESTING.md` | after the backgrounds' paragraph (438) | `AURORA_DEMO_DESKTOP` | 1, then each |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | the `fs-` block | `fs-desktop-*`, `fs-taskbar-*` (about 60 keys in all; 19 with checkpoint 1) | each |
+| `docs/TESTING.md` | after the backgrounds' paragraph (438), and its row in the table | `AURORA_DEMO_DESKTOP` | 1 (**done**), then each |
 
 No hook in: `ui/bars.rs` (we call `run_command`), `ui/toolbar/catalogue.rs`
 (we add no command), `ui/layout.rs`, `ui/bars/islands.rs`,
@@ -579,3 +581,50 @@ wallpaper; how winit orders monitors on the human's PC (we sort, so it
 should not matter).
 
 **Not done**: nothing was built or run. No cargo command was needed.
+
+
+## 19. Checkpoint 1 as built
+
+What the build changed against the sections above, and what it found.
+
+- **The frame call is after the windows' calls, not after the bars**
+  (`app.rs`, beside the gesture boards' line). At the place first planned
+  the skin's icons are still borrowed by `draw_ui`, so a method of the app
+  cannot be called there. It changes nothing on screen: a desktop is an
+  area of egui's background order, painted under every window wherever it
+  is called from, and egui tests the pointer against the last frame's
+  rectangles.
+- **Speak is a third button-only command**, with Favorites and VR view:
+  its button is a key held, and `run_command` does nothing for it. The
+  three are listed greyed in *Add a command*, with the reason.
+- **A fourth gate**: the two-layout toggle (`layout_toggle`, ours) is
+  greyed while no layout is set to toggle to, as its toolbar button is
+  (`workspaces::toolbar::look`).
+- **A room is one rectangle**: the largest part of the slot that is clear
+  of the world and of the bars, 8 points in from its edges. Bars *Inside*
+  or *Around the world*: the slot less the bars' area
+  (`viewport::bars::side_screen`). Bars *Over the window*: the slot within
+  Aurora's work area, less the world. So "a cell under a bar" never
+  exists; a blocked cell is one outside the grid (the window got smaller,
+  or the world moved), and the shortcut is shown in the nearest free cell.
+- **The record's taskbar field** is `all_windows` (absent: the collapsed
+  windows only), after the main session's change of the default.
+- **In the record but without a control yet**: `single_click` (honoured by
+  the surface, its switch comes with checkpoint 3), `name` and `icon`
+  (shown when set; the demo sets them; edited with checkpoint 3), a folder
+  target (kept, shown greyed "Not available yet" to its account until
+  checkpoint 2), `taskbar`.
+- **The desktop's menu** has *Add a command ›*, *Icon size ›* and *Desktop
+  settings…*. *Toolbar buttons…* and *Arrange by name* come with
+  checkpoint 3.
+- **Keyboard, so far**: a shortcut is a focusable button (Tab reaches it,
+  Enter or Space opens it, Delete removes it, the screen reader names
+  it). A click does not take the keyboard focus, as for Aurora's buttons:
+  the avatar's keys keep working after a click on the desktop.
+- **Not done in checkpoint 1**: a notice when a room has no free cell for
+  *Add a command* (the command is then not added); the count of shortcuts
+  on a monitor not in use; *Remove all shortcuts…*.
+- **Tests**: `folderstorm/desktop/{store,place,targets}.rs` (pure),
+  `folderstorm/desktop/tests.rs` (frames, with the renderer's cut of the
+  world's labels), `app/folderstorm_desktop.rs` (a command reaches
+  `run_command`, the gates).
