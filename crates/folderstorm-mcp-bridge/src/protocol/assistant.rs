@@ -36,6 +36,8 @@ pub fn bound_group(group: &str) -> bool {
         || group == binding::NAVIGATION
         // Folderstorm: script_test_stop needs no class (mcp-script-testing.md)
         || group == binding::SCRIPT_TESTING
+        // Folderstorm: inventory_upload_cancel needs no class (mcp-uploads.md)
+        || group == binding::UPLOADS
 }
 
 pub const CANCEL: &str = "assistant_operation_cancel";
@@ -46,6 +48,8 @@ pub fn answers_early(spec: &ToolSpec, arguments: &Value) -> bool {
     (spec.name == EXECUTE_PLAN && arguments.get("wait").and_then(Value::as_bool) == Some(false))
         // Folderstorm: a move and a teleport take seconds: they answer at once
         || super::navigation::answers_early(spec.name)
+        // Folderstorm: an upload's files go one by one (mcp-uploads.md)
+        || super::uploads::answers_early(spec.name)
 }
 
 fn cancel_schema() -> Value {

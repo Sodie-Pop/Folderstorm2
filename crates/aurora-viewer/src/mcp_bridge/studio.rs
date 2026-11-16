@@ -21,6 +21,7 @@
 use super::camera::Pose;
 use super::desk::{ACCESS_OFF, Desk, Review};
 use super::picture::{self, Plan, Request, Source};
+use folderstorm_mcp_bridge::protocol::uploads::{FILE_BYTES_MAX, SNAPSHOT as SNAPSHOT_UPLOAD};
 use folderstorm_mcp_bridge::protocol::{CHANGE_WAIT, IMAGE_BYTES_MAX, IMAGE_KEY, SNAPSHOT_WAIT};
 use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::{ErrorCode, ToolError};
@@ -109,6 +110,9 @@ pub struct Studio {
     /// The view's field of view before an exact shot set one: given back
     /// by `camera_reset` and `camera_preset`.
     pub fov_before: Option<f32>,
+    /// Folderstorm: `inventory_snapshot_upload`'s pictures drawn, as PNG
+    /// bytes, for the upload plans (mcp-uploads.md).
+    staged: Vec<(Pending, Result<Vec<u8>, String>)>,
 }
 
 /// The camera was moved: a refusal says so.
@@ -172,6 +176,9 @@ impl Studio {
         for job in old.encoding {
             let kept = if job.save { NO_IMAGE_SAVED } else { NO_IMAGE };
             job.call.answer(Err(already(off(), TAKEN, kept)));
+        }
+        for (call, _) in old.staged {
+            call.answer(Err(already(off(), TAKEN, NO_IMAGE)));
         }
         if let Some(wait) = old.thumbnail {
             if wait.sent {
@@ -383,8 +390,14 @@ impl Studio {
             return;
         };
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        // Folderstorm: a picture for an upload keeps its size (64 MiB)
+        let cap = if call.tool == SNAPSHOT_UPLOAD {
+            usize::try_from(FILE_BYTES_MAX).unwrap_or(IMAGE_BYTES_MAX)
+        } else {
+            IMAGE_BYTES_MAX
+        };
         let spawned = std::thread::Builder::new().name("mcp-picture".into()).spawn(move || {
-            let _ = tx.send(encode(pixels, size, &plan, &request, &folder, &stamp));
+            let _ = tx.send(encode(pixels, size, &plan, &request, &folder, &stamp, cap));
         });
         match spawned {
             Ok(_) => self.encoding.push(Encoding {
@@ -414,6 +427,11 @@ impl Studio {
         }
         for job in std::mem::take(&mut self.encoding) {
             match job.rx.try_recv() {
+                // Folderstorm: a picture for an upload becomes a plan
+                Ok(result) if job.call.tool == SNAPSHOT_UPLOAD => {
+                    let png = result.map_err(|e| e.message).and_then(|value| png_of(&value));
+                    self.staged.push((job.call, png));
+                }
                 Ok(result) => job.call.answer(result),
                 Err(TryRecvError::Empty) => self.encoding.push(job),
                 Err(TryRecvError::Disconnected) => job.call.answer(Err(ToolError::new(ErrorCode::Internal, "the picture was lost"))),
@@ -442,6 +460,11 @@ impl Studio {
         }
     }
 
+    /// Folderstorm: the pictures drawn for upload plans since the last call.
+    pub fn take_staged(&mut self) -> Vec<(Pending, Result<Vec<u8>, String>)> {
+        std::mem::take(&mut self.staged)
+    }
+
     /// Calls in each state, for the tests: moves, pictures waiting or
     /// drawn, pictures encoding, thumbnail.
     #[cfg(test)]
@@ -458,9 +481,10 @@ fn encode(
     request: &Request,
     folder: &std::path::Path,
     stamp: &str,
+    cap: usize,
 ) -> Result<Value, ToolError> {
     use base64::Engine as _;
-    let encoded = picture::finish(pixels, size, plan, request.format, IMAGE_BYTES_MAX).map_err(|e| ToolError::new(ErrorCode::Failed, e))?;
+    let encoded = picture::finish(pixels, size, plan, request.format, cap).map_err(|e| ToolError::new(ErrorCode::Failed, e))?;
     let mut reply = json!({
         "width": encoded.size.0,
         "height": encoded.size.1,
@@ -487,4 +511,13 @@ fn encode(
         "data": base64::engine::general_purpose::STANDARD.encode(&encoded.bytes),
     });
     Ok(reply)
+}
+
+/// Folderstorm: the PNG bytes of a picture's answer.
+fn png_of(value: &Value) -> Result<Vec<u8>, String> {
+    use base64::Engine as _;
+    let data = value[IMAGE_KEY]["data"].as_str().ok_or("the picture came back empty")?;
+    base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|_| "the picture came back unreadable".to_owned())
 }

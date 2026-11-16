@@ -220,6 +220,13 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-pose-hint"),
                     field!(local_assistant.permissions.pose),
                 ),
+                // Folderstorm: file uploads (mcp-uploads.md)
+                (
+                    Class::Upload,
+                    tr!("fs-mcp-upload"),
+                    tr!("fs-mcp-upload-hint"),
+                    field!(local_assistant.permissions.upload),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

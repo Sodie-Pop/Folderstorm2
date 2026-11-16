@@ -58,10 +58,14 @@ pub enum Class {
     /// Folderstorm: pose the user's own avatar on this screen, and save
     /// that pose as a new file (folderstorm/plans/mcp-gestures.md).
     Pose,
+    /// Folderstorm: upload local files as new inventory items, and open a
+    /// Collada file in the uploader's Mesh window; anything that costs L$
+    /// always asks, with its price (folderstorm/plans/mcp-uploads.md).
+    Upload,
 }
 
 impl Class {
-    pub const ALL: [Class; 16] = [
+    pub const ALL: [Class; 17] = [
         Class::Read,
         Class::Edit,
         Class::Move,
@@ -78,6 +82,7 @@ impl Class {
         Class::NextOwner, // Folderstorm: mcp-building.md
         Class::Gestures,  // Folderstorm: mcp-gestures.md
         Class::Pose,      // Folderstorm: mcp-gestures.md
+        Class::Upload,    // Folderstorm: mcp-uploads.md
     ];
 
     /// Whether the class can ask the user before each call (every class
@@ -106,7 +111,7 @@ pub enum Level {
 /// included; and the Interact level, Scripts included; and the Build
 /// level, Interact included; and the NextOwner level, Build included;
 /// and the Gestures level, NextOwner included, then the Pose level,
-/// Gestures included.
+/// Gestures included; and the Upload level, Pose included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "Saved")]
 pub struct Permissions {
@@ -136,6 +141,8 @@ pub struct Permissions {
     pub gestures: Level,
     /// Folderstorm: posing the user's own avatar (mcp-gestures.md).
     pub pose: Level,
+    /// Folderstorm: uploading local files (mcp-uploads.md).
+    pub upload: Level,
 }
 
 /// [`Permissions`] as saved: Camera came with phase 3, Navigation and
@@ -160,6 +167,7 @@ struct Saved {
     next_owner: Option<Level>,
     gestures: Option<Level>,
     pose: Option<Level>,
+    upload: Option<Level>,
 }
 
 impl Default for Saved {
@@ -182,6 +190,7 @@ impl Default for Saved {
             next_owner: None,
             gestures: None,
             pose: None,
+            upload: None,
         }
     }
 }
@@ -259,6 +268,12 @@ impl From<Saved> for Permissions {
         } else {
             Level::Never
         });
+        // Folderstorm: the same for uploads, posing included
+        let upload = s.upload.unwrap_or(if built && gestures == Level::Ask && pose == Level::Ask {
+            Level::Ask
+        } else {
+            Level::Never
+        });
         Permissions {
             read: s.read,
             edit: s.edit,
@@ -276,6 +291,7 @@ impl From<Saved> for Permissions {
             next_owner,
             gestures,
             pose,
+            upload,
         }
     }
 }
@@ -306,6 +322,7 @@ impl Permissions {
             Class::NextOwner => self.next_owner,
             Class::Gestures => self.gestures,
             Class::Pose => self.pose,
+            Class::Upload => self.upload,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -338,6 +355,7 @@ impl Permissions {
             Class::NextOwner => self.next_owner = level,
             Class::Gestures => self.gestures = level,
             Class::Pose => self.pose = level,
+            Class::Upload => self.upload = level,
         }
     }
 
@@ -427,6 +445,7 @@ impl Preset {
             next_owner: changes,
             gestures: changes,
             pose: changes,
+            upload: changes,
         }
     }
 }
@@ -466,6 +485,7 @@ mod tests {
             Class::NextOwner,
             Class::Gestures,
             Class::Pose,
+            Class::Upload,
         ] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
@@ -673,6 +693,35 @@ mod tests {
         assert_eq!(kept.level(Class::Pose), Level::Ask);
         let json = serde_json::to_string(&kept).expect("serialized");
         assert!(json.contains(r#""gestures":"allow""#) && json.contains(r#""pose":"ask""#), "{json}");
+    }
+
+    /// Folderstorm: uploads (mcp-uploads.md).
+    #[test]
+    fn upload_asks_in_ask_before_changes_and_keeps_older_presets() {
+        assert_eq!(Preset::AskBeforeChanges.permissions().level(Class::Upload), Level::Ask);
+        assert_eq!(Preset::ReadOnly.permissions().level(Class::Upload), Level::Never);
+        assert!(Class::Upload.can_ask());
+        for saved in [
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask","next_owner":"ask","gestures":"ask","pose":"ask"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#,
+        ] {
+            let asked: Permissions = serde_json::from_str(saved).expect("parsed");
+            assert_eq!(asked.level(Class::Upload), Level::Ask, "{saved}");
+            assert_eq!(asked.preset(), Preset::AskBeforeChanges, "{saved}");
+        }
+        // posing allowed or refused by hand: uploads do not ask
+        for saved in [
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask","next_owner":"ask","gestures":"ask","pose":"allow"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask","next_owner":"ask","gestures":"ask","pose":"never"}"#,
+            r#"{"edit":"allow","move":"ask","wear":"ask","trash":"ask"}"#,
+        ] {
+            let custom: Permissions = serde_json::from_str(saved).expect("parsed");
+            assert_eq!(custom.level(Class::Upload), Level::Never, "{saved}");
+        }
+        let kept: Permissions = serde_json::from_str(r#"{"upload":"allow"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Upload), Level::Allow);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""upload":"allow""#), "{json}");
     }
 
     #[test]

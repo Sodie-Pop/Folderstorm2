@@ -49,6 +49,10 @@ pub mod building;
 pub mod gestures;
 pub mod posing;
 
+// Folderstorm: the camera read and file uploads (mcp-uploads.md)
+pub mod camera_read;
+pub mod uploads;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -344,6 +348,8 @@ impl ToolSpec {
             // Folderstorm: a gesture played, a pose file saved (mcp-gestures.md)
             || gestures::needs_client_request_id(self.name)
             || posing::needs_client_request_id(self.name)
+            // Folderstorm: an upload (mcp-uploads.md)
+            || uploads::needs_client_request_id(self.name)
     }
 }
 
@@ -883,6 +889,8 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(building::BUILDING_TOOLS) // Folderstorm: building
         .chain(gestures::GESTURE_TOOLS) // Folderstorm: gestures
         .chain(posing::POSE_TOOLS) // Folderstorm: own posing
+        .chain(camera_read::CAMERA_READ_TOOLS) // Folderstorm: camera read
+        .chain(uploads::UPLOAD_TOOLS) // Folderstorm: file uploads
 }
 
 #[cfg(test)]

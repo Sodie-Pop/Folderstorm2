@@ -3440,6 +3440,13 @@ impl App {
                 self.outfit_hd_uploaded(result);
                 return;
             }
+            // Folderstorm: the local assistant's upload (mcp-uploads.md)
+            if crate::mcp_bridge::upload_owns(request) {
+                if let Some(item) = crate::mcp_bridge::uploaded(request, result) {
+                    self.world.inventory.add_items(vec![item]);
+                }
+                return;
+            }
             let material_map = self.imports.uploading_entry(request);
             if let Some(item) = self.imports.uploaded(request, result) {
                 if let Some(entry) = material_map {
@@ -3581,6 +3588,11 @@ impl App {
             }
             if self.imports.folders.owns(request) {
                 self.imports.import_folder_result(request, result, &mut self.world.inventory);
+                return;
+            }
+            // Folderstorm: a folder of the local assistant's upload (mcp-uploads.md)
+            if crate::mcp_bridge::upload_folder_owns(request) {
+                crate::mcp_bridge::upload_folder_result(request, result, &mut self.world.inventory);
                 return;
             }
             if self.texture_library_result(request, &result) {

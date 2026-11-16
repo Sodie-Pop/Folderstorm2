@@ -115,6 +115,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
         Work::Interact(_) | Work::ScriptTest(_) => panic!("not run here (script_testing_tests)"),
         Work::Build(_) => panic!("not run here (building_tests)"),
         Work::Gesture(_) | Work::Pose(_) => panic!("not run here (gesture_tests)"),
+        Work::Upload | Work::MeshReview(_) => panic!("not run here (upload_tests)"),
     }
 }
 

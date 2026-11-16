@@ -6012,6 +6012,26 @@ assistant's session ends (`superseded_by_viewer_poser` in the next
 rows "Play gestures on my avatar" and "Pose my avatar". Capture the dialogs and
 the rows in English, French and Japanese.
 
+`AURORA_DEMO_MCP=uploads` (Folderstorm2, folderstorm/plans/mcp-uploads.md:
+`src/mcp_bridge/uploads.rs`): the same session settings ("Ask before
+changes"); once the avatar is in the world, the demo logs `camera_get`
+(`uploads step 0 answered {"camera":[…],"focus":[…],"distance":…}`), writes a
+small folder under `.scratch/mcp-uploads-demo/` (two textures in
+`Textures/`, a sound), previews it (no dialog: a read; the log reads
+`uploads step 1 answered {… "total":30 …}` at the demo's L$10 a file), then
+asks, as "Demo assistant", to "Upload the folder “Assistant upload demo”
+(3 files) from this computer as a new folder in “…” for L$30:" with each file
+and its price, "2 new inventory folders" and the balance before and after
+listed under it: anything above L$0 always asks, even on Allow. Allow: the
+folder and its `Textures` sub-folder appear in My Inventory with the three
+items, the demo balance drops by L$30, and the log reads
+`uploads step 2 answered {… "done":true,"spent":30 …}`, then the status
+(`uploads step 3`). Refuse instead: nothing is created or spent.
+`AURORA_DEMO_MCP=camera-get` only logs `camera_get`. With
+`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+row "Upload local files". Capture the dialog and the row in English, French
+and Japanese.
+
 `AURORA_DEMO_AREA_SEARCH`: `1` opens the object list; `parcel` restricts it to
 the agent's parcel, `sale` shows sale entries, `filters` opens Filters (required/excluded properties, permissions, click action and scope), and
 `search` searches the localized fountain name, and `menu` right-clicks the

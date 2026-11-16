@@ -299,6 +299,8 @@ mod tests {
                 + super::super::building::BUILDING_TOOLS.len() // Folderstorm: building
                 + super::super::gestures::GESTURE_TOOLS.len() // Folderstorm: gestures
                 + super::super::posing::POSE_TOOLS.len() // Folderstorm: own posing
+                + super::super::camera_read::CAMERA_READ_TOOLS.len() // Folderstorm: camera read
+                + super::super::uploads::UPLOAD_TOOLS.len() // Folderstorm: file uploads
         );
         for read in [
             "inventory_get_many",
@@ -324,11 +326,13 @@ mod tests {
             assert!(t.changes(), "{edit} may ask");
             assert_eq!(t.wait, CHANGE_WAIT);
         }
-        // never a way to uploads or to L$; the next owner's rights only
-        // through the building group, under their own class (mcp-building.md)
-        for absent in ["inventory_snapshot_upload", "inventory_upload_execute"] {
-            assert!(tool(absent).is_none(), "{absent}");
+        // uploads and L$ only through their own group, under the Upload
+        // class (mcp-uploads.md); the next owner's rights only through the
+        // building group, under their own class (mcp-building.md)
+        for upload in ["inventory_snapshot_upload", "inventory_upload_execute"] {
+            assert_eq!(tool(upload).map(|t| t.group), Some(crate::binding::UPLOADS), "{upload}");
         }
+        assert_eq!(tool("inventory_upload_execute").and_then(|t| t.class), Some(Class::Upload));
         let next_owner = tool("inventory_next_owner_set").expect("next owner");
         assert_eq!(next_owner.group, crate::binding::BUILDING);
         assert_eq!(next_owner.class, Some(Class::NextOwner));

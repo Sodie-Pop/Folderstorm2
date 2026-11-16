@@ -77,6 +77,9 @@ mod task_scripts_tests;
 #[cfg(test)]
 mod tests;
 pub mod tools;
+#[cfg(test)]
+mod upload_tests;
+pub mod uploads; // Folderstorm: camera read and file uploads (mcp-uploads.md)
 pub mod world; // Folderstorm: phase 3, part 3 (world observation)
 #[cfg(test)]
 mod world_tests;
@@ -142,6 +145,10 @@ struct Runtime {
     /// it waits for, and the pose session with its revision.
     demo_gesture: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
     demo_pose: Option<(String, u64)>,
+    /// Folderstorm: `AURORA_DEMO_MCP=uploads` (and `camera-get`): the
+    /// demo's step, the answer it waits for, and its plan.
+    demo_upload: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
+    demo_upload_plan: Option<String>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -278,6 +285,8 @@ fn demo_asks() -> bool {
             || v == "script-testing"
             || v == "building" // Folderstorm: mcp-building.md
             || v == "gestures" // Folderstorm: mcp-gestures.md
+            || v == "uploads" // Folderstorm: mcp-uploads.md
+            || v == "camera-get"
     })
 }
 
@@ -326,6 +335,8 @@ pub struct View<'a> {
     pub content_open: HashSet<Uuid>,
     /// Folderstorm: what the gesture and pose tools read (mcp-gestures.md).
     pub avatar: gestures::Avatar<'a>,
+    /// Folderstorm: what the upload tools read of the account (mcp-uploads.md).
+    pub uploads: uploads::Account,
 }
 
 impl View<'_> {
@@ -468,6 +479,7 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         let session = running.bridge.viewer_session();
         rt.desk.set_login(generation, session.clone());
         rt.desk.set_permissions(wanted.permissions);
+        rt.desk.uploads().set_account(view.uploads.clone()); // Folderstorm: mcp-uploads.md
         let now = Instant::now();
         rt.studio.observe(view.camera, now);
         let mut cx = None;
@@ -482,6 +494,12 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         }
         for _ in 0..PER_FRAME {
             let Ok(call) = running.calls.try_recv() else { break };
+            // Folderstorm: camera_get reads where the camera is (mcp-uploads.md)
+            if call.tool == folderstorm_mcp_bridge::protocol::camera_read::GET {
+                let Some(call) = rt.desk.admit(call) else { continue };
+                call.answer(camera::get(&view.camera, &view.stage));
+                continue;
+            }
             if world::answers(&call.tool) {
                 // reads of what the viewer shows, answered at once once the
                 // desk has checked the login and the levels
@@ -500,7 +518,8 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             && (!task_scripts::demo::wanted() || task_scripts::demo::ready(view.world))
             && (!script_testing::demo::wanted() || script_testing::demo::ready(view.world))
             && (!building::demo::wanted() || (view.stage.in_world && building::demo::ready(view.world)))
-            && (!gestures::demo::wanted() || (view.stage.in_world && posing::demo::ready(view.world)));
+            && (!gestures::demo::wanted() || (view.stage.in_world && posing::demo::ready(view.world)))
+            && (!(uploads::demo::wanted() || uploads::demo::camera_only()) || view.stage.in_world);
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -540,6 +559,16 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     rt.desk.take(call, cx.get_or_insert_with(context), now);
                     rt.demo_reads.push(answer);
                 }
+                Vec::new()
+            } else if uploads::demo::wanted() || uploads::demo::camera_only() {
+                // Folderstorm: camera_get now, then the upload steps
+                let (tool, arguments) = uploads::demo::camera();
+                let (call, answer) = Pending::detached(tool, arguments, false, Some("Demo assistant"));
+                rt.desk
+                    .admit(call)
+                    .into_iter()
+                    .for_each(|call| call.answer(camera::get(&view.camera, &view.stage)));
+                rt.demo_upload = Some((0, answer));
                 Vec::new()
             } else if gestures::demo::wanted() {
                 // Folderstorm: the demo gesture read now (if seeded), else
@@ -750,6 +779,41 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                 Err(TryRecvError::Disconnected) => {}
             }
         }
+        // Folderstorm: the upload demo's next step
+        if let Some((step, answer)) = rt.demo_upload.take() {
+            match answer.try_recv() {
+                Ok(result) => {
+                    log_demo_upload(step, &result);
+                    let next = result.ok().and_then(|value| match step {
+                        0 if uploads::demo::wanted() => {
+                            let base = std::path::PathBuf::from(".scratch")
+                                .join("mcp-uploads-demo")
+                                .join(Uuid::new_v4().to_string());
+                            match uploads::demo::fixtures(&base) {
+                                Ok(folder) => Some((1, uploads::demo::preview(&folder))),
+                                Err(e) => {
+                                    log::warn!("local assistant demo: upload fixtures failed: {e}");
+                                    None
+                                }
+                            }
+                        }
+                        1 => {
+                            rt.demo_upload_plan = value["plan_id"].as_str().map(str::to_owned);
+                            uploads::demo::execute_after(&value).map(|n| (2, n))
+                        }
+                        2 => rt.demo_upload_plan.as_deref().map(|plan| (3, uploads::demo::status(plan))),
+                        _ => None,
+                    });
+                    if let Some((step, (tool, arguments))) = next {
+                        let (call, answer) = Pending::detached(tool, arguments, step == 2, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_upload = Some((step, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_upload = Some((step, answer)),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
         rt.demo_answers.retain(|(tool, answer)| match answer.try_recv() {
             Ok(result) => {
                 log_demo_answer(tool, &result);
@@ -783,6 +847,14 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             }
         }
         rt.studio.tick(&view.camera, now);
+        // Folderstorm: the pictures drawn for upload plans, then the
+        // previews and the run (mcp-uploads.md)
+        for (call, png) in rt.studio.take_staged() {
+            rt.desk.uploads().stage_snapshot(call, png, cx.get_or_insert_with(context), now);
+        }
+        if rt.desk.uploads().busy() {
+            rt.desk.tick_uploads(cx.get_or_insert_with(context), now);
+        }
         rt.desk.tick_reads(view.world, now);
         // Folderstorm: the gesture and pose tools' waits, playback and session
         if rt.desk.avatar_busy() {
@@ -990,16 +1062,57 @@ pub fn wanted_landmarks() -> Vec<Uuid> {
 }
 
 /// Folderstorm: whether the Image window's job `request` is the local
-/// assistant's `inventory_set_thumbnail` (it then needs no window).
+/// assistant's `inventory_set_thumbnail` (it then needs no window), or an
+/// upload's picture (mcp-uploads.md).
 pub fn image_job(request: Uuid) -> bool {
-    with(|rt| rt.desk.image_job(request))
+    with(|rt| rt.desk.image_job(request) || rt.desk.uploads().image_job(request))
 }
 
 /// Folderstorm: the Image window's job `request` ended (an error: why).
 pub fn image_finished(request: Uuid, error: Option<&str>) {
+    with(|rt| rt.desk.uploads().image_finished(request, error));
     if let Some(error) = error {
         with(|rt| rt.desk.image_failed(request, error));
     }
+}
+
+/// Folderstorm: an upload's execute runs now (mcp-uploads.md).
+pub fn upload_start(call: Pending) {
+    with(|rt| rt.desk.upload_start(call, Instant::now()));
+}
+
+/// Folderstorm: what the upload run wants sent now.
+pub fn upload_acts() -> Vec<uploads::Act> {
+    with(|rt| rt.desk.uploads().take_acts())
+}
+
+/// Folderstorm: whether the upload `request` is the assistant's.
+pub fn upload_owns(request: Uuid) -> bool {
+    with(|rt| rt.desk.uploads().owns_upload(request))
+}
+
+/// Folderstorm: the server's answer to the assistant's upload: the new
+/// item, for the inventory.
+pub fn uploaded(
+    request: Uuid,
+    result: Result<aurora_net::inventory::upload::Receipt, aurora_net::inventory::upload::Error>,
+) -> Option<aurora_net::inventory::InvItem> {
+    with(|rt| rt.desk.uploads().uploaded(request, result))
+}
+
+/// Folderstorm: whether the inventory change `request` is a folder of the
+/// assistant's upload.
+pub fn upload_folder_owns(request: Uuid) -> bool {
+    with(|rt| rt.desk.uploads().owns_folder(request))
+}
+
+/// Folderstorm: the server's answer to that folder (the inventory learns it).
+pub fn upload_folder_result(
+    request: Uuid,
+    result: Result<aurora_net::inventory::operations::Reply, String>,
+    inventory: &mut crate::world::inventory::Inventory,
+) {
+    with(|rt| rt.desk.uploads().folder_result(request, result, inventory));
 }
 
 /// Decide and plan a change again just before it is sent: the permissions,
@@ -1026,6 +1139,8 @@ pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)>
         // Folderstorm: and a gesture or pose change (mcp-gestures.md)
         let planned =
             planned.or_else(|| (gestures::is_change(&call.tool) || posing::is_change(&call.tool)).then(|| rt.desk.avatar_plan(&call, &cx)));
+        // Folderstorm: and an upload change (mcp-uploads.md)
+        let planned = planned.or_else(|| uploads::is_change(&call.tool).then(|| rt.desk.upload_plan(&call, &cx)));
         Some((call, planned))
     })?;
     match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
@@ -1181,6 +1296,23 @@ fn log_demo_gesture(step: u8, result: &Result<serde_json::Value, ToolError>) {
             log::info!("local assistant demo: gestures step {step} answered {value}");
         }
         Err(e) => log::info!("local assistant demo: gestures step {step} ended with {e}"),
+    }
+}
+
+/// Folderstorm: the upload demo's step answered: what it did, never a
+/// path or the files' names.
+fn log_demo_upload(step: u8, result: &Result<serde_json::Value, ToolError>) {
+    match result {
+        Ok(value) => {
+            let mut value = value.clone();
+            if let Some(object) = value.as_object_mut() {
+                for key in ["files", "destination", "root_folder", "folders", "next"] {
+                    object.remove(key);
+                }
+            }
+            log::info!("local assistant demo: uploads step {step} answered {value}");
+        }
+        Err(e) => log::info!("local assistant demo: uploads step {step} ended with {e}"),
     }
 }
 
