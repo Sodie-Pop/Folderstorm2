@@ -5,7 +5,7 @@
 //! (`nearby-media.png`).
 
 use super::super::panel::{self, CLOSE_DELAY};
-use super::super::{Action, Row, Snapshot, Source, State};
+use super::super::{Action, Filter, Place, Row, Snapshot, Source, State};
 use super::prim;
 use crate::settings::AudioSettings;
 use crate::ui::audio::{AudioAction, AudioUi, MediaState, MusicStatus};
@@ -48,6 +48,15 @@ fn media_row(source: Source, name: &str, on: bool, distance: f32) -> Row {
         muted: false,
         distance,
         note: String::new(),
+        volume: 1.0,
+        place: match source {
+            Source::Prim { .. } => Place {
+                in_parcel: true,
+                zoomable: true,
+                ..Default::default()
+            },
+            _ => Place::PARCEL,
+        },
     }
 }
 
@@ -61,7 +70,20 @@ fn seeded() -> Snapshot {
         ],
         media_enabled: true,
         plugins_missing: false,
+        show_on_others: false,
     }
+}
+
+/// [`seeded`] with a billboard outside the parcel and a badge worn by
+/// another avatar standing on it.
+fn with_neighbours() -> Snapshot {
+    let mut s = seeded();
+    let mut billboard = media_row(prim(3), "Billboard next door", true, 66.0);
+    billboard.place.in_parcel = false;
+    let mut badge = media_row(prim(4), "Wolf badge", true, 5.0);
+    badge.place.on_other_avatar = true;
+    s.rows.extend([billboard, badge]);
+    s
 }
 
 impl Bench {
@@ -197,10 +219,52 @@ impl Bench {
             .unwrap_or_else(|| panic!("“{text}” drawn: {:?}", self.texts))
     }
 
+    /// The centre of a drawn text starting with `prefix`.
+    fn at_start(&self, prefix: &str) -> Pos2 {
+        self.texts
+            .iter()
+            .find(|(t, _)| t.starts_with(prefix))
+            .map(|(_, r)| r.center())
+            .unwrap_or_else(|| panic!("“{prefix}…” drawn: {:?}", self.texts))
+    }
+
+    fn double_click(&mut self, at: Pos2) {
+        self.pointer = at;
+        self.frame(vec![egui::Event::PointerMoved(at)]);
+        let press = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        self.frame(vec![press(true)]);
+        self.frame(vec![press(false)]);
+        self.frame(vec![press(true)]);
+        self.frame(vec![press(false)]);
+        self.frames(1);
+    }
+
     fn button(&self, source: Source, kind: &'static str) -> Pos2 {
         panel::button_rect(&self.ctx, source, kind)
             .unwrap_or_else(|| panic!("{kind} button of {source:?} drawn"))
             .center()
+    }
+
+    /// Opens the Show list and picks `filter` in it.
+    fn choose(&mut self, filter: Filter) {
+        let (combo, _) = panel::filter_rects(&self.ctx, filter);
+        self.click(combo.expect("the Show list drawn").center());
+        let (_, item) = panel::filter_rects(&self.ctx, filter);
+        self.click(item.expect("the Show list's entries drawn").center());
+    }
+
+    /// The rows' names drawn.
+    fn listed(&self) -> Vec<&str> {
+        ["Club screen", "Gallery slideshow", "Billboard next door", "Wolf badge"]
+            .into_iter()
+            .chain([tr!("fs-nearby-media-parcel-media"), tr!("fs-nearby-media-parcel-music")])
+            .filter(|name| self.starts(name).is_some())
+            .collect()
     }
 
     fn face(&self, icon: &str) -> bool {
@@ -358,7 +422,111 @@ fn every_glyph_of_the_button_and_the_rows_exists() {
         "volume",
         "volume-off",
         "settings-filled",
+        "zoom-in-filled",
+        "zoom-out-filled",
     ] {
         assert!(bench.icons.get(icon).is_some(), "{icon}");
     }
+}
+
+#[test]
+fn the_show_list_keeps_the_rows_of_one_place() {
+    let mut bench = Bench::new();
+    bench.snapshot = with_neighbours();
+    bench.move_to(MEDIA);
+    assert_eq!(panel::filter(&bench.ctx), Filter::All);
+    assert!(bench.shown(Filter::All.label()));
+    assert_eq!(bench.listed().len(), 6, "{:?}", bench.texts);
+    bench.choose(Filter::OutsideParcel);
+    bench.capture("nearby-media-outside");
+    assert_eq!(bench.listed(), ["Billboard next door"]);
+    // the panel stayed open through the list's clicks
+    assert!(bench.shown(tr!("fs-nearby-media-title")));
+    assert!(bench.shown(Filter::OutsideParcel.label()));
+    bench.choose(Filter::WithinParcel);
+    let mut within = bench.listed();
+    within.sort_unstable();
+    let mut expected = vec![
+        "Club screen",
+        "Gallery slideshow",
+        "Wolf badge",
+        tr!("fs-nearby-media-parcel-media"),
+        tr!("fs-nearby-media-parcel-music"),
+    ];
+    expected.sort_unstable();
+    assert_eq!(within, expected);
+    // on other avatars: the badge, and why the list may stay empty
+    bench.choose(Filter::OnOthers);
+    assert_eq!(bench.listed(), ["Wolf badge"]);
+    assert!(bench.shown(tr!("fs-nearby-media-others-off")));
+    bench.snapshot.show_on_others = true;
+    bench.frames(1);
+    assert!(!bench.shown(tr!("fs-nearby-media-others-off")));
+    // kept once the panel closed and opened again
+    bench.pointer = pos2(5.0, 360.0);
+    bench.frames(1);
+    bench.time += CLOSE_DELAY + 0.1;
+    bench.frames(2);
+    assert!(!bench.shown(tr!("fs-nearby-media-title")));
+    bench.move_to(MEDIA);
+    assert_eq!(bench.listed(), ["Wolf badge"]);
+    // nothing of that place: said so, not "no media nearby"
+    bench.snapshot = seeded();
+    bench.frames(1);
+    assert!(bench.shown(tr!("fs-nearby-media-empty-filter")));
+    assert!(!bench.shown(tr!("fs-nearby-media-empty")));
+}
+
+#[test]
+fn zoom_is_offered_for_media_on_objects_only() {
+    let mut bench = Bench::new();
+    bench.snapshot = with_neighbours();
+    // the badge's avatar is out of view: greyed
+    bench.snapshot.rows[5].place.zoomable = false;
+    bench.move_to(MEDIA);
+    // the parcel's media and music have none
+    assert!(panel::button_rect(&bench.ctx, Source::ParcelMedia, "zoom").is_none());
+    assert!(panel::button_rect(&bench.ctx, Source::ParcelMusic, "zoom").is_none());
+    let zoom = bench.button(prim(3), "zoom");
+    bench.click(zoom);
+    let greyed = bench.button(prim(4), "zoom");
+    bench.click(greyed);
+    assert_eq!(super::super::take_actions(&bench.ctx), [Action::Zoom(prim(3))]);
+    // the camera on it: the same button zooms back out
+    bench.snapshot.rows[4].place.zoomed = true;
+    bench.frames(1);
+    let unzoom = bench.button(prim(3), "zoom");
+    bench.click(unzoom);
+    assert_eq!(super::super::take_actions(&bench.ctx), [Action::Unzoom]);
+    // a double click on a name zooms on it too
+    let name = bench.at_start("Club screen");
+    bench.double_click(name);
+    assert_eq!(super::super::take_actions(&bench.ctx), [Action::Zoom(prim(1))]);
+}
+
+#[test]
+fn a_rows_slider_sets_the_volume_of_its_own_source() {
+    let mut bench = Bench::new();
+    bench.move_to(MEDIA);
+    let slider = panel::button_rect(&bench.ctx, prim(2), "volume").expect("the gallery's slider");
+    bench.click(pos2(slider.left() + slider.width() * 0.3, slider.center().y));
+    let actions = super::super::take_actions(&bench.ctx);
+    assert!(!actions.is_empty());
+    for action in &actions {
+        match action {
+            Action::SetVolume(source, volume) => {
+                assert_eq!(*source, prim(2));
+                assert!((0.0..0.9).contains(volume), "{volume}");
+            }
+            other => panic!("only the gallery's volume: {other:?}"),
+        }
+    }
+    // the music's volume is the volume panel's
+    assert!(panel::button_rect(&bench.ctx, Source::ParcelMusic, "volume").is_none());
+    assert!(panel::button_rect(&bench.ctx, Source::ParcelMedia, "volume").is_some());
+    // media turned off: the slider stays still
+    bench.snapshot.media_enabled = false;
+    bench.frames(1);
+    bench.click(pos2(slider.left() + slider.width() * 0.6, slider.center().y));
+    assert!(super::super::take_actions(&bench.ctx).is_empty());
 }

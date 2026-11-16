@@ -3,7 +3,9 @@
 //! (LLViewerMedia::setAllMediaEnabled), its face says whether any media
 //! plays, and hovering it opens "Nearby media" (LLPanelNearByMedia,
 //! panel_nearby_media.xml): each source with its own start / stop and mute,
-//! Stop all, Start all and a way to the Media preferences.
+//! Stop all, Start all and a way to the Media preferences. Like there, a
+//! "Show" list keeps the rows of one place ([`Filter`]), a source on an
+//! object has a zoom button and every media its own volume.
 //!
 //! As in the Legacy Viewer, which separates the parcel stream from the media
 //! (FS:Zi "Media/Stream separation"), the parcel music keeps its own radio
@@ -16,9 +18,13 @@
 //! (app/folderstorm_nearby_media.rs). Aurora's top bar reaches it through
 //! one hook in `ui/audio.rs`.
 
+pub mod demo;
 pub mod panel;
+pub mod place;
 #[cfg(test)]
 mod tests;
+
+pub use place::{Filter, Place};
 
 use crate::media::{MediaImpl, MediaKey, MediaManager, MediaSettings};
 use crate::ui::audio::MusicStatus;
@@ -81,6 +87,12 @@ pub struct Row {
     pub distance: f32,
     /// A longer word on the state (the music's reason), for the tooltip.
     pub note: String,
+    /// Its own volume, 0..1 (LLViewerMediaImpl::getVolume); the master and
+    /// media volumes and the distance scale it. 1 for the music, whose
+    /// volume is the volume panel's.
+    pub volume: f32,
+    /// Where it is: the Show list and the zoom button read it.
+    pub place: Place,
 }
 
 /// What the panel shows, built by the app while the panel is open.
@@ -91,6 +103,9 @@ pub struct Snapshot {
     pub media_enabled: bool,
     /// No media plugins found yet: web pages and videos cannot load.
     pub plugins_missing: bool,
+    /// Preferences › Media › media on other avatars (MediaShowOnOthers):
+    /// without it, "On other avatars" stays empty and says why.
+    pub show_on_others: bool,
 }
 
 impl Snapshot {
@@ -110,12 +125,20 @@ impl Snapshot {
 }
 
 /// What the panel or the button asks for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Action {
     /// The row's start / stop button (onClickSelectedMediaPlay / Stop).
     Toggle(Source),
     /// The row's mute button (onClickSelectedMediaMute).
     Mute(Source),
+    /// The row's volume slider (onCommitSelectedMediaVolume).
+    SetVolume(Source, f32),
+    /// The row's zoom button, or a double click on its name
+    /// (onClickSelectedMediaZoom, onZoomMedia).
+    Zoom(Source),
+    /// The zoom button of the row the camera is on
+    /// (onClickSelectedMediaUnzoom).
+    Unzoom,
     StopAll,
     StartAll,
     /// The top bar button (onClickMediaToggle): Stop all when any media is
@@ -125,7 +148,7 @@ pub enum Action {
 }
 
 /// One change for the app to make.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Op {
     /// LLViewerParcelMedia::play (through the media filter).
     PlayParcel,
@@ -136,6 +159,15 @@ pub enum Op {
     /// setDisabled(true): unloaded, and not started again by itself.
     Stop(MediaKey),
     SetMuted(MediaKey, bool),
+    /// LLViewerMediaImpl::setVolume: the source's own volume, 0..1.
+    SetVolume(MediaKey, f32),
+    /// LLViewerMediaFocus::focusZoomOnMedia: the camera frames that face.
+    Zoom {
+        object: Uuid,
+        face: u8,
+    },
+    /// LLViewerMediaFocus::unZoom: the camera back on the avatar.
+    Unzoom,
     /// MediaTentativeAutoPlay: new media on objects may start by itself.
     TentativeAutoplay(bool),
     /// The radio button's toggle.
@@ -173,6 +205,17 @@ pub fn plan(action: Action, rows: &[Row]) -> Vec<Op> {
             .and_then(|r| source.key().map(|key| Op::SetMuted(key, !r.muted)))
             .into_iter()
             .collect(),
+        Action::SetVolume(source, volume) => row(source)
+            .and_then(|_| source.key())
+            .map(|key| Op::SetVolume(key, if volume.is_finite() { volume.clamp(0.0, 1.0) } else { 1.0 }))
+            .into_iter()
+            .collect(),
+        // the parcel's media and music have no zoom (include_zoom is false)
+        Action::Zoom(source) => match (source, row(source)) {
+            (Source::Prim { object, face }, Some(r)) if r.place.zoomable => vec![Op::Zoom { object, face }],
+            _ => Vec::new(),
+        },
+        Action::Unzoom => vec![Op::Unzoom],
         Action::StopAll => set_all(false),
         Action::StartAll => set_all(true),
         Action::ToggleAll => set_all(!rows.iter().any(|r| r.source.is_media() && r.on)),
@@ -209,6 +252,9 @@ pub struct MediaFacts<'a> {
     pub status: MediaStatus,
     pub muted: bool,
     pub distance: f32,
+    pub volume: f32,
+    /// Where its object is (the app reads the world for it).
+    pub place: Place,
 }
 
 impl<'a> MediaFacts<'a> {
@@ -230,6 +276,8 @@ impl<'a> MediaFacts<'a> {
             status: m.status,
             muted: m.muted,
             distance: m.distance,
+            volume: m.volume,
+            place: Place::default(),
         }
     }
 
@@ -320,6 +368,8 @@ pub fn snapshot<'a>(
                     muted: facts.muted,
                     distance: facts.distance,
                     note: String::new(),
+                    volume: facts.volume,
+                    place: facts.place,
                 });
             }
             None => {}
@@ -328,7 +378,11 @@ pub fn snapshot<'a>(
     prims.sort_by(|a, b| a.distance.total_cmp(&b.distance));
     let mut rows = Vec::with_capacity(prims.len() + 2);
     if let Some(url) = parcel_url.map(str::trim).filter(|u| !u.is_empty()) {
-        let facts = parcel.unwrap_or_default();
+        // not started yet: at full volume, as a new media starts
+        let facts = parcel.unwrap_or(MediaFacts {
+            volume: 1.0,
+            ..Default::default()
+        });
         rows.push(Row {
             source: Source::ParcelMedia,
             name: aurora_i18n::tr!("fs-nearby-media-parcel-media").to_owned(),
@@ -338,6 +392,8 @@ pub fn snapshot<'a>(
             muted: facts.muted,
             distance: 0.0,
             note: String::new(),
+            volume: facts.volume,
+            place: Place::PARCEL,
         });
     }
     if !music.station.trim().is_empty() || music.requested {
@@ -350,6 +406,8 @@ pub fn snapshot<'a>(
             muted: false,
             distance: 0.0,
             note: music.status.text(),
+            volume: 1.0,
+            place: Place::PARCEL,
         });
     }
     rows.extend(prims);
@@ -357,6 +415,7 @@ pub fn snapshot<'a>(
         rows,
         media_enabled: settings.enabled,
         plugins_missing,
+        show_on_others: settings.show_on_others,
     }
 }
 

@@ -29,6 +29,15 @@ fn row(source: Source, on: bool) -> Row {
         muted: false,
         distance: 0.0,
         note: String::new(),
+        volume: 1.0,
+        place: match source {
+            Source::Prim { .. } => Place {
+                in_parcel: true,
+                zoomable: true,
+                ..Default::default()
+            },
+            _ => Place::PARCEL,
+        },
     }
 }
 
@@ -113,6 +122,7 @@ fn stop_all_and_start_all_are_offered_when_they_would_change_something() {
         rows: rows(),
         media_enabled: true,
         plugins_missing: false,
+        show_on_others: false,
     };
     assert!(s.can_stop_all() && s.can_start_all());
     s.rows[3].on = true;
@@ -348,4 +358,180 @@ fn the_speaker_takes_over_at_once() {
     assert!(h.open);
     assert!(!h.step(false, false, false, true, 0.1));
     assert!(!h.open);
+}
+
+fn placed(source: Source, in_parcel: bool, on_other_avatar: bool) -> Row {
+    let mut r = row(source, true);
+    r.place.in_parcel = in_parcel;
+    r.place.on_other_avatar = on_other_avatar;
+    r
+}
+
+#[test]
+fn the_show_list_keeps_the_rows_of_their_place_and_the_parcels_own_with_all_and_within() {
+    let rows = [
+        row(Source::ParcelMedia, true),
+        row(Source::ParcelMusic, true),
+        placed(prim(1), true, false),
+        placed(prim(2), false, false),
+        // worn by another avatar standing on our parcel, then away from it
+        placed(prim(3), true, true),
+        placed(prim(4), false, true),
+    ];
+    let shown = |f: Filter| rows.iter().filter(|r| f.shows(r)).map(|r| r.source).collect::<Vec<_>>();
+    assert_eq!(shown(Filter::All).len(), 6);
+    assert_eq!(
+        shown(Filter::WithinParcel),
+        [Source::ParcelMedia, Source::ParcelMusic, prim(1), prim(3)]
+    );
+    assert_eq!(shown(Filter::OutsideParcel), [prim(2), prim(4)]);
+    assert_eq!(shown(Filter::OnOthers), [prim(3), prim(4)]);
+    // the list's order and labels, All first
+    assert_eq!(Filter::default(), Filter::All);
+    assert_eq!(Filter::ALL[0], Filter::All);
+    assert_eq!(Filter::OnOthers.label(), aurora_i18n::tr!("fs-nearby-media-filter-others"));
+}
+
+#[test]
+fn a_media_is_in_the_agents_parcel_when_its_object_stands_on_its_cells() {
+    // the demo parcel: x and y from 64 to 192 m (cells 16..48)
+    let mut cells = vec![0u8; 512];
+    for y in 16..48 {
+        for x in 16..48 {
+            let i = y * 64 + x;
+            cells[i / 8] |= 1 << (i % 8);
+        }
+    }
+    let at = |x: f32, y: f32| Some(glam::Vec3::new(x, y, 25.0));
+    assert!(place::in_agent_parcel(false, at(135.5, 129.5), Some(&cells)));
+    assert!(place::in_agent_parcel(false, at(64.0, 191.9), Some(&cells)));
+    assert!(!place::in_agent_parcel(false, at(198.0, 131.0), Some(&cells)));
+    assert!(!place::in_agent_parcel(false, at(-5.0, 100.0), Some(&cells)));
+    // another region (outside 0..256): never the agent's parcel
+    assert!(!place::in_agent_parcel(false, at(300.0, 100.0), Some(&cells)));
+    // a HUD rides with us
+    assert!(place::in_agent_parcel(true, None, None));
+    // nothing known: not in it, as the Legacy Viewer without its parcel
+    assert!(!place::in_agent_parcel(false, at(135.5, 129.5), None));
+    assert!(!place::in_agent_parcel(false, None, Some(&cells)));
+}
+
+/// The demo world with the Nearby media demo's billboard and badge.
+fn demo_world() -> crate::world::World {
+    let mut world = crate::world::World::new(std::sync::Arc::new(crate::scene::avatar::AvatarLibrary::load()));
+    for event in crate::demo::events() {
+        world.apply(event);
+    }
+    world.agent_id = crate::demo::DEMO_AGENT;
+    for (event, ..) in demo::sources() {
+        world.apply(event);
+    }
+    world
+}
+
+#[test]
+fn the_demos_billboard_is_outside_the_parcel_and_the_badge_on_another_avatar() {
+    let world = demo_world();
+    assert!(world.parcel.is_some(), "the demo parcel");
+    let now = std::time::Instant::now();
+    let billboard = place::place_of(&world, None, demo::OUTSIDE, now);
+    assert_eq!(
+        billboard,
+        Place {
+            in_parcel: false,
+            on_other_avatar: false,
+            zoomable: true,
+            zoomed: false
+        }
+    );
+    // Violet Wolf stands on the parcel: both classes, as there
+    let badge = place::place_of(&world, None, demo::WORN, now);
+    assert!(badge.on_other_avatar && badge.in_parcel, "{badge:?}");
+    // the demo's own screen, on the plaza
+    let (event, screen, _) = crate::demo::media_screen();
+    let mut world = world;
+    world.apply(event);
+    let plaza = place::place_of(&world, None, screen, now);
+    assert!(plaza.in_parcel && !plaza.on_other_avatar && plaza.zoomable, "{plaza:?}");
+    // an object not (or no longer) in the world
+    assert_eq!(place::place_of(&world, None, id(404), now), Place::default());
+}
+
+#[test]
+fn a_zoom_frames_the_media_object_and_the_camera_keeps_it_until_unzoomed() {
+    let mut world = demo_world();
+    let mut camera = crate::camera::Camera::default();
+    let settings = crate::camera::CameraSettings::default();
+    let now = std::time::Instant::now();
+    let idx = world.objects.index_of_uuid(&demo::OUTSIDE).expect("billboard");
+    let (centre, ..) = crate::scene::Scene::object_transform(&world, idx, now, 0).expect("placed");
+    assert!(place::zoom_on(&mut camera, &mut world, demo::OUTSIDE, None, 1.6, &settings, now));
+    assert_eq!(camera.focus_object_id(), Some(demo::OUTSIDE));
+    let focus = camera.focus_point().expect("a focus point");
+    assert!(focus.distance(centre) < 0.5, "{focus} {centre}");
+    // the row now offers to zoom back out
+    assert!(place::place_of(&world, camera.focus_object_id(), demo::OUTSIDE, now).zoomed);
+    assert!(!place::place_of(&world, camera.focus_object_id(), demo::WORN, now).zoomed);
+    place::unzoom(&mut camera, &mut world, &settings);
+    assert_eq!(camera.focus_object_id(), None);
+    // nothing to frame
+    assert!(!place::zoom_on(&mut camera, &mut world, id(404), None, 1.6, &settings, now));
+}
+
+#[test]
+fn a_face_box_turns_with_its_object() {
+    let model = glam::Mat4::from_rotation_translation(
+        glam::Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        glam::Vec3::new(10.0, 20.0, 30.0),
+    );
+    let (centre, size) = place::world_box(model, glam::Vec3::new(1.0, 0.0, 0.0), glam::Vec3::new(0.5, 2.0, 1.0));
+    assert!(centre.distance(glam::Vec3::new(10.0, 21.0, 30.0)) < 1e-4, "{centre}");
+    assert!(size.distance(glam::Vec3::new(4.0, 1.0, 2.0)) < 1e-4, "{size}");
+}
+
+#[test]
+fn the_volume_slider_and_the_zoom_ask_for_their_own_source() {
+    let mut rows = rows();
+    assert_eq!(plan(Action::SetVolume(prim(2), 0.25), &rows), [Op::SetVolume(key(2), 0.25)]);
+    assert_eq!(
+        plan(Action::SetVolume(Source::ParcelMedia, 1.7), &rows),
+        [Op::SetVolume(MediaKey::Parcel, 1.0)]
+    );
+    // the music's volume is the volume panel's; a source gone: nothing
+    assert!(plan(Action::SetVolume(Source::ParcelMusic, 0.5), &rows).is_empty());
+    assert!(plan(Action::SetVolume(prim(9), 0.5), &rows).is_empty());
+    assert_eq!(plan(Action::Zoom(prim(1)), &rows), [Op::Zoom { object: id(1), face: 0 }]);
+    // the parcel's media and music have no zoom, nor an object out of view
+    assert!(plan(Action::Zoom(Source::ParcelMedia), &rows).is_empty());
+    assert!(plan(Action::Zoom(Source::ParcelMusic), &rows).is_empty());
+    rows[3].place.zoomable = false;
+    assert!(plan(Action::Zoom(prim(2)), &rows).is_empty());
+    assert_eq!(plan(Action::Unzoom, &rows), [Op::Unzoom]);
+}
+
+#[test]
+fn a_row_carries_its_sources_volume_and_place() {
+    let settings = MediaSettings::default();
+    let near = MediaFacts {
+        volume: 0.4,
+        place: Place {
+            in_parcel: false,
+            zoomable: true,
+            ..Default::default()
+        },
+        ..facts(key(1), "", "https://a.example/", 3.0)
+    };
+    let s = snapshot(
+        [near],
+        Some("https://parcel.example/"),
+        music("http://radio.example/", false, MusicStatus::Stopped),
+        &settings,
+        false,
+    );
+    // the parcel media not started yet: full volume, in the parcel, no zoom
+    assert_eq!((s.rows[0].volume, s.rows[0].place), (1.0, Place::PARCEL));
+    assert_eq!(s.rows[1].place, Place::PARCEL);
+    assert_eq!(s.rows[2].volume, 0.4);
+    assert!(!s.rows[2].place.in_parcel && s.rows[2].place.zoomable);
+    assert!(!s.show_on_others);
 }
