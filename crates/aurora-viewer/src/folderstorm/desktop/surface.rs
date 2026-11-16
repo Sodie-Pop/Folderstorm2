@@ -5,7 +5,7 @@
 //! (folderstorm/plans/margin-desktop.md, "Drawing order and input").
 
 use super::place::Grid;
-use super::store::{Desktop, Error, Size, Target};
+use super::store::{Desktop, Error, MAX_SHORTCUTS, Size, Target};
 use super::targets::{self, Face};
 use super::{Env, Request};
 use crate::theme::Palette;
@@ -98,10 +98,85 @@ pub struct Added {
     pub added: usize,
     /// Folders that desktop has a shortcut to already.
     pub existing: usize,
-    /// Folders left out: no free cell, or the profile's limit.
+    /// Folders left out: that desktop has no free cell.
     pub no_room: usize,
+    /// Folders left out: the desktops hold [`MAX_SHORTCUTS`] already.
+    pub limit: usize,
     /// The first shortcut added, else the first one found there already.
     pub first: Option<u32>,
+}
+
+/// Why a desktop takes no new shortcut.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoRoom {
+    /// Its room has no free cell.
+    Full,
+    /// The desktops hold [`MAX_SHORTCUTS`] already.
+    Limit,
+}
+
+impl NoRoom {
+    /// What the notice, and the greyed *Add a command ›*, say.
+    pub fn text(self) -> String {
+        match self {
+            NoRoom::Full => tr!("fs-desktop-full").to_owned(),
+            NoRoom::Limit => tr!("fs-desktop-limit", count = MAX_SHORTCUTS),
+        }
+    }
+}
+
+/// Why the room `grid`, with `taken` cells shown, takes no new shortcut
+/// now; None when it does.
+pub(super) fn no_room(desktop: &Desktop, grid: &Grid, taken: &[(u16, u16)]) -> Option<NoRoom> {
+    if desktop.shortcuts.len() >= MAX_SHORTCUTS {
+        Some(NoRoom::Limit)
+    } else if grid.first_free(taken).is_none() {
+        Some(NoRoom::Full)
+    } else {
+        None
+    }
+}
+
+/// The shortcut that the desktop of `slot` has to `target` already.
+fn existing(desktop: &Desktop, slot: u8, target: &Target) -> Option<u32> {
+    desktop
+        .shortcuts
+        .iter()
+        .find(|s| s.slot == slot && s.target == *target)
+        .map(|s| s.id)
+}
+
+/// What adding a command to a room did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CommandAdded {
+    New(u32),
+    /// That desktop has it already: shown instead.
+    Existing(u32),
+    Refused(NoRoom),
+}
+
+/// Adds a shortcut to `command` in `room`, whose shown cells are `taken`:
+/// in `cell` when it is free, else in the first free cell.
+pub(super) fn add_command(
+    desktop: &mut Desktop,
+    room: &Room,
+    taken: &[(u16, u16)],
+    command: &str,
+    cell: Option<(u16, u16)>,
+) -> CommandAdded {
+    let target = Target::command(command);
+    // (a full desktop still shows the one it has)
+    if let Some(id) = existing(desktop, room.slot, &target) {
+        return CommandAdded::Existing(id);
+    }
+    let Some(cell) = cell.filter(|cell| !taken.contains(cell)).or_else(|| room.grid.first_free(taken)) else {
+        return CommandAdded::Refused(NoRoom::Full);
+    };
+    match desktop.add(target, room.slot, cell) {
+        Ok(id) => CommandAdded::New(id),
+        Err(Error::Existing(id)) => CommandAdded::Existing(id),
+        Err(Error::Full | Error::Missing) => CommandAdded::Refused(NoRoom::Limit),
+    }
 }
 
 /// Without a room (the world fills the window), shortcuts are kept in
@@ -123,7 +198,14 @@ pub fn add_folders(
     let slot = slot.or(rooms.first().map(|room| room.slot)).unwrap_or(0);
     let grid = rooms.iter().find(|room| room.slot == slot).map(|room| room.grid);
     let mut out = Added::default();
-    for (n, folder) in folders.iter().enumerate() {
+    for folder in folders {
+        let target = Target::Folder { folder: *folder, account };
+        // (a full desktop still shows the one it has)
+        if let Some(id) = existing(desktop, slot, &target) {
+            out.existing += 1;
+            out.first.get_or_insert(id);
+            continue;
+        }
         let stored: Vec<_> = desktop
             .shortcuts
             .iter()
@@ -143,10 +225,9 @@ pub fn add_folders(
                 .find(|at| !stored.iter().any(|(_, taken)| taken == at)),
         };
         let Some(free) = free else {
-            out.no_room += folders.len() - n;
-            break;
+            out.no_room += 1;
+            continue;
         };
-        let target = Target::Folder { folder: *folder, account };
         match desktop.add(target, slot, free) {
             Ok(id) => {
                 out.added += 1;
@@ -160,8 +241,7 @@ pub fn add_folders(
                 out.first.get_or_insert(id);
             }
             Err(Error::Full | Error::Missing) => {
-                out.no_room += folders.len() - n;
-                break;
+                out.limit += 1;
             }
         }
     }
@@ -216,7 +296,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                 if back.secondary_clicked() {
                     state.menu_cell = pointer.and_then(|pos| room.grid.cell_at(pos)).map(|cell| (room.slot, cell));
                 }
-                room_menu(&back, env.p, desktop.size, room.slot, state.menu_cell, &mut ops);
+                room_menu(&back, env.p, desktop, room, cells, state.menu_cell, &mut ops);
                 for &(id, cell) in cells {
                     let Some(shortcut) = desktop.shortcut(id) else { continue };
                     let face = targets::face(shortcut, &env.facts, &env.folders);
@@ -371,19 +451,13 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     continue;
                 };
                 let taken: Vec<_> = shown[at].iter().map(|(_, cell)| *cell).collect();
-                let cell = cell
-                    .filter(|cell| !taken.contains(cell))
-                    .or_else(|| rooms[at].grid.first_free(&taken));
-                // (a room with no free cell takes no more)
-                let Some(cell) = cell else { continue };
-                match desktop.add(Target::command(command), slot, cell) {
-                    Ok(id) => {
+                match add_command(desktop, &rooms[at], &taken, command, cell) {
+                    CommandAdded::New(id) => {
                         state.selected = Some(id);
                         changed = true;
                     }
-                    // the one that desktop has already is shown instead
-                    Err(Error::Existing(id)) => state.selected = Some(id),
-                    Err(Error::Full | Error::Missing) => {}
+                    CommandAdded::Existing(id) => state.selected = Some(id),
+                    CommandAdded::Refused(why) => out.push(Request::Notice(why.text())),
                 }
             }
             Op::Drop { id, slot, cell } => {
@@ -443,10 +517,24 @@ fn shortcut_menu(response: &egui::Response, p: &Palette, id: u32, face: &Face, i
     });
 }
 
-/// The menu of the desktop itself, opened on a cell without a shortcut.
-fn room_menu(back: &egui::Response, p: &Palette, size: Size, slot: u8, menu_cell: Option<(u8, (u16, u16))>, ops: &mut Vec<Op>) {
+/// The menu of the desktop itself, opened on a cell without a shortcut
+/// of `room`, whose shortcuts are shown in `cells`. *Add a command ›* is
+/// greyed, with the reason, while that desktop takes no new shortcut.
+fn room_menu(
+    back: &egui::Response,
+    p: &Palette,
+    desktop: &Desktop,
+    room: &Room,
+    cells: &[(u32, (u16, u16))],
+    menu_cell: Option<(u8, (u16, u16))>,
+    ops: &mut Vec<Op>,
+) {
+    let (size, slot) = (desktop.size, room.slot);
     menu::context_menu(back, p, |ui| {
-        menu::submenu(ui, p, ICON_ADD, tr!("fs-desktop-add-command"), true, |ui| {
+        // (worked out while the menu is open only)
+        let taken: Vec<_> = cells.iter().map(|(_, cell)| *cell).collect();
+        let refused = no_room(desktop, &room.grid, &taken);
+        let add = menu::submenu_heading(ui, p, ICON_ADD, tr!("fs-desktop-add-command"), refused.is_none(), |ui| {
             let height = (ui.ctx().content_rect().height() * 0.6).max(160.0);
             egui::ScrollArea::vertical().max_height(height).show(ui, |ui| {
                 for (command, label, icon, refused) in targets::addable() {
@@ -458,6 +546,9 @@ fn room_menu(back: &egui::Response, p: &Palette, size: Size, slot: u8, menu_cell
                 }
             });
         });
+        if let Some(why) = refused {
+            add.on_hover_text(why.text());
+        }
         menu::submenu(ui, p, ICON_SIZE, tr!("fs-desktop-size"), true, |ui| {
             for choice in Size::ALL {
                 if menu::check(ui, p, "", size_label(choice), choice == size, true) {

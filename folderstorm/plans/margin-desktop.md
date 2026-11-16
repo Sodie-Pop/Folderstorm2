@@ -623,8 +623,9 @@ What the build changed against the sections above, and what it found.
   it). A click does not take the keyboard focus, as for Aurora's buttons:
   the avatar's keys keep working after a click on the desktop.
 - **Not done in checkpoint 1**: a notice when a room has no free cell for
-  *Add a command* (the command is then not added); the count of shortcuts
-  on a monitor not in use; *Remove all shortcuts…*.
+  *Add a command* (the command is then not added; done since, see "A full
+  desktop" in section 20); the count of shortcuts on a monitor not in use;
+  *Remove all shortcuts…*.
 - **Tests**: `folderstorm/desktop/{store,place,targets}.rs` (pure),
   `folderstorm/desktop/tests.rs` (frames, with the renderer's cut of the
   world's labels), `app/folderstorm_desktop.rs` (a command reaches
@@ -693,6 +694,20 @@ changed against the sections above, and what it decided.
   cannot be played) and moves it to the third monitor at 300; `rlva`.
   The folders are those of the demo's login (Clothes, Landmarks, the
   Photo Album, Objects).
+- **A full desktop says so** (the human's decision, on
+  `claude/margin-desktop-full-notice`). Every way of adding to a room
+  with no free cell (*Add a command ›*, *Add to desktop* from the
+  Inventory, a drop) adds nothing there and says, in the chat's notices
+  (topic Items): "This desktop is full: remove a shortcut or use a smaller
+  icon size." When some folders of a selection went in, the notice starts
+  with how many did not fit. Only the target room counts: nothing flows to
+  another monitor's desktop (section 5 does not say it should). At the
+  profile's limit (256 shortcuts) the notice says that limit instead.
+  While the room takes no new shortcut, *Add a command ›* is greyed with
+  the same reason as its tooltip (the desktop's menu is then reached on
+  the room's edge past its cells). A shortcut that desktop has already is
+  still found and selected, full or not (`surface::add_command`,
+  `add_folders`). `surface::NoRoom` holds the two reasons.
 - **Not done in checkpoint 2**: a drop is not offered on a slot without a
   room (there is nothing to drop on); *Move to ›* a slot from the menu
   (checkpoint 3, with the keyboard); folder windows already open when
@@ -703,6 +718,7 @@ changed against the sections above, and what it decided.
   name, its request and its menu; gone and other-account folders;
   `@showinv`; drops of a folder, a mixed selection, the same folder, an
   item, the Library, over the world; adding without a room and in a full
-  one), `app/folderstorm_desktop.rs` (one window per folder, refused
+  one; a full room and the profile's limit on every way of adding, the
+  greyed *Add a command ›*), `app/folderstorm_desktop.rs` (one window per folder, refused
   under `@showinv`, gone folders),
   `ui/inventory/context_catalog/folder_tabs.rs` (the menu entry).

@@ -141,8 +141,16 @@ pub fn added_notice(added: &Added, left_out: usize, turned_on: bool, shown: bool
     if added.existing > 0 && added.added == 0 {
         parts.push(tr!("fs-desktop-add-existing").to_owned());
     }
+    // a full room: what was left out when some went in, then why (as a
+    // command added to that room says)
     if added.no_room > 0 {
-        parts.push(tr!("fs-desktop-add-full", count = added.no_room));
+        if added.added > 0 || added.existing > 0 {
+            parts.push(tr!("fs-desktop-add-full", count = added.no_room));
+        }
+        parts.push(surface::NoRoom::Full.text());
+    }
+    if added.limit > 0 {
+        parts.push(surface::NoRoom::Limit.text());
     }
     if left_out > 0 {
         parts.push(tr!("fs-desktop-left-out", count = left_out));
