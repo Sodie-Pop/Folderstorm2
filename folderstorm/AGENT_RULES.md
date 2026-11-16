@@ -97,13 +97,28 @@ viewer the **Legacy Viewer**. In `folderstorm/` docs, the original fork is
 
 ## 4. Checks
 
-Before each PR, from the repository root:
+Run the full checks **once per PR**, just before the commit that goes up for
+review, not after each change. While working, run only the tests you need
+(`cargo test --profile ci -p aurora-viewer <filter>`). From the repository
+root:
 
 ```bash
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace            # filter by name if needed; never -p alone
+cargo clippy --workspace --all-targets --profile ci -- -D warnings
+cargo test --workspace --profile ci   # filter by name if needed; never -p alone
 ```
+
+**Builds in a cloud session** (one or several agents):
+
+- Every `cargo` command except `cargo fmt` uses `--profile ci` (build, check,
+  clippy, test, and `run` for the demo). That profile, defined in
+  `Cargo.toml`, compiles fast rather than running fast.
+- All agents share one build folder: set
+  `CARGO_TARGET_DIR=<repository root>/target` for every `cargo` command, also
+  in git worktrees. A worktree's own `target/` is then unused; delete it.
+- Agents take turns behind one shared lock:
+  `flock <scratchpad>/cargo.lock cargo …`. Two builds at once fight over the
+  build folder and the machine.
 
 On Linux (a cloud session), Windows-only helpers look unused, so run clippy
 with `-- -D warnings -A dead-code` as upstream's Linux CI job does, then run it
