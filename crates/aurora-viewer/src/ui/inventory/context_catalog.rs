@@ -1,5 +1,7 @@
 //! Native inventory commands and their current availability, before presentation.
 mod extra;
+// Folderstorm: Create tab / Add to › (context_catalog/folder_tabs.rs)
+mod folder_tabs;
 use super::menu_layout::{Direction, Entry, Kind, LOCK, TEXT, children};
 use super::*;
 use crate::world::appearance::Action as Wear;
@@ -25,6 +27,8 @@ pub(super) enum Command {
     BulkPermissions(Vec<Uuid>),
     // Folderstorm: Review bulk changes
     BulkReview(Vec<Uuid>),
+    // Folderstorm: Create tab / Add to › (context_catalog/folder_tabs.rs)
+    FolderTab(folder_tabs::Command),
     Rename(Uuid),
     Image(Uuid),
     Protect(Uuid),
@@ -52,6 +56,8 @@ pub(super) struct Catalog {
     pub prepare_outfit: Option<Uuid>,
     /// Complete presentation metadata; never retains executable commands.
     editing: bool,
+    // Folderstorm: why an entry is greyed, by entry id (context_catalog/folder_tabs.rs)
+    pub help: std::collections::BTreeMap<String, String>,
 }
 impl Catalog {
     fn add(&mut self, id: impl Into<String>, zone: &str, icon: &str, label: &str, enabled: bool, command: Command) {
@@ -756,6 +762,7 @@ fn build_mode(inv: &Inventory, id: Uuid, st: &InventoryUi, prefs: &InventoryPref
             ready && (1..=super::bulk_review::MAX).contains(&ids.len()),
             Command::BulkReview(ids.clone()),
         );
+        folder_tabs::entries(&mut c, inv, st, prefs, facts, &ids); // Folderstorm: Create tab / Add to ›
         c.add(
             "rename",
             TEXT,
@@ -1260,6 +1267,7 @@ pub(super) fn execute(
         }
         Command::BulkPermissions(ids) => st.open_bulk_permissions(ids),
         Command::BulkReview(ids) => super::bulk_review::open(st, ids), // Folderstorm: Review bulk changes
+        Command::FolderTab(command) => folder_tabs::execute(command, inv, st, prefs, facts), // Folderstorm: Create tab / Add to ›
         Command::Rename(id) => st.begin_rename(inv, id),
         Command::Image(id) => st.thumbnail.open(id),
         Command::Protect(id) => {

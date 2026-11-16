@@ -880,6 +880,7 @@ fn the_card_and_the_menu_are_drawn() {
                 world: &mut world,
             },
             Some(window.seen),
+            &mut apply::NoShell,
         );
         window.send(&outcome.commands);
         window.frame();

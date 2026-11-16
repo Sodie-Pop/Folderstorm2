@@ -20,9 +20,11 @@ use std::sync::Arc;
 /// The embedded Tabler icons of the submenu.
 pub(super) const ICON_LAYOUTS: &str = "layout-dashboard-filled";
 pub(super) const ICON_LAYOUT: &str = "layout-filled";
+pub(super) const ICON_WORKSPACE: &str = "app-window-filled";
 pub(super) const ICON_OPEN: &str = "layout-dashboard-filled";
 pub(super) const ICON_PREVIOUS: &str = "arrow-back-up";
 pub(super) const ICON_UNLOCK: &str = "lock-open";
+pub(super) const ICON_STRIP: &str = "star-filled";
 
 /// Something asked from the menu or the card, run before the next frame's
 /// interface.
@@ -52,6 +54,17 @@ pub enum Request {
     Update(String),
     /// *Save new*: the arrangement of now, these parts of it, under a name.
     SaveNew(String, Parts),
+    /// Apply the workspace of this name.
+    ApplyWorkspace(String),
+    /// The star of the workspace of this name, given or taken away.
+    StarWorkspace(String, bool),
+    /// *Update*: the workspace of this name takes the windows open now.
+    UpdateWorkspace(String),
+    /// *Save new* as a workspace: the windows open now under a name, with
+    /// the layout in use and the Inventory folder windows when asked.
+    SaveWorkspace(String, super::apply::Keep),
+    /// The favorites strip shown or put away (`super::strip`).
+    Strip(bool),
 }
 
 /// What a keyboard action asks (`crate::folderstorm::keys`). `hidden`: in
@@ -89,6 +102,8 @@ pub struct View {
     /// favorites in their order, or every usable layout when there is no
     /// favorite.
     pub layouts: Vec<(String, bool)>,
+    /// The workspaces the menu lists, by the same rule.
+    pub workspaces: Vec<(String, bool)>,
     /// The viewer window is locked or borderless.
     pub held: bool,
     /// There is an arrangement to go back to.
@@ -96,24 +111,87 @@ pub struct View {
     /// The layout the toolbar's toggle would apply now; None until its two
     /// layouts are chosen.
     pub toggle: Option<String>,
+    /// The favorites strip is shown (`super::strip`).
+    pub strip: bool,
+    /// What the strip shows: the usable favorites of both kinds, in the
+    /// user's order.
+    pub favorites: Vec<Favorite>,
+}
+
+/// A favorite as the strip shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Favorite {
+    pub kind: pick::Kind,
+    pub name: String,
+    pub in_use: bool,
+    /// In use, and no longer as saved (the switcher's "modified").
+    pub modified: bool,
+}
+
+/// The layout in use and the workspace in use are no longer as saved
+/// (`super::apply::modified`, `workspace_modified`). Only worked out while
+/// the strip is shown, the one place that tells it from the view.
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+pub struct Modified {
+    pub layout: bool,
+    pub workspace: bool,
+}
+
+impl Favorite {
+    /// What a click on it asks.
+    pub fn apply(&self) -> Request {
+        match self.kind {
+            pick::Kind::Layout => Request::Apply(self.name.clone()),
+            pick::Kind::Workspace => Request::ApplyWorkspace(self.name.clone()),
+        }
+    }
+
+    /// The icon of its kind.
+    pub fn icon(&self) -> &'static str {
+        match self.kind {
+            pick::Kind::Layout => ICON_LAYOUT,
+            pick::Kind::Workspace => ICON_WORKSPACE,
+        }
+    }
 }
 
 impl View {
-    fn of(store: &Store, previous: bool) -> Self {
+    fn of(store: &Store, previous: bool, modified: Modified) -> Self {
         let lines = pick::entries(store);
         let favorites = lines.iter().any(|line| line.favorite);
-        View {
-            layouts: lines
+        let of = |kind: pick::Kind| -> Vec<(String, bool)> {
+            lines
                 .iter()
-                .filter(|line| line.favorite || !favorites)
-                .filter_map(|line| Some((store.layout(line.index)?.name.clone(), store.is_active(line.index))))
-                .collect(),
+                .filter(|line| line.kind == kind && (line.favorite || !favorites))
+                .filter_map(|line| Some((line.name(store)?.to_owned(), line.in_use(store))))
+                .collect()
+        };
+        View {
+            layouts: of(pick::Kind::Layout),
+            workspaces: of(pick::Kind::Workspace),
             held: store.window_held,
             previous,
             toggle: pick::toggle_target(store)
                 .ok()
                 .and_then(|index| store.layout(index))
                 .map(|layout| layout.name.clone()),
+            strip: store.strip,
+            favorites: lines
+                .iter()
+                .filter(|line| line.favorite)
+                .filter_map(|line| {
+                    Some(Favorite {
+                        kind: line.kind,
+                        name: line.name(store)?.to_owned(),
+                        in_use: line.in_use(store),
+                        modified: line.in_use(store)
+                            && match line.kind {
+                                pick::Kind::Layout => modified.layout,
+                                pick::Kind::Workspace => modified.workspace,
+                            },
+                    })
+                })
+                .collect(),
         }
     }
 }
@@ -121,7 +199,7 @@ impl View {
 /// A number that changes when the view would: the names in their order,
 /// the layout in use, the hold, *Previous*. Made each frame without
 /// allocating; the view itself only when it differs.
-pub(super) fn stamp(store: &Store, previous: bool) -> u64 {
+pub(super) fn stamp(store: &Store, previous: bool, modified: Modified) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for record in &store.layouts {
         record.layout().map(|layout| layout.name.as_str()).hash(&mut hasher);
@@ -132,6 +210,19 @@ pub(super) fn stamp(store: &Store, previous: bool) -> u64 {
         favorite.layout().hash(&mut hasher);
     }
     store.toggle.hash(&mut hasher);
+    for record in &store.workspaces {
+        record.workspace().map(|workspace| workspace.name.as_str()).hash(&mut hasher);
+    }
+    store.active_workspace.hash(&mut hasher);
+    for favorite in &store.favorites {
+        favorite.workspace().hash(&mut hasher);
+    }
+    // the strip: shown or not, and the favorites of both kinds in their
+    // one order
+    (store.strip, modified).hash(&mut hasher);
+    for favorite in &store.favorites {
+        (favorite.layout(), favorite.workspace()).hash(&mut hasher);
+    }
     // (never the stamp of a session that has published nothing)
     hasher.finish() | 1
 }
@@ -140,8 +231,8 @@ fn view_id() -> egui::Id {
     egui::Id::unique("folderstorm_workspaces_menu")
 }
 
-pub(super) fn publish(ctx: &egui::Context, store: &Store, previous: bool) {
-    ctx.data_mut(|d| d.insert_temp(view_id(), Arc::new(View::of(store, previous))));
+pub(super) fn publish(ctx: &egui::Context, store: &Store, previous: bool, modified: Modified) {
+    ctx.data_mut(|d| d.insert_temp(view_id(), Arc::new(View::of(store, previous, modified))));
 }
 
 pub(super) fn view(ctx: &egui::Context) -> Arc<View> {
@@ -164,6 +255,14 @@ pub(super) fn body(ui: &mut egui::Ui, p: &Palette) {
     if !view.layouts.is_empty() {
         menu::separator(ui, p);
     }
+    for (name, active) in &view.workspaces {
+        if menu::check(ui, p, ICON_WORKSPACE, name, *active, true) {
+            request = Some(Request::ApplyWorkspace(name.clone()));
+        }
+    }
+    if !view.workspaces.is_empty() {
+        menu::separator(ui, p);
+    }
     if menu::item(ui, p, ICON_OPEN, tr!("fs-layouts-menu-open")) {
         request = Some(Request::Switcher);
     }
@@ -172,6 +271,9 @@ pub(super) fn body(ui: &mut egui::Ui, p: &Palette) {
     }
     if view.held && menu::item(ui, p, ICON_UNLOCK, tr!("fs-layouts-unlock")) {
         request = Some(Request::Unlock);
+    }
+    if menu::check(ui, p, ICON_STRIP, tr!("fs-strip-show"), view.strip, true) {
+        request = Some(Request::Strip(!view.strip));
     }
     if let Some(request) = request {
         ask(ui.ctx(), request);

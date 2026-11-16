@@ -398,6 +398,7 @@ pub(super) fn show(
             custom_tabs::select(st, prefs, slot);
         }
         menu::context_menu(&response, p, |ui| custom_tabs::tab_menu(ui, p, st, prefs, slot));
+        custom_tabs::folder_ui::drop_on_tab(ui, p, inv, st, prefs, slot, &response); // Folderstorm: folders dropped on a tab
     }
     let saved = if scoped { Vec::new() } else { super::super::smart_store::list() };
     if !saved.is_empty() || (st.finding_similar() && !scoped) {

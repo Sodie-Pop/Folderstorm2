@@ -118,6 +118,9 @@ struct Pane {
     sheet: Option<(usize, contacts_ui::Sheet)>,
     /// Checkpoint 11: a web link that waits for the user's yes.
     link: Option<chat_ui::LinkAsk>,
+    /// Tests: where that question was drawn last.
+    #[cfg(test)]
+    asked_at: Option<Rect>,
 }
 
 /// What the host's windows keep for the monitors' own.
@@ -161,6 +164,18 @@ impl Monitors {
                 },
             )
         });
+    }
+
+    /// Tests: a web link that waits for the user's yes in the seat's chat
+    /// part, and where its question was drawn last.
+    #[cfg(test)]
+    pub(super) fn test_link(&mut self, seat: Seat, link: Option<chat_ui::LinkAsk>) {
+        self.pane_mut(seat).link = link;
+    }
+
+    #[cfg(test)]
+    pub(super) fn test_asked_at(&self, seat: Seat) -> Option<Rect> {
+        self.pane(seat).asked_at
     }
 
     #[cfg(test)]
@@ -267,6 +282,42 @@ const TOOL_GAP: f32 = 3.0;
 const MIN_CHAT: f32 = 96.0;
 /// The room the chat's box keeps under the lines.
 const BOX_ROOM: f32 = 50.0;
+
+/// Where the picture and the chat part go in a monitor's body, under its
+/// header: the picture's room, and the chat part's when it has one.
+///
+/// - **Chat off**, or no room for a chat part worth drawing: the picture's
+///   room is the whole body, the picture centred in it with bands where
+///   its proportions leave them.
+/// - **Chat on**: the chat part has at least `wanted` (or what the least
+///   picture leaves); the picture sits at the top, as tall as its
+///   proportions make it at the body's width (never less than the least
+///   picture), and **the chat part takes all the rest**: no band above or
+///   under the picture. Without a picture (`picture` is None: a reason is
+///   shown in its place, such as "This is the active character"), that
+///   reason keeps the least picture's room and the chat the rest.
+/// - A window wider than the picture's proportions keeps its bands at the
+///   sides and the chat under the picture: a chat beside it would be a
+///   narrow column of lines, and its window's size follows the chat part
+///   under the picture (`rules::natural_size`, `toggled_height`).
+///
+/// `picture`: the picture's size in pixels.
+fn split(body: Rect, chat: bool, wanted: f32, picture: Option<[usize; 2]>) -> (Rect, Option<Rect>) {
+    let least = MIN_PICTURE as f32;
+    let chat_height = if chat { wanted.min(body.height() - least) } else { 0.0 };
+    if chat_height < MIN_CHAT {
+        return (body, None);
+    }
+    let natural = match picture {
+        Some([w, h]) => body.width() * h.max(1) as f32 / w.max(1) as f32,
+        None => least,
+    };
+    // (the picture's room is never more than the chat part's least leaves)
+    let room = natural.max(least).min(body.height() - chat_height).round();
+    let picture = Rect::from_min_max(body.min, egui::pos2(body.right(), body.top() + room));
+    let chat = Rect::from_min_max(egui::pos2(body.left(), picture.bottom()), body.max);
+    (picture, Some(chat))
+}
 
 /// A child of `ui` in `rect`, clipped to it, laid out from the top.
 fn child(ui: &mut egui::Ui, rect: Rect, inside: Vec2) -> egui::Ui {
@@ -624,25 +675,24 @@ impl Window_ {
             self.monitor_options(ui, &p, body, seat, config, acts);
         } else {
             // the chat part under the picture, when there is room for
-            // both; while the "+N" list is open it takes what the least
-            // picture leaves
-            // (checkpoint 11: and so does a "New IM" or "Friends" sheet)
+            // both, with all the room the picture does not use; while the
+            // "+N" list is open it takes what the least picture leaves
+            // (checkpoint 11: and so does a "New IM" or "Friends" sheet;
+            // a link's question makes its own room: `monitor_chat`)
             let pane = self.monitors.pane(seat);
             let wanted = if pane.more || pane.sheet.is_some() {
                 body.height()
             } else {
                 CHAT as f32
             };
-            let chat = if config.chat {
-                wanted.min(body.height() - MIN_PICTURE as f32)
-            } else {
-                0.0
-            };
-            let chat = if chat >= MIN_CHAT { chat } else { 0.0 };
-            let picture = Rect::from_min_max(body.min, egui::pos2(body.right(), body.bottom() - chat));
+            // (no character shown: no chat part, the reason has the body)
+            let picture = state
+                .as_ref()
+                .and_then(|(slot, _)| self.host.screens[*slot].shown)
+                .map(|shown| shown.size);
+            let (picture, chat) = split(body, config.chat && state.is_some(), wanted, picture);
             self.monitor_picture_in(ui, &p, picture, seat, state.as_ref(), now);
-            if chat > 0.0 {
-                let room = Rect::from_min_max(egui::pos2(body.left(), picture.bottom()), body.max);
+            if let Some(room) = chat {
                 viewing = self.monitor_chat(ui, &p, room, seat, state.as_ref(), now, acts);
             } else {
                 self.monitors.pane_mut(seat).typing = false;
@@ -862,6 +912,9 @@ impl Window_ {
             return Viewing::Nothing;
         };
         let slot = *slot;
+        // (under the header: the most a link's question may cover)
+        let below_header =
+            Rect::from_min_max(egui::pos2(room.left(), ui.max_rect().top() + HEADER as f32), room.max).intersect(ui.clip_rect());
         let mut ui = child(ui, room, Vec2::new(6.0, 4.0));
         let name = faces::shown_name(state);
         let pane = self.monitors.pane(seat);
@@ -899,82 +952,132 @@ impl Window_ {
         let mut answer = false;
         let mut open = None;
         let mut web = None;
-        let lines = (ui.available_height() - if sheet.is_some() { 0.0 } else { BOX_ROOM }).max(24.0);
-        egui::Frame::new()
-            .fill(p.field)
-            .inner_margin(6.0)
-            .corner_radius(ui.visuals().window_corner_radius)
-            .show(&mut ui, |ui| {
-                ui.set_width(ui.available_width());
-                egui::ScrollArea::vertical()
-                    .id_salt((
-                        "folderstorm-monitor-lines",
-                        seat,
-                        slot,
-                        shown,
-                        more,
-                        sheet.as_ref().map(|s| s.which),
-                    ))
-                    .auto_shrink([false, false])
-                    .max_height((lines - 12.0).max(12.0))
-                    .stick_to_bottom(!more && sheet.is_none())
-                    .show(ui, |ui| {
-                        if let Some(open_sheet) = sheet.as_mut() {
-                            let clicks = contacts_ui::sheet(ui, p, book, slot, &name, in_world, open_sheet);
-                            if clicks.close {
-                                sheet = None;
-                                acted = true;
-                            }
-                            open = clicks.open;
-                            return;
-                        }
-                        if more {
-                            let clicks = chips::list(ui, p, chat, slot, &drawn.hidden);
-                            acted |= clicks.apply(chat, slot, &mut shown, &mut more);
-                            return;
-                        }
-                        match chat.open_thread(slot, shown) {
-                            Some(thread) => {
-                                if thread.earlier_login {
-                                    ui.label(RichText::new(tr!("folderstorm-chat-earlier-login")).italics().color(p.muted));
+        // what goes under the lines keeps its whole room: a link's
+        // question (in the box's place: a monitor's window is small), or
+        // the box, measured first; the sheet takes the box's room too
+        // (nothing is typed there)
+        let asked_before = link.is_some();
+        let speaks = sheet.is_none() && chat.open_thread(slot, shown).is_some();
+        let who = chat_ui::Speaker {
+            slot,
+            conversation: shown,
+            name: &name,
+            said_as: None,
+        };
+        let question = match &link {
+            Some(ask) => chat_ui::measure(&mut ui, "folderstorm-monitor-link-probe", |ui| {
+                chat_ui::link_question(ui, p, ask);
+            }),
+            None => 0.0,
+        };
+        let under = match &link {
+            Some(_) => question + 3.0,
+            None if speaks => {
+                let height = chat_ui::measure(&mut ui, "folderstorm-monitor-box-probe", |ui| {
+                    chat_ui::compose(ui, p, chat, who, now);
+                });
+                (height + 3.0).max(BOX_ROOM)
+            }
+            None => 0.0,
+        };
+        let left = ui.available_height() - under;
+        // (a question comes first: too little room for lines, no lines)
+        let lines = if asked_before { left } else { left.max(24.0) };
+        let lined = lines >= 24.0;
+        if lined {
+            egui::Frame::new()
+                .fill(p.field)
+                .inner_margin(6.0)
+                .corner_radius(ui.visuals().window_corner_radius)
+                .show(&mut ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    egui::ScrollArea::vertical()
+                        .id_salt((
+                            "folderstorm-monitor-lines",
+                            seat,
+                            slot,
+                            shown,
+                            more,
+                            sheet.as_ref().map(|s| s.which),
+                        ))
+                        .auto_shrink([false, false])
+                        .max_height((lines - 12.0).max(12.0))
+                        .stick_to_bottom(!more && sheet.is_none())
+                        .show(ui, |ui| {
+                            if let Some(open_sheet) = sheet.as_mut() {
+                                let clicks = contacts_ui::sheet(ui, p, book, slot, &name, in_world, open_sheet);
+                                if clicks.close {
+                                    sheet = None;
+                                    acted = true;
                                 }
-                                for entry in thread.entries().filter(|entry| chat.shows_entry(entry)) {
-                                    match chat_ui::entry_row(ui, p, entry, None) {
-                                        chat_ui::Clicked::Answer | chat_ui::Clicked::Grid => answer = true,
-                                        chat_ui::Clicked::Web(target) => web = Some(target),
-                                        chat_ui::Clicked::Nothing | chat_ui::Clicked::Place => {}
+                                open = clicks.open;
+                                return;
+                            }
+                            if more {
+                                let clicks = chips::list(ui, p, chat, slot, &drawn.hidden);
+                                acted |= clicks.apply(chat, slot, &mut shown, &mut more);
+                                return;
+                            }
+                            match chat.open_thread(slot, shown) {
+                                Some(thread) => {
+                                    if thread.earlier_login {
+                                        ui.label(RichText::new(tr!("folderstorm-chat-earlier-login")).italics().color(p.muted));
+                                    }
+                                    for entry in thread.entries().filter(|entry| chat.shows_entry(entry)) {
+                                        match chat_ui::entry_row(ui, p, entry, None) {
+                                            chat_ui::Clicked::Answer | chat_ui::Clicked::Grid => answer = true,
+                                            chat_ui::Clicked::Web(target) => web = Some(target),
+                                            chat_ui::Clicked::Nothing | chat_ui::Clicked::Place => {}
+                                        }
                                     }
                                 }
+                                None => {
+                                    ui.label(RichText::new(tr!("folderstorm-chat-empty", name = name.clone())).color(p.muted));
+                                }
                             }
-                            None => {
-                                ui.label(RichText::new(tr!("folderstorm-chat-empty", name = name.clone())).color(p.muted));
-                            }
-                        }
-                    });
-            });
+                        });
+                });
+        }
         ui.add_space(3.0);
         if let Some(target) = web {
             link = chat_ui::follow_web(ui.ctx(), &target);
+            // (a question asked now has no room yet: it is drawn in the
+            // next frame, which this asks for)
+            acted = true;
         }
         let mut composed = chat_ui::Composed::default();
+        #[cfg(test)]
+        let mut asked_at = None;
         if let Some(ask) = &link {
-            // (in the box's place: a monitor's window is small)
-            if chat_ui::link_question(&mut ui, p, ask) {
-                link = None;
-                acted = true;
+            if asked_before {
+                // at the bottom of the window, where the lines left it its
+                // room; in a window too low for that, over what is above
+                // it (the chips, the picture), never past the header
+                let bottom = room.bottom() - 4.0;
+                let top = (bottom - question).max(below_header.top());
+                let at = Rect::from_min_max(egui::pos2(room.left() + 6.0, top), egui::pos2(room.right() - 6.0, bottom));
+                let mut place = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt("folderstorm-monitor-link")
+                        .max_rect(at)
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
+                place.set_clip_rect(below_header);
+                let answered = chat_ui::link_question(&mut place, p, ask);
+                #[cfg(test)]
+                {
+                    asked_at = Some(place.min_rect());
+                }
+                if answered {
+                    link = None;
+                    acted = true;
+                }
             }
-        } else if sheet.is_none() && chat.open_thread(slot, shown).is_some() {
-            // (the sheet takes the box's room too: nothing is typed there)
-            let who = chat_ui::Speaker {
-                slot,
-                conversation: shown,
-                name: &name,
-                said_as: None,
-            };
+        } else if speaks {
             composed = chat_ui::compose(&mut ui, p, chat, who, now);
         }
         let viewing = match chat.open_thread(slot, shown) {
-            Some(_) if !more && sheet.is_none() => Viewing::Thread(slot, shown),
+            Some(_) if lined && !more && sheet.is_none() => Viewing::Thread(slot, shown),
             _ => Viewing::Nothing,
         };
         if let Some((what, who)) = open {
@@ -993,6 +1096,10 @@ impl Window_ {
         pane.typing = composed.focused;
         pane.sheet = sheet.map(|sheet| (slot, sheet));
         pane.link = link;
+        #[cfg(test)]
+        {
+            pane.asked_at = asked_at;
+        }
         if seat == Seat::Cycling && composed.typed {
             // a text typed here: the turn waits for it
             self.monitors.typed = Some((slot, shown));

@@ -49,6 +49,7 @@ pub fn page(cx: &mut Cx, tab: usize) {
                 if cx.searching() {
                     let keys: Vec<String> = cx.s.keybinds.get(a).iter().flatten().map(|b| b.label()).collect();
                     cx.keywords(&keys.join(" "));
+                    super::folderstorm_search::shortcut(cx, a); // Folderstorm: search keywords
                 }
                 cx.wide().row_with(label, "", &t, |ui, s, st, _| {
                     for slot in 0..2 {

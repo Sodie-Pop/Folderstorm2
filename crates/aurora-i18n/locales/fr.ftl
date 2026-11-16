@@ -1228,6 +1228,62 @@ inventory-custom-tab-delete-question = Supprimer l'onglet personnalisé « { $na
 inventory-custom-tab-clone-name = { $name } (copie)
 inventory-custom-tab-demo-media = Textures et sons
 inventory-custom-tab-demo-named = Objets de démo
+inventory-folder-tab-create = Créer un onglet
+inventory-folder-tab-add-to = Ajouter à
+inventory-folder-tab-new = Nouvel onglet…
+inventory-folder-tab-has-tip = Déjà dans cet onglet.
+inventory-folder-tab-why-empty = Sélectionnez d'abord des dossiers ou des objets.
+inventory-folder-tab-why-refused = La racine de l'inventaire, la Bibliothèque, la Corbeille et ce qu'elle contient ne peuvent pas aller dans un onglet.
+inventory-folder-tab-why-loading = L'inventaire n'est pas encore chargé.
+inventory-folder-tab-why-window = Une fenêtre ouverte sur un seul dossier n'a pas d'onglets personnalisés.
+inventory-folder-tab-added-one = « { $folder } » ajouté à « { $tab } ».
+inventory-folder-tab-added-many = { $count ->
+    [one] { $count } élément ajouté à « { $tab } ».
+   *[other] { $count } éléments ajoutés à « { $tab } ».
+    }
+inventory-folder-tab-added-already = { $count ->
+    [one] { $count } y était déjà.
+   *[other] { $count } y étaient déjà.
+    }
+inventory-folder-tab-already-one = « { $folder } » est déjà dans « { $tab } ».
+inventory-folder-tab-already-many = Ils sont déjà dans « { $tab } ».
+inventory-folder-tab-add = Ajouter la sélection
+inventory-folder-tab-replace = N'utiliser que la sélection
+inventory-folder-tab-clear = Tout afficher
+inventory-folder-tab-clear-tip = Afficher à nouveau tout l'inventaire dans cet onglet : aucun dossier, aucun objet épinglé. Ses filtres et sa recherche restent.
+inventory-folder-tab-select-tip = Sélectionnez d'abord des dossiers ou des objets dans la liste de l'inventaire : { $count } dossiers au plus, ni la Corbeille ni la Bibliothèque.
+inventory-folder-tab-limit = Un onglet peut afficher au plus { $count } dossiers.
+inventory-folder-tab-heading = Dossiers et objets épinglés
+inventory-folder-tab-all = Tous les dossiers
+inventory-folder-tab-elsewhere = Les dossiers et objets de cet onglet ont été choisis sur un autre compte : ici, il affiche tous les dossiers.
+inventory-folder-tab-help = L'onglet affiche ces dossiers et tout ce qu'ils contiennent, et les objets épinglés en tête, avec ses filtres et sa recherche. Sélectionnez des dossiers ({ $count } au plus) ou des objets dans la liste de l'inventaire, puis ajoutez-les.
+inventory-folder-tab-remove = Retirer de l'onglet
+inventory-folder-tab-deleted-folder = Dossier supprimé
+inventory-folder-tab-status-missing = supprimé
+inventory-folder-tab-status-trash = dans la Corbeille
+inventory-folder-tab-status-refused = non autorisé
+inventory-folder-tab-note-gone = { $count ->
+    [one] { $count } dossier ou objet de cet onglet est supprimé ou dans la Corbeille.
+   *[other] { $count } dossiers ou objets de cet onglet sont supprimés ou dans la Corbeille.
+    }
+inventory-folder-tab-note-remove = Retirer de l'onglet
+inventory-folder-tab-note-remove-tip = Les oublier dans cet onglet. Ce qui sera restauré depuis la Corbeille n'y reviendrait pas.
+inventory-folder-tab-demo-name = Vêtements et corps
+inventory-folder-tab-demo-other = Au quotidien
+inventory-folder-tab-why-broken = Un lien de la sélection ne mène à rien : il ne peut pas aller dans un onglet.
+inventory-folder-tab-item-limit = Un onglet peut épingler au plus { $count } objets.
+inventory-folder-tab-deleted-item = Objet supprimé
+inventory-quick-pinned = Objet épinglé
+inventory-quick-open-window = Ouvrir dans une fenêtre
+inventory-quick-open-window-tip = Afficher cet onglet dans une petite fenêtre à lui.
+inventory-quick-flat = Liste à plat
+inventory-quick-flat-tip = Lister tous les objets de cet onglet sans dossiers, chacun avec son dossier.
+inventory-quick-in-folder = Dans { $path }
+inventory-quick-pin = Épingler : garder cette fenêtre au-dessus des autres
+inventory-quick-unpin = Désépingler : laisser d'autres fenêtres la couvrir
+inventory-quick-quiet = Vue simple : la liste seule
+inventory-quick-full = Vue complète : recherche, onglets et outils
+inventory-quick-demo-name = Accès rapide
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar
@@ -1592,9 +1648,9 @@ folderstorm-viewport-too-small = Une trop petite partie de cet écran est sous l
 folderstorm-viewport-set-aside = Ces marges laissent au monde moins d'un quart de la fenêtre : pour l'instant, le monde occupe toute la fenêtre.
 
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
-fs-layouts-tab = Dispositions
+fs-layouts-tab = Dispositions et espaces de travail
 fs-layouts-group = Dispositions enregistrées
-fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. Elle n'ouvre ni ne ferme jamais une fenêtre, et ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
+fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. L'appliquer ouvre les fenêtres qui étaient ouvertes à son enregistrement et n'en ferme aucune (fermer est l'affaire d'un espace de travail), et elle ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
 fs-layouts-list = Dispositions
 fs-layouts-list-help = Cliquez sur une disposition pour la sélectionner, puis sur Appliquer ; un double clic l'applique tout de suite. Appliquer remet la fenêtre du viewer, le monde, les barres et les fenêtres là où la disposition les a. Ce que vous déplacez ensuite n'est enregistré que si vous choisissez Mettre à jour.
 fs-layouts-empty = Aucune disposition enregistrée. Placez le monde et vos fenêtres comme vous les aimez, puis enregistrez l'arrangement ci-dessous.
@@ -1635,6 +1691,14 @@ fs-layouts-applied-unknown = { $count ->
     [one] { $count } fenêtre de cette disposition est inconnue de cette version et a été laissée telle quelle.
    *[other] { $count } fenêtres de cette disposition sont inconnues de cette version et ont été laissées telles quelles.
     }
+fs-layouts-applied-opened = { $count ->
+    [one] { $count } fenêtre qui était ouverte dans cette disposition a été ouverte.
+   *[other] { $count } fenêtres qui étaient ouvertes dans cette disposition ont été ouvertes.
+    }
+fs-layouts-applied-blocked = { $count ->
+    [one] { $count } fenêtre de cette disposition ne peut pas être ouverte pour l'instant et est restée fermée.
+   *[other] { $count } fenêtres de cette disposition ne peuvent pas être ouvertes pour l'instant et sont restées fermées.
+    }
 fs-layouts-waiting = { $count ->
     [one] { $count } fenêtre fermée prendra sa place quand vous l'ouvrirez.
    *[other] { $count } fenêtres fermées prendront leur place quand vous les ouvrirez.
@@ -1660,7 +1724,7 @@ fs-layouts-reset = Réinitialiser les barres et le monde
 fs-layouts-reset-help = Désactive la zone du monde et remet les barres dans le monde, comme au premier démarrage. Les fenêtres restent où elles sont, et aucune disposition n'est modifiée ni supprimée.
 fs-layouts-reset-button = Réinitialiser
 fs-layouts-menu = Dispositions
-fs-layouts-menu-open = Dispositions…
+fs-layouts-menu-open = Dispositions et espaces de travail…
 fs-layouts-part-window = Fenêtre du viewer
 fs-layouts-lock = Verrouiller la taille de la fenêtre
 fs-layouts-locked = Verrouillée
@@ -1700,22 +1764,22 @@ fs-layouts-monitors-unlocked = Vos écrans ont changé : la fenêtre du viewer a
 fs-layouts-monitors-later = Pas maintenant
 fs-layouts-favorite = Favorite
 fs-layouts-quick = Changement rapide
-fs-layouts-quick-intro = Trois façons de changer de disposition sans ouvrir les Préférences. La fenêtre Dispositions (Monde › Dispositions › Dispositions…) : tapez une partie d'un nom et appuyez sur Entrée. Deux boutons de barre, à trouver dans Boutons de la barre… : « Dispositions » ouvre cette fenêtre, « Changer de disposition » passe en un clic de l'une des deux dispositions choisies ci-dessous à l'autre. Et cinq raccourcis sans touche tant que vous ne leur en donnez pas, dans Préférences › Raccourcis › Autres › Dispositions. Les favorites viennent en premier dans la fenêtre et dans Monde › Dispositions, et ce sont elles que parcourent les raccourcis Disposition favorite suivante et précédente.
+fs-layouts-quick-intro = Trois façons de changer de disposition sans ouvrir les Préférences. La fenêtre Dispositions et espaces de travail (Monde › Dispositions › Dispositions et espaces de travail…) : tapez une partie d'un nom et appuyez sur Entrée. Deux boutons de barre, à trouver dans Boutons de la barre… : « Dispositions et espaces de travail » ouvre cette fenêtre, « Changer de disposition » passe en un clic de l'une des deux dispositions choisies ci-dessous à l'autre. Et cinq raccourcis sans touche tant que vous ne leur en donnez pas, dans Préférences › Raccourcis › Autres › Dispositions. Les favoris viennent en premier dans la fenêtre et dans Monde › Dispositions ; les dispositions favorites sont celles que parcourent les raccourcis Disposition favorite suivante et précédente.
 fs-layouts-toggle-first = Première disposition
 fs-layouts-toggle-second = Seconde disposition
 fs-layouts-toggle-help = Les deux dispositions entre lesquelles passent le bouton de barre « Changer de disposition » et son raccourci, par exemple « 2 écrans » et « 1 écran » : la seconde quand la première est en service, la première sinon.
 fs-layouts-toggle-none = Non choisie
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
-fs-switcher-title = Dispositions
-fs-switcher-help = Tapez une partie du nom d'une disposition : la liste garde celles qui la contiennent, les favorites en premier. Haut et Bas choisissent, Entrée applique la disposition choisie et ferme cette fenêtre, Échap la ferme. Un clic sur une étoile fait d'une disposition une favorite. L'image montre ce que donnerait la disposition choisie sur les écrans branchés maintenant. Mettre à jour enregistre l'arrangement actuel dans la disposition en service ; Enregistrer une nouvelle… le garde sous un autre nom.
-fs-switcher-hint = Tapez le nom d'une disposition, puis Entrée
+fs-switcher-title = Dispositions et espaces de travail
+fs-switcher-help = Tapez une partie d'un nom : la liste garde les espaces de travail et les dispositions qui la contiennent, les favoris en premier. Haut et Bas choisissent, Entrée applique l'entrée choisie et ferme cette fenêtre, Échap la ferme. Un clic sur une étoile en fait un favori. Une disposition dit où vont les choses : l'image montre ce qu'elle donnerait sur les écrans branchés maintenant. Un espace de travail dit quelles fenêtres sont ouvertes : l'appliquer les ouvre et ferme les autres, sur sa disposition s'il en nomme une. Mettre à jour enregistre l'arrangement actuel dans la disposition en service, ou les fenêtres ouvertes maintenant dans l'espace de travail en service ; Enregistrer une nouvelle… les garde sous un autre nom.
+fs-switcher-hint = Tapez un nom, puis Entrée
 fs-switcher-favorites = Favorites
-fs-switcher-layouts = Autres dispositions
+fs-switcher-layouts = Dispositions
 fs-switcher-star = Ajouter aux favorites
 fs-switcher-unstar = Retirer des favorites
-fs-switcher-empty = Aucune disposition enregistrée. Arrangez le monde et vos fenêtres comme vous les aimez, puis choisissez Enregistrer une nouvelle….
-fs-switcher-no-match = Aucune disposition n'a cela dans son nom.
+fs-switcher-empty = Rien d'enregistré pour l'instant. Arrangez le monde et vos fenêtres comme vous les aimez, puis choisissez Enregistrer une nouvelle….
+fs-switcher-no-match = Aucune disposition ni aucun espace de travail n'a cela dans son nom.
 fs-switcher-picture-help = Ce que donnerait cette disposition sur les écrans branchés maintenant : la fenêtre du viewer (encadrée), le monde (éclairé) et les fenêtres que la disposition place. Un écran de la disposition qui n'est pas branché est en pointillés.
 fs-switcher-note-missing = { $count ->
     [one] { $count } écran de cette disposition n'est pas branché.
@@ -1732,17 +1796,157 @@ fs-switcher-note-fitted = { $count ->
 fs-switcher-update = Mettre à jour « { $name } »
 fs-switcher-update-help = Enregistre l'arrangement actuel dans la disposition en service, pour les parties qu'elle contient. Demande d'abord.
 fs-switcher-save-new = Enregistrer une nouvelle…
-fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions, modifier la fenêtre du viewer d'une disposition, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Disposition › Dispositions.
+fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions et les espaces de travail, modifier la fenêtre du viewer d'une disposition ou les fenêtres d'un espace de travail, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Disposition › Dispositions et espaces de travail.
 fs-switcher-keys = Haut et Bas choisissent, Entrée applique et ferme, Échap ferme.
-fs-switcher-command = Dispositions
+fs-switcher-command = Dispositions et espaces de travail
 fs-switcher-toggle-command = Changer de disposition
 fs-switcher-toggle-to = Passer à la disposition « { $name } »
-fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions (un clic l'ouvre).
+fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions et espaces de travail (un clic l'ouvre).
 fs-keys-section = Dispositions
-fs-keys-layout-switcher = Fenêtre Dispositions
+fs-keys-layout-switcher = Fenêtre Dispositions et espaces de travail
 fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
 fs-keys-next-favorite = Disposition favorite suivante
 fs-keys-previous-favorite = Disposition favorite précédente
+
+# Folderstorm: workspaces (folderstorm/workspaces/workspace.rs, checkpoint 6)
+fs-switcher-workspaces = Espaces de travail
+fs-workspaces-one = Espace de travail
+fs-workspaces-closes = L'appliquer ferme les autres fenêtres. Conversations reste comme elle est.
+fs-workspaces-save-layout = Disposition
+fs-workspaces-save-workspace = Espace de travail
+fs-workspaces-name-hint = Nom, par exemple Tri
+fs-workspaces-with-layout = Toujours utiliser la disposition « { $name } » avec lui
+fs-workspaces-with-no-layout = Toujours utiliser la disposition en service avec lui (aucune n'est en service)
+fs-workspaces-save-help = Enregistre sous un nouveau nom quelles fenêtres sont ouvertes maintenant. Appliquer l'espace de travail les ouvre et ferme les autres, là où la disposition en service les place ; cochez la case pour qu'il applique aussi la disposition en service maintenant. Il ne contient jamais ce qu'une fenêtre affiche.
+fs-workspaces-save-new = Enregistrer comme nouvel espace de travail
+fs-workspaces-save = Enregistrer l'espace
+fs-workspaces-ask-update = Remplacer les fenêtres de l'espace de travail « { $name } » par celles ouvertes maintenant ?
+fs-workspaces-ask-delete = Supprimer l'espace de travail « { $name } » ?
+fs-workspaces-update-help = Enregistre dans l'espace de travail les fenêtres ouvertes maintenant. Son choix de disposition est gardé. Demande d'abord.
+fs-workspaces-error-empty = Donnez un nom à l'espace de travail.
+fs-workspaces-error-taken = Un autre espace de travail porte déjà ce nom.
+fs-workspaces-error-full = Il y a déjà { $count } espaces de travail : supprimez-en un d'abord.
+fs-workspaces-error-invalid = L'espace de travail n'a pas pu être enregistré. Réessayez dans un instant.
+fs-workspaces-holds-layout = Utilise la disposition « { $name } ».
+fs-workspaces-holds-no-layout = Garde la disposition en service.
+fs-workspaces-holds-none = N'ouvre aucune fenêtre.
+fs-workspaces-holds-opens = Ouvre : { $names }.
+fs-workspaces-applied = Espace de travail « { $name } » appliqué.
+fs-workspaces-applied-no-layout = Sa disposition ne peut pas être utilisée : la disposition en service a été gardée.
+fs-workspaces-applied-opened = { $count ->
+    [one] { $count } fenêtre ouverte.
+   *[other] { $count } fenêtres ouvertes.
+    }
+fs-workspaces-applied-closed = { $count ->
+    [one] { $count } fenêtre fermée.
+   *[other] { $count } fenêtres fermées.
+    }
+fs-workspaces-applied-blocked = { $count ->
+    [one] { $count } fenêtre ne peut pas être ouverte pour l'instant et est restée fermée.
+   *[other] { $count } fenêtres ne peuvent pas être ouvertes pour l'instant et sont restées fermées.
+    }
+fs-workspaces-group = Espaces de travail enregistrés
+fs-workspaces-intro = Un espace de travail retient quelles fenêtres sont ouvertes, pour une activité : « Tri » avec les deux fenêtres d'inventaire, « Exploration » avec les cartes. L'appliquer ouvre ces fenêtres et ferme les autres ; où elles vont est l'affaire de la disposition, donc un espace de travail fonctionne sur n'importe quelle disposition. Il peut aussi nommer une disposition à appliquer avec lui. Conversations n'est jamais ouverte ni fermée, et rien de ce qu'une fenêtre affiche n'est enregistré.
+fs-workspaces-list = Espaces de travail
+fs-workspaces-list-help = Cliquez sur un espace de travail pour le sélectionner, puis Appliquer ; un double clic l'applique tout de suite. L'appliquer ouvre les fenêtres cochées ci-dessous et ferme les autres, après sa disposition s'il en a une. Mettre à jour y enregistre les fenêtres ouvertes maintenant.
+fs-workspaces-empty = Aucun espace de travail enregistré. Ouvrez les fenêtres voulues pour une activité, puis enregistrez-les ci-dessous.
+fs-workspaces-newer-help = Cet espace de travail a été créé par une version plus récente du viewer. Il est gardé tel quel et ne peut être ni appliqué ni modifié ici ; il peut seulement être supprimé.
+fs-workspaces-invalid-help = Cette entrée du fichier de réglages n'est pas un espace de travail que cette version sait lire. Elle est gardée telle quelle et ne peut être ni appliquée ni modifiée ici ; elle peut seulement être supprimée.
+fs-workspaces-layout = Disposition appliquée avec lui
+fs-workspaces-layout-keep = Garder la disposition en service
+fs-workspaces-windows = Fenêtres qu'il ouvre (les autres sont fermées ; Conversations reste comme elle est) :
+fs-workspaces-remember-folders = Retenir les dossiers d'inventaire
+fs-strip-show = Bande des favorites
+fs-strip-show-help = Affiche vos dispositions et espaces de travail favoris sous la barre supérieure, un clic pour appliquer : au bout droit de la rangée des favoris quand elle est affichée (Interface › Accès aux favoris › Rangée sous la barre supérieure), dans une petite barre à part sinon. Ce qui ne tient pas est dans Plus…, avec la fenêtre Dispositions et espaces de travail et Arrangement précédent. Masquée en vue subjective. Donnez son étoile à une disposition ou à un espace de travail dans la fenêtre Dispositions et espaces de travail.
+fs-strip-box = Afficher la bande des favorites
+fs-strip-hide = Masquer la bande des favorites
+fs-strip-more = { $n } de plus
+fs-strip-more-tip = Plus…
+fs-strip-layout = Disposition
+fs-strip-workspace = Espace de travail
+fs-strip-pill-hint = Cliquer pour appliquer
+fs-workspaces-remember-folders-help = Garde aussi les fenêtres de dossier d'inventaire ouvertes maintenant (Ouvrir dans une nouvelle fenêtre) : le dossier de chacune et sa place, jusqu'à 16. Appliquer l'espace de travail les rouvre et ferme les autres fenêtres de dossier. Seulement pour le compte qui les a enregistrées ; jamais ce qu'un dossier contient.
+fs-workspaces-remember-folders-now = { $count ->
+    [one] Retenir les dossiers d'inventaire ({ $count } fenêtre de dossier ouverte maintenant)
+   *[other] Retenir les dossiers d'inventaire ({ $count } fenêtres de dossier ouvertes maintenant)
+    }
+fs-workspaces-holds-folders = { $count ->
+    [one] Retient { $count } fenêtre de dossier d'inventaire.
+   *[other] Retient { $count } fenêtres de dossier d'inventaire.
+    }
+fs-workspaces-folders-missing = { $count ->
+    [one] { $count } dossier d'inventaire de cet espace de travail est introuvable (supprimé, ou l'inventaire n'est pas encore chargé) et a été ignoré.
+   *[other] { $count } dossiers d'inventaire de cet espace de travail sont introuvables (supprimés, ou l'inventaire n'est pas encore chargé) et ont été ignorés.
+    }
+fs-workspaces-folders-blocked = L'inventaire est masqué par RLVa : ses fenêtres de dossier n'ont pas été ouvertes.
+fs-workspaces-folders-other-account = Ses dossiers d'inventaire ont été enregistrés par un autre compte et ont été ignorés.
+fs-context-section = Graphismes, caméra et HUD
+fs-context-section-set = Graphismes, caméra et HUD (choisis)
+fs-context-graphics = Profil graphique
+fs-context-graphics-keep = Laisser les graphismes tels quels
+fs-context-graphics-help = Un profil graphique enregistré dans Préférences › Graphismes, choisi par son nom : appliquer l'espace de travail le sélectionne, comme le choisir là-bas. Une modification du profil est prise en compte la fois suivante. Jamais la fenêtre ni le plein écran.
+fs-context-camera = Caméra
+fs-context-camera-keep = Laisser la caméra telle quelle
+fs-context-camera-help = L'une des quatre vues des commandes de caméra, ou un préréglage de caméra que vous avez enregistré, choisi par son nom. Non appliqué tant que RLVa verrouille la caméra, ni en vue subjective.
+fs-context-camera-preset = préréglage de caméra « { $name } »
+fs-context-gone = { $name } (introuvable)
+fs-context-huds = HUD qu'il porte :
+fs-context-huds-help = Cochez un HUD que vous portez : appliquer l'espace de travail le remet au même point HUD s'il n'est pas porté, avec les règles de la tenue (RLVa, la limite d'attachements). Passer ensuite à un autre espace de travail qui a des HUD enlève ceux que cet espace de travail a mis, sauf si l'autre les porte aussi ; un HUD que vous portiez déjà ou que vous avez mis vous-même n'est jamais enlevé. Arrangement précédent les remet comme avant. Seulement pour le compte qui les a choisis ; l'espace de travail garde l'objet, jamais son contenu.
+fs-context-huds-none = Portez un HUD pour le choisir ici.
+fs-context-hud-gone = Un objet absent de l'inventaire
+fs-context-huds-other = { $count ->
+    [one] { $count } HUD choisi par un autre compte.
+   *[other] { $count } HUD choisis par un autre compte.
+    }
+fs-context-huds-forget = Les oublier
+fs-context-holds-graphics = Profil graphique « { $name } ».
+fs-context-holds-camera = Caméra : { $camera }.
+fs-context-holds-huds = { $count ->
+    [one] Porte { $count } HUD.
+   *[other] Porte { $count } HUD.
+    }
+fs-context-restored = Graphismes et caméra remis comme avant.
+fs-context-graphics-done = Profil graphique « { $name } » sélectionné.
+fs-context-graphics-missing = Le profil graphique « { $name } » est introuvable : les graphismes n'ont pas changé.
+fs-context-camera-done = Caméra : { $camera }.
+fs-context-camera-missing = Le { $camera } est introuvable : la caméra n'a pas changé.
+fs-context-camera-locked = RLVa verrouille la caméra : elle n'a pas changé.
+fs-context-camera-mouselook = En vue subjective, la caméra n'a pas changé.
+fs-context-camera-failed = Caméra : { $why }
+fs-context-huds-asked = { $count ->
+    [one] { $count } HUD demandé.
+   *[other] { $count } HUD demandés.
+    }
+fs-context-huds-worn = { $count ->
+    [one] { $count } HUD était déjà porté.
+   *[other] { $count } HUD étaient déjà portés.
+    }
+fs-context-huds-missing = { $count ->
+    [one] { $count } HUD est introuvable dans l'inventaire (supprimé, ou pas encore chargé) et a été ignoré.
+   *[other] { $count } HUD sont introuvables dans l'inventaire (supprimés, ou pas encore chargés) et ont été ignorés.
+    }
+fs-context-huds-not-wearable = { $count ->
+    [one] { $count } objet ne peut pas être porté (pas un objet, ou dans la Bibliothèque ou la Corbeille) et a été ignoré.
+   *[other] { $count } objets ne peuvent pas être portés (pas des objets, ou dans la Bibliothèque ou la Corbeille) et ont été ignorés.
+    }
+fs-context-huds-blocked = { $count ->
+    [one] { $count } HUD est refusé par RLVa et a été ignoré.
+   *[other] { $count } HUD sont refusés par RLVa et ont été ignorés.
+    }
+fs-context-huds-other-account = Ses HUD ont été choisis par un autre compte et ont été ignorés.
+fs-context-huds-busy = Un changement de tenue était en cours : aucun HUD n'a été mis ni enlevé. Appliquez-le de nouveau dans un instant.
+fs-context-huds-refused = Aucun HUD n'a été mis ni enlevé : { $why }
+fs-context-huds-refused-plain = le changement de tenue a été refusé.
+fs-context-huds-taken-off = { $count ->
+    [one] { $count } HUD mis par un espace de travail a été enlevé.
+   *[other] { $count } HUD mis par un espace de travail ont été enlevés.
+    }
+fs-context-huds-stuck = { $count ->
+    [one] { $count } HUD mis par un espace de travail n'a pas pu être enlevé (RLVa le garde).
+   *[other] { $count } HUD mis par un espace de travail n'ont pas pu être enlevés (RLVa les garde).
+    }
+fs-context-take-off = Enlever les HUD de l'espace de travail précédent
+fs-context-take-off-help = Quand vous passez à un espace de travail qui a des HUD, ceux que l'espace de travail précédent a mis sont enlevés, sauf si le nouveau les porte aussi. Seulement les HUD mis par un espace de travail : un HUD que vous portiez déjà, ou que vous avez mis vous-même, n'est jamais enlevé ; RLVa peut en garder un. Arrangement précédent les remet. Désactivez pour ne faire qu'ajouter des HUD.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
@@ -1867,6 +2071,24 @@ fs-folder-upload-balance = Solde : { $balance } L$, puis { $after } L$ après ce
 fs-folder-upload-short = Pas assez de L$ : cet import coûte { $cost } L$ et le solde est de { $balance } L$.
 fs-folder-upload-receipt = Import du dossier { $folder } : { $uploaded } importés, { $failed } en échec, { $cancelled } non envoyés, { $spent } L$ dépensés.
 fs-folder-upload-receipt-failed = En échec : { $names }.
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = activité historique journal reçus opérations arrêter
+fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
+fs-search-photo = mode photo capture image appareil
+fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
+fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer
+fs-search-layouts-save = enregistrer nouvelle capturer
+fs-search-layouts-previous = annuler retour restaurer revenir
+fs-search-layouts-lock = verrouiller déverrouiller taille de la fenêtre sans bordure plein écran
+fs-search-layouts-monitors = débrancher brancher écrans moniteurs changés
+fs-search-layouts-reset = défaut réinitialiser barres zone du monde
+fs-search-layouts-quick = bascule rapide changement sélecteur bouton barre d'outils raccourci clavier touche favori favoris
+fs-search-characters = plusieurs comptes alts alt personnages personnage multibox hôte de session arrière-plan moniteurs
+fs-search-chat-upload = image envoi téléverser photo capture d'écran coller déposer partager lien Zipline hébergeur
+fs-search-outfit-safety = tenue sécurité porter clic de travers remplacer protéger
+
 ui-options-place-bar-stretch = Étirer la barre du lieu jusqu'à droite
 ui-options-place-bar-stretch-help = L'îlot du lieu va jusqu'à l'îlot du compte ; désactivé, il prend la largeur de ce qu'il affiche.
 ui-options-place-bar-rights-text = Nommer les droits de la parcelle
