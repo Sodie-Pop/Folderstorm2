@@ -482,7 +482,8 @@ world viewport is turned on (the world in the middle third) unless
 `AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
 wallpaper under the shortcuts. Without pretend monitors the window is one
 monitor, and only the first one's shortcuts show, in the left margin.
-Preferences › Layout › Bars and windows has the group *Desktop in the
+Each account has its own desktop: the demo's is made for the demo's
+account. Preferences › Layout › Bars and windows has the group *Desktop in the
 margins*:
 
 ```bash

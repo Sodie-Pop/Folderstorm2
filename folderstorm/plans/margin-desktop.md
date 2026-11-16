@@ -128,7 +128,7 @@ Each line gives the default the build starts from.
 | Grid | Cells of one size, from the room's top-left corner, filled down then right (Windows' order). Three sizes: Small (icon 24, cell 76 × 68), Medium (32, 92 × 84, default), Large (48, 112 × 104) |
 | Snapping | Always: a shortcut stands in a cell. No free placement in v1 |
 | A cell under a bar, the world or the taskbar | Blocked. A shortcut stored there is shown in the nearest free cell, and its stored cell is kept (it goes back when the cell is free) |
-| Limits | 256 shortcuts for a profile; a name of 64 characters |
+| Limits | 256 shortcuts for an account; a name of 64 characters |
 | Look | A Tabler icon over a name of two lines at most, cut with "…". A folder: `folder-filled`, tinted with its Aurora folder colour when it has one (`ui/inventory/folder_colors.rs:32`). A command: the catalogue's icon. The hovered and the selected shortcut get the theme's pill (`ui.visuals().widgets.inactive.corner_radius`, `p.raised`), the name is drawn on a discreet `p.panel` pill so that it reads over any wallpaper. Palette only, no radius or colour written by hand |
 | Tooltip | A folder: its path in the Inventory. A command: the catalogue's label, and why it is greyed when it is |
 
@@ -141,7 +141,7 @@ Each line gives the default the build starts from.
 | Items | **Not in v1.** Each kind opens its own way (a double click wears clothing, plays a gesture, opens a notecard in a window owned by an Inventory window), and outfit safety (row 2.7) asks before a folder is worn. Cheapest to add later: landmarks (`InvAction::TeleportLandmark` exists). To decide after v1 |
 | The same thing twice | Allowed on different slots, refused in one desktop (the existing one is selected instead) |
 | A folder that is gone (deleted, or put in the Trash) | The shortcut stays, greyed, with "This folder is no longer in your inventory" and *Remove* |
-| A folder of another account | Not shown (section 6) |
+| Another account's shortcuts | Never shown: each account has its own desktop (section 6) |
 
 ### Adding
 
@@ -214,7 +214,7 @@ Each line gives the default the build starts from.
 
 | Point | Decision |
 |---|---|
-| Does a layout carry its desktop? | **No, in v1.** One desktop set for the profile, keyed by slot: it follows the monitors, not the layout. A layout that moves the world onto a slot hides that slot's desktop until the world leaves |
+| Does a layout carry its desktop? | **No, in v1.** One desktop set for each account, keyed by slot: it follows the monitors, not the layout. A layout that moves the world onto a slot hides that slot's desktop until the world leaves |
 | What layouts already do | They save and restore each window's collapsed state, so a layout applied with the taskbar on fills the taskbar |
 | Later | A layout's own choices, as for the background: *Shortcuts: default / hidden*, *Taskbar: default / off / slot N* |
 
@@ -228,21 +228,39 @@ folderstorm_desktop: {
   size: "small" | "medium" | "large",
   single_click: bool,
   taskbar: { on: bool, slot: null | u8, all_windows: bool },  # absent = collapsed windows only
-  next_id: u32,
-  shortcuts: [
-    { id, target: { folder: <uuid>, account: <uuid> } | { command: "<id>" },
-      slot: u8, col: u16, row: u16,
-      name?: string, icon?: string }
-  ],
-  kept: [ ... ]                # entries this version cannot read, written back
+  accounts: {                  # one desktop for each account
+    "<account uuid>": {
+      next_id: u32,
+      shortcuts: [
+        { id, target: { folder: <uuid> } | { command: "<id>" },
+          slot: u8, col: u16, row: u16,
+          name?: string, icon?: string }
+      ],
+      kept: [ ... ]            # entries this version cannot read, written back
+    }
+  },
+  # only in a file of checkpoints 1 and 2, until an account takes them:
+  next_id, shortcuts: [ ... target: { folder, account } | { command } ... ], kept
 }
 ```
 
-- **Per profile**, as the layouts (`workspaces.md` 7.2): the session
-  host's `--profile` moves the settings folder, so each character has its
-  own. **A folder shortcut carries its account id** and is shown only to
-  that account (the rule of a workspace's folder references). Command
-  shortcuts are shared by the accounts of a profile.
+- **Each account has its own desktop** (the human's decision, section 21;
+  as the gesture boards and the folders of a custom tab): the shortcuts,
+  their places, their names and icons are kept under the account's id, and
+  only those of the account logged in are read by the surface. Another
+  account's shortcuts never show, greyed or not; switching back shows the
+  first account's desktop as it was. At the login screen nothing shows.
+- **The profile's choices**: the switch (*Shortcuts in the margins*), the
+  icon size, `single_click` and the taskbar's choices, as every other
+  setting of Preferences. The size is the profile's because it fits the
+  monitors, which the accounts of a profile share, and because a shortcut
+  keeps a cell, not a position: an arrangement holds at every size.
+- **A file of checkpoints 1 and 2** (the shortcuts beside the choices) is
+  read: a folder shortcut goes to the account it named, the commands (and
+  what could not be read) to the first account that logs in; the settings
+  are saved at that moment. A shortcut keeps its id unless that account
+  has it already. Until an account logs in, they are written back as they
+  were read.
 - **Ids only.** Folder ids and command ids. No asset id, no inventory
   name, no window title.
 - **Reading never fails and never drops**: an entry that cannot be read (a
@@ -435,8 +453,8 @@ AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
 
 **Pure**
 - `store`: the file read and written back unchanged, unknown entries
-  kept, limits, add / move / swap / rename / remove / arrange, a folder of
-  another account left out.
+  kept, limits, add / move / swap / rename / remove / arrange, one desktop
+  for each account, an earlier file's shortcuts given to their accounts.
 - `place`: slots for one, two and three monitors, at 100 and 200 %, with
   negative desktop coordinates, without a monitor list; rooms for each
   place of the bars and with the world on part of a monitor; cells for
@@ -552,7 +570,8 @@ taskbar matters more to the human than the shortcuts, it can go second.
    set of shortcuts, or only hide them and place the taskbar (the "later"
    here)?
 7. **Per profile, folders per account** (as the layouts): right, or one
-   desktop per account (as the gesture boards)?
+   desktop per account (as the gesture boards)? **Answered: one desktop
+   per account** (section 21).
 8. **`@showinv`**: hide the folder shortcuts' names (the default here), or
    only refuse to open?
 9. **A folder's default action**: its own window (the default here), or
@@ -636,7 +655,9 @@ What the build changed against the sections above, and what it found.
 Folder shortcuts, on `claude/margin-desktop-folders`. What the build
 changed against the sections above, and what it decided.
 
-- **A folder of another account is shown greyed, not hidden** ("This
+- *(Replaced by section 21: each account has its own desktop, and another
+  account's shortcuts are not shown at all.)* **A folder of another
+  account is shown greyed, not hidden** ("This
   folder is in another account's inventory", *Remove* in its menu), by
   the main session's brief for this checkpoint; sections 5 and 6 said "not
   shown". Nothing of the folder is read for it: it wears the generic name
@@ -722,3 +743,55 @@ changed against the sections above, and what it decided.
   greyed *Add a command ›*), `app/folderstorm_desktop.rs` (one window per folder, refused
   under `@showinv`, gone folders),
   `ui/inventory/context_catalog/folder_tabs.rs` (the menu entry).
+
+## 21. One desktop per account, as built
+
+The human's decision, on `claude/margin-desktop-per-account`: "**Each
+account should have its own desktop.**" It answers open question 7 and
+replaces what sections 5, 6, 19 and 20 said of accounts.
+
+- **Per account**: the shortcuts (commands and folders), their slot and
+  cell, their own names and icons. Two accounts on one profile see two
+  desktops; switching back restores the first. Nothing of another account
+  is shown: the greyed "another account" folder shortcut, its tooltip
+  (`fs-desktop-greyed-other-account`) and `Greyed::OtherAccount` are gone.
+- **Per profile**: the switch, the icon size, `single_click`, the
+  taskbar's choices (the reasons are in section 6). Preferences is
+  unchanged but for a sentence in the switch's help.
+- **The limit** (256 shortcuts) is now each account's.
+- **The record** (section 6): `accounts`, account id → `{ next_id,
+  shortcuts, kept }`. A folder target is `{ folder }`: its account is the
+  key. In memory, `store::Desktop` holds the shortcuts of the account
+  logged in (`shortcuts`, as before, so the surface is unchanged) and the
+  others aside (`others`); `Desktop::sign_in(account)` swaps them, and the
+  app calls it each frame and before *Add to desktop*
+  (`app/folderstorm_desktop.rs` `desktop_sign_in`; a comparison when the
+  account is the same). What is written does not depend on who is logged
+  in.
+- **Migration** of a file of checkpoints 1 and 2, when it is read: a
+  folder shortcut goes to the account it named; the commands, a folder
+  without a readable account and the entries that could not be read wait,
+  written back in their old place, for the first account that logs in.
+  That `sign_in` returns true and the app saves at once, so that a second
+  account cannot take them. A shortcut keeps its id unless the account has
+  that id already (it then takes the next one); beyond the account's limit
+  it is kept unread (`kept`), not dropped. Two shortcuts could then name one cell,
+  but only in a hand-edited file holding both shapes: nothing special is
+  done for it.
+- **Lenient reading**: an entry of `accounts` whose key is not an account
+  id, or that is not a table, is kept and written back; an account's
+  shortcuts are read as the profile's were (unknown targets kept, values
+  brought back into range, an id met twice kept unread).
+- **Going back to a build of checkpoints 1 to 3** would not show the
+  shortcuts (it does not read `accounts`) and would drop them at its next
+  save. Those builds were never merged.
+- **No upstream hook** added or moved.
+- **Demo**: unchanged for the eye; the demo's desktop is made for the
+  demo's account.
+- **Tests**: `store.rs` (each account has its own desktop and switching
+  back restores it; a file of the earlier shape goes to its accounts,
+  whichever logs in first, before and after a save; lenient reading of
+  `accounts`, ids met twice, an account at its limit), `tests.rs`
+  (frames: a second account sees none of the first's shortcuts and
+  cannot open them from where they stood; back to the first; logged out),
+  `targets.rs` (the other-account face removed).
