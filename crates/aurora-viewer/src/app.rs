@@ -11580,6 +11580,7 @@ impl App {
         ui::fonts::preview::release_unused(&self.egui_ctx);
         let mut raw = gfx.egui_state.take_egui_input(&gfx.window);
         self.folderstorm_bar_inset(&mut raw); // Folderstorm: the session host's bar keeps a strip at the top (app/folderstorm_characters/bar.rs)
+        self.folderstorm_login_inset(&mut raw); // Folderstorm: the login screen on one monitor (app/folderstorm_viewport.rs)
         raw.events.extend(self.alt_text.drain(..).map(egui::Event::Text));
         self.demo_script_input(&mut raw);
         // Synthetic preedit uses the ordinary focused Conversations editor.
