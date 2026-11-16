@@ -114,7 +114,10 @@ impl Bench {
             },
             facts: Facts::default(),
             inv: {
-                let mut inv = crate::world::inventory::Inventory::default();
+                let mut inv = crate::world::inventory::Inventory {
+                    root: Uuid::from_u128(77),
+                    ..Default::default()
+                };
                 crate::world::inventory::demo::seed(&mut inv, ME);
                 inv
             },
@@ -128,15 +131,6 @@ impl Bench {
             painter: Default::default(),
             pointer: pos2(960.0, 200.0),
             time: 0.0,
-        }
-    }
-
-    fn folders(&self) -> Folders<'_> {
-        Folders {
-            inv: &self.inv,
-            account: ME,
-            no_inventory: self.no_inventory,
-            colors: None,
         }
     }
 
@@ -674,17 +668,20 @@ fn the_demo_seeds_its_desktops() {
         assert!(demo::seed(mode, &mut desktop, &mut view, 5760), "{mode}");
     }
     demo::seed_folders(&mut desktop, ME);
-    let b = Bench::new();
     let folders: Vec<_> = desktop
         .shortcuts
         .iter()
-        .filter(|s| matches!(s.target, Target::Folder { .. }))
-        .map(|s| super::targets::face(s, &b.facts, &b.folders()).greyed)
+        .filter(|s| matches!(s.target, Target::Folder { account, .. } if account == ME))
+        .map(|s| (s.slot, s.cell()))
         .collect();
-    assert_eq!(folders, [None, None, None, Some(super::targets::Greyed::FolderGone)]);
     assert_eq!(
-        super::targets::folder_state(&b.inv, demo::DROPPED),
-        super::targets::FolderState::Live
+        folders,
+        [(0, (1, 0)), (0, (1, 1)), (0, (1, 2)), (0, (1, 3))],
+        "down the second column"
+    );
+    assert!(
+        desktop.shortcuts.iter().all(|s| s.cell() != demo::DROPPED_AT),
+        "the drop's cell is free"
     );
     // the demo's desktop drawn: every size holds its names in its cells
     for size in Size::ALL {
@@ -704,7 +701,7 @@ fn the_demo_seeds_its_desktops() {
 /// A folder of the demo inventory, its sub-folder, and one of its items.
 const MINE: u128 = 8000;
 const SUB: u128 = 8001;
-const ITEM: u128 = 730;
+const ITEM: u128 = 710;
 
 #[test]
 fn a_folder_shortcut_shows_its_folder_and_asks_for_its_window() {
@@ -713,7 +710,10 @@ fn a_folder_shortcut_shows_its_folder_and_asks_for_its_window() {
     b.frames(3);
     let name = b.folder_name(MINE);
     let cell = b.cell_of(mine);
-    assert!(b.drawn(&name).is_some_and(|text| cell.contains_rect(text)), "the folder's name, read now");
+    assert!(
+        b.drawn(&name).is_some_and(|text| cell.contains_rect(text)),
+        "the folder's name, read now"
+    );
     assert!(b.world_untouched());
     b.double_click(cell.center());
     assert_eq!(b.opened(), vec![Uuid::from_u128(MINE)]);
@@ -783,7 +783,9 @@ fn showinv_locks_the_folder_shortcuts_and_hides_their_names() {
     b.frames(2);
     let name = b.folder_name(MINE);
     assert!(
-        b.texts.iter().all(|(text, _)| !text.contains(&name) && !text.contains("My own name")),
+        b.texts
+            .iter()
+            .all(|(text, _)| !text.contains(&name) && !text.contains("My own name")),
         "nothing of the folder is said while the Inventory is hidden: {:?}",
         b.texts
     );
@@ -831,7 +833,10 @@ fn inventory_dropped_on_a_desktop_adds_its_folders_and_leaves_its_items_out() {
         }
     );
     assert_eq!((added.slot, added.cell()), (0, (2, 2)));
-    assert!(crate::ui::inventory::drag::carried_ids(&b.ctx).is_none(), "nothing left for the world");
+    assert!(
+        crate::ui::inventory::drag::carried_ids(&b.ctx).is_none(),
+        "nothing left for the world"
+    );
     assert!(b.out.contains(&Request::Changed));
     assert!(b.notices().is_empty(), "a drop that worked says nothing");
     assert_eq!(surface::state(&b.ctx).selected, Some(added.id));
@@ -885,7 +890,10 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     // again: there already
     let again = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
     assert_eq!((again.added, again.existing, again.first), (0, 2, added.first));
-    assert_eq!(super::added_notice(&again, 0, false, true).as_deref(), Some(aurora_i18n::tr!("fs-desktop-add-existing")));
+    assert_eq!(
+        super::added_notice(&again, 0, false, true).as_deref(),
+        Some(aurora_i18n::tr!("fs-desktop-add-existing"))
+    );
     // the world fills the window: kept for when it leaves room, and said
     let mut unseen = Desktop::default();
     let kept = super::add_folders(&mut unseen, &[], ME, &ids, None, None);

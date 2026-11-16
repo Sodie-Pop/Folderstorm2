@@ -112,7 +112,14 @@ const UNSEEN_ROWS: u16 = 8;
 /// `slot` (None: the first room's): from `cell` when one is given, each in
 /// the free cell nearest to it; else in the first free cells. Without a
 /// room for that slot they are kept for when it has one.
-pub fn add_folders(desktop: &mut Desktop, rooms: &[Room], account: Uuid, folders: &[Uuid], slot: Option<u8>, cell: Option<(u16, u16)>) -> Added {
+pub fn add_folders(
+    desktop: &mut Desktop,
+    rooms: &[Room],
+    account: Uuid,
+    folders: &[Uuid],
+    slot: Option<u8>,
+    cell: Option<(u16, u16)>,
+) -> Added {
     let slot = slot.or(rooms.first().map(|room| room.slot)).unwrap_or(0);
     let grid = rooms.iter().find(|room| room.slot == slot).map(|room| room.grid);
     let mut out = Added::default();

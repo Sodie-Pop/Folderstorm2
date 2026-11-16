@@ -131,7 +131,10 @@ mod tests {
 
     #[test]
     fn add_to_desktop_is_offered_for_folders_and_greyed_with_the_reason_otherwise() {
-        let mut inv = Inventory::default();
+        let mut inv = Inventory {
+            root: Uuid::from_u128(1),
+            ..Default::default()
+        };
         crate::world::inventory::demo::seed(&mut inv, Uuid::from_u128(42));
         let entry = |ids: &[Uuid]| {
             let mut c = Catalog::default();
@@ -143,7 +146,7 @@ mod tests {
             );
             (e.enabled, adds, c.help.get(DESKTOP).cloned())
         };
-        let (mine, item) = (Uuid::from_u128(8000), Uuid::from_u128(730));
+        let (mine, item) = (Uuid::from_u128(8000), Uuid::from_u128(710));
         assert!(inv.items.get(&item).is_some());
         // a folder, and a selection with one
         assert_eq!(entry(&[mine]), (true, true, None));

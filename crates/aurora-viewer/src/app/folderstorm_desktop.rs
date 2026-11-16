@@ -215,10 +215,8 @@ impl App {
             log::warn!("AURORA_DEMO_DESKTOP={mode}: not a mode of the demo");
             return;
         }
-        // the demo inventory, for the folder shortcuts
-        let agent = self.world.agent_id;
-        crate::world::inventory::demo::seed(&mut self.world.inventory, agent);
-        desktop::demo::seed_folders(&mut s.folderstorm_desktop, agent);
+        // folders of the demo's inventory
+        desktop::demo::seed_folders(&mut s.folderstorm_desktop, self.world.agent_id);
         if mode == "rlva" {
             self.settings.rlva_enabled = true;
             self.world.rlva_configure(true);
@@ -329,7 +327,10 @@ mod tests {
     #[test]
     fn a_folder_shortcut_opens_one_window_and_then_brings_it_forward() {
         let ctx = egui::Context::default();
-        let mut inv = crate::world::inventory::Inventory::default();
+        let mut inv = crate::world::inventory::Inventory {
+            root: Uuid::from_u128(1),
+            ..Default::default()
+        };
         crate::world::inventory::demo::seed(&mut inv, Uuid::from_u128(42));
         let (mine, sub) = (Uuid::from_u128(8000), Uuid::from_u128(8001));
         let mut windows = ui::inventory::InventoryUi::default();
@@ -345,14 +346,23 @@ mod tests {
         assert_eq!(windows.folderstorm_folder_windows(), [(first.clone(), mine)]);
         // again: the same window, to the front (expanded when collapsed)
         ui::widgets::minimize_floater(&ctx, &first);
-        assert_eq!(open_folder(&ctx, &mut windows, &inv, mine, false, cell, room), Opened::Front(first.clone()));
+        assert_eq!(
+            open_folder(&ctx, &mut windows, &inv, mine, false, cell, room),
+            Opened::Front(first.clone())
+        );
         assert_eq!(windows.folderstorm_folder_windows().len(), 1, "one window per folder");
         // another folder: its own window
-        assert!(matches!(open_folder(&ctx, &mut windows, &inv, sub, false, cell, room), Opened::New(_)));
+        assert!(matches!(
+            open_folder(&ctx, &mut windows, &inv, sub, false, cell, room),
+            Opened::New(_)
+        ));
         assert_eq!(windows.folderstorm_folder_windows().len(), 2);
         // closed with its cross: a new one next time
         windows.folderstorm_close_folder(&first);
-        assert!(matches!(open_folder(&ctx, &mut windows, &inv, mine, false, cell, room), Opened::New(_)));
+        assert!(matches!(
+            open_folder(&ctx, &mut windows, &inv, mine, false, cell, room),
+            Opened::New(_)
+        ));
         // gone since the shortcut was drawn, the Library, the root: nothing
         let before = windows.folderstorm_folder_windows().len();
         for folder in [Uuid::from_u128(123_456), inv.lib_root, inv.root] {

@@ -691,7 +691,8 @@ changed against the sections above, and what it decided.
   inventory, one gone); `open` opens a folder at frame 200 and People at
   300; `drop` adds a folder as a drop would at frame 200 (the pointer
   cannot be played) and moves it to the third monitor at 300; `rlva`.
-  The demo seeds the demo inventory itself.
+  The folders are those of the demo's login (Clothes, Landmarks, the
+  Photo Album, Objects).
 - **Not done in checkpoint 2**: a drop is not offered on a slot without a
   room (there is nothing to drop on); *Move to ›* a slot from the menu
   (checkpoint 3, with the keyboard); folder windows already open when

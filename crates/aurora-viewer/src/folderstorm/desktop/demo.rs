@@ -27,14 +27,14 @@ pub const SECOND_FRAME: u64 = 300;
 /// The command `open` opens.
 pub const OPENED: &str = "people";
 
-/// Folders of the demo inventory (`world::inventory::demo::seed`: a
-/// folder of the user's own and two outfits), then one that does not exist.
-const FOLDERS: [u128; 4] = [8000, 702, 703, 0xF01D_E400];
+/// Folders of the demo's inventory (`crate::demo`, the login's skeleton:
+/// Clothes, Landmarks, the Photo Album), then one that does not exist.
+const FOLDERS: [u128; 4] = [11, 12, 31, 0xF01D_E400];
 /// The cell of the first of them, on the left monitor; the others follow
 /// down its column.
 pub const FOLDERS_AT: (u16, u16) = (1, 0);
-/// The folder `drop` adds, and the cell it is dropped on.
-pub const DROPPED: Uuid = Uuid::from_u128(8001);
+/// The folder `drop` adds (Objects), and the cell it is dropped on.
+pub const DROPPED: Uuid = Uuid::from_u128(14);
 pub const DROPPED_AT: (u16, u16) = (2, 1);
 /// Where `drop` then moves it: a slot and a cell.
 pub const MOVED_TO: (u8, (u16, u16)) = (2, (1, 0));

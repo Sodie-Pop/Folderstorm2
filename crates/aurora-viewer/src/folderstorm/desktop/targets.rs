@@ -211,11 +211,14 @@ pub fn folder_state(inv: &Inventory, id: Uuid) -> FolderState {
     if inv.root.is_nil() {
         return FolderState::Unknown;
     }
-    let Some(folder) = inv.folders.get(&id) else {
+    if id.is_nil() || id == inv.root || id == inv.lib_root {
+        return FolderState::Refused;
+    }
+    if !inv.folders.contains_key(&id) {
         return FolderState::Gone;
-    };
+    }
     let library = |id: Uuid| id == inv.lib_root || inv.folders.get(&id).is_some_and(|f| f.library);
-    if id.is_nil() || id == inv.root || folder.library || rules::ancestors(inv, id).any(library) {
+    if rules::ancestors(inv, id).any(library) {
         return FolderState::Refused;
     }
     if rules::in_type(inv, id, 14) || !rules::under(inv, id, inv.root) {
@@ -398,11 +401,7 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
     let unnamed = |icon: &str, why: Greyed, own_name: bool| {
         let target_name = tr!("fs-desktop-folder").to_owned();
         Face {
-            name: shortcut
-                .name
-                .clone()
-                .filter(|_| own_name)
-                .unwrap_or_else(|| target_name.clone()),
+            name: shortcut.name.clone().filter(|_| own_name).unwrap_or_else(|| target_name.clone()),
             target_name,
             icon: icon.to_owned(),
             greyed: Some(why),
@@ -568,7 +567,10 @@ mod tests {
     fn inventory() -> Inventory {
         use crate::world::inventory::{FetchState, Folder};
         use aurora_net::inventory::{InvFolder, InvItem};
-        let mut inv = Inventory::default();
+        let mut inv = Inventory {
+            root: Uuid::from_u128(1),
+            ..Default::default()
+        };
         crate::world::inventory::demo::seed(&mut inv, Uuid::from_u128(42));
         let trash = rules::system(&inv, 14).expect("a Trash");
         for (id, parent, name, library) in [(9001, trash, "Old things", false), (9002, inv.lib_root, "Clothing", true)] {
@@ -651,7 +653,10 @@ mod tests {
         assert_eq!(offer(&inv, &[inv.root], false), Err(Refusal::NoFolder));
         // @showinv: nothing is added
         assert_eq!(offer(&inv, &ids(&[MINE]), true), Err(Refusal::Rlva));
-        assert_eq!(offer(&inv, &ids(&[MINE, 9004]), false).map(|p| (p.folders.len(), p.left_out)), Ok((1, 1)));
+        assert_eq!(
+            offer(&inv, &ids(&[MINE, 9004]), false).map(|p| (p.folders.len(), p.left_out)),
+            Ok((1, 1))
+        );
     }
 
     #[test]

@@ -467,8 +467,8 @@ once, a desktop of shortcuts in the margins around the world (row 1.10):
 People, Inventory, the world map renamed "Where am I?" with a compass,
 Photo, Home, then two greyed ones: Favorites, which only works from its
 toolbar button, and a command the catalogue no longer has), four folder
-shortcuts in its second column (three folders of the demo inventory, and
-one whose folder is gone, greyed) and two commands on the third monitor
+shortcuts in its second column (Clothes, Landmarks and the Photo Album of
+the demo inventory, and one whose folder is gone, greyed) and two commands on the third monitor
 (Preferences, Build); `open` does the same, opens the first folder
 shortcut at frame 200 as a double click does (its window beside it) and
 the People shortcut at frame 300; `drop` adds a folder at frame 200 where
