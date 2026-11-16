@@ -1264,7 +1264,7 @@ fn a_desktop_is_arranged_by_name_and_a_shortcut_moved_to_another_monitor() {
     // from the desktop's menu, on a free cell
     let free = b.room(0).grid.rect((3, 3)).center();
     b.menu(free, aurora_i18n::tr!("fs-desktop-arrange"));
-    let mut named = vec![
+    let mut named = [
         ("aaa first".to_owned(), map),
         (label_of("build").to_lowercase(), build),
         (label_of("people").to_lowercase(), people),
