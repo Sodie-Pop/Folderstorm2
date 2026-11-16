@@ -93,6 +93,9 @@ pub(super) fn filter(ctx: &egui::Context) -> Filter {
 
 fn set_filter(ctx: &egui::Context, filter: Filter) {
     ctx.data_mut(|d| d.insert_temp(filter_id(), filter));
+    // the list changes height: lay the panel out again before showing it
+    ctx.request_discard("Nearby media: Show list changed");
+    ctx.request_repaint();
 }
 
 /// Where the Show list's widget id is kept, to know whether its list is
@@ -343,7 +346,11 @@ fn row_ui(ui: &mut egui::Ui, p: &Palette, icons: &Icons, snapshot: &Snapshot, ro
         };
         let name = ui.allocate_ui(Vec2::new(name_width, 18.0), |ui| {
             ui.set_width(name_width);
-            ui.add(widgets::elided_label(ui, name, name_width).sense(egui::Sense::click()))
+            ui.add(
+                widgets::elided_label(ui, name, name_width)
+                    .selectable(false)
+                    .sense(egui::Sense::click()),
+            )
         });
         // a double click on the name zooms on it, as on a row of the list there
         if name.inner.double_clicked() && row.place.zoomable && !row.place.zoomed {
@@ -386,7 +393,8 @@ fn row_ui(ui: &mut egui::Ui, p: &Palette, icons: &Icons, snapshot: &Snapshot, ro
                 });
             }
         } else {
-            ui.add_space(BUTTON);
+            // a space adds no item spacing of its own
+            ui.add_space(BUTTON + spacing);
         }
         let (icon, tip) = if row.on {
             ("player-stop-filled", tr!("fs-nearby-media-stop"))

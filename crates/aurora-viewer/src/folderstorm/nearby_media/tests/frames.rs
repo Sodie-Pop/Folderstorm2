@@ -229,6 +229,8 @@ impl Bench {
     }
 
     fn double_click(&mut self, at: Pos2) {
+        // well after any earlier click, or egui counts a triple click
+        self.time += 1.0;
         self.pointer = at;
         self.frame(vec![egui::Event::PointerMoved(at)]);
         let press = |pressed| egui::Event::PointerButton {
@@ -437,6 +439,7 @@ fn the_show_list_keeps_the_rows_of_one_place() {
     assert_eq!(panel::filter(&bench.ctx), Filter::All);
     assert!(bench.shown(Filter::All.label()));
     assert_eq!(bench.listed().len(), 6, "{:?}", bench.texts);
+    bench.capture("nearby-media-all");
     bench.choose(Filter::OutsideParcel);
     bench.capture("nearby-media-outside");
     assert_eq!(bench.listed(), ["Billboard next door"]);
@@ -454,7 +457,7 @@ fn the_show_list_keeps_the_rows_of_one_place() {
         tr!("fs-nearby-media-parcel-music"),
     ];
     expected.sort_unstable();
-    assert_eq!(within, expected);
+    assert_eq!(within, expected, "{:?}", bench.texts);
     // on other avatars: the badge, and why the list may stay empty
     bench.choose(Filter::OnOthers);
     assert_eq!(bench.listed(), ["Wolf badge"]);
