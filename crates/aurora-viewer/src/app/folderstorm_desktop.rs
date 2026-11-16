@@ -13,8 +13,10 @@
 //! menu (*Add to desktop*, `InvAction::FolderstormDesktopAdd`) or are
 //! dropped on a desktop; only their ids are kept. A toolbar button's menu
 //! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
-//! is run here), and two keyboard actions of `crate::folderstorm::keys`
-//! show or hide the shortcuts and give the desktop the keyboard.
+//! is run here), and three keyboard actions of `crate::folderstorm::keys`
+//! show or hide the shortcuts and give the desktop or the taskbar the
+//! keyboard. The taskbar (`desktop::taskbar`) is drawn from here as well,
+//! with or without the shortcuts.
 
 use super::*;
 use crate::folderstorm::desktop::{self, Facts, Folders, Request, place, targets};
@@ -89,13 +91,29 @@ impl App {
         self.desktop_demo(ctx);
         self.desktop_sign_in();
         // what a toolbar button's menu and the keyboard asked
-        let mut focus = false;
+        let (mut focus, mut focus_taskbar) = (false, false);
         for ask in desktop::take_asks(ctx) {
             match ask {
                 desktop::Ask::AddCommand(command) => self.desktop_add_command(ctx, &command),
                 desktop::Ask::Focus => focus = true,
+                desktop::Ask::FocusTaskbar => focus_taskbar = true,
             }
         }
+        // hidden with the interface, and in mouselook as the bars are
+        let mouselook = self.camera.mouselook() && !self.settings.camera.show_interface_in_mouselook;
+        let hidden = mouselook || self.interface.hidden || self.interface.immersive || ui::widgets::interface_hidden(ctx);
+        // the taskbar: it stands without the shortcuts too
+        desktop::taskbar::show(
+            ctx,
+            &self.settings.folderstorm_desktop,
+            &desktop::taskbar::Env {
+                p,
+                icons: &self.skin.icons,
+                hidden,
+                mouselook: self.camera.mouselook(),
+                focus: focus_taskbar,
+            },
+        );
         if !self.settings.folderstorm_desktop.shortcuts_on {
             return;
         }
@@ -103,8 +121,6 @@ impl App {
         // (RlvBehaviourToggleHandler<RLV_BHVR_SHOWINV>: the Inventory is hidden)
         let no_inventory = self.world.rlva.has("showinv");
         let prefs = &self.settings.inventory;
-        // hidden with the interface, and in mouselook as the bars are
-        let mouselook = self.camera.mouselook() && !self.settings.camera.show_interface_in_mouselook;
         let env = desktop::Env {
             p,
             icons: &self.skin.icons,
@@ -114,7 +130,7 @@ impl App {
                 no_inventory,
                 colors: prefs.folder_colors_enabled.then_some(&prefs.folder_colors),
             },
-            hidden: mouselook || self.interface.hidden || self.interface.immersive || ui::widgets::interface_hidden(ctx),
+            hidden,
             focus,
         };
         let mut requests = desktop::show(ctx, &mut self.settings.folderstorm_desktop, &env);
@@ -180,7 +196,7 @@ impl App {
         };
         self.desktop_sign_in();
         let d = &mut self.settings.folderstorm_desktop;
-        let rooms = desktop::rooms(&ctx, d.size);
+        let rooms = desktop::rooms(&ctx, d);
         let added = desktop::add_folders(d, &rooms, &picked.folders, None, None);
         let turned_on = added.added > 0 && !d.shortcuts_on;
         if added.added > 0 {
@@ -198,7 +214,7 @@ impl App {
     /// it did (the desktop may be on another monitor, or not shown now).
     fn desktop_add_command(&mut self, ctx: &egui::Context, command: &str) {
         let d = &mut self.settings.folderstorm_desktop;
-        let rooms = desktop::rooms(ctx, d.size);
+        let rooms = desktop::rooms(ctx, d);
         let added = desktop::surface::add_command_first(d, &rooms, command);
         let new = matches!(added, desktop::surface::CommandAdded::New(_));
         let turned_on = new && !d.shortcuts_on;
@@ -227,6 +243,10 @@ impl App {
             // (run by the next frame, where the shortcuts are drawn)
             Key::DesktopFocus => {
                 desktop::ask(&self.egui_ctx, desktop::Ask::Focus);
+                true
+            }
+            Key::DesktopTaskbar => {
+                desktop::ask(&self.egui_ctx, desktop::Ask::FocusTaskbar);
                 true
             }
             _ => false,
@@ -296,7 +316,8 @@ impl App {
     /// from the Inventory would then moves it to the third monitor, `rlva`
     /// tries to open a folder shortcut under `@showinv`, `edit` edits a
     /// name in place then gives a folder shortcut a name and an icon,
-    /// `unused` opens Preferences on the desktop's group.
+    /// `unused` opens Preferences on the desktop's group, `taskbar` and
+    /// `overflow` open windows and collapse them into the taskbar.
     fn desktop_demo_frame(&mut self, ctx: &egui::Context) -> Vec<Request> {
         use desktop::demo;
         if !self.demo || ![demo::OPEN_FRAME, demo::SECOND_FRAME].contains(&self.frame_count) {
@@ -306,8 +327,50 @@ impl App {
             return Vec::new();
         };
         let first = self.frame_count == demo::OPEN_FRAME;
+        match (mode.as_str(), first) {
+            // Inventory and a folder's window collapsed: held by the
+            // taskbar; People open: not listed
+            ("taskbar", true) => {
+                self.panels.inventory = true;
+                self.panels.people = true;
+                ui::widgets::minimize_floater(ctx, "inventory");
+                if let Some(window) = self.inventory_ui.folderstorm_open_folder(demo::folder(0)) {
+                    ui::widgets::minimize_floater(ctx, &window);
+                }
+                return Vec::new();
+            }
+            // as a click on its button: the Inventory comes back where it was
+            ("taskbar", false) => {
+                ui::widgets::bring_floater_front(ctx, "inventory");
+                return Vec::new();
+            }
+            // twenty collapsed windows: more than the taskbar has room for
+            ("overflow", true) => {
+                let mut folders: Vec<Uuid> = self
+                    .world
+                    .inventory
+                    .folders
+                    .keys()
+                    .copied()
+                    .filter(|folder| targets::folder_state(&self.world.inventory, *folder) == targets::FolderState::Live)
+                    .collect();
+                folders.sort();
+                for n in 0..demo::OVERFLOW {
+                    // (a folder may have several windows: enough of them,
+                    // whatever the demo's inventory holds)
+                    let Some(folder) = folders.get(n % folders.len().max(1)) else {
+                        break;
+                    };
+                    if let Some(window) = self.inventory_ui.folderstorm_open_folder(*folder) {
+                        ui::widgets::minimize_floater(ctx, &window);
+                    }
+                }
+                return Vec::new();
+            }
+            _ => {}
+        }
         let d = &mut self.settings.folderstorm_desktop;
-        let rooms = desktop::rooms(ctx, d.size);
+        let rooms = desktop::rooms(ctx, d);
         match (mode.as_str(), first) {
             ("open" | "rlva", true) => {
                 let Some(room) = rooms.first() else {

@@ -593,6 +593,14 @@ impl<'a> Floater<'a> {
         // the toolbar button, a menu entry or a shortcut asked to expand it
         let expand_asked = ctx.data_mut(|d| d.remove_temp::<bool>(egui::Id::unique(self.id).with(EXPAND)));
         let mut toggle_min = minimized && expand_asked.unwrap_or(false);
+        // Folderstorm: collapsed, the margins' taskbar holds it: its button there stands for its title bar
+        let collapsed = minimized && !compact && !close && !toggle_min;
+        if crate::folderstorm::desktop::taskbar::holds(ctx, &self, workspace::window_icon(self.id), collapsed) {
+            if self.cascade.is_some() {
+                cascade::hidden(ctx, egui::Id::unique(self.id));
+            }
+            return None;
+        }
         let mut out = None;
         let window_id = egui::Id::unique(self.id);
         let expanded_id = window_id.with("expanded_size");

@@ -34,10 +34,12 @@ pub enum Key {
     /// The keyboard to the margins' desktop: its selected shortcut, else
     /// its first.
     DesktopFocus,
+    /// The keyboard to the taskbar of the margins: its first button.
+    DesktopTaskbar,
 }
 
 /// Every key, in the order of the Shortcuts page.
-pub const KEYS: [Key; 7] = [
+pub const KEYS: [Key; 8] = [
     Key::LayoutSwitcher,
     Key::LayoutToggle,
     Key::PreviousArrangement,
@@ -45,6 +47,7 @@ pub const KEYS: [Key; 7] = [
     Key::PreviousFavoriteLayout,
     Key::DesktopShortcuts,
     Key::DesktopFocus,
+    Key::DesktopTaskbar,
 ];
 
 impl Key {
@@ -58,6 +61,7 @@ impl Key {
             Key::PreviousFavoriteLayout => "fs-keys-previous-favorite",
             Key::DesktopShortcuts => "fs-keys-desktop-shortcuts",
             Key::DesktopFocus => "fs-keys-desktop-focus",
+            Key::DesktopTaskbar => "fs-keys-desktop-taskbar",
         }
     }
 }

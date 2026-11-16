@@ -1707,6 +1707,7 @@ fs-keys-next-favorite = 次のお気に入りレイアウト
 fs-keys-previous-favorite = 前のお気に入りレイアウト
 fs-keys-desktop-shortcuts = デスクトップのショートカットを表示／非表示
 fs-keys-desktop-focus = デスクトップにフォーカス
+fs-keys-desktop-taskbar = タスクバーにフォーカス
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = ジェスチャーボード
@@ -1979,6 +1980,19 @@ fs-desktop-clear-help = このアカウントのデスクトップにあるシ�
 fs-desktop-clear-button = すべて削除…
 fs-desktop-clear-ask = このアカウントの { $count } 個のショートカットを削除しますか？
 fs-desktop-clear-confirm = すべて削除
+fs-taskbar-switch = 余白のタスクバー
+fs-taskbar-switch-help = 折りたたんだウィンドウが、タイトルバーの代わりに余白のモニター下端のバーにボタンとして並びます。クリックでウィンドウを元の位置に戻し、右クリックでその他の操作を表示します。オフのとき、またはワールドの周りに余白がないときは、これまでどおりタイトルバーになります。
+fs-taskbar-monitor = モニター
+fs-taskbar-monitor-help = タスクバーを置くモニター。自動：空きがいちばん広いモニター。選んだモニターに空きがないときは、タスクバーは表示されません。
+fs-taskbar-monitor-auto = 自動
+fs-taskbar-all = 開いているすべてのウィンドウ
+fs-taskbar-all-help = 折りたたんだものだけでなく、開いているすべてのウィンドウを並べます。クリックでウィンドウを最前面にし、最前面のウィンドウは折りたたみます。
+fs-taskbar-restore = 元に戻す
+fs-taskbar-front = 最前面に表示
+fs-taskbar-empty = 折りたたんだウィンドウはありません
+fs-taskbar-empty-all = 開いているウィンドウはありません
+fs-taskbar-spoken-collapsed = { $title }、折りたたみ中
+fs-taskbar-spoken-front = { $title }、最前面
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります
@@ -2076,6 +2090,7 @@ fs-search-mcp = MCP ローカル アシスタント AI エージェント ブリ
 fs-search-mcp-activity = アクティビティ 履歴 ログ 受領 操作 停止
 fs-search-viewport = デュアル モニター デュアルモニター マルチ マルチモニター 複数 画面 ディスプレイ 表示領域 ワールド 余白 マージン ワイド ウルトラワイド
 fs-search-desktop = デスクトップ ショートカット アイコン ランチャー フォルダ 余白 マージン モニター ディスプレイ
+fs-search-taskbar = タスクバー 最小化 折りたたみ 折りたたんだ ウィンドウ トレイ ドック
 fs-search-photo = 写真 写真モード フォト スナップショット 撮影 カメラ
 fs-search-layouts = レイアウト ワークスペース 作業 プロファイル 配置 ウィンドウ デュアル モニター マルチモニター 複数 画面
 fs-search-layouts-list = お気に入り スター 適用 名前の変更 削除
