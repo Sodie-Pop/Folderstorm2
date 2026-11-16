@@ -377,6 +377,21 @@ AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=apply cargo run -p aurora-viewer -- --title
 AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=folders cargo run -p aurora-viewer -- --title "Test workspaces folders"
 ```
 
+**The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
+as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
+closed: the four favorites stand in a small bar under the top bar, each one
+click to apply, with *More…* at the end (the switcher, *Previous
+arrangement*, *Hide the favorites strip*). `row` also shows the favourites'
+row under the top bar (Interface › Favourites access): the strip stands at its
+right end, after a divider. `many` adds five favorite layouts so that some go
+to *More…*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_STRIP=1 cargo run -p aurora-viewer -- --title "Test strip"
+AURORA_DEMO=1 AURORA_DEMO_STRIP=row cargo run -p aurora-viewer -- --title "Test strip row"
+AURORA_DEMO=1 AURORA_DEMO_STRIP=many cargo run -p aurora-viewer -- --title "Test strip many"
+```
+
 Check that the field has the keyboard when the window opens; that typing
 keeps the layouts with those letters, favorites first; that Up and Down
 choose, Enter applies the chosen layout and closes the window, and Esc closes
@@ -6164,6 +6179,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|reopen\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself; `reopen` closes two windows then applies "Wide", which opens them. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it |
+| `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |

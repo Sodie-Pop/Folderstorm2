@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 
 mod folders;
 mod open;
+mod strip;
 mod switcher;
 mod viewer;
 mod workspace;
@@ -53,6 +54,30 @@ struct Viewer {
     texts: Vec<(String, Rect)>,
     /// The Inventory's folder windows, as the app has them.
     inventory: Folders,
+    /// The top bar, as far as the favorites strip goes. None: no bars.
+    bars: Option<Bars>,
+    /// Each frame drawn with the software painter, for the pictures
+    /// (`Viewer::painted`). None: not drawn.
+    paint: Option<Box<Paint>>,
+}
+
+/// The pixels of the last frame and what draws them, with the icons and
+/// the theme of the app.
+struct Paint {
+    painter: crate::crash::software::Painter,
+    pixels: Vec<u32>,
+    icons: crate::ui::icons::Icons,
+    background: egui::Color32,
+}
+
+/// What the top bar's code does around the favorites strip
+/// (`ui/bars/islands.rs`, `top`): the favourites' row under `under` when
+/// the favourites are shown as a row, then the strip's own call.
+#[derive(Clone, Debug)]
+struct Bars {
+    under: Rect,
+    /// The favourites as a row (*Favourites access*); None: in the menu.
+    landmarks: Option<crate::ui::bars::favorites::View>,
 }
 
 /// A pretend Inventory: the account logged in, the folders it has, and
@@ -139,7 +164,39 @@ impl Viewer {
             events: Vec::new(),
             texts: Vec::new(),
             inventory: Folders::default(),
+            bars: None,
+            paint: None,
         }
+    }
+
+    /// From now on each frame is drawn with the software painter, with the
+    /// app's theme and icons, so that [`Viewer::picture`] can keep it.
+    fn painted(&mut self) {
+        let theme = crate::theme::Theme::default();
+        theme.apply(&self.ctx, 1.0);
+        self.ctx.all_styles_mut(|s| s.animation_time = 0.0);
+        let icons = crate::ui::icons::Icons::load(&self.ctx, None);
+        self.paint = Some(Box::new(Paint {
+            painter: Default::default(),
+            pixels: vec![0; (self.size.x * self.size.y) as usize],
+            icons,
+            background: theme.palette().navy,
+        }));
+    }
+
+    /// The last frame kept as `<folder>/<name>.png` when
+    /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>`.
+    fn picture(&self, name: &str) {
+        let (Some(paint), Some(dir)) = (&self.paint, std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR")) else {
+            return;
+        };
+        let rgba: Vec<_> = paint
+            .pixels
+            .iter()
+            .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+            .collect();
+        let path = std::path::Path::new(&dir).join(format!("{name}.png"));
+        image::save_buffer(path, &rgba, self.size.x as u32, self.size.y as u32, image::ColorType::Rgba8).expect("picture written");
     }
 
     /// The same settings in a viewer just started (egui's memory is new).
@@ -212,6 +269,10 @@ impl Viewer {
         let folder_windows = self.inventory.windows.clone();
         let menu = self.menu;
         let hidden = self.hidden;
+        let bars = self.bars.clone();
+        let empty = crate::ui::icons::Icons::default();
+        let icons = self.paint.as_ref().map_or(&empty, |paint| &paint.icons);
+        let painted = self.paint.is_some();
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
@@ -227,6 +288,26 @@ impl Viewer {
                 // as the interface's pass does: the card and the switcher,
                 // and the menu when open
                 super::interface(ctx, &p, hidden);
+                if let Some(bars) = &bars {
+                    use crate::ui::bars::{favorites, islands};
+                    if painted {
+                        // a pretend place island over the row, for the pictures
+                        islands::area(ctx, &p, "test_place", bars.under, |ui| {
+                            let text = ui.painter().layout_no_wrap(
+                                "Pretend Region (128, 128, 22)".to_owned(),
+                                egui::FontId::proportional(13.0),
+                                p.ink,
+                            );
+                            widgets::paint_ink_left(ui.painter(), text, pos2(bars.under.left() + 14.0, bars.under.center().y), p.ink);
+                        });
+                    }
+                    let row = bars
+                        .landmarks
+                        .as_ref()
+                        .map(|view| favorites::row(ctx, &p, icons, view, bars.under).0.bottom());
+                    islands::set_favorites_row_bottom(ctx, row);
+                    super::strip::own_row(ctx, &p, icons, bars.under);
+                }
                 if menu {
                     egui::Area::new(egui::Id::unique("test-world-menu"))
                         .order(egui::Order::Foreground)
@@ -264,6 +345,19 @@ impl Viewer {
                 }
             },
         );
+        if let Some(paint) = &mut self.paint {
+            // (the painter is given every frame's textures)
+            let primitives = ctx.tessellate(output.shapes.clone(), output.pixels_per_point);
+            paint.pixels.fill(0);
+            paint.painter.paint(
+                &mut paint.pixels,
+                [self.size.x as usize, self.size.y as usize],
+                &primitives,
+                &output.textures_delta,
+                output.pixels_per_point,
+                paint.background,
+            );
+        }
         output.textures_delta.clear();
         fn collect(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
             match shape {

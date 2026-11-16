@@ -672,6 +672,14 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
             out.push(Request::Preferences);
         }
     });
+    // (Folderstorm (C++): "Show workspace favorites strip" in the switcher)
+    let mut strip = shown.store.strip;
+    if widgets::checkbox(ui, p, &mut strip, tr!("fs-strip-box"))
+        .on_hover_text(tr!("fs-strip-show-help"))
+        .changed()
+    {
+        out.push(Request::Strip(strip));
+    }
     if let Some(error) = apply::refused(&ctx) {
         refused(ui, p, words::refusal(error));
     } else if let Some(report) = apply::report(&ctx) {

@@ -30,6 +30,7 @@
 //! - [`pick`]: which layout a quick switch means. [`preview`]: the picture
 //!   of a layout before it is applied. [`switcher`]: the window to change
 //!   layout from the keyboard. [`toolbar`]: the two toolbar commands.
+//!   [`strip`]: the favorites on the row under the top bar.
 //!   [`words`]: the layouts in words.
 //!
 //! A layout never holds what a window contains: no message, conversation,
@@ -44,6 +45,7 @@ pub mod notice;
 pub mod pick;
 pub mod preview;
 pub mod store;
+pub mod strip;
 pub mod switcher;
 pub mod toolbar;
 pub mod viewer;
@@ -64,6 +66,7 @@ pub use store::Store;
 /// not drawn and waits (the switcher is hidden with the other windows).
 pub fn interface(ctx: &egui::Context, p: &crate::theme::Palette, hidden: bool) {
     apply::set_notice_hidden(ctx, hidden);
+    strip::set_hidden(ctx, hidden);
     if !hidden {
         notice::show(ctx, p);
     }
