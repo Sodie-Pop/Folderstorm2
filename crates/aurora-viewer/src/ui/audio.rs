@@ -283,19 +283,20 @@ pub fn top_controls(
             if music.clicked() && media.music_available {
                 action = AudioAction::ToggleMusic;
             }
-            let med = toggle(
+            // Folderstorm: all media on click, its state on the face, Nearby media on hover (folderstorm/nearby_media)
+            let med = slot_button(
                 ui,
-                "brand-youtube-filled",
-                if !media.media_available {
-                    aurora_i18n::tr!("ui-audio-no-media-on-this-parcel")
-                } else if media.media_playing {
-                    aurora_i18n::tr!("ui-audio-stop-parcel-media")
-                } else {
-                    aurora_i18n::tr!("ui-audio-play-parcel-media")
-                },
+                p,
+                icons,
+                crate::folderstorm::nearby_media::panel::button_icon(media.media_playing),
                 media.media_playing,
                 media.media_available,
+                slot,
             );
+            crate::folderstorm::nearby_media::panel::hover(ui, p, icons, &med, sp.contains_pointer());
+            if med.contains_pointer() {
+                *st = AudioUi::default(); // Folderstorm: the volume panel gives way
+            }
             if med.clicked() && media.media_available {
                 action = AudioAction::ToggleMedia;
             }
