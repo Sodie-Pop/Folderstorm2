@@ -58,8 +58,12 @@ pub mod objects; // Folderstorm: object inspection and lifecycle (mcp-objects.md
 mod objects_tests;
 pub mod picture;
 pub mod plans; // Folderstorm: batch plans (mcp-receipts.md, section 6)
+pub mod script_feed; // Folderstorm: script output feed (mcp-task-scripts.md)
 pub mod setup;
 pub mod studio;
+pub mod task_scripts; // Folderstorm: scripts inside objects (mcp-task-scripts.md)
+#[cfg(test)]
+mod task_scripts_tests;
 #[cfg(test)]
 mod tests;
 pub mod tools;
@@ -114,6 +118,10 @@ struct Runtime {
     /// Folderstorm: `AURORA_DEMO_MCP=objects`: the demo's listing, which a
     /// put follows once it answers.
     demo_listing: Option<Receiver<Result<serde_json::Value, ToolError>>>,
+    /// Folderstorm: `AURORA_DEMO_MCP=task-scripts`: the demo's step and the
+    /// answer it waits for, and the script it works on.
+    demo_task: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
+    demo_task_item: Option<String>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -235,11 +243,12 @@ fn identity(view: &View) -> folderstorm_mcp_bridge::server::Identity {
 }
 
 /// `AURORA_DEMO_MCP=ask` (or `camera`, `plan`, `navigation`, `content`,
-/// `objects`): the session asks before every change, and the demo makes
-/// requests of its own so that the dialog shows.
+/// `objects`, `task-scripts`): the session asks before every change, and
+/// the demo makes requests of its own so that the dialog shows.
 fn demo_asks() -> bool {
-    std::env::var("AURORA_DEMO_MCP")
-        .is_ok_and(|v| v == "ask" || v == "camera" || v == "plan" || v == "navigation" || v == "content" || v == "objects")
+    std::env::var("AURORA_DEMO_MCP").is_ok_and(|v| {
+        v == "ask" || v == "camera" || v == "plan" || v == "navigation" || v == "content" || v == "objects" || v == "task-scripts"
+    })
 }
 
 /// Folderstorm: `AURORA_DEMO_MCP=navigation`: the demo walks the avatar 8 m
@@ -374,6 +383,9 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             }
         }
         let wanted = rt.session.unwrap_or(*saved);
+        // Folderstorm: the script output feed captures while access is on
+        // and Read is Allow (mcp-task-scripts.md)
+        script_feed::set_capturing(wanted.enabled && wanted.permissions.check(folderstorm_mcp_bridge::Class::Read).is_ok());
         let generation = rt.logins.observe(view.world.login.as_ref());
         if !wanted.enabled {
             rt.failure = None;
@@ -451,7 +463,8 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
         let demo_ready = !view.world.inventory.root.is_nil()
             && (!(demo_camera() || demo_navigation()) || view.stage.in_world)
             && (!content::demo::wanted() || view.world.inventory.items.contains_key(&content::demo::NOTES))
-            && (!objects::demo::wanted() || objects::demo::ready(view.world));
+            && (!objects::demo::wanted() || objects::demo::ready(view.world))
+            && (!task_scripts::demo::wanted() || task_scripts::demo::ready(view.world));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -491,6 +504,13 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     rt.desk.take(call, cx.get_or_insert_with(context), now);
                     rt.demo_reads.push(answer);
                 }
+                Vec::new()
+            } else if task_scripts::demo::wanted() {
+                // Folderstorm: the listing now, then a read, a save and a reset
+                let (tool, arguments) = task_scripts::demo::list();
+                let (call, answer) = Pending::detached(tool, arguments, false, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                rt.demo_task = Some((0, answer));
                 Vec::new()
             } else if objects::demo::wanted() {
                 // Folderstorm: the listing now, the put once it answers (below)
@@ -546,6 +566,36 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     }
                 }
                 Err(TryRecvError::Empty) => rt.demo_listing = Some(listing),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
+        // Folderstorm: the task script demo's next step
+        if let Some((step, answer)) = rt.demo_task.take() {
+            match answer.try_recv() {
+                Ok(result) => {
+                    log_demo_task(step, &result);
+                    let next = result.ok().and_then(|value| match step {
+                        0 => task_scripts::demo::get_after(&value).map(|n| (1, n)),
+                        1 => {
+                            rt.demo_task_item = value["item_id"].as_str().map(str::to_owned);
+                            task_scripts::demo::save_after(&value).map(|n| (2, n))
+                        }
+                        2 => Some((3, task_scripts::demo::list())),
+                        3 => rt
+                            .demo_task_item
+                            .as_deref()
+                            .and_then(|item| task_scripts::demo::reset_after(&value, item))
+                            .map(|n| (4, n)),
+                        _ => None,
+                    });
+                    if let Some((step, (tool, arguments))) = next {
+                        let ask = matches!(step, 2 | 4);
+                        let (call, answer) = Pending::detached(tool, arguments, ask, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_task = Some((step, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_task = Some((step, answer)),
                 Err(TryRecvError::Disconnected) => {}
             }
         }
@@ -686,6 +736,37 @@ pub fn object_associate(call: Pending, reply: serde_json::Value) {
     with(|rt| rt.desk.objects().associate(call, reply));
 }
 
+/// Folderstorm: what the waiting task script reads need fetched, and the
+/// running states to ask for (mcp-task-scripts.md).
+pub fn task_script_wants() -> (Vec<task_scripts::Fetch>, Vec<task_scripts::Query>) {
+    with(|rt| {
+        let scripts = rt.desk.task_scripts();
+        (scripts.wanted(), scripts.wanted_queries())
+    })
+}
+
+/// Folderstorm: a task script fetch could not be sent.
+pub fn task_script_fetch_failed(source_request: Uuid, reason: &str) {
+    with(|rt| rt.desk.task_scripts().fetch_failed(source_request, reason));
+}
+
+/// Folderstorm: the app sends a task script change now; a save's upload
+/// request id comes back.
+pub fn task_script_sending(call: Pending, send: &task_scripts::Send, reply: serde_json::Value) -> Option<Uuid> {
+    with(|rt| rt.desk.task_scripts().sending(call, send, reply, Instant::now()))
+}
+
+/// Folderstorm: the task scripts saved since the last call: prim, item and
+/// new asset, for the Contents tab.
+pub fn task_script_updates() -> Vec<(Uuid, Uuid, Uuid)> {
+    with(|rt| rt.desk.task_scripts().take_updates())
+}
+
+/// Folderstorm: whether a save of that script is under way.
+pub fn task_script_saving(object: Uuid, item: Uuid) -> bool {
+    with(|rt| rt.desk.task_scripts().saving(object, item))
+}
+
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
 /// asks the landmark cache for them, phase 3).
 pub fn wanted_landmarks() -> Vec<Uuid> {
@@ -719,6 +800,8 @@ pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)>
         // Folderstorm: an object change is planned again against its
         // snapshot, the prim unchanged since (mcp-objects.md)
         let planned = objects::handles(&call.tool).then(|| rt.desk.objects().plan(&call, &cx, Instant::now(), true));
+        // Folderstorm: and a task script change (mcp-task-scripts.md)
+        let planned = planned.or_else(|| task_scripts::is_change(&call.tool).then(|| rt.desk.task_script_plan(&call, &cx, Instant::now())));
         Some((call, planned))
     })?;
     match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
@@ -750,12 +833,27 @@ pub fn observe(event: &aurora_net::NetEvent) {
         with(|rt| rt.desk.teleport_failed(reason));
         return;
     }
-    // Folderstorm: objects' properties and contents (mcp-objects.md)
+    // Folderstorm: objects' properties and contents (mcp-objects.md); a
+    // listing also tells the task script snapshots (mcp-task-scripts.md)
     if matches!(
         event,
         aurora_net::NetEvent::ObjectProperties(_) | aurora_net::NetEvent::TaskInventory { .. }
     ) {
-        return with(|rt| rt.desk.objects().observe(event, Instant::now()));
+        return with(|rt| {
+            rt.desk.task_script_observe(event, Instant::now());
+            rt.desk.objects().observe(event, Instant::now());
+        });
+    }
+    // Folderstorm: scripts inside objects: their source, association, save
+    // and running state (mcp-task-scripts.md)
+    match event {
+        aurora_net::NetEvent::ScriptLoaded { target, .. } | aurora_net::NetEvent::ScriptSaved { target, .. } if !target.object.is_nil() => {
+            return with(|rt| rt.desk.task_script_observe(event, Instant::now()));
+        }
+        aurora_net::NetEvent::ScriptExperiences { .. } | aurora_net::NetEvent::ScriptRunning { .. } => {
+            return with(|rt| rt.desk.task_script_observe(event, Instant::now()));
+        }
+        _ => {}
     }
     if let aurora_net::NetEvent::InventoryCreated(item) = event {
         with(|rt| {
@@ -787,6 +885,22 @@ pub fn shutdown() {
         rt.studio = studio::Studio::default();
         rt.running = None;
     });
+}
+
+/// Folderstorm: the task script demo's step answered: what it did, never
+/// the source.
+fn log_demo_task(step: u8, result: &Result<serde_json::Value, ToolError>) {
+    match result {
+        Ok(value) => {
+            let mut value = value.clone();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("text");
+                object.remove("items");
+            }
+            log::info!("local assistant demo: task script step {step} answered {value}");
+        }
+        Err(e) => log::info!("local assistant demo: task script step {step} ended with {e}"),
+    }
 }
 
 /// The demo's request answered: what it did, never the picture's bytes.

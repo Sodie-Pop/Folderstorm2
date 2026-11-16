@@ -283,7 +283,7 @@ fn world<'a>(cx: &Ctx<'a>) -> Result<&'a World, ToolError> {
 }
 
 /// A name from the grid as the viewer shows it (the RLVa text filter).
-fn shown(world: &World, text: &str) -> String {
+pub(super) fn shown(world: &World, text: &str) -> String {
     let text = world.rlva_privacy.apply(text);
     receipts::clean(&text, NAME_MAX * 2)
 }
@@ -381,7 +381,7 @@ fn target(world: &World, scene_owner: Option<Uuid>, object: Uuid, take: Option<b
 }
 
 /// The task item's rights for the agent, as the Contents tab reads them.
-fn rights(item: &TaskItem, agent: Uuid) -> (bool, bool, bool) {
+pub(super) fn rights(item: &TaskItem, agent: Uuid) -> (bool, bool, bool) {
     let mask = actions::task_agent_mask(item, agent);
     (
         mask & actions::COPY != 0,
@@ -1453,7 +1453,11 @@ impl Objects {
             _ => Err(invalid("give `operation_id` or `client_request_id`")),
         })?;
         let receipt = receipt
-            .filter(|r| handles(&r.tool) && r.tool != LIST && r.tool != STATUS)
+            // Folderstorm: the task script tools' changes too (mcp-task-scripts.md)
+            .filter(|r| {
+                (handles(&r.tool) && r.tool != LIST && r.tool != STATUS)
+                    || folderstorm_mcp_bridge::protocol::task_scripts::needs_client_request_id(&r.tool)
+            })
             .ok_or_else(|| err(ErrorCode::NotFound, "no object operation with this id on this login"))?;
         let mut answer = json!({"receipt": receipt.to_json(names)});
         if let Some(f) = self.facts(&receipt.operation_id) {
@@ -1484,6 +1488,77 @@ impl Objects {
             answer["object"] = seen;
         }
         Ok(answer)
+    }
+
+    /// Folderstorm: the prim `object` for the task script tools
+    /// (mcp-task-scripts.md): the same rules as every object tool; its
+    /// owner must be known by now.
+    pub(super) fn prim(&self, scene: &Scene, world: &World, object: Uuid) -> Result<Target, ToolError> {
+        self.owned(scene, world, object, None)
+    }
+
+    /// Folderstorm: the raw name of task item `item` in the newest
+    /// snapshot of `object` that holds it.
+    pub(super) fn item_name(&self, _scene: &Scene, object: Uuid, item: Uuid) -> Option<String> {
+        self.snapshots
+            .iter()
+            .rev()
+            .filter(|s| s.object == object)
+            .find_map(|s| s.items.iter().find(|i| i.item_id == item).map(|i| i.name.clone()))
+    }
+
+    /// Folderstorm: the prim's raw name, from the server's properties or
+    /// its newest snapshot.
+    pub(super) fn prim_name(&self, scene: &Scene, object: Uuid) -> String {
+        let known = self.raw_name(scene, object);
+        if !known.is_empty() {
+            return known;
+        }
+        self.snapshots
+            .iter()
+            .rev()
+            .find(|s| s.object == object)
+            .map(|s| s.name.clone())
+            .unwrap_or_default()
+    }
+
+    /// Folderstorm: the task item `item` of the snapshot `snapshot_id` of
+    /// the prim `object`, checked as every change checks its snapshot
+    /// (`fresh`: younger than 120 s), with the prim's raw name.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn task_item(
+        &self,
+        scene: &Scene,
+        world: &World,
+        object: Uuid,
+        snapshot_id: &str,
+        item: Uuid,
+        now: Instant,
+        fresh: bool,
+    ) -> Result<(Target, TaskItem, String), ToolError> {
+        let snapshot = self.check_snapshot(snapshot_id, object, now, fresh)?;
+        let target = self.owned(scene, world, object, None)?;
+        let found = snapshot
+            .items
+            .iter()
+            .find(|i| i.item_id == item)
+            .cloned()
+            .ok_or_else(|| err(ErrorCode::NotFound, "no such item in this snapshot"))?;
+        let known = self.raw_name(scene, object);
+        let name = if known.is_empty() { snapshot.name.clone() } else { known };
+        Ok((target, found, name))
+    }
+
+    /// Folderstorm: the assistant changed the prim `object` (a task script
+    /// saved): its snapshots are stale from now on.
+    pub(super) fn touched(&mut self, object: Uuid) {
+        *self.edits.entry(object).or_default() += 1;
+    }
+
+    /// Folderstorm: ask the server for the prim's contents again (after a
+    /// task script save), answered like any listing.
+    pub(super) fn relist(&mut self, handle: u64, local_id: u32, object: Uuid) {
+        self.want_contents(handle, local_id, object);
     }
 
     /// Every listing still waiting is refused (a login change, access off).

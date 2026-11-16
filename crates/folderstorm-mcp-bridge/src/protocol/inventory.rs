@@ -294,6 +294,7 @@ mod tests {
                 + super::super::navigation::NAVIGATION_TOOLS.len() // Folderstorm: navigation
                 + super::super::content::CONTENT_TOOLS.len() // Folderstorm: content editing
                 + super::super::objects::OBJECT_TOOLS.len() // Folderstorm: object tools
+                + super::super::task_scripts::TASK_SCRIPT_TOOLS.len() // Folderstorm: task scripts
         );
         for read in [
             "inventory_get_many",

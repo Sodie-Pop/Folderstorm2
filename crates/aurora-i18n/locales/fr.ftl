@@ -938,6 +938,8 @@ fs-mcp-objects = Contenu de mes objets
 fs-mcp-objects-hint = Lire et modifier ce que contiennent les objets qui vous appartiennent et que vous pouvez modifier : y mettre des copies de vos éléments (un script y entre arrêté), renommer ou retirer ce qu'ils contiennent, et noter quel élément une copie incertaine a créé. Retirer supprime définitivement et demande toujours d'abord. Jamais les objets portés, jamais ceux des autres.
 fs-mcp-take = Prendre mes objets
 fs-mcp-take-hint = Prendre dans votre inventaire les objets qui vous appartiennent et que vous pouvez modifier, ou en prendre une copie. Retirer un objet du monde demande toujours d'abord.
+fs-mcp-scripts = Exécuter les scripts de mes objets
+fs-mcp-scripts-hint = Démarrer, arrêter et réinitialiser les scripts des objets qui vous appartiennent et que vous pouvez modifier, et laisser un script en marche après que l'assistant l'a enregistré. Un script en marche agit dans le monde comme son code le dit. Jamais les objets portés, jamais ceux des autres.
 fs-mcp-changes-note = Demander ouvre une fenêtre dans le viewer avant chaque changement ; sans réponse sous 60 secondes, le changement est refusé. La suppression définitive et Vider la corbeille ne sont jamais autorisées.
 fs-mcp-status = État
 fs-mcp-status-hint = Si la connexion est ouverte. La clé d'accès n'est jamais affichée.
@@ -1102,6 +1104,23 @@ fs-mcp-ask-object-reconcile = Noter « { $item } » de l'objet « { $object } »
 fs-mcp-ask-object-take = Prendre l'objet « { $object } » dans « { $folder } » (il quitte le monde)
 fs-mcp-ask-object-take-copy = Prendre une copie de l'objet « { $object } » dans « { $folder } »
 fs-mcp-ask-object-rez-identify = Noter l'objet « { $object } » comme celui posé plus tôt (non vérifié)
+fs-mcp-ask-task-script-save = Enregistrer et compiler le script « { $name } » de l'objet « { $object } » ({ $added ->
+    [one] { $added } ligne ajoutée
+   *[other] { $added } lignes ajoutées
+}, { $removed ->
+    [one] { $removed } retirée
+   *[other] { $removed } retirées
+}), arrêté ensuite
+fs-mcp-ask-task-script-save-run = Enregistrer et compiler le script « { $name } » de l'objet « { $object } » ({ $added ->
+    [one] { $added } ligne ajoutée
+   *[other] { $added } lignes ajoutées
+}, { $removed ->
+    [one] { $removed } retirée
+   *[other] { $removed } retirées
+}), puis le laisser en marche
+fs-mcp-ask-task-script-start = Démarrer le script « { $name } » de l'objet « { $object } »
+fs-mcp-ask-task-script-stop = Arrêter le script « { $name } » de l'objet « { $object } »
+fs-mcp-ask-task-script-reset = Réinitialiser le script « { $name } » de l'objet « { $object } » (il repart du début)
 inventory-folder-jump-menu = Aller au dossier…
 inventory-folder-jump-menu-tip = Trouver un dossier par son nom ou celui de son parent, puis l'ouvrir (Ctrl+J).
 inventory-folder-jump-title = Aller à un dossier de l'inventaire

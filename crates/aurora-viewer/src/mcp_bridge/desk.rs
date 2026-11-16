@@ -38,12 +38,14 @@ use super::content::{self, Content}; // Folderstorm: content editing
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::objects::{self, Objects}; // Folderstorm: object tools (mcp-objects.md)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
+use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
 use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
 use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: object tools
+use folderstorm_mcp_bridge::protocol::task_scripts as task_tool; // Folderstorm: task scripts
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
@@ -206,6 +208,8 @@ pub struct Desk {
     content: Content,
     /// Folderstorm: this login's object snapshots, listings and watches.
     objects: Objects,
+    /// Folderstorm: this login's task script reads, snapshots and changes.
+    task_scripts: TaskScripts,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -290,7 +294,21 @@ pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
 pub fn call_decision(permissions: &Permissions, call: &Pending) -> Decision {
     match call.plan_class {
         Some(class) => permissions.decide(class),
-        None => decision(permissions, &call.tool),
+        None => {
+            // Folderstorm: a task script save also needs Read, and Scripts
+            // when it leaves the script running (mcp-task-scripts.md)
+            let extra = task_tool::extra_classes(&call.tool, &call.arguments);
+            let base = decision(permissions, &call.tool);
+            if extra.is_empty() || base == Decision::Refuse {
+                base
+            } else {
+                match permissions.decide_all(extra) {
+                    Decision::Refuse => Decision::Refuse,
+                    Decision::Ask => Decision::Ask,
+                    Decision::Run => base,
+                }
+            }
+        }
     }
 }
 
@@ -346,7 +364,11 @@ impl Desk {
         }
         // Folderstorm: an object change needs its client_request_id
         // (mcp-objects.md; decision 3 of mcp-receipts.md)
-        if fresh && object_tool::needs_client_request_id(&call.tool) && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none() {
+        // Folderstorm: and a task script change (mcp-task-scripts.md)
+        if fresh
+            && (object_tool::needs_client_request_id(&call.tool) || task_tool::needs_client_request_id(&call.tool))
+            && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none()
+        {
             return call.answer(Err(ToolError::new(
                 ErrorCode::InvalidArguments,
                 "`client_request_id` is required for an object change: choose a new one for each change, and send the same one again only to ask for that change's receipt",
@@ -455,9 +477,35 @@ impl Desk {
             return;
         }
         if call.tool == object_tool::STATUS {
-            let result = self
+            let mut result = self
                 .objects
                 .status(&call.arguments, &self.receipts, self.session.as_deref(), self.names());
+            // Folderstorm: a task script operation's facts (mcp-task-scripts.md)
+            if let Ok(answer) = &mut result
+                && let Some(facts) = answer["receipt"]["operation_id"]
+                    .as_str()
+                    .and_then(|op| self.task_scripts.facts(op))
+            {
+                answer["script"] = facts;
+            }
+            return call.answer(result);
+        }
+        // Folderstorm: the task script tools' reads (mcp-task-scripts.md)
+        if call.tool == task_tool::GET {
+            self.task_scripts.start_get(call, &self.objects, cx, now);
+            return;
+        }
+        if call.tool == task_tool::STATUS {
+            self.task_scripts.start_status(call, &self.objects, cx, now);
+            return;
+        }
+        if call.tool == task_tool::PREVIEW {
+            let save = self.permissions.decide_all([Class::Content, Class::Objects, Class::Read]);
+            let result = self.task_scripts.preview(&call.arguments, &self.objects, cx, save, now);
+            return call.answer(result);
+        }
+        if call.tool == task_tool::DEBUG_POLL {
+            let result = super::script_feed::poll(&call.arguments, cx);
             return call.answer(result);
         }
         if !spec.changes() {
@@ -473,9 +521,18 @@ impl Desk {
                 Err(e) => return call.answer(Err(e)),
             }
         }
+        // Folderstorm: a task script save is checked and frozen, once
+        if fresh && call.tool == task_tool::SAVE {
+            match self.task_scripts.freeze(&call.arguments, &self.objects, cx, now) {
+                Ok(frozen) => call.arguments = frozen,
+                Err(e) => return call.answer(Err(e)),
+            }
+        }
         // Folderstorm: an object change is planned against its snapshot
         let planned = if objects::handles(&call.tool) {
             self.objects.plan(&call, cx, now, false)
+        } else if task_scripts::is_change(&call.tool) {
+            self.task_scripts.plan(&call, &self.objects, cx, now, false)
         } else {
             changes::plan(&call.tool, &call.arguments, cx)
         };
@@ -841,6 +898,8 @@ impl Desk {
         self.receipts.with(receipts::Store::clear);
         self.content.clear(&refusal); // Folderstorm: content editing
         self.objects.clear(&refusal); // Folderstorm: object tools
+        self.task_scripts.clear(&refusal); // Folderstorm: task scripts
+        super::script_feed::clear();
     }
 
     fn refuse_waiting(&mut self, refusal: &ToolError) {
@@ -857,6 +916,7 @@ impl Desk {
         landmark::refuse_all(&mut self.landmarks, refusal);
         self.content.refuse_all(refusal); // Folderstorm: content reads
         self.objects.refuse_all(refusal); // Folderstorm: object listings
+        self.task_scripts.refuse_all(refusal); // Folderstorm: task script reads
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -884,6 +944,10 @@ impl Desk {
         // Folderstorm: the object operations' facts stay, the snapshots go
         old.objects.close(&refused(ACCESS_OFF));
         self.objects = old.objects;
+        // Folderstorm: the task script operations' facts stay, the snapshots go
+        old.task_scripts.close(&refused(ACCESS_OFF));
+        self.task_scripts = old.task_scripts;
+        super::script_feed::set_capturing(false);
     }
 
     /// Folderstorm: `flight` answers that it may still land, and listens on
@@ -1289,6 +1353,37 @@ impl Desk {
         self.content
             .tick(&world.inventory, &limits, read, &refused(PERMISSIONS_CHANGED), now);
         self.objects.tick(world, now); // Folderstorm: object tools
+        // Folderstorm: task scripts: reads, waits, and the prims to list again
+        let limits = content::Limits::of(&world.rlva);
+        self.task_scripts
+            .tick(&self.objects, world, &limits, read, &refused(PERMISSIONS_CHANGED), now);
+        for (handle, local_id, object) in self.task_scripts.take_relists() {
+            self.objects.relist(handle, local_id, object);
+            self.objects.touched(object);
+        }
+    }
+
+    /// Folderstorm: the task script state (the app's fetch answers, sends
+    /// and the scripts saved).
+    pub fn task_scripts(&mut self) -> &mut TaskScripts {
+        &mut self.task_scripts
+    }
+
+    /// Folderstorm: a script answer of the server for the task script
+    /// tools; a confirmed save marks its prim changed for the object tools
+    /// at once (their snapshots taken before are stale) and lists it again.
+    pub fn task_script_observe(&mut self, event: &aurora_net::NetEvent, now: Instant) {
+        self.task_scripts.observe(event, now);
+        for (handle, local_id, object) in self.task_scripts.take_relists() {
+            self.objects.relist(handle, local_id, object);
+            self.objects.touched(object);
+        }
+    }
+
+    /// Folderstorm: a task script change planned again just before the
+    /// send, against the object tools' snapshots (mcp-task-scripts.md).
+    pub fn task_script_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
+        self.task_scripts.plan(call, &self.objects, cx, now, true)
     }
 
     /// Folderstorm: what the waiting content reads need fetched (each once).

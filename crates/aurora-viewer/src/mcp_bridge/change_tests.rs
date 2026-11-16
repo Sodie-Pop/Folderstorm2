@@ -110,6 +110,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
         Work::Navigate(_) => panic!("not an inventory change"),
         Work::Content(_) => panic!("not run here (content_tests)"),
         Work::Object(_) => panic!("not run here (objects_tests)"),
+        Work::TaskScript(_) => panic!("not run here (task_scripts_tests)"),
     }
 }
 

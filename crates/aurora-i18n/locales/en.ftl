@@ -935,6 +935,8 @@ fs-mcp-objects = My objects' contents
 fs-mcp-objects-hint = Read and change what objects you own and may modify hold: put copies of your items into them (a script goes in stopped), rename or remove what they hold, and record which item an uncertain copy made. Removing deletes for good and always asks first. Never attachments, never someone else's objects.
 fs-mcp-take = Take my objects
 fs-mcp-take-hint = Take objects you own and may modify into your inventory, or take a copy of them. Taking one out of the world always asks first.
+fs-mcp-scripts = Run my objects' scripts
+fs-mcp-scripts-hint = Start, stop and reset scripts inside objects you own and may modify, and leave a script running after the assistant saves it. A running script acts in the world as its code says. Never attachments, never someone else's objects.
 fs-mcp-changes-note = Asking opens a dialog in the viewer before each change; without an answer within 60 seconds, the change is refused. Permanent deletion and Empty Trash are never allowed.
 fs-mcp-status = Status
 fs-mcp-status-hint = Whether the connection is open. The access key is never shown.
@@ -1099,6 +1101,23 @@ fs-mcp-ask-object-reconcile = Record “{ $item }” in the object “{ $object 
 fs-mcp-ask-object-take = Take the object “{ $object }” into “{ $folder }” (it leaves the world)
 fs-mcp-ask-object-take-copy = Take a copy of the object “{ $object }” into “{ $folder }”
 fs-mcp-ask-object-rez-identify = Record the object “{ $object }” as the one rezzed earlier (not verified)
+fs-mcp-ask-task-script-save = Save and compile the script “{ $name }” in the object “{ $object }” ({ $added ->
+    [one] one line
+   *[other] { $added } lines
+} added, { $removed ->
+    [one] one
+   *[other] { $removed }
+} removed), stopped afterwards
+fs-mcp-ask-task-script-save-run = Save and compile the script “{ $name }” in the object “{ $object }” ({ $added ->
+    [one] one line
+   *[other] { $added } lines
+} added, { $removed ->
+    [one] one
+   *[other] { $removed }
+} removed), then leave it running
+fs-mcp-ask-task-script-start = Start the script “{ $name }” in the object “{ $object }”
+fs-mcp-ask-task-script-stop = Stop the script “{ $name }” in the object “{ $object }”
+fs-mcp-ask-task-script-reset = Reset the script “{ $name }” in the object “{ $object }” (it starts over from the beginning)
 inventory-folder-jump-menu = Go to folder…
 inventory-folder-jump-menu-tip = Find a folder by its name or its parent's name and open it (Ctrl+J).
 inventory-folder-jump-title = Go to inventory folder
