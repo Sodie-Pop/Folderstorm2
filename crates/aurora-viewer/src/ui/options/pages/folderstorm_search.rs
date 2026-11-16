@@ -192,9 +192,10 @@ mod tests {
             ("dual monitor", Page::Layout, 12),
             ("multi-monitor", Page::Layout, 12),
             ("viewport margins", Page::Layout, 5),
-            // Layout: the margins' desktop (the switch, the icon size)
-            ("desktop shortcut", Page::Layout, 2),
-            ("launcher", Page::Layout, 2),
+            // Layout: the margins' desktop (the switch, the icon size, the
+            // single click, Remove all shortcuts)
+            ("desktop shortcut", Page::Layout, 4),
+            ("launcher", Page::Layout, 4),
             ("icon size", Page::Layout, 1),
             ("photo mode", Page::Layout, 1),
             ("workspace", Page::Layout, 8),

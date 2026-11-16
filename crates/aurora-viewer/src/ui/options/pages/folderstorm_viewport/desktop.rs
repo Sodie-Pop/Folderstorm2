@@ -48,11 +48,12 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             &field!(folderstorm_desktop.single_click),
         );
         cx.greyed(false);
-        // shortcuts kept on a monitor that has no desktop now
+        // shortcuts kept on a monitor that has no desktop now (the row
+        // exists only then: it is a state, not a setting to search for)
         let ctx = cx.ui.ctx().clone();
         let unused = desktop::unused(&ctx, &cx.s.folderstorm_desktop);
-        cx.conditional(unused > 0, |cx| {
-            words(cx, &["fs-search-desktop"]).wide().row(
+        if unused > 0 {
+            cx.wide().row(
                 &tr!("fs-desktop-unused", count = unused),
                 tr!("fs-desktop-unused-help"),
                 &Nothing,
@@ -71,7 +72,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     }
                 },
             );
-        });
+        }
         let count = cx.s.folderstorm_desktop.shortcuts.len();
         words(cx, &["fs-search-desktop"]).wide().row(
             tr!("fs-desktop-clear"),

@@ -592,19 +592,18 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                             egui::TextEdit::singleline(&mut text)
                                 .id(area_id(room.slot).with(("rename", id)))
                                 .char_limit(MAX_NAME)
-                                .horizontal_align(egui::Align::Center)
+                                .align(egui::Align2::CENTER_CENTER)
                                 .font(egui::TextStyle::Small),
                         );
                         if state.rename_fresh {
                             state.rename_fresh = false;
                             field.request_focus();
-                            if let Some(mut edit) = egui::TextEdit::load_state(ctx, field.id) {
-                                edit.cursor.set_char_range(Some(egui::text::CCursorRange::two(
-                                    egui::text::CCursor::new(0),
-                                    egui::text::CCursor::new(text.chars().count()),
-                                )));
-                                edit.store(ctx, field.id);
-                            }
+                            let mut edit = egui::TextEdit::load_state(ctx, field.id).unwrap_or_default();
+                            edit.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(text.chars().count()),
+                            )));
+                            edit.store(ctx, field.id);
                             ctx.data_mut(|d| d.insert_temp(rename_id(), text));
                         } else if field.lost_focus() || escape {
                             state.rename = None;
@@ -847,6 +846,12 @@ struct MenuOf<'a> {
     rooms: &'a [Room],
 }
 
+/// Where the tests find the cell of `icon` in the open *Icon ›* menu.
+#[cfg(test)]
+pub(super) fn icon_cell_id(icon: &str) -> egui::Id {
+    egui::Id::unique(("folderstorm_desktop_icon_cell", icon))
+}
+
 /// The name of the monitor of `slot`, as the menus say it.
 pub fn monitor_label(slot: u8) -> String {
     tr!("fs-desktop-monitor", number = u32::from(slot) + 1)
@@ -878,6 +883,9 @@ fn shortcut_menu(response: &egui::Response, p: &Palette, of: &MenuOf, open: impl
                     ui.spacing_mut().item_spacing.x = 2.0;
                     for icon in line {
                         let cell = menu::icon_cell(ui, p, icon, "", true, false, vec2(28.0, 28.0));
+                        // (where the tests click: an icon has no text to find)
+                        #[cfg(test)]
+                        ui.data_mut(|d| d.insert_temp(icon_cell_id(icon), cell.rect));
                         cell.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, *icon));
                         if of.own_icon == Some(*icon) {
                             ui.painter().rect_stroke(
