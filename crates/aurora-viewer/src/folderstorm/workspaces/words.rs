@@ -44,7 +44,13 @@ pub fn workspace_holds(workspace: &Workspace) -> String {
     } else {
         tr!("fs-workspaces-holds-opens", names = names.join(", "))
     };
-    format!("{layout} {opens}")
+    match &workspace.folders {
+        Some(folders) => format!(
+            "{layout} {opens} {}",
+            tr!("fs-workspaces-holds-folders", count = folders.windows.len())
+        ),
+        None => format!("{layout} {opens}"),
+    }
 }
 
 /// What the last apply did, in a sentence or two.
@@ -87,6 +93,15 @@ pub fn report_text(report: &Report, waiting: usize) -> String {
         add(tr!("fs-workspaces-applied-blocked", count = report.blocked));
     } else if report.blocked > 0 {
         add(tr!("fs-layouts-applied-blocked", count = report.blocked));
+    }
+    if report.folders_missing > 0 {
+        add(tr!("fs-workspaces-folders-missing", count = report.folders_missing));
+    }
+    if report.folders_blocked > 0 {
+        add(tr!("fs-workspaces-folders-blocked").to_owned());
+    }
+    if report.folders_other_account {
+        add(tr!("fs-workspaces-folders-other-account").to_owned());
     }
     if waiting > 0 {
         add(tr!("fs-layouts-waiting", count = waiting));

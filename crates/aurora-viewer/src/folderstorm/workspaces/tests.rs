@@ -10,6 +10,7 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod folders;
 mod open;
 mod switcher;
 mod viewer;
@@ -50,6 +51,28 @@ struct Viewer {
     events: Vec<egui::Event>,
     /// The texts of the last frame and where they were.
     texts: Vec<(String, Rect)>,
+    /// The Inventory's folder windows, as the app has them.
+    inventory: Folders,
+}
+
+/// A pretend Inventory: the account logged in, the folders it has, and
+/// its open folder windows (each floater's id and its folder).
+#[derive(Clone, Debug, Default)]
+struct Folders {
+    account: Option<uuid::Uuid>,
+    known: BTreeSet<uuid::Uuid>,
+    windows: Vec<(String, uuid::Uuid)>,
+    /// How many folder windows were opened: each has an id of its own.
+    opened: usize,
+}
+
+impl Folders {
+    fn open(&mut self, folder: uuid::Uuid) -> String {
+        self.opened += 1;
+        let window = format!("inventory_folder-{}", self.opened);
+        self.windows.push((window.clone(), folder));
+        window
+    }
 }
 
 /// The viewer's windows as the app has them: open or not, opened by a
@@ -57,6 +80,7 @@ struct Viewer {
 struct Windows<'a> {
     open: &'a mut BTreeSet<&'static str>,
     blocked: &'a BTreeSet<&'static str>,
+    inventory: &'a mut Folders,
 }
 
 impl apply::Shell for Windows<'_> {
@@ -70,6 +94,27 @@ impl apply::Shell for Windows<'_> {
 
     fn close(&mut self, _: &egui::Context, window: &windows::Window) {
         self.open.remove(window.id);
+    }
+
+    fn account(&self) -> Option<uuid::Uuid> {
+        self.inventory.account
+    }
+
+    fn folder_windows(&self) -> Vec<(String, uuid::Uuid)> {
+        self.inventory.windows.clone()
+    }
+
+    fn has_folder(&self, folder: uuid::Uuid) -> bool {
+        self.inventory.known.contains(&folder)
+    }
+
+    fn open_folder(&mut self, _: &egui::Context, folder: uuid::Uuid) -> Option<String> {
+        // (as RLVa's @showinv has it)
+        (!self.blocked.contains(INVENTORY)).then(|| self.inventory.open(folder))
+    }
+
+    fn close_folder(&mut self, window: &str) {
+        self.inventory.windows.retain(|(id, _)| id != window);
     }
 }
 
@@ -93,6 +138,7 @@ impl Viewer {
             hidden: false,
             events: Vec::new(),
             texts: Vec::new(),
+            inventory: Folders::default(),
         }
     }
 
@@ -147,6 +193,7 @@ impl Viewer {
         let mut shell = Windows {
             open: &mut self.open,
             blocked: &self.blocked,
+            inventory: &mut self.inventory,
         };
         let mut live = Live {
             store: &mut self.store,
@@ -162,6 +209,7 @@ impl Viewer {
         self.time += 1.0 / 60.0;
         let screen = Rect::from_min_size(Pos2::ZERO, self.size);
         let open = self.open.clone();
+        let folder_windows = self.inventory.windows.clone();
         let menu = self.menu;
         let hidden = self.hidden;
         let mut output = ctx.run_ui(
@@ -194,6 +242,9 @@ impl Viewer {
                     if open.contains(id) {
                         Floater::new(id, id, at, size).show(ctx, &p, &mut true, |ui| ui.label("…"));
                     }
+                }
+                for (window, _) in &folder_windows {
+                    Floater::new(window, window, pos2(100.0, 100.0), vec2(420.0, 440.0)).show(ctx, &p, &mut true, |ui| ui.label("…"));
                 }
                 if open.contains(MINIMAP) {
                     let default = Rect::from_min_size(pos2(1000.0, 500.0), Vec2::splat(200.0));

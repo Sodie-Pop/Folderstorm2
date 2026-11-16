@@ -29,6 +29,10 @@ struct Windows<'a> {
     no_inventory: bool,
     no_minimap: bool,
     no_world_map: bool,
+    /// The account logged in, and its Inventory: a workspace's folder
+    /// windows are for one account and for folders that still exist.
+    account: uuid::Uuid,
+    folders: Option<&'a crate::world::inventory::Inventory>,
 }
 
 /// The `Panels` flag of an allowlisted window that has one of its own.
@@ -138,6 +142,30 @@ impl apply::Shell for Windows<'_> {
             }
         }
     }
+
+    fn account(&self) -> Option<uuid::Uuid> {
+        Some(self.account)
+    }
+
+    fn folder_windows(&self) -> Vec<(String, uuid::Uuid)> {
+        self.inventory.folderstorm_folder_windows()
+    }
+
+    fn has_folder(&self, folder: uuid::Uuid) -> bool {
+        self.folders.is_some_and(|inventory| inventory.folders.contains_key(&folder))
+    }
+
+    fn open_folder(&mut self, _: &egui::Context, folder: uuid::Uuid) -> Option<String> {
+        // (@showinv hides the Inventory: no window on a part of it either)
+        if self.no_inventory {
+            return None;
+        }
+        self.inventory.folderstorm_open_folder(folder)
+    }
+
+    fn close_folder(&mut self, window: &str) {
+        self.inventory.folderstorm_close_folder(window);
+    }
 }
 
 impl App {
@@ -164,6 +192,8 @@ impl App {
             no_inventory: rlva.has("showinv"),
             no_minimap: rlva.has("showminimap"),
             no_world_map: rlva.has("showworldmap"),
+            account: self.world.agent_id,
+            folders: Some(&self.world.inventory),
         };
         let outcome = apply::frame(&self.egui_ctx, &mut apply::Live::of(&mut self.settings), seen, &mut windows);
         for command in &outcome.commands {
@@ -289,7 +319,11 @@ impl App {
     /// "Sorting" (Inventory, the additional Inventory window, People; with
     /// the layout "Single") and "Exploring" (mini-map, world map, Places;
     /// any layout). `=apply` also applies "Sorting" at frame 180 and
-    /// "Exploring" at frame 360.
+    /// "Exploring" at frame 360. `=folders` (part 2) opens windows on the
+    /// first two folders of the demo's Inventory at frame 120, saves them
+    /// at frame 240 as the workspace "Folders" (*Remember Inventory
+    /// folders*), closes them at frame 300 and applies "Folders" at frame
+    /// 420: they come back at their places.
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
@@ -306,6 +340,7 @@ impl App {
             (_, Ok(switcher), _) if switcher == "toggle" => "switcher-toggle".to_owned(),
             (_, Ok(_), _) => "switcher".to_owned(),
             (_, _, Ok(workspaces)) if workspaces == "apply" => "switcher-workspaces-apply".to_owned(),
+            (_, _, Ok(workspaces)) if workspaces == "folders" => "switcher-workspaces-folders".to_owned(),
             (_, _, Ok(_)) => "switcher-workspaces".to_owned(),
             _ => return,
         };
@@ -471,6 +506,47 @@ impl App {
                     }
                 }
             }
+            "switcher-workspaces-folders" => {
+                let places = [egui::pos2(40.0, 80.0), egui::pos2(480.0, 120.0)];
+                match self.frame_count {
+                    120 => {
+                        let inventory = &self.world.inventory;
+                        let children = inventory.folders.get(&inventory.root).map(|root| root.children.clone());
+                        for (folder, at) in children.unwrap_or_default().into_iter().zip(places) {
+                            if let Some(window) = self.inventory_ui.folderstorm_open_folder(folder) {
+                                ui::widgets::place_floater(&ctx, &window, at, egui::vec2(420.0, 440.0));
+                            }
+                        }
+                    }
+                    240 => {
+                        let keep = apply::Keep {
+                            layout: false,
+                            folders: true,
+                        };
+                        if let Err(error) = apply::save_new_workspace(&ctx, &mut apply::Live::of(&mut self.settings), "Folders", keep) {
+                            log::warn!("AURORA_DEMO_WORKSPACES: folders not saved: {error:?}");
+                        }
+                    }
+                    300 => {
+                        for (window, _) in self.inventory_ui.folderstorm_folder_windows() {
+                            self.inventory_ui.folderstorm_close_folder(&window);
+                        }
+                    }
+                    420 => {
+                        let index = self
+                            .settings
+                            .folderstorm_workspaces
+                            .find_workspace("Folders")
+                            .map(|(index, _)| index);
+                        if let Some(index) = index
+                            && let Err(error) = apply::apply_workspace(&ctx, &mut apply::Live::of(&mut self.settings), index)
+                        {
+                            log::warn!("AURORA_DEMO_WORKSPACES: workspace not applied: {error:?}");
+                        }
+                    }
+                    _ => {}
+                }
+            }
             "unplug" => {
                 apply_at(0, 180, self);
                 if self.frame_count == 600 {
@@ -538,6 +614,8 @@ mod tests {
                 no_inventory: false,
                 no_minimap: false,
                 no_world_map: false,
+                account: uuid::Uuid::nil(),
+                folders: None,
             };
             for window in windows::all() {
                 assert!(!shell.is_open(window), "{}", window.id);
@@ -574,6 +652,8 @@ mod tests {
                 no_inventory: false,
                 no_minimap: false,
                 no_world_map: false,
+                account: uuid::Uuid::nil(),
+                folders: None,
             };
             for window in windows::all() {
                 if shell.open(&ctx, window) {
@@ -584,6 +664,41 @@ mod tests {
             }
             assert!(!panels.inventory && !panels.minimap && !panels.camera_controls && !panels.movement_controls);
             assert!(!inventory.additional_open());
+        }
+    }
+
+    /// A workspace's folder windows go through the Inventory's own way of
+    /// opening one; none while RLVa hides the Inventory, and only on a
+    /// folder the Inventory has.
+    #[test]
+    fn folder_windows_are_opened_listed_and_closed_through_the_inventory() {
+        let ctx = egui::Context::default();
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let world = crate::world::inventory::Inventory::default();
+        let folder = uuid::Uuid::from_u128(8000);
+        for no_inventory in [false, true] {
+            let mut shell = Windows {
+                panels: &mut panels,
+                inventory: &mut inventory,
+                classic_controls: false,
+                contacts_torn_off: false,
+                no_inventory,
+                no_minimap: false,
+                no_world_map: false,
+                account: uuid::Uuid::from_u128(7),
+                folders: Some(&world),
+            };
+            assert_eq!(shell.account(), Some(uuid::Uuid::from_u128(7)));
+            assert!(!shell.has_folder(folder), "not in this Inventory");
+            if no_inventory {
+                assert_eq!(shell.open_folder(&ctx, folder), None, "@showinv");
+                continue;
+            }
+            let window = shell.open_folder(&ctx, folder).expect("opened");
+            assert_eq!(shell.folder_windows(), [(window.clone(), folder)]);
+            shell.close_folder(&window);
+            assert!(shell.folder_windows().is_empty());
         }
     }
 
@@ -600,6 +715,8 @@ mod tests {
             no_inventory: true,
             no_minimap: true,
             no_world_map: true,
+            account: uuid::Uuid::nil(),
+            folders: None,
         };
         for id in ["inventory", windows::ADDITIONAL_INVENTORY, "minimap", "worldmap", "contacts"] {
             let window = windows::find(id).expect("on the list");
