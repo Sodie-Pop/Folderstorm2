@@ -326,6 +326,7 @@ pub(super) fn show(
     actions: &mut Vec<InvAction>,
 ) {
     let mut catalog = super::context_catalog::build(inv, id, st, prefs, facts);
+    st.menu_editor.help = std::mem::take(&mut catalog.help); // Folderstorm: why an entry is greyed
     let scope = super::context_catalog::scope(inv, id);
     prefs.context_menus.unify();
     st.menu_editor

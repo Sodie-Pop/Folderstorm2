@@ -1877,6 +1877,7 @@ fn list_destination(st: &InventoryUi, root: Uuid) -> Uuid {
 /// search, a filter or a tab other than the plain inventory), searched and
 /// its folders fetched.
 fn list_scope(inv: &mut Inventory, st: &mut InventoryUi, prefs: &InventoryPreferences, facts: &Facts) -> (Uuid, bool) {
+    custom_tabs::folder_ui::before_list(inv, st, prefs, facts.agent); // Folderstorm: a custom tab's folders
     // LLSidepanelInventory::observeInboxModifications/onInboxChanged
     // (indra/newview/llsidepanelinventory.cpp): scope and fetch the full FT_INBOX.
     // Aurora presents it as a tab, as requested, instead of a second bottom pane.
@@ -1930,6 +1931,7 @@ fn list(
     filtered: bool,
     show_root: bool,
 ) -> egui::scroll_area::ScrollAreaOutput<()> {
+    let list_h = custom_tabs::folder_ui::note(ui, p, st, prefs, list_h); // Folderstorm: a custom tab's folders
     let key = ListKey {
         tab: st.tab,
         filtered,
@@ -2091,7 +2093,7 @@ fn inventory_contents(
         }
     }
     // Folderstorm: the custom tabs follow the built-in ones (custom_tabs.rs)
-    custom_tabs::legacy_strip(ui, p, st, prefs, &tab_ids, &labels);
+    custom_tabs::legacy_strip(ui, p, inv, st, prefs, &tab_ids, &labels);
     let (root, filtered) = list_scope(inv, st, prefs, facts);
     ui.add_space(6.0);
     next_owner_control(ui, p, st);

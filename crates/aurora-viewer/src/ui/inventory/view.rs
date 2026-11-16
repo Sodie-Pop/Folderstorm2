@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+// Folderstorm: a custom tab scoped to folders (view/folder_scope.rs)
+mod folder_scope;
 
 #[test]
 fn my_suitcase_sorts_with_the_system_folders() {
@@ -579,6 +581,8 @@ pub struct ViewCache {
     /// With Always show folders, the folders that hold a matching item: the
     /// others it lists start closed (`TreeState::prepare`).
     holding: Option<IdSet>,
+    // Folderstorm: a custom tab's folders (view/folder_scope.rs)
+    folder_scope: Option<Vec<Uuid>>,
 }
 
 impl ViewCache {
@@ -789,6 +793,7 @@ impl ViewCache {
             worn,
             names,
         };
+        let query = self.folder_scope_query(query); // Folderstorm: a custom tab's folders
         if self.query.as_ref() == Some(&query) {
             return;
         }
@@ -808,6 +813,7 @@ impl ViewCache {
         } else {
             within(inv, &[root])
         };
+        let scope = self.within_folder_scope(inv, scope); // Folderstorm: a custom tab's folders
         // A favorite folder shows its whole content, favorite or not
         // (LLInventoryFavoritesItemsPanel::findAndInitRootContent builds the
         // full tree under each favorite folder, llinventorypanel.cpp).

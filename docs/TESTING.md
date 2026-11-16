@@ -7012,6 +7012,31 @@ failure. Grid validation and any paid upload are performed by the human.
   focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
   a custom tab with that tab's finder and search. The `aurora-` mode starts with
   the narrow window; widen it to see the shortcuts column.
+- **`AURORA_DEMO_INVENTORY=folder-tabs|aurora-folder-tabs`** (Folderstorm2):
+  a custom tab "Clothing and body" scoped to the demo's Clothing and Body
+  folders and to a deleted one, shown with its "Customize tab…" dialog open.
+  Check that the list holds those two folders and what is inside them, under
+  their path (My inventory / A — Personal folder) and nothing else; that a
+  note above the list says one folder is deleted or in the Trash, and "Remove
+  from tab" forgets it; that the dialog's Folders part lists each folder by
+  path (the deleted one marked), with a remove button. Select folders in the
+  list (from the Inventory tab), then right-click the custom tab: "Add
+  selected folders", "Use only selected folders" (greyed while the selection
+  holds an item, the Trash or a Library folder), "Show all folders". On the
+  Inventory tab, select folders (Ctrl+click, Shift+click for a range) and
+  right-click them: "Create tab" makes a new tab named after the first, its
+  Rename dialog open; "Add to ›" lists every custom tab (a check mark on one
+  that has them all already) and "New tab…"; picking a tab adds the folders to
+  it, and the status line says so, or that they were already there. Both are
+  greyed, with the reason on hover, while the selection holds an item, the
+  root, the Trash or a Library folder. Dragging folders onto a custom tab's
+  button adds them the same way (a red outline refuses). With
+  `AURORA_DEMO_FOLDER_TABS=menu`, a second tab "Everyday", and the Inventory
+  tab with Clothing and Body selected and their right-click menu open at
+  about frame 650 (hover "Add to" to see the tabs; the menu closes in a
+  window without focus, as under xvfb). Filters and search
+  apply inside the folders; moving a scoped folder elsewhere keeps it in the
+  tab; moving it to the Trash takes it out (and the note appears).
 - **`AURORA_DEMO_INVENTORY=bulk-multi|bulk-folder|bulk-permissions`**: selected items
   and folder context menus expose Bulk permissions; the last mode opens the
   shared type/permission controls directly. Apply/OK use synthetic inventory
