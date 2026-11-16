@@ -1587,7 +1587,7 @@ fs-keys-previous-favorite = 前のお気に入りレイアウト
 fs-gesture-board-title = ジェスチャーボード
 fs-gesture-board-menu = ジェスチャーボード…
 fs-gesture-board-command = ジェスチャーボード
-fs-gesture-board-help = ボタンをクリックすると、そのジェスチャーまたはサウンドを再生します。サウンドのボタンにはスピーカーが付いています：インベントリからサウンドを再生したときと同じく、周りの全員に聞こえます。アクティブでないジェスチャーは再生時にアクティブになります。再生中のジェスチャーをクリックすると停止します。インベントリからジェスチャーやサウンドをボードにドラッグするか、「追加」を選びます。ボタンを右クリックすると、名前の変更、色、サイズ、移動、削除ができます（インベントリのアイテムはそのままです）。ボタンを別のボタンにドラッグすると、その前に移動します。Ctrl+F ですべてのボード、またはこのボードだけのボタンを検索します。「オプション」にはボードの管理（新規、名前の変更、複製、削除）とすべてのボタンのサイズがあります。
+fs-gesture-board-help = ボタンをクリックすると、そのジェスチャーまたはサウンドを再生します。サウンドのボタンにはスピーカーが付いています：インベントリからサウンドを再生したときと同じく、周りの全員に聞こえます。アクティブでないジェスチャーは再生時にアクティブになります。再生中のジェスチャーをクリックすると停止します。インベントリからジェスチャー、サウンド、またはフォルダーごと（サブフォルダーも含む）ボードにドラッグするか、「追加」を選びます。ボタンを右クリックすると、名前の変更、色、サイズ、移動、削除ができます（インベントリのアイテムはそのままです）。ボタンを別のボタンにドラッグすると、その前に移動します。Ctrl+F ですべてのボード、またはこのボードだけのボタンを検索します。「オプション」にはボードの管理（新規、名前の変更、複製、削除）とすべてのボタンのサイズがあります。
 fs-gesture-board-none = ボードなし
 fs-gesture-board-options = オプション
 fs-gesture-board-new = 新しいボード…
@@ -1644,7 +1644,7 @@ fs-gesture-board-move-later = 後ろへ移動
 fs-gesture-board-show-inventory = インベントリで表示
 fs-gesture-board-remove = ボードから削除
 fs-gesture-board-empty-boards = まだボードがありません。ここをクリックするか、「オプション › 新しいボード…」を選び、インベントリからジェスチャーやサウンドをドラッグしてください。
-fs-gesture-board-empty-tiles = インベントリからジェスチャーやサウンドをここへドラッグするか、プラスをクリックしてください。
+fs-gesture-board-empty-tiles = インベントリからジェスチャー、サウンド、またはフォルダーをここへドラッグするか、プラスをクリックしてください。
 fs-gesture-board-unavailable = 利用不可
 fs-gesture-board-missing = インベントリにありません（削除されたか、まだ読み込まれていません）。
 fs-gesture-board-trash = ごみ箱にあります。
@@ -1656,6 +1656,18 @@ fs-gesture-board-blocked-rlva = ジェスチャーは RLVa によりブロック
 fs-gesture-board-blocked-off = ジェスチャーはオフです（ジェスチャーウィンドウ）。
 fs-gesture-board-already = すでにこのボードにあります。
 fs-gesture-board-drop-refused = ボードに置けるのは、インベントリのジェスチャーとサウンドだけです。
+fs-gesture-board-folder-added = { $count ->
+    [0] ボタンは追加されませんでした
+   *[other] { $count } 個のボタンを追加しました
+    }
+fs-gesture-board-folder-empty = ドロップしたものにジェスチャーやサウンドはありません
+fs-gesture-board-folder-already = { $count } 個はすでにボードにあります
+fs-gesture-board-folder-full = { $count } 個は追加できません：ボードがいっぱいです（最大 { $max } 個）
+fs-gesture-board-folder-refused = { $count } 個は使えません（ライブラリ、ごみ箱、または壊れたリンク）
+fs-gesture-board-folder-other = その他のアイテム { $count } 個は無視しました
+fs-gesture-board-folder-loading = { $count } 個のフォルダーはまだ読み込み中です：少ししてからもう一度ドロップすると残りが追加されます
+fs-gesture-board-folder-cut = とても大きなフォルダーのため、一部だけを調べました
+fs-gesture-board-folder-separator = 。
 fs-gesture-board-error-name = ボードに名前を付けてください。
 fs-gesture-board-error-boards = ボードは最大 { $count } 個です。
 fs-gesture-board-error-tiles = 1 つのボードのボタンは最大 { $count } 個です。

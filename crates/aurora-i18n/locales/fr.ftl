@@ -1656,7 +1656,7 @@ fs-keys-previous-favorite = Disposition favorite précédente
 fs-gesture-board-title = Tableau de gestes
 fs-gesture-board-menu = Tableau de gestes…
 fs-gesture-board-command = Tableau de gestes
-fs-gesture-board-help = Cliquez sur un bouton pour jouer son geste ou son son. Le bouton d'un son porte un haut-parleur : tout le monde autour l'entend, comme un son joué depuis l'inventaire. Un geste inactif est activé quand il est joué ; un clic sur un geste en cours l'arrête. Glissez des gestes et des sons de l'inventaire sur le tableau, ou choisissez Ajouter. Clic droit sur un bouton pour le renommer, le colorer, le redimensionner, le déplacer ou le retirer (l'objet de l'inventaire reste tel quel). Glissez un bouton sur un autre pour le placer avant lui. Ctrl+F cherche des boutons sur tous les tableaux, ou sur ce tableau seulement. Options regroupe les tableaux (nouveau, renommer, dupliquer, supprimer) et la taille de tous les boutons.
+fs-gesture-board-help = Cliquez sur un bouton pour jouer son geste ou son son. Le bouton d'un son porte un haut-parleur : tout le monde autour l'entend, comme un son joué depuis l'inventaire. Un geste inactif est activé quand il est joué ; un clic sur un geste en cours l'arrête. Glissez des gestes, des sons ou des dossiers entiers (avec leurs sous-dossiers) de l'inventaire sur le tableau, ou choisissez Ajouter. Clic droit sur un bouton pour le renommer, le colorer, le redimensionner, le déplacer ou le retirer (l'objet de l'inventaire reste tel quel). Glissez un bouton sur un autre pour le placer avant lui. Ctrl+F cherche des boutons sur tous les tableaux, ou sur ce tableau seulement. Options regroupe les tableaux (nouveau, renommer, dupliquer, supprimer) et la taille de tous les boutons.
 fs-gesture-board-none = Aucun tableau
 fs-gesture-board-options = Options
 fs-gesture-board-new = Nouveau tableau…
@@ -1721,7 +1721,7 @@ fs-gesture-board-move-later = Déplacer après
 fs-gesture-board-show-inventory = Afficher dans l'inventaire
 fs-gesture-board-remove = Retirer du tableau
 fs-gesture-board-empty-boards = Aucun tableau pour l'instant. Cliquez ici, ou choisissez Options › Nouveau tableau…, puis glissez-y des gestes et des sons de l'inventaire.
-fs-gesture-board-empty-tiles = Glissez ici des gestes et des sons de l'inventaire, ou cliquez sur le plus.
+fs-gesture-board-empty-tiles = Glissez ici des gestes, des sons ou des dossiers entiers de l'inventaire, ou cliquez sur le plus.
 fs-gesture-board-unavailable = Indisponible
 fs-gesture-board-missing = Absent de votre inventaire (supprimé, ou pas encore chargé).
 fs-gesture-board-trash = Dans la corbeille.
@@ -1733,6 +1733,31 @@ fs-gesture-board-blocked-rlva = Les gestes sont bloqués par RLVa.
 fs-gesture-board-blocked-off = Les gestes sont désactivés (fenêtre Gestes).
 fs-gesture-board-already = Déjà sur ce tableau.
 fs-gesture-board-drop-refused = Seuls les gestes et les sons de votre inventaire peuvent aller sur un tableau.
+fs-gesture-board-folder-added = { $count ->
+    [0] Aucun bouton ajouté
+    [one] { $count } bouton ajouté
+   *[other] { $count } boutons ajoutés
+    }
+fs-gesture-board-folder-empty = Aucun geste ni son dans ce qui a été déposé
+fs-gesture-board-folder-already = { $count } déjà sur le tableau
+fs-gesture-board-folder-full = { $count ->
+    [one] { $count } laissé de côté : le tableau est plein ({ $max } boutons au plus)
+   *[other] { $count } laissés de côté : le tableau est plein ({ $max } boutons au plus)
+    }
+fs-gesture-board-folder-refused = { $count ->
+    [one] { $count } non autorisé (bibliothèque, corbeille ou lien rompu)
+   *[other] { $count } non autorisés (bibliothèque, corbeille ou lien rompu)
+    }
+fs-gesture-board-folder-other = { $count ->
+    [one] { $count } autre objet ignoré
+   *[other] { $count } autres objets ignorés
+    }
+fs-gesture-board-folder-loading = { $count ->
+    [one] { $count } dossier encore en chargement : déposez-le de nouveau dans un instant pour ajouter le reste
+   *[other] { $count } dossiers encore en chargement : déposez-les de nouveau dans un instant pour ajouter le reste
+    }
+fs-gesture-board-folder-cut = dossier très volumineux : une partie seulement a été parcourue
+fs-gesture-board-folder-separator = { " ; " }
 fs-gesture-board-error-name = Donnez un nom au tableau.
 fs-gesture-board-error-boards = { $count } tableaux au plus.
 fs-gesture-board-error-tiles = { $count } boutons au plus sur un tableau.

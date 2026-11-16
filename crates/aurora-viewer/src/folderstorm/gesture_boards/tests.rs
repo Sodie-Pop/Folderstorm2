@@ -2,6 +2,7 @@
 //! what a tile plays, and the window drawn frame by frame
 //! (`tests/frames.rs`).
 
+mod folders;
 mod frames;
 
 use super::layout::{self, GAP};

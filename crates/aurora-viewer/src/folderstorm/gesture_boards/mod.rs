@@ -5,6 +5,8 @@
 //!
 //! - [`store`]: the boards as the settings keep them, per account. Pure.
 //! - [`layout`]: tile sizes, pages and search. Pure.
+//! - [`folders`]: whole folders dropped on a board, walked with their
+//!   sub-folders for their gestures and sounds. Pure.
 //! - `window`, `dialogs`: the window (egui), which leaves what is clicked
 //!   to play as [`Request`]s.
 //! - `app/folderstorm_gesture_boards.rs`: plays them through Aurora's own
@@ -15,6 +17,7 @@
 //! switcher's: the menu entry and the toolbar button flip it.
 
 mod dialogs;
+pub mod folders;
 pub mod layout;
 pub mod store;
 #[cfg(test)]
@@ -25,7 +28,7 @@ use crate::theme::Palette;
 use crate::world::inventory::{Inventory, actions as rules};
 use uuid::Uuid;
 
-pub use window::{Facts, Request, demo_search, show};
+pub use window::{Facts, Request, demo_drop, demo_search, show};
 
 /// The window's id.
 pub const WINDOW: &str = "fs_gesture_board";

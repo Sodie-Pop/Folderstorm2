@@ -279,11 +279,16 @@ its own size and one whose item is gone; "Party") and opens World › Gesture
 board…. `full` turns *Show full names* on; `pages` makes the window small, so
 that the board has pages; `search` opens the search on all the boards with
 "wave" typed; `play` plays a gesture's tile and a sound's tile at frame 300
-(the log says "demo sound trigger"):
+(the log says "demo sound trigger"); `folder` adds a folder "Party pack" to
+the demo's test folder (gestures and sounds, some in sub-folders, an object
+and a link to "Wave hello") and an empty board "From a folder", and drops the
+folder on it at frame 200 (the log says "folder dropped, 8 buttons"; the
+summary shows under the tiles):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_GESTURE_BOARDS=1 cargo run -p aurora-viewer -- --title "Test gesture boards"
 AURORA_DEMO=1 AURORA_DEMO_GESTURE_BOARDS=pages cargo run -p aurora-viewer -- --title "Test gesture board pages"
+AURORA_DEMO=1 AURORA_DEMO_GESTURE_BOARDS=folder cargo run -p aurora-viewer -- --title "Test gesture board folder"
 ```
 
 Check that a click plays (a gesture says its line in the chat, a sound
@@ -292,7 +297,9 @@ chimes), that sounds show a speaker, that the window and the buttons resize
 only with more than one page, that Ctrl+F finds buttons on both boards and
 *This board only* keeps the board shown, that dragging a gesture or a sound
 from the Inventory adds it (once) and dragging a button onto another moves
-it, and that Options creates, renames, duplicates, moves and deletes boards.
+it, that dragging a folder (or several entries) from the Inventory adds every
+gesture and sound of it and of its sub-folders, once, with a summary, and
+that Options creates, renames, duplicates, moves and deletes boards.
 
 **Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
 demo's own settings, opens Inventory, the world map and People, and opens

@@ -413,6 +413,66 @@ fn an_inventory_drop_adds_a_tile() {
     assert_eq!(bench.current().tiles.len(), 1, "one in the Trash too");
 }
 
+/// A whole folder dropped on the board: every gesture and sound of it and
+/// of its sub-folders, in the walk's order, and a summary; a folder not
+/// loaded yet is asked for; a selection of several entries works the same;
+/// the Trash is refused.
+#[test]
+fn a_folder_drop_adds_its_gestures_and_sounds() {
+    use super::folders::{DROPPED, add_board_stuff, folder};
+    let mut bench = Bench::new(vec2(680.0, 300.0));
+    add_board_stuff(&mut bench.inv);
+    folder(
+        &mut bench.inv,
+        607300,
+        id(DROPPED),
+        "Unloaded",
+        crate::world::inventory::FetchState::Unknown,
+    );
+    bench.account.new_board("Empty").expect("board");
+    bench.frames(2);
+    let room = bench.at(tr!("fs-gesture-board-empty-tiles"));
+    let release = |bench: &mut Bench| {
+        bench.pointer = room;
+        bench.frames(2);
+        bench.frame(vec![egui::Event::PointerButton {
+            pos: room,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        bench.frames(2);
+    };
+    egui::DragAndDrop::set_payload(&bench.ctx, crate::ui::inventory::FolderDrag(id(DROPPED)));
+    release(&mut bench);
+    bench.capture("gesture-board-folder-drop");
+    let items: Vec<u128> = bench.current().tiles.iter().map(|t| t.item.as_u128()).collect();
+    assert_eq!(items, [610702, 610701, 610704, 610711, 617111, 610721]);
+    assert_eq!(
+        bench.out,
+        [Request::FetchFolders(vec![id(607300)])],
+        "the folder not loaded is asked for"
+    );
+    let added = tr!("fs-gesture-board-folder-added", count = 6);
+    assert!(
+        bench.texts.iter().any(|(t, _, _)| t.starts_with(&added)),
+        "the summary: {:?}",
+        bench.texts.iter().map(|(t, _, _)| t).collect::<Vec<_>>()
+    );
+    // a selection: the folder again (nothing new) and a gesture
+    bench.out.clear();
+    crate::ui::inventory::drag::demo_carry(&bench.ctx, vec![id(DROPPED), id(200)]);
+    release(&mut bench);
+    assert_eq!(bench.current().tiles.len(), 7, "only the gesture is new");
+    assert_eq!(bench.current().tiles[6].item, id(200));
+    // the Trash: refused
+    let trash = crate::world::appearance::system_folder(&bench.inv, 14).expect("a Trash");
+    egui::DragAndDrop::set_payload(&bench.ctx, crate::ui::inventory::FolderDrag(trash));
+    release(&mut bench);
+    assert_eq!(bench.current().tiles.len(), 7);
+    assert!(egui::DragAndDrop::payload::<crate::ui::inventory::FolderDrag>(&bench.ctx).is_none());
+}
+
 /// Right-click › Edit…: a label and a colour, saved; the inventory item
 /// keeps its name.
 #[test]

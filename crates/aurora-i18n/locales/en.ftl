@@ -1653,7 +1653,7 @@ fs-keys-previous-favorite = Previous favorite layout
 fs-gesture-board-title = Gesture board
 fs-gesture-board-menu = Gesture board…
 fs-gesture-board-command = Gesture board
-fs-gesture-board-help = Click a button to play its gesture or sound. A sound's button has a speaker: everyone nearby hears it, as when a sound is played from the Inventory. A gesture that is not active is activated when it is played; a click on a gesture that is playing stops it. Drag gestures and sounds from the Inventory onto the board, or choose Add. Right-click a button to rename it, colour it, resize it, move it or remove it (the inventory item stays as it is). Drag a button onto another to move it before it. Ctrl+F finds buttons on all the boards, or on this board only. Options holds the boards (new, rename, duplicate, delete) and the size of all the buttons.
+fs-gesture-board-help = Click a button to play its gesture or sound. A sound's button has a speaker: everyone nearby hears it, as when a sound is played from the Inventory. A gesture that is not active is activated when it is played; a click on a gesture that is playing stops it. Drag gestures, sounds or whole folders (with their sub-folders) from the Inventory onto the board, or choose Add. Right-click a button to rename it, colour it, resize it, move it or remove it (the inventory item stays as it is). Drag a button onto another to move it before it. Ctrl+F finds buttons on all the boards, or on this board only. Options holds the boards (new, rename, duplicate, delete) and the size of all the buttons.
 fs-gesture-board-none = No board
 fs-gesture-board-options = Options
 fs-gesture-board-new = New board…
@@ -1718,7 +1718,7 @@ fs-gesture-board-move-later = Move later
 fs-gesture-board-show-inventory = Show in Inventory
 fs-gesture-board-remove = Remove from the board
 fs-gesture-board-empty-boards = No board yet. Click here, or choose Options › New board…, then drag gestures and sounds from the Inventory onto it.
-fs-gesture-board-empty-tiles = Drag gestures and sounds from the Inventory here, or click the plus.
+fs-gesture-board-empty-tiles = Drag gestures, sounds or whole folders from the Inventory here, or click the plus.
 fs-gesture-board-unavailable = Unavailable
 fs-gesture-board-missing = Not in your inventory (deleted, or not loaded yet).
 fs-gesture-board-trash = In the Trash.
@@ -1730,6 +1730,25 @@ fs-gesture-board-blocked-rlva = Gestures are blocked by RLVa.
 fs-gesture-board-blocked-off = Gestures are turned off (Gestures window).
 fs-gesture-board-already = Already on this board.
 fs-gesture-board-drop-refused = Only gestures and sounds of your inventory can go on a board.
+fs-gesture-board-folder-added = { $count ->
+    [0] No button added
+    [one] Added { $count } button
+   *[other] Added { $count } buttons
+    }
+fs-gesture-board-folder-empty = No gesture or sound in what was dropped
+fs-gesture-board-folder-already = { $count } already on the board
+fs-gesture-board-folder-full = { $count } left out: the board is full ({ $max } buttons at most)
+fs-gesture-board-folder-refused = { $count } not allowed (Library, Trash or broken link)
+fs-gesture-board-folder-other = { $count ->
+    [one] { $count } other item ignored
+   *[other] { $count } other items ignored
+    }
+fs-gesture-board-folder-loading = { $count ->
+    [one] { $count } folder still loading: drop it again in a moment to add the rest
+   *[other] { $count } folders still loading: drop again in a moment to add the rest
+    }
+fs-gesture-board-folder-cut = a very large folder: only part of it was looked at
+fs-gesture-board-folder-separator = { "; " }
 fs-gesture-board-error-name = Give the board a name.
 fs-gesture-board-error-boards = At most { $count } boards.
 fs-gesture-board-error-tiles = At most { $count } buttons on a board.

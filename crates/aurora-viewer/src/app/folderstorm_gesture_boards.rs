@@ -120,6 +120,14 @@ impl App {
                 self.inventory_ui.show_original(&self.world.inventory, id);
                 self.panels.inventory = true;
             }
+            // folders dropped before they were loaded: queued as the
+            // Inventory window queues the folders it opens (sent with the
+            // inventory's other fetches)
+            Request::FetchFolders(folders) => {
+                for folder in folders {
+                    self.world.inventory.request(folder);
+                }
+            }
         }
     }
 
@@ -131,7 +139,10 @@ impl App {
     /// makes the window small, so that the board has pages; `search` opens
     /// the search on all the boards with "wave" typed; `play` clicks a
     /// gesture's tile and a sound's tile at frame 300 (the log says "demo
-    /// sound trigger").
+    /// sound trigger"); `folder` adds the folder "Party pack" (gestures and
+    /// sounds in sub-folders, a link, an object) and an empty board "From a
+    /// folder", onto which the folder is dropped at frame 200 (the summary
+    /// shows under the tiles).
     fn gesture_boards_demo(&mut self, ctx: &egui::Context, glue: &mut Glue) {
         if !self.demo || !matches!(self.screen, Screen::World) {
             return;
@@ -150,9 +161,24 @@ impl App {
                     self.demo_documents.insert(item, data);
                 }
             }
+            if mode == "folder" {
+                for (item, definition) in demo_folder(&mut self.world.inventory, agent, sound) {
+                    if let Ok(data) = definition.encode() {
+                        self.demo_documents.insert(item, data);
+                    }
+                }
+            }
             let account = self.settings.folderstorm_gesture_boards.accounts.entry(agent).or_default();
             if account.boards.is_empty() {
                 *account = demo_account(mode == "full");
+            }
+            if mode == "folder" {
+                match account.boards.iter().find(|b| b.name == DEMO_FOLDER_BOARD) {
+                    Some(board) => account.selected = Some(board.id),
+                    None => {
+                        let _ = account.new_board(DEMO_FOLDER_BOARD);
+                    }
+                }
             }
             if mode == "search" {
                 account.search_current = false;
@@ -160,6 +186,8 @@ impl App {
             let area = crate::ui::layout::work_area(ctx);
             let size = if mode == "pages" {
                 egui::vec2(300.0, 150.0)
+            } else if mode == "folder" {
+                egui::vec2(460.0, 230.0)
             } else {
                 egui::vec2(380.0, 230.0)
             };
@@ -168,6 +196,28 @@ impl App {
         }
         if mode == "search" && self.frame_count == 120 {
             boards::demo_search(ctx, "wave");
+        }
+        if mode == "folder" && self.frame_count == 200 {
+            let playing = |_: Uuid| false;
+            let facts = Facts {
+                inv: &self.world.inventory,
+                playing: &playing,
+                gestures_blocked: None,
+            };
+            let account = self
+                .settings
+                .folderstorm_gesture_boards
+                .accounts
+                .entry(self.world.agent_id)
+                .or_default();
+            let requests = boards::demo_drop(ctx, account, &facts, &[DEMO_FOLDER]);
+            log::info!(
+                "demo gesture board: folder dropped, {} buttons",
+                account.current().map_or(0, |b| b.tiles.len())
+            );
+            for request in requests {
+                self.gesture_board_request(request);
+            }
         }
         if mode == "play" && self.frame_count == 300 {
             for (item, kind) in [(DEMO_WAVE, Kind::Gesture), (DEMO_CHIME, Kind::Sound)] {
@@ -245,6 +295,112 @@ fn demo_items(inv: &mut crate::world::inventory::Inventory, agent: Uuid, sound: 
             ..Default::default()
         });
     }
+    inv.add_items(items);
+    out
+}
+
+/// The folder of `AURORA_DEMO_GESTURE_BOARDS=folder`, and its board.
+const DEMO_FOLDER: Uuid = Uuid::from_u128(960_300);
+const DEMO_FOLDER_BOARD: &str = "From a folder";
+
+/// "Party pack", in the demo's test folder: two gestures, a sound, an
+/// object and a link to "Wave hello" of its own, a sub-folder "Dances"
+/// (two gestures) and a sub-folder "Sounds" with "Horns" in it (a sound
+/// each), and the gestures' definitions.
+fn demo_folder(inv: &mut crate::world::inventory::Inventory, agent: Uuid, sound: Uuid) -> Vec<(Uuid, aurora_assets::gesture::Gesture)> {
+    use crate::world::inventory::{FetchState, Folder};
+    use aurora_assets::gesture::{Gesture, Step};
+    let folders = [
+        (DEMO_FOLDER, Uuid::from_u128(8000), "Party pack"),
+        (Uuid::from_u128(960_301), DEMO_FOLDER, "Dances"),
+        (Uuid::from_u128(960_302), DEMO_FOLDER, "Sounds"),
+        (Uuid::from_u128(960_303), Uuid::from_u128(960_302), "Horns"),
+    ];
+    for (id, parent, name) in folders {
+        if inv.folders.contains_key(&id) {
+            continue;
+        }
+        inv.folders.insert(
+            id,
+            Folder {
+                info: aurora_net::inventory::InvFolder {
+                    id,
+                    parent,
+                    name: name.into(),
+                    type_default: -1,
+                    version: 1,
+                    ..Default::default()
+                },
+                children: Vec::new(),
+                items: Vec::new(),
+                state: FetchState::Fetched,
+                library: false,
+            },
+        );
+        if let Some(folder) = inv.folders.get_mut(&parent) {
+            folder.children.push(id);
+        }
+    }
+    inv.generation += 1;
+    // (id, folder, name, asset type)
+    let entries = [
+        (960_310, 960_300, "Cheer", 21),
+        (960_311, 960_300, "High five", 21),
+        (960_312, 960_300, "Party popper", 1),
+        (960_313, 960_300, "Party hat", 6),
+        (960_320, 960_301, "Conga line", 21),
+        (960_321, 960_301, "Robot dance", 21),
+        (960_330, 960_302, "Whistle", 1),
+        (960_340, 960_303, "Fog horn", 1),
+    ];
+    let mut out = Vec::new();
+    let mut items = Vec::new();
+    for (n, folder, name, asset_type) in entries {
+        let id = Uuid::from_u128(n);
+        let folder = Uuid::from_u128(folder);
+        items.push(aurora_net::inventory::InvItem {
+            id,
+            parent: folder,
+            name: name.into(),
+            asset_type,
+            inv_type: match asset_type {
+                21 => 20,
+                1 => 1,
+                _ => 6,
+            },
+            asset_id: if asset_type == 1 { sound } else { Uuid::from_u128(n + 1_000) },
+            creator: agent,
+            owner: agent,
+            base_mask: 0x7fff_ffff,
+            owner_mask: 0x7fff_ffff,
+            ..Default::default()
+        });
+        if asset_type == 21 {
+            out.push((
+                id,
+                Gesture {
+                    steps: vec![Step::Chat {
+                        text: format!("*{name}*"),
+                        flags: 0,
+                    }],
+                    ..Default::default()
+                },
+            ));
+        }
+    }
+    items.push(aurora_net::inventory::InvItem {
+        id: Uuid::from_u128(960_314),
+        parent: DEMO_FOLDER,
+        name: "Wave hello (link)".into(),
+        asset_type: 24,
+        inv_type: 20,
+        asset_id: DEMO_WAVE,
+        creator: agent,
+        owner: agent,
+        base_mask: 0x7fff_ffff,
+        owner_mask: 0x7fff_ffff,
+        ..Default::default()
+    });
     inv.add_items(items);
     out
 }

@@ -9,7 +9,6 @@ use super::layout::{self, Hit, Page};
 use super::store::{Account, Board};
 use super::{Item, Kind, WINDOW, resolve};
 use crate::theme::Palette;
-use crate::ui::inventory::InvDrag;
 use crate::ui::widgets::{self, Floater};
 use crate::world::inventory::Inventory;
 use aurora_i18n::tr;
@@ -35,13 +34,16 @@ pub enum Request {
     Play { original: Uuid, kind: Kind },
     /// Show the item in the Inventory window.
     ShowInventory(Uuid),
+    /// Load these folders of the user's inventory (dropped on the board
+    /// before their contents were known: `folders::collect`).
+    FetchFolders(Vec<Uuid>),
 }
 
 /// Height of the top strip and of the pages' row.
 const STRIP: f32 = 22.0;
 /// How long a tile found or added again stays outlined, in seconds.
 const FLASH: f64 = 1.6;
-/// How long a message stays, in seconds.
+/// How long a message stays at least, in seconds.
 const MESSAGE: f64 = 5.0;
 
 /// The window's state between frames (egui's memory).
@@ -135,7 +137,12 @@ pub fn show(ctx: &egui::Context, p: &Palette, account: &mut Account, facts: &Fac
 
 fn body(ui: &mut egui::Ui, p: &Palette, account: &mut Account, facts: &Facts, view: &mut View, out: &mut Vec<Request>) {
     let now = ui.input(|i| i.time);
-    if view.message.as_ref().is_some_and(|(_, at)| now - at > MESSAGE) {
+    // a long message (a folder's summary) stays long enough to be read
+    if view
+        .message
+        .as_ref()
+        .is_some_and(|(text, at)| now - at > MESSAGE.max(text.chars().count() as f64 / 12.0))
+    {
         view.message = None;
     }
     if view.flash.is_some_and(|(_, at)| now - at > FLASH) {
@@ -487,10 +494,10 @@ fn board_page(
     }
     page = page.min(page_count - 1);
     let room_rect = Rect::from_min_size(full.min, room);
-    // an inventory gesture or sound dropped on the board: added where it
-    // is dropped, or at the end
-    let drop = inventory_drop(ui, p, room_rect);
-    let mut drop_at: Option<Option<usize>> = drop.map(|_| None);
+    // inventory dropped on the board (gestures and sounds, folders): added
+    // where it is dropped, or at the end
+    let drop = inventory_drop(ui, p, facts.inv, room_rect);
+    let mut drop_at: Option<Option<usize>> = drop.as_ref().map(|_| None);
     let mut moved: Option<(usize, usize)> = None;
     let mut remove = None;
     let mut edit = None;
@@ -636,15 +643,19 @@ fn board_page(
     {
         view.dialog = Some(dialog);
     }
-    if let (Some(id), Some(at)) = (drop, drop_at) {
-        add_dropped(ui.ctx(), account, facts, view, board_id, id, at);
+    if let (Some(cargo), Some(at)) = (drop, drop_at) {
+        add_cargo(ui.ctx(), account, facts, view, board_id, &cargo, at, out);
     }
 }
 
-/// An inventory item dropped on `room` this frame: the room is outlined
-/// while one is carried over it.
-fn inventory_drop(ui: &egui::Ui, p: &Palette, room: Rect) -> Option<Uuid> {
-    let carried = egui::DragAndDrop::payload::<InvDrag>(ui.ctx())?;
+/// Inventory (an item, a folder, a selection of several, from any Inventory
+/// window and either style: `inventory::drag::carried_ids`) dropped on
+/// `room` this frame. While it is carried over the room, the room is
+/// outlined: as a drop target when the drop can add something
+/// (`folders::welcome`), in the refusal colour when it cannot, as the
+/// Inventory's own drop targets are (`inventory::tree::drop_outline`).
+fn inventory_drop(ui: &egui::Ui, p: &Palette, inv: &Inventory, room: Rect) -> Option<Vec<Uuid>> {
+    let carried = crate::ui::inventory::drag::carried_ids(ui.ctx())?;
     let over = ui.rect_contains_pointer(room)
         && ui
             .ctx()
@@ -654,17 +665,78 @@ fn inventory_drop(ui: &egui::Ui, p: &Palette, room: Rect) -> Option<Uuid> {
     if !over {
         return None;
     }
+    let welcome = super::folders::welcome(inv, &carried);
+    crate::ui::inventory::drag::feedback(
+        ui.ctx(),
+        if welcome {
+            egui::CursorIcon::Copy
+        } else {
+            egui::CursorIcon::NotAllowed
+        },
+    );
     ui.painter().rect_stroke(
         room.shrink(1.0),
         ui.visuals().widgets.inactive.corner_radius,
-        Stroke::new(1.5, p.violet_light),
+        Stroke::new(1.5, if welcome { p.violet_light } else { p.danger }),
         egui::StrokeKind::Inside,
     );
     if ui.input(|i| i.pointer.any_released()) {
         egui::DragAndDrop::clear_payload(ui.ctx());
-        return Some(carried.0);
+        return Some(carried);
     }
     None
+}
+
+/// Adds what was dropped to the board, before the tile at `at`: one item
+/// as before (`add_dropped`); folders, or several entries, through
+/// `folders::collect` (every gesture and sound they hold, sub-folders
+/// included), with a summary of what was added and left out. Folders not
+/// loaded yet are asked for (`Request::FetchFolders`): what they hold
+/// already is added, and the summary says to drop them again once loaded.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn add_cargo(
+    ctx: &egui::Context,
+    account: &mut Account,
+    facts: &Facts,
+    view: &mut View,
+    board: u32,
+    cargo: &[Uuid],
+    at: Option<usize>,
+    out: &mut Vec<Request>,
+) {
+    use super::folders;
+    if let [id] = cargo
+        && folders::folder_of(facts.inv, *id).is_none()
+    {
+        add_dropped(ctx, account, facts, view, board, *id, at);
+        return;
+    }
+    let found = folders::collect(facts.inv, cargo);
+    if !found.loading.is_empty() {
+        out.push(Request::FetchFolders(found.loading.clone()));
+    }
+    match folders::add_found(facts.inv, account, board, &found, at) {
+        Ok(outcome) => {
+            if let Some(tile) = outcome.added.first().or(outcome.existing.first()) {
+                view.flash(ctx, *tile);
+            }
+            view.say(ctx, outcome.summary());
+        }
+        Err(error) => view.say(ctx, error.text()),
+    }
+}
+
+/// The demo's drop (`AURORA_DEMO_GESTURE_BOARDS=folder`): `cargo` dropped
+/// at the end of the board shown, as a drop with the pointer does.
+pub fn demo_drop(ctx: &egui::Context, account: &mut Account, facts: &Facts, cargo: &[Uuid]) -> Vec<Request> {
+    let mut out = Vec::new();
+    let Some(board) = account.current_id() else {
+        return out;
+    };
+    let mut view: View = ctx.data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<View>(view_id())));
+    add_cargo(ctx, account, facts, &mut view, board, cargo, None, &mut out);
+    ctx.data_mut(|d| d.insert_temp(view_id(), view));
+    out
 }
 
 /// Adds the dropped item `id` to the board, before the tile at `at`.
