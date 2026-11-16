@@ -274,7 +274,7 @@ pub async fn install(
     let stage = Stage::new(root).map_err(|e| failure(Failure::Filesystem, e))?;
     let folder = pack.folder();
     let url = source
-        .asset_url(&pack.tag(), &format!("{folder}.zip"))
+        .media_pack_url(&pack.tag(), &format!("{folder}.zip")) // Folderstorm: Aurora's pack
         .map_err(|e| failure(Failure::Network, e))?;
     let client = source.client().map_err(|e| failure(Failure::Network, e))?;
     let archive = stage.0.join("download.zip");
@@ -316,6 +316,10 @@ pub async fn install(
     .map_err(|e| failure(Failure::Package, e.into()))?
     .map_err(|e| failure(Failure::Package, e))
 }
+
+// Folderstorm: where the pack is downloaded from.
+#[cfg(test)]
+mod folderstorm_tests;
 
 #[cfg(test)]
 mod tests {
