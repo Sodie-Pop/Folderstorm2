@@ -182,7 +182,7 @@ stay Activity lines only. Reads get none.
 | `tool`, `client` | the tool, and the name the program gives itself (48 characters) | yes | yes |
 | `viewer_session` | its binding | yes | – |
 | times | asked, decided, sent, finished | yes | yes |
-| `decision` | `allowed`, `approved` (Allow clicked), `refused_by_user`, `ask_timed_out`, `refused_permissions_changed`, `refused_by_viewer` (`not_allowed`), `stale` | yes | yes |
+| `decision` | `allowed`, `approved` (Allow clicked), `approved_for_session` (a touch of an object the user allowed for the session, mcp-script-testing.md), `refused_by_user`, `ask_timed_out`, `refused_permissions_changed`, `refused_by_viewer` (`not_allowed`), `stale` | yes | yes |
 | `summary` | the Ask dialog's sentence, in the user's language | only when Read is Allow | yes |
 | `targets` | the inventory ids it touches (50 at most), never asset ids | yes | – |
 | `rows` | plans only: id, before, after, outcome | names only when Read is Allow | the counts |

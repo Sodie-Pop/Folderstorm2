@@ -10,8 +10,13 @@ use crate::ui::widgets::{self, Floater};
 use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use std::collections::BTreeSet;
 
+mod context;
+mod folders;
+mod open;
+mod strip;
 mod switcher;
 mod viewer;
+mod workspace;
 
 const INVENTORY: &str = "inventory";
 const PEOPLE: &str = "people";
@@ -28,6 +33,8 @@ struct Viewer {
     world: ViewportSettings,
     size: Vec2,
     open: BTreeSet<&'static str>,
+    /// Windows the viewer cannot open now (as RLVa's @showinv has it).
+    blocked: BTreeSet<&'static str>,
     time: f64,
     /// Whether `apply::frame` asked for the settings to be saved.
     saved: bool,
@@ -46,6 +53,120 @@ struct Viewer {
     events: Vec<egui::Event>,
     /// The texts of the last frame and where they were.
     texts: Vec<(String, Rect)>,
+    /// The Inventory's folder windows, as the app has them.
+    inventory: Folders,
+    /// The top bar, as far as the favorites strip goes. None: no bars.
+    bars: Option<Bars>,
+    /// Each frame drawn with the software painter, for the pictures
+    /// (`Viewer::painted`). None: not drawn.
+    paint: Option<Box<Paint>>,
+    /// What `apply::frame` asked the app to do with a context (row 1.7),
+    /// in order.
+    asked: Vec<super::context::Ask>,
+    /// The HUDs worn now and the names of the Inventory's items, as the
+    /// app has them.
+    huds: Vec<super::context::Hud>,
+    names: std::collections::BTreeMap<uuid::Uuid, String>,
+    /// What the outfit has on (worn or linked), as the app has it; None:
+    /// not known.
+    on: Option<BTreeSet<uuid::Uuid>>,
+}
+
+/// The pixels of the last frame and what draws them, with the icons and
+/// the theme of the app.
+struct Paint {
+    painter: crate::crash::software::Painter,
+    pixels: Vec<u32>,
+    icons: crate::ui::icons::Icons,
+    background: egui::Color32,
+}
+
+/// What the top bar's code does around the favorites strip
+/// (`ui/bars/islands.rs`, `top`): the favourites' row under `under` when
+/// the favourites are shown as a row, then the strip's own call.
+#[derive(Clone, Debug)]
+struct Bars {
+    under: Rect,
+    /// The favourites as a row (*Favourites access*); None: in the menu.
+    landmarks: Option<crate::ui::bars::favorites::View>,
+}
+
+/// A pretend Inventory: the account logged in, the folders it has, and
+/// its open folder windows (each floater's id and its folder).
+#[derive(Clone, Debug, Default)]
+struct Folders {
+    account: Option<uuid::Uuid>,
+    known: BTreeSet<uuid::Uuid>,
+    windows: Vec<(String, uuid::Uuid)>,
+    /// How many folder windows were opened: each has an id of its own.
+    opened: usize,
+}
+
+impl Folders {
+    fn open(&mut self, folder: uuid::Uuid) -> String {
+        self.opened += 1;
+        let window = format!("inventory_folder-{}", self.opened);
+        self.windows.push((window.clone(), folder));
+        window
+    }
+}
+
+/// The viewer's windows as the app has them: open or not, opened by a
+/// flag.
+struct Windows<'a> {
+    open: &'a mut BTreeSet<&'static str>,
+    blocked: &'a BTreeSet<&'static str>,
+    inventory: &'a mut Folders,
+    huds: &'a [super::context::Hud],
+    names: &'a std::collections::BTreeMap<uuid::Uuid, String>,
+    on: &'a Option<BTreeSet<uuid::Uuid>>,
+}
+
+impl apply::Shell for Windows<'_> {
+    fn is_open(&self, window: &windows::Window) -> bool {
+        self.open.contains(window.id)
+    }
+
+    fn open(&mut self, _: &egui::Context, window: &windows::Window) -> bool {
+        !self.blocked.contains(window.id) && self.open.insert(window.id)
+    }
+
+    fn close(&mut self, _: &egui::Context, window: &windows::Window) {
+        self.open.remove(window.id);
+    }
+
+    fn account(&self) -> Option<uuid::Uuid> {
+        self.inventory.account
+    }
+
+    fn folder_windows(&self) -> Vec<(String, uuid::Uuid)> {
+        self.inventory.windows.clone()
+    }
+
+    fn has_folder(&self, folder: uuid::Uuid) -> bool {
+        self.inventory.known.contains(&folder)
+    }
+
+    fn open_folder(&mut self, _: &egui::Context, folder: uuid::Uuid) -> Option<String> {
+        // (as RLVa's @showinv has it)
+        (!self.blocked.contains(INVENTORY)).then(|| self.inventory.open(folder))
+    }
+
+    fn close_folder(&mut self, window: &str) {
+        self.inventory.windows.retain(|(id, _)| id != window);
+    }
+
+    fn worn_huds(&self) -> Vec<super::context::Hud> {
+        self.huds.to_vec()
+    }
+
+    fn item_name(&self, item: uuid::Uuid) -> Option<String> {
+        self.names.get(&item).cloned()
+    }
+
+    fn huds_on(&self) -> Option<BTreeSet<uuid::Uuid>> {
+        self.on.clone()
+    }
 }
 
 impl Viewer {
@@ -58,6 +179,7 @@ impl Viewer {
             world: ViewportSettings::default(),
             size: vec2(width, height),
             open: BTreeSet::from([INVENTORY, PEOPLE, MAP, MINIMAP, PREFERENCES]),
+            blocked: BTreeSet::new(),
             time: 0.0,
             saved: false,
             window: None,
@@ -67,7 +189,44 @@ impl Viewer {
             hidden: false,
             events: Vec::new(),
             texts: Vec::new(),
+            inventory: Folders::default(),
+            bars: None,
+            paint: None,
+            asked: Vec::new(),
+            huds: Vec::new(),
+            names: Default::default(),
+            on: None,
         }
+    }
+
+    /// From now on each frame is drawn with the software painter, with the
+    /// app's theme and icons, so that [`Viewer::picture`] can keep it.
+    fn painted(&mut self) {
+        let theme = crate::theme::Theme::default();
+        theme.apply(&self.ctx, 1.0);
+        self.ctx.all_styles_mut(|s| s.animation_time = 0.0);
+        let icons = crate::ui::icons::Icons::load(&self.ctx, None);
+        self.paint = Some(Box::new(Paint {
+            painter: Default::default(),
+            pixels: vec![0; (self.size.x * self.size.y) as usize],
+            icons,
+            background: theme.palette().navy,
+        }));
+    }
+
+    /// The last frame kept as `<folder>/<name>.png` when
+    /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>`.
+    fn picture(&self, name: &str) {
+        let (Some(paint), Some(dir)) = (&self.paint, std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR")) else {
+            return;
+        };
+        let rgba: Vec<_> = paint
+            .pixels
+            .iter()
+            .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+            .collect();
+        let path = std::path::Path::new(&dir).join(format!("{name}.png"));
+        image::save_buffer(path, &rgba, self.size.x as u32, self.size.y as u32, image::ColorType::Rgba8).expect("picture written");
     }
 
     /// The same settings in a viewer just started (egui's memory is new).
@@ -118,9 +277,22 @@ impl Viewer {
             );
         }
         let seen = self.window.as_ref().map(|window| window.seen);
-        let outcome = apply::frame(&ctx, &mut self.live(), seen);
+        let mut shell = Windows {
+            open: &mut self.open,
+            blocked: &self.blocked,
+            inventory: &mut self.inventory,
+            huds: &self.huds,
+            names: &self.names,
+            on: &self.on,
+        };
+        let mut live = Live {
+            store: &mut self.store,
+            world: &mut self.world,
+        };
+        let outcome = apply::frame(&ctx, &mut live, seen, &mut shell);
         self.saved |= outcome.save;
         self.preferences |= outcome.preferences;
+        self.asked.extend(outcome.context);
         if let Some(window) = &mut self.window {
             window.send(&outcome.commands);
             window.frame();
@@ -128,8 +300,13 @@ impl Viewer {
         self.time += 1.0 / 60.0;
         let screen = Rect::from_min_size(Pos2::ZERO, self.size);
         let open = self.open.clone();
+        let folder_windows = self.inventory.windows.clone();
         let menu = self.menu;
         let hidden = self.hidden;
+        let bars = self.bars.clone();
+        let empty = crate::ui::icons::Icons::default();
+        let icons = self.paint.as_ref().map_or(&empty, |paint| &paint.icons);
+        let painted = self.paint.is_some();
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(screen),
@@ -145,6 +322,26 @@ impl Viewer {
                 // as the interface's pass does: the card and the switcher,
                 // and the menu when open
                 super::interface(ctx, &p, hidden);
+                if let Some(bars) = &bars {
+                    use crate::ui::bars::{favorites, islands};
+                    if painted {
+                        // a pretend place island over the row, for the pictures
+                        islands::area(ctx, &p, "test_place", bars.under, |ui| {
+                            let text = ui.painter().layout_no_wrap(
+                                "Pretend Region (128, 128, 22)".to_owned(),
+                                egui::FontId::proportional(13.0),
+                                p.ink,
+                            );
+                            widgets::paint_ink_left(ui.painter(), text, pos2(bars.under.left() + 14.0, bars.under.center().y), p.ink);
+                        });
+                    }
+                    let row = bars
+                        .landmarks
+                        .as_ref()
+                        .map(|view| favorites::row(ctx, &p, icons, view, bars.under).0.bottom());
+                    islands::set_favorites_row_bottom(ctx, row);
+                    super::strip::own_row(ctx, &p, icons, bars.under);
+                }
                 if menu {
                     egui::Area::new(egui::Id::unique("test-world-menu"))
                         .order(egui::Order::Foreground)
@@ -160,6 +357,9 @@ impl Viewer {
                     if open.contains(id) {
                         Floater::new(id, id, at, size).show(ctx, &p, &mut true, |ui| ui.label("…"));
                     }
+                }
+                for (window, _) in &folder_windows {
+                    Floater::new(window, window, pos2(100.0, 100.0), vec2(420.0, 440.0)).show(ctx, &p, &mut true, |ui| ui.label("…"));
                 }
                 if open.contains(MINIMAP) {
                     let default = Rect::from_min_size(pos2(1000.0, 500.0), Vec2::splat(200.0));
@@ -179,6 +379,19 @@ impl Viewer {
                 }
             },
         );
+        if let Some(paint) = &mut self.paint {
+            // (the painter is given every frame's textures)
+            let primitives = ctx.tessellate(output.shapes.clone(), output.pixels_per_point);
+            paint.pixels.fill(0);
+            paint.painter.paint(
+                &mut paint.pixels,
+                [self.size.x as usize, self.size.y as usize],
+                &primitives,
+                &output.textures_delta,
+                output.pixels_per_point,
+                paint.background,
+            );
+        }
         output.textures_delta.clear();
         fn collect(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
             match shape {
@@ -389,6 +602,7 @@ fn the_mini_map_takes_the_place_a_layout_gives_it() {
             width: 260.0,
             height: 240.0,
             minimized: false,
+            open: false,
         },
     );
     v.store
@@ -408,9 +622,23 @@ fn the_mini_map_takes_the_place_a_layout_gives_it() {
     assert!(apply::take_bare(&v.ctx, egui::Id::unique(MINIMAP)).is_none());
 }
 
+/// As if the window `id` had been closed when the layout `name` was saved
+/// (or the layout saved before layouts knew which windows were open).
+fn saved_closed(v: &mut Viewer, name: &str, id: &str) {
+    for record in &mut v.store.layouts {
+        if let super::store::Record::Layout(layout) = record
+            && layout.name == name
+            && let Some(place) = layout.windows.as_mut().and_then(|windows| windows.windows.get_mut(id))
+        {
+            place.open = false;
+        }
+    }
+}
+
 #[test]
 fn a_closed_window_takes_its_place_when_it_opens() {
     let mut v = two_layouts();
+    saved_closed(&mut v, "Wide", MAP);
     v.open.remove(MAP);
     v.frames(3);
     v.saved = false;
@@ -439,6 +667,7 @@ fn a_closed_window_takes_its_place_when_it_opens() {
 #[test]
 fn a_window_still_waiting_at_quit_is_asked_again_at_the_next_start() {
     let mut v = two_layouts();
+    saved_closed(&mut v, "Wide", MAP);
     v.open.remove(MAP);
     v.frames(3);
     v.apply("Wide");

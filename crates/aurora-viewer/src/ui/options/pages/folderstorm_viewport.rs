@@ -2,16 +2,20 @@
 //! (`crate::folderstorm::viewport`). Folderstorm (C++) had these under
 //! Move & View › Layout. The diagram (`crate::folderstorm::diagram`) shows
 //! under the switch as soon as the viewport is on; the margin sliders stay
-//! behind the cog as the keyboard route and edit the same settings.
+//! behind the cog as the keyboard route and edit the same settings. The
+//! background of the margins follows ([`background`]).
+
+pub(super) mod background;
 
 use super::super::cx::{Cx, field, fields};
+use super::folderstorm_search::words;
 use crate::folderstorm::viewport::bars::BarsPlace;
 use crate::folderstorm::{diagram, viewport};
 
 pub(super) fn group(cx: &mut Cx) {
     use aurora_i18n::tr;
     cx.group(tr!("folderstorm-viewport"), |cx| {
-        cx.toggle(
+        words(cx, &["fs-search-viewport"]).toggle(
             tr!("folderstorm-viewport-enable"),
             tr!("folderstorm-viewport-enable-help"),
             &field!(folderstorm_viewport.enabled),
@@ -19,35 +23,35 @@ pub(super) fn group(cx: &mut Cx) {
         let off = !cx.s.folderstorm_viewport.enabled;
         cx.subs(off, |cx| {
             let help = tr!("folderstorm-viewport-margin-help");
-            cx.slider(
+            words(cx, &["fs-search-viewport"]).slider(
                 tr!("folderstorm-viewport-left"),
                 help,
                 &field!(folderstorm_viewport.left),
                 0..=16384,
                 " px",
             );
-            cx.slider(
+            words(cx, &["fs-search-viewport"]).slider(
                 tr!("folderstorm-viewport-right"),
                 help,
                 &field!(folderstorm_viewport.right),
                 0..=16384,
                 " px",
             );
-            cx.slider(
+            words(cx, &["fs-search-viewport"]).slider(
                 tr!("folderstorm-viewport-top"),
                 help,
                 &field!(folderstorm_viewport.top),
                 0..=16384,
                 " px",
             );
-            cx.slider(
+            words(cx, &["fs-search-viewport"]).slider(
                 tr!("folderstorm-viewport-bottom"),
                 help,
                 &field!(folderstorm_viewport.bottom),
                 0..=16384,
                 " px",
             );
-            cx.row(
+            words(cx, &["fs-search-viewport"]).row(
                 tr!("folderstorm-viewport-fit"),
                 tr!("folderstorm-viewport-fit-help"),
                 &fields!(
@@ -58,7 +62,7 @@ pub(super) fn group(cx: &mut Cx) {
                 ),
                 |ui, s| monitor_buttons(ui, &mut s.folderstorm_viewport),
             );
-            cx.toggle(
+            words(cx, &["fs-search-viewport"]).toggle(
                 tr!("folderstorm-viewport-mouselook"),
                 tr!("folderstorm-viewport-mouselook-help"),
                 &field!(folderstorm_viewport.in_mouselook),
@@ -71,8 +75,8 @@ pub(super) fn group(cx: &mut Cx) {
                 (BarsPlace::Around, tr!("folderstorm-viewport-bars-around"), false),
                 (BarsPlace::Window, tr!("folderstorm-viewport-bars-window"), false),
             ];
-            let words: Vec<&str> = places.iter().map(|(_, label, _)| *label).collect();
-            cx.keywords(&words.join(" ")).wide().row(
+            let choices: Vec<&str> = places.iter().map(|(_, label, _)| *label).collect();
+            words(cx, &["fs-search-viewport"]).keywords(&choices.join(" ")).wide().row(
                 tr!("folderstorm-viewport-bars"),
                 tr!("folderstorm-viewport-bars-help"),
                 &fields!(folderstorm_viewport.bars_in_viewport, folderstorm_viewport.bars_around),
@@ -85,7 +89,7 @@ pub(super) fn group(cx: &mut Cx) {
                     changed
                 },
             );
-            cx.toggle(
+            words(cx, &["fs-search-viewport", "fs-search-photo"]).toggle(
                 tr!("folderstorm-viewport-photo"),
                 tr!("folderstorm-viewport-photo-help"),
                 &field!(folderstorm_viewport.photo_whole_window),
@@ -95,7 +99,7 @@ pub(super) fn group(cx: &mut Cx) {
         // the cog (the sliders and switches stay behind it)
         if !off {
             let p = cx.p;
-            cx.below().row(
+            words(cx, &["fs-search-viewport"]).below().row(
                 tr!("folderstorm-viewport-diagram"),
                 tr!("folderstorm-viewport-diagram-help"),
                 &fields!(
@@ -111,6 +115,8 @@ pub(super) fn group(cx: &mut Cx) {
             );
         }
     });
+    // what the margins show (row 1.8)
+    background::group(cx);
 }
 
 /// One button per monitor under the window: its margins put the world on it.

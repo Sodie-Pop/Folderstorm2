@@ -281,6 +281,17 @@ pub(super) fn new_menu(
             }
         },
     );
+    // Folderstorm: Upload a folder here… (folderstorm/folder_upload)
+    let upload = InvAction::FolderstormUploadFolder(id);
+    entry(
+        ui,
+        p,
+        "file-upload-filled",
+        aurora_i18n::tr!("fs-folder-upload-menu"),
+        enabled,
+        upload,
+        actions,
+    );
     menu::submenu(
         ui,
         p,
@@ -326,6 +337,7 @@ pub(super) fn show(
     actions: &mut Vec<InvAction>,
 ) {
     let mut catalog = super::context_catalog::build(inv, id, st, prefs, facts);
+    st.menu_editor.help = std::mem::take(&mut catalog.help); // Folderstorm: why an entry is greyed
     let scope = super::context_catalog::scope(inv, id);
     prefs.context_menus.unify();
     st.menu_editor

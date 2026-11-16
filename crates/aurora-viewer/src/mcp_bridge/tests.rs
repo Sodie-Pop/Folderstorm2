@@ -68,6 +68,7 @@ fn ctx(inv: &Inventory) -> Ctx<'_> {
         nav: Default::default(),
         content: Default::default(),
         objects: Default::default(),
+        avatar: Default::default(),
     }
 }
 

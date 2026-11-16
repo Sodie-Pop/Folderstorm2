@@ -115,6 +115,7 @@ pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inv
         if custom_tabs::has_menu(tab) {
             menu::context_menu(&response, p, |ui| custom_tabs::tab_menu(ui, p, st, prefs, tab));
         }
+        custom_tabs::folder_ui::drop_on_tab(ui, p, inv, st, prefs, tab, &response); // Folderstorm: folders dropped on a tab
     }
 }
 

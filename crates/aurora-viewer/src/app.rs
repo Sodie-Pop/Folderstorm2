@@ -63,6 +63,7 @@ mod derender;
 mod describe;
 mod dev_toolbox;
 mod folders;
+mod folderstorm_folder_upload; // Folderstorm: folder upload (folderstorm/folder_upload)
 mod folderstorm_gesture_boards; // Folderstorm: gesture boards (folderstorm/gesture_boards)
 mod folderstorm_viewport;
 mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
@@ -960,6 +961,8 @@ pub struct App {
     instances: crate::instances::Instances,
     // Folderstorm: 3D behind another Folderstorm2 window, GPU trouble behind
     folderstorm_characters: crate::folderstorm_characters::State,
+    // Folderstorm: Upload a folder here… (folderstorm/folder_upload)
+    folderstorm_folder_upload: crate::folderstorm::folder_upload::State,
     /// The Down key's latch (FSCrouchToggle).
     crouch_toggle: crate::movement::crouch_toggle::CrouchToggle,
     /// `key2name` chat commands waiting for a name.
@@ -1923,7 +1926,8 @@ impl App {
             gpu_stall: Default::default(),
             busy_pause: Default::default(),
             instances: crate::instances::Instances::new(),
-            folderstorm_characters: Default::default(), // Folderstorm
+            folderstorm_characters: Default::default(),    // Folderstorm
+            folderstorm_folder_upload: Default::default(), // Folderstorm
             crouch_toggle: Default::default(),
             key_to_name: Vec::new(),
             media,
@@ -3437,6 +3441,13 @@ impl App {
                 self.outfit_hd_uploaded(result);
                 return;
             }
+            // Folderstorm: the local assistant's upload (mcp-uploads.md)
+            if crate::mcp_bridge::upload_owns(request) {
+                if let Some(item) = crate::mcp_bridge::uploaded(request, result) {
+                    self.world.inventory.add_items(vec![item]);
+                }
+                return;
+            }
             let material_map = self.imports.uploading_entry(request);
             if let Some(item) = self.imports.uploaded(request, result) {
                 if let Some(entry) = material_map {
@@ -3578,6 +3589,11 @@ impl App {
             }
             if self.imports.folders.owns(request) {
                 self.imports.import_folder_result(request, result, &mut self.world.inventory);
+                return;
+            }
+            // Folderstorm: a folder of the local assistant's upload (mcp-uploads.md)
+            if crate::mcp_bridge::upload_folder_owns(request) {
+                crate::mcp_bridge::upload_folder_result(request, result, &mut self.world.inventory);
                 return;
             }
             if self.texture_library_result(request, &result) {
@@ -10544,6 +10560,7 @@ impl App {
                 self.settings.save();
             }
             self.scene.poser = self.ik_editor.pose_layers(&self.world);
+            self.local_assistant_pose(); // Folderstorm: the local assistant's pose (mcp-gestures.md)
             self.outfit_portrait_pose();
             self.ik_editor.tick_pose_storage(&self.scene.jobs, &self.egui_ctx, &self.world);
             if !self.scene.poser.is_empty() {
@@ -10631,6 +10648,7 @@ impl App {
                 h as f32,
                 self.egui_ctx.pixels_per_point(),
             );
+            self.world_build_cam(&gfx.renderer); // Folderstorm: world viewport
             if self.build.tool == crate::build::Tool::Edit
                 && self.build.hud_selected(&self.world)
                 && let Some(view) = drag_view
@@ -10656,6 +10674,7 @@ impl App {
                     h as f32,
                     self.egui_ctx.pixels_per_point(),
                 );
+                self.world_build_cam(&gfx.renderer); // Folderstorm: world viewport
             }
             let over_ui = self.ui_takes_pointer();
             let mods = crate::build::Mods {
@@ -10778,6 +10797,7 @@ impl App {
                     h as f32,
                     self.egui_ctx.pixels_per_point(),
                 );
+                self.world_build_cam(&gfx.renderer); // Folderstorm: world viewport
             }
             self.scene.update_beacons(&mut self.world, &self.settings.beacons, &cull);
             self.scene.held_at = hold.map(|h| h.at);
@@ -12149,6 +12169,7 @@ impl App {
             log::info!("GPU recovery: egui's textures sent again ({} KB)", self.egui_shadow.bytes() >> 10);
             textures = self.egui_shadow.replay(textures);
         }
+        crate::folderstorm::backgrounds::underlay(&ctx, &self.settings.folderstorm_workspaces, &mut full.shapes); // Folderstorm: the margins' background
         self.studio_fade(&ctx, &mut full.shapes);
         let egui_frame = self
             .egui_hand_over
@@ -21207,6 +21228,12 @@ impl ApplicationHandler for App {
                         // Folderstorm: custom Inventory tabs
                         | "custom-tabs"
                         | "aurora-custom-tabs"
+                        // Folderstorm: folder-scoped Inventory tabs
+                        | "folder-tabs"
+                        | "aurora-folder-tabs"
+                        // Folderstorm: Inventory quick access
+                        | "quick-access"
+                        | "aurora-quick-access"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
@@ -21310,6 +21337,17 @@ impl ApplicationHandler for App {
                                 window.id = ui::inventory::AURORA_DEMO_FOLDER_WINDOW;
                             }
                         }
+                    }
+                    if view.ends_with("folder-tabs") {
+                        // Folderstorm: folder-scoped Inventory tabs
+                        let account = self.world.agent_id;
+                        ui::inventory::custom_tabs::folder_demo(&mut self.inventory_ui, &mut self.settings.inventory, account);
+                    }
+                    if view.ends_with("quick-access") {
+                        // Folderstorm: Inventory quick access
+                        let account = self.world.agent_id;
+                        let ctx = self.egui_ctx.clone();
+                        ui::inventory::custom_tabs::quick_access_demo(&ctx, &mut self.inventory_ui, &mut self.settings.inventory, account);
                     }
                     if view.contains("favorites") {
                         if view.ends_with("-flat") || view.ends_with("-parents") {

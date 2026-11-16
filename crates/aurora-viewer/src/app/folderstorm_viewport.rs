@@ -142,6 +142,13 @@ impl App {
         }
     }
 
+    /// The build tools' camera, made for the whole window, kept in the
+    /// world's part of it: selection outlines, manipulators and their drags
+    /// (`crate::folderstorm::viewport::build_tools`).
+    pub(super) fn world_build_cam(&mut self, renderer: &Renderer) {
+        self.build.cam = viewport::build_tools::world_cam(self.build.cam, renderer.world_rect());
+    }
+
     /// Width over height of the world's part of the window, when it has one.
     pub(super) fn world_aspect(&self) -> Option<f32> {
         let size = self.gfx.as_ref()?.window.inner_size();

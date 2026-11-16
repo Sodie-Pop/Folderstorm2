@@ -49,32 +49,42 @@ impl App {
                 blocks_walk: self.native_anchor.blocks_walk(self.world.agent.seated, self.world.agent.ground_sit),
             },
             content_open: self.local_assistant_open_documents(),
+            // Folderstorm: the gestures and the pose library (mcp-gestures.md)
+            avatar: mcp_bridge::gestures::Avatar {
+                gestures: Some(&self.gesture_state.manager),
+                failures: Some(self.assistant_gesture_failures()),
+                chat_commands: Some(&self.settings.chat_commands),
+                poses: (!self.world.agent_id.is_nil()).then(|| crate::settings::account_dir(&self.world.agent_id).join("poses")),
+            },
+            // Folderstorm: the account's prices and balance (mcp-uploads.md)
+            uploads: mcp_bridge::uploads::Account {
+                prices: self.photo_prices(),
+                balance: self.world.balance,
+                sound_limit: self.imports.sound_limit,
+                texture: self.settings.imports.texture(),
+            },
         }
     }
 
     /// Folderstorm: the items open in the notecard window (the inventory's
     /// own preview or a document window) or in the script editor: content
-    /// saves leave them to the user (mcp-content.md).
+    /// saves leave them to the user (mcp-content.md). A script editor on a
+    /// script inside an object counts too (its task item id): task script
+    /// saves leave it to the user (mcp-task-scripts.md).
     fn local_assistant_open_documents(&self) -> std::collections::HashSet<Uuid> {
         let inventory = &self.inventory_ui;
         inventory
             .preview
             .into_iter()
             .chain(inventory.windows.iter().filter_map(|w| w.state.preview))
-            .chain(
-                self.script_editors
-                    .documents
-                    .iter()
-                    .filter(|e| e.target.object.is_nil())
-                    .map(|e| e.target.item),
-            )
+            .chain(self.script_editors.documents.iter().map(|e| e.target.item))
             .collect()
     }
 
     /// Once per frame: the bridge's calls, then the changes due now.
     pub(super) fn local_assistant_frame(&mut self) {
         // Folderstorm: content editing: the demo's fixtures, and the scripts
-        // the assistant saved (their new asset, then the item read back)
+        // the assistant saved (their new asset held on the inventory)
         if self.demo
             && mcp_bridge::content::demo::wanted()
             && !self.world.inventory.root.is_nil()
@@ -87,21 +97,21 @@ impl App {
                 self.demo_script_sources.insert(target, source);
             }
         }
-        for (item, asset) in mcp_bridge::content_updates() {
-            if let Some(mut it) = self.world.inventory.items.get(&item).cloned() {
-                it.asset_id = asset;
-                self.world.inventory.add_items(vec![it]);
-            }
-            if !self.demo {
-                self.send(NetCommand::FetchItems {
-                    items: vec![item],
-                    owner: self.world.agent_id,
-                });
-            }
+        // the upload's new asset is authoritative, as the Legacy Viewer
+        // takes it (LLBufferedAssetUploadInfo::finishUpload): no item read
+        // after the save, whose answer may still carry the old asset
+        mcp_bridge::content_hold(&mut self.world.inventory);
+        // Folderstorm: the upload demo pays from a demo balance (mcp-uploads.md)
+        if self.demo && mcp_bridge::uploads::demo::wanted() && self.world.balance.is_none() {
+            self.world.balance = Some(500);
         }
         let runs = mcp_bridge::frame(&self.settings.local_assistant, &self.local_assistant_view());
         for call in runs {
             self.local_assistant_run(call);
+        }
+        // Folderstorm: the upload run's folders, files and picture (mcp-uploads.md)
+        for act in mcp_bridge::upload_acts() {
+            self.local_assistant_upload(act);
         }
         // inventory_landmark: the landmark cache asks for what it lacks
         for asset in mcp_bridge::wanted_landmarks() {
@@ -114,6 +124,303 @@ impl App {
         // Folderstorm: an object's properties and contents (mcp-objects.md)
         for want in mcp_bridge::object_wants() {
             self.local_assistant_object_want(want);
+        }
+        // Folderstorm: scripts inside objects (mcp-task-scripts.md)
+        self.local_assistant_task_script_frame();
+        // Folderstorm: the test run's steps (mcp-script-testing.md)
+        for (token, send) in mcp_bridge::script_test_sends() {
+            let result = self.local_assistant_interaction(&send).map_err(|e| e.message);
+            mcp_bridge::script_test_sent(token, result);
+        }
+        // Folderstorm: the gestures to load, the playbacks to stop
+        // (mcp-gestures.md), even with access turned off
+        for item in mcp_bridge::gesture_loads() {
+            self.assistant_gesture_load(item);
+        }
+        for key in mcp_bridge::gesture_stops() {
+            log::info!("local assistant gesture playback stopped by the viewer");
+            self.assistant_gesture_stop(key);
+        }
+    }
+
+    /// Folderstorm: once per frame, just after the viewer's poser gave its
+    /// layers: the assistant's pose session of the user's own avatar, shown
+    /// on this screen only, unless the viewer's poser poses the user
+    /// (mcp-gestures.md).
+    pub(super) fn local_assistant_pose(&mut self) {
+        let me = self.world.agent_id;
+        let native = self.scene.poser.contains_key(&me);
+        if let Some(pose) = mcp_bridge::pose_layer(native)
+            && pose.valid(&self.world.avatar_lib.rig)
+        {
+            self.scene.poser.insert(me, pose);
+        }
+    }
+
+    /// Folderstorm: a gesture played under the assistant's own key, or its
+    /// playback stopped, through the Gestures window's paths
+    /// (mcp-gestures.md). Played once: never again automatically.
+    fn local_assistant_gesture(&mut self, call: Pending, reply: serde_json::Value, work: mcp_bridge::gestures::Work) {
+        use mcp_bridge::gestures::Work as Gesture;
+        match work {
+            Gesture::Play { key, item, definition } => {
+                // LLGestureMgr::playGesture under RlvActions::canPlayGestures
+                if self.world.rlva.has("sendgesture") {
+                    return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks gestures")));
+                }
+                log::info!("local assistant gesture played ({} steps)", definition.steps.len());
+                self.assistant_gesture_play(key, definition);
+                mcp_bridge::gesture_started(call, key, item, reply);
+            }
+            Gesture::Stop { key } => {
+                self.assistant_gesture_stop(key);
+                mcp_bridge::gesture_stopped(call, key, reply);
+            }
+        }
+    }
+
+    /// Folderstorm: a touch, a dialog answer, a channel line or a script's
+    /// running state, sent as the viewer's click, its script window, its
+    /// chat and the object's script editor send them, each checked for
+    /// RLVa just before (mcp-script-testing.md). The demo's box answers.
+    fn local_assistant_interaction(&mut self, send: &mcp_bridge::script_testing::Send) -> Result<(), ToolError> {
+        use aurora_net::build::BuildCmd;
+        use mcp_bridge::script_testing::Send;
+        let blocked = || ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this");
+        match send {
+            Send::Touch { local_id, .. } => {
+                let command = NetCommand::Touch { local_id: *local_id };
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                self.send(command);
+            }
+            Send::Channel { channel, text } => {
+                if self.world.rlva.enabled() && !self.world.rlva.allows_channel(*channel) {
+                    return Err(blocked());
+                }
+                self.send(NetCommand::Chat {
+                    message: text.clone(),
+                    channel: *channel,
+                    chat_type: aurora_net::ChatType::Normal,
+                });
+            }
+            Send::Dialog {
+                notification,
+                fingerprint,
+                object,
+                channel,
+                button,
+                label,
+            } => {
+                let live = self
+                    .world
+                    .notifications
+                    .list
+                    .iter()
+                    .find(|n| n.id == *notification)
+                    .and_then(mcp_bridge::script_testing::fingerprint);
+                if live != Some(*fingerprint) {
+                    return Err(ToolError::new(
+                        ErrorCode::Stale,
+                        "the dialog was answered, closed or replaced in the meantime: nothing was sent. List again with object_dialog_list",
+                    ));
+                }
+                let check = NetCommand::ScriptDialogReply {
+                    sender: None,
+                    object_id: *object,
+                    channel: *channel,
+                    index: button.map_or(0, |i| i as i32),
+                    label: label.clone(),
+                };
+                if !self.world.rlva_allows_command(&check, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                let response = match button {
+                    Some(i) => crate::world::notifications::Response::Button(*i),
+                    None => {
+                        if let Some(n) = self.world.notifications.list.iter_mut().find(|n| n.id == *notification) {
+                            n.text.clone_from(label);
+                        }
+                        crate::world::notifications::Response::SendText
+                    }
+                };
+                let (commands, _) = self.world.respond_notification(*notification, response);
+                for command in commands {
+                    self.send(command);
+                }
+            }
+            Send::Running {
+                handle,
+                object,
+                item,
+                running,
+            } => {
+                let command = NetCommand::Build(BuildCmd::SetScriptRunning {
+                    handle: *handle,
+                    object_id: *object,
+                    item_id: *item,
+                    running: *running,
+                });
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                self.send(command);
+            }
+            Send::Reset { handle, object, item } => {
+                let command = NetCommand::Build(BuildCmd::ScriptReset {
+                    handle: *handle,
+                    object_id: *object,
+                    item_id: *item,
+                });
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    return Err(blocked());
+                }
+                self.send(command);
+            }
+            Send::Query { handle, object, item } => self.send(NetCommand::Build(BuildCmd::GetScriptRunning {
+                handle: *handle,
+                object_id: *object,
+                item_id: *item,
+            })),
+        }
+        if self.demo {
+            for event in mcp_bridge::script_testing::demo::answers(send, self.world.agent_id) {
+                if let Some(e) = self.world.apply(event) {
+                    self.on_app_event(e);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Folderstorm: what the task script tools wait for, asked the way the
+    /// object's script editor asks (`LoadScript`, `LoadScriptExperiences`,
+    /// `GetScriptRunning`), and the scripts they saved put in the Contents
+    /// tab with the upload's asset, the prim listed again.
+    fn local_assistant_task_script_frame(&mut self) {
+        use aurora_net::build::BuildCmd;
+        use aurora_net::scripts::ScriptTarget;
+        for (object, item, asset) in mcp_bridge::task_script_updates() {
+            if let Some(inv) = self.build.contents.objects.get_mut(&object)
+                && let Some(it) = inv.items.iter_mut().find(|it| it.item_id == item)
+            {
+                it.asset_id = asset;
+            }
+            self.build.contents_changed(object);
+        }
+        let (fetches, queries) = mcp_bridge::task_script_wants();
+        for fetch in fetches {
+            let target = ScriptTarget {
+                object: fetch.object,
+                item: fetch.item,
+            };
+            let load = NetCommand::LoadScript {
+                request: fetch.source_request,
+                target,
+                handle: fetch.handle,
+                owner: fetch.owner,
+                asset: fetch.asset,
+            };
+            // the send would drop it with a notice of its own
+            if !self.world.rlva_allows_command(&load, Uuid::nil()) {
+                mcp_bridge::task_script_fetch_failed(fetch.source_request, "an RLV restriction hides it");
+                continue;
+            }
+            self.send(NetCommand::LoadScriptExperiences {
+                request: fetch.experience_request,
+                target,
+                handle: fetch.handle,
+            });
+            self.send(load);
+        }
+        for query in queries {
+            self.send(NetCommand::Build(BuildCmd::GetScriptRunning {
+                handle: query.handle,
+                object_id: query.object,
+                item_id: query.item,
+            }));
+        }
+    }
+
+    /// Folderstorm: a task script change, sent as the object's script
+    /// editor sends it (`SaveScript` to UpdateScriptTask, Mono, the running
+    /// flag asked, the association read with the source; `SetScriptRunning`;
+    /// `ScriptReset`), checked for RLVa just before, then the running state
+    /// asked (mcp-task-scripts.md). Sent once: never again automatically.
+    fn local_assistant_task_script(&mut self, call: Pending, reply: serde_json::Value, send: mcp_bridge::task_scripts::Send) {
+        use aurora_net::build::BuildCmd;
+        use mcp_bridge::task_scripts::Action;
+        let target = aurora_net::scripts::ScriptTarget {
+            object: send.object,
+            item: send.item,
+        };
+        if matches!(send.action, Action::Save { .. }) && mcp_bridge::task_script_saving(send.object, send.item) {
+            return call.answer(Err(ToolError::new(
+                ErrorCode::Busy,
+                "another save of this script is still waiting for the server: try again in a moment",
+            )));
+        }
+        let check = match &send.action {
+            Action::Save { .. } => NetCommand::SaveScript {
+                request: Uuid::nil(),
+                target,
+                handle: send.handle,
+                options: aurora_net::scripts::ScriptOptions {
+                    mono: true,
+                    luau: aurora_net::scripts::Luau::Off,
+                    running: false,
+                    experience: Uuid::nil(),
+                },
+                source: String::new(),
+            },
+            Action::Running(running) => NetCommand::Build(BuildCmd::SetScriptRunning {
+                handle: send.handle,
+                object_id: send.object,
+                item_id: send.item,
+                running: *running,
+            }),
+            Action::Reset => NetCommand::Build(BuildCmd::ScriptReset {
+                handle: send.handle,
+                object_id: send.object,
+                item_id: send.item,
+            }),
+        };
+        if !self.world.rlva_allows_command(&check, Uuid::nil()) {
+            return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this change")));
+        }
+        // watched from before the send: the demo answers inside it
+        let request = mcp_bridge::task_script_sending(call, &send, reply);
+        log::info!("local assistant task script change: {}", send.tool);
+        match send.action {
+            Action::Save {
+                source,
+                running,
+                experience,
+                ..
+            } => {
+                let Some(request) = request else { return };
+                self.send(NetCommand::SaveScript {
+                    request,
+                    target,
+                    handle: send.handle,
+                    options: aurora_net::scripts::ScriptOptions {
+                        mono: true,
+                        luau: aurora_net::scripts::Luau::Off,
+                        running,
+                        experience,
+                    },
+                    source,
+                });
+            }
+            Action::Running(_) | Action::Reset => {
+                self.send(check);
+                self.send(NetCommand::Build(BuildCmd::GetScriptRunning {
+                    handle: send.handle,
+                    object_id: send.object,
+                    item_id: send.item,
+                }));
+            }
         }
     }
 
@@ -202,6 +509,27 @@ impl App {
         self.send(command);
     }
 
+    /// Folderstorm: a building change, sent as the build tools send it
+    /// (MultipleObjectUpdate, ObjectImage, ModifyMaterialParams, ObjectAdd,
+    /// RezObject), checked for RLVa just before (mcp-building.md). Sent
+    /// once: never again automatically.
+    fn local_assistant_build(&mut self, call: Pending, reply: serde_json::Value, send: mcp_bridge::building::Send) {
+        let command = NetCommand::Build(send.command.clone());
+        if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+            return call.answer(Err(ToolError::new(ErrorCode::NotAllowed, "an RLV restriction blocks this change")));
+        }
+        // watched from before the send: the demo answers inside it
+        mcp_bridge::build_sending(call, &send, reply, &self.world);
+        if matches!(
+            send.command,
+            aurora_net::build::BuildCmd::Add(_) | aurora_net::build::BuildCmd::RezInventory(_)
+        ) {
+            self.world.ui_sounds.push(crate::ui_sound::UiSound::ObjectCreate);
+        }
+        log::info!("local assistant building change: {}", send.tool);
+        self.send(command);
+    }
+
     fn local_assistant_run(&mut self, call: Pending) {
         // decided again with the permissions and the login in force
         let Some((call, planned)) = mcp_bridge::replan(call, &self.local_assistant_view()) else {
@@ -256,6 +584,23 @@ impl App {
             Work::Navigate(work) => self.local_assistant_navigate(call, work),
             Work::Content(save) => self.local_assistant_content(call, &planned, save),
             Work::Object(send) => self.local_assistant_object(call, planned.reply, *send), // Folderstorm: mcp-objects.md
+            Work::TaskScript(send) => self.local_assistant_task_script(call, planned.reply, *send), // Folderstorm: mcp-task-scripts.md
+            // Folderstorm: mcp-script-testing.md
+            Work::Interact(interaction) => {
+                let result = self.local_assistant_interaction(&interaction.send);
+                if result.is_ok() {
+                    log::info!("local assistant interaction: {}", interaction.tool);
+                }
+                mcp_bridge::interaction_sent(call, &interaction, planned.reply, result);
+            }
+            Work::ScriptTest(recipe) => mcp_bridge::script_test_start(call, *recipe),
+            Work::Build(send) => self.local_assistant_build(call, planned.reply, *send), // Folderstorm: mcp-building.md
+            // Folderstorm: mcp-gestures.md
+            Work::Gesture(work) => self.local_assistant_gesture(call, planned.reply, *work),
+            Work::Pose(work) => mcp_bridge::pose_run(call, *work, planned.reply, &self.world),
+            // Folderstorm: mcp-uploads.md
+            Work::Upload => mcp_bridge::upload_start(call),
+            Work::MeshReview(path) => self.local_assistant_mesh_review(call, path, planned.reply),
             Work::Image { target, texture } => {
                 if self.inventory_ui.pending.is_some() {
                     return call.answer(Err(busy("an inventory change")));
@@ -631,6 +976,80 @@ impl App {
             name,
         });
         mcp_bridge::sent(None, None);
+    }
+
+    /// Folderstorm: one step of the assistant's upload, sent as the
+    /// uploader sends it: a folder (`EditInventory`), a file
+    /// (`UploadAsset` with the uploads' permissions of Preferences; a
+    /// snapshot as the photo window's), or the picture set from the new
+    /// texture through the Image window's path (mcp-uploads.md). Each is
+    /// checked for RLVa just before, as `send` would.
+    fn local_assistant_upload(&mut self, act: mcp_bridge::uploads::Act) {
+        use aurora_net::inventory::upload::{self, Kind};
+        use mcp_bridge::uploads::Act;
+        match act {
+            Act::Folder { request, change } => {
+                let command = NetCommand::EditInventory { request, change };
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    let refused = Err("an RLV restriction blocks this change".to_owned());
+                    return mcp_bridge::upload_folder_result(request, refused, &mut self.world.inventory);
+                }
+                log::info!("local assistant upload: one folder");
+                self.send(command);
+            }
+            Act::Upload { request, mut upload } => {
+                let uploads = self.settings.imports.permissions();
+                upload.permissions = if upload.kind == Kind::Snapshot {
+                    // as the photo window's Save to inventory
+                    upload::Permissions {
+                        next_owner: 0x7fff_ffff,
+                        ..uploads
+                    }
+                } else {
+                    self.settings.imports.permissions_for(upload.kind)
+                };
+                let command = NetCommand::UploadAsset { request, upload };
+                if !self.world.rlva_allows_command(&command, Uuid::nil()) {
+                    let _ = mcp_bridge::uploaded(request, Err(upload::Error::Rejected));
+                    return;
+                }
+                log::info!("local assistant upload: one file");
+                self.send(command);
+            }
+            Act::Thumbnail { request, target, asset } => {
+                self.inventory_image_action(
+                    request,
+                    target,
+                    crate::ui::inventory::thumbnail::Input::Texture { asset, resize: true },
+                );
+            }
+        }
+    }
+
+    /// Folderstorm: a Collada file opened in the uploader's Mesh window for
+    /// the user to review and upload by hand (mcp-uploads.md). Nothing is
+    /// uploaded: the window shows the server's fee and its Upload button.
+    fn local_assistant_mesh_review(&mut self, call: Pending, path: std::path::PathBuf, reply: serde_json::Value) {
+        let holds_mesh = self
+            .imports
+            .entries
+            .iter()
+            .any(|e| !e.local && matches!(e.source, Some(crate::imports::Source::Mesh(_))));
+        if self.imports.busy() || self.imports.pending_files.is_some() || self.imports.confirm || holds_mesh {
+            return call.answer(Err(ToolError::new(
+                ErrorCode::Busy,
+                "the viewer's uploader is busy or already holds a mesh: the user finishes or clears it first",
+            )));
+        }
+        let ctx = self.egui_ctx.clone();
+        self.imports
+            .add_mesh_path(path, &self.scene.jobs, &ctx, self.settings.imports.texture());
+        if self.imports.pending_files.is_none() {
+            return call.answer(Err(ToolError::new(ErrorCode::Busy, "the viewer's uploader did not take the file")));
+        }
+        self.imports.open_type_window(&ctx, crate::imports::Choice::Mesh);
+        log::info!("local assistant mesh review opened");
+        call.answer(Ok(reply));
     }
 
     /// `submit_inventory_change` (app/inventory.rs), without what belongs
