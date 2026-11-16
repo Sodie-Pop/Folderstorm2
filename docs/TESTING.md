@@ -547,9 +547,10 @@ notice). Right-click a toolbar button › *Add to desktop* (greyed, with the
 reason, for those three and for a command Aurora does not run yet): the
 shortcut goes to the first free cell of the first desktop, the shortcuts
 are turned on when they were off, and a notice says so. In Preferences ›
-Layout › Bars and windows › *Desktop in the margins*: *Open with a single
-click* (a click then opens, as a toolbar button), *Remove all shortcuts…*
-(asks first; only this account's go), and with `unused` the note and
+Layout › Bars and windows › *Desktop in the margins*, behind the cog of
+*Shortcuts in the margins*: *Open with a single click* (a click then
+opens, as a toolbar button) and *Remove all shortcuts…* (asks first; only
+this account's go); under the icon size, with `unused`, the note and
 *Bring them here* (the two shortcuts go to the first desktop). Keyboard:
 give *Focus the desktop* a key in Preferences › Shortcuts (it has none by
 default, as *Show or hide the desktop shortcuts*), press it: the selected

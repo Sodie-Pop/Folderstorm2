@@ -19,9 +19,10 @@ fn asking_id() -> egui::Id {
     egui::Id::unique("folderstorm_desktop_clear_asking")
 }
 
-/// *Desktop in the margins*: the shortcuts' switch, their size, how they
-/// open, and what tidies them (the shortcuts themselves are the account's:
-/// they are not settings, so these rows have nothing to reset).
+/// *Desktop in the margins*: the shortcuts' switch (behind its cog: how
+/// they open, and removing them all), their size, and the note about the
+/// shortcuts of a monitor not in use. The shortcuts themselves are the
+/// account's, not settings: the rows about them have nothing to reset.
 pub(in crate::ui::options) fn group(cx: &mut Cx) {
     let p = cx.p;
     cx.group(tr!("fs-desktop-group"), |cx| {
@@ -34,6 +35,14 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             &field!(folderstorm_desktop.shortcuts_on),
         );
         let off = !cx.s.folderstorm_desktop.shortcuts_on;
+        cx.subs(off, |cx| {
+            words(cx, &["fs-search-desktop"]).toggle(
+                tr!("fs-desktop-single-click"),
+                tr!("fs-desktop-single-click-help"),
+                &field!(folderstorm_desktop.single_click),
+            );
+            clear_row(cx);
+        });
         cx.greyed(off);
         let sizes = Size::ALL.map(|size| (size, size_label(size), false));
         words(cx, &["fs-search-desktop"]).choice(
@@ -41,11 +50,6 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             tr!("fs-desktop-size-help"),
             &field!(folderstorm_desktop.size),
             &sizes,
-        );
-        words(cx, &["fs-search-desktop"]).toggle(
-            tr!("fs-desktop-single-click"),
-            tr!("fs-desktop-single-click-help"),
-            &field!(folderstorm_desktop.single_click),
         );
         cx.greyed(false);
         // shortcuts kept on a monitor that has no desktop now (the row
@@ -73,40 +77,45 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 },
             );
         }
-        let count = cx.s.folderstorm_desktop.shortcuts.len();
-        words(cx, &["fs-search-desktop"])
-            .wide()
-            .row(tr!("fs-desktop-clear"), tr!("fs-desktop-clear-help"), &Nothing, |ui, s| {
-                let asking = count > 0 && ui.data(|d| d.get_temp::<bool>(asking_id())).unwrap_or(false);
-                let mut answer = None;
-                let mut removed = false;
-                if asking {
-                    ui.label(egui::RichText::new(tr!("fs-desktop-clear-ask", count = count)).color(p.ink));
-                    let size = vec2(0.0, BUTTON_H);
-                    if widgets::action_button(ui, &p, "trash-filled", tr!("fs-desktop-clear-confirm"), ActionKind::Danger, size).clicked() {
-                        removed = s.folderstorm_desktop.clear() > 0;
-                        answer = Some(false);
-                    }
-                    if widgets::action_button(ui, &p, "x", tr!("common-cancel"), ActionKind::Flat, size).clicked() {
-                        answer = Some(false);
-                    }
-                } else if widgets::action_button_if(
-                    ui,
-                    &p,
-                    "trash-filled",
-                    tr!("fs-desktop-clear-button"),
-                    ActionKind::Flat,
-                    vec2(0.0, BUTTON_H),
-                    count > 0,
-                )
-                .clicked()
-                {
-                    answer = Some(true);
-                }
-                if let Some(asking) = answer {
-                    ui.data_mut(|d| d.insert_temp(asking_id(), asking));
-                }
-                removed
-            });
     });
+}
+
+/// *Remove all shortcuts…*: asks in its row before removing.
+fn clear_row(cx: &mut Cx) {
+    let p = cx.p;
+    let count = cx.s.folderstorm_desktop.shortcuts.len();
+    words(cx, &["fs-search-desktop"])
+        .wide()
+        .row(tr!("fs-desktop-clear"), tr!("fs-desktop-clear-help"), &Nothing, |ui, s| {
+            let asking = count > 0 && ui.data(|d| d.get_temp::<bool>(asking_id())).unwrap_or(false);
+            let size = vec2(0.0, BUTTON_H);
+            let mut answer = None;
+            let mut removed = false;
+            if asking {
+                ui.label(egui::RichText::new(tr!("fs-desktop-clear-ask", count = count)).color(p.ink));
+                if widgets::action_button(ui, &p, "trash-filled", tr!("fs-desktop-clear-confirm"), ActionKind::Danger, size).clicked() {
+                    removed = s.folderstorm_desktop.clear() > 0;
+                    answer = Some(false);
+                }
+                if widgets::action_button(ui, &p, "x", tr!("common-cancel"), ActionKind::Flat, size).clicked() {
+                    answer = Some(false);
+                }
+            } else if widgets::action_button_if(
+                ui,
+                &p,
+                "trash-filled",
+                tr!("fs-desktop-clear-button"),
+                ActionKind::Flat,
+                size,
+                count > 0,
+            )
+            .clicked()
+            {
+                answer = Some(true);
+            }
+            if let Some(asking) = answer {
+                ui.data_mut(|d| d.insert_temp(asking_id(), asking));
+            }
+            removed
+        });
 }

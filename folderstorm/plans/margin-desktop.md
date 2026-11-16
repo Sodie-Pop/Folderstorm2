@@ -866,11 +866,16 @@ against the sections above, and what it decided.
   desktop". *Focus the taskbar* comes with checkpoint 4. **Not done**: the
   menu key / Shift+F10 on a focused shortcut (Aurora's menus open on the
   pointer only).
-- **Preferences** (*Desktop in the margins*): *Open with a single click*
-  (the profile's, off by default); "N shortcuts are on a monitor that is
-  not in use" with *Bring them here*, shown only while it is so; *Remove
-  all shortcuts…*, which asks in its row before removing (this account's
-  only; what this version cannot read is kept).
+- **Preferences** (*Desktop in the margins*): **behind the cog of the
+  switch**, *Open with a single click* (the profile's, off by default) and
+  *Remove all shortcuts…*, which asks in its row before removing (this
+  account's only; what this version cannot read is kept); under the icon
+  size, "N shortcuts are on a monitor that is not in use" with *Bring them
+  here*, shown only while it is so. The cog keeps the page as long as it
+  was: two more rows above Aurora's own pushed a row of its page out of
+  the frame of one of upstream's tests
+  (`keyboard_scale_survives_an_unrelated_preference_change_and_reload`),
+  which is not ours to edit.
 - **"On a monitor not in use"** counts the shortcuts of slots without a
   room while another slot has one. While no desktop shows at all (the
   world fills the window) nothing is counted: the group's first note says
