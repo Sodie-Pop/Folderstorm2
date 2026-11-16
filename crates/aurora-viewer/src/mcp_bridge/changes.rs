@@ -58,6 +58,24 @@ pub enum Work {
     /// Folderstorm: an object's contents changed or the object taken, as
     /// the Contents tab and Take send it (mcp-objects.md).
     Object(Box<super::objects::Send>),
+    /// Folderstorm: a script inside an object saved, started, stopped or
+    /// reset, as its script editor sends it (mcp-task-scripts.md).
+    TaskScript(Box<super::task_scripts::Send>),
+    /// Folderstorm: a touch, a dialog answer or a channel line, as the
+    /// viewer's click, its script window and its chat send them
+    /// (mcp-script-testing.md).
+    Interact(Box<super::script_testing::Interaction>),
+    /// Folderstorm: a frozen test recipe the desk then drives.
+    ScriptTest(Box<super::script_testing::Recipe>),
+    /// Folderstorm: an object moved, turned, resized or repainted, or a
+    /// new one rezzed, as the build tools send it (mcp-building.md).
+    Build(Box<super::building::Send>),
+    /// Folderstorm: a gesture played or stopped under the assistant's own
+    /// key, as the gesture editor's Preview plays it (mcp-gestures.md).
+    Gesture(Box<super::gestures::Work>),
+    /// Folderstorm: the assistant's pose session of the user's own avatar
+    /// (mcp-gestures.md).
+    Pose(Box<super::posing::Work>),
 }
 
 #[derive(Debug, Clone)]

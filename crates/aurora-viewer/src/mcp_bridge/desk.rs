@@ -33,24 +33,34 @@
 //! been sent ([`Desk::cancel`]); just before the send, a call whose time ran
 //! out is cancelled.
 
+use super::building::{self, Building}; // Folderstorm: building (mcp-building.md)
 use super::changes::{self, Planned, Work};
 use super::content::{self, Content}; // Folderstorm: content editing
+use super::gestures::{self, Gestures}; // Folderstorm: gestures (mcp-gestures.md)
 use super::navigation::{self, Navigator}; // Folderstorm: phase 3, part 4 (navigation)
 use super::objects::{self, Objects}; // Folderstorm: object tools (mcp-objects.md)
 use super::plans::{self, Plans}; // Folderstorm: batch plans
+use super::posing::{self, Posing}; // Folderstorm: own posing (mcp-gestures.md)
+use super::script_testing::{self, ScriptTesting}; // Folderstorm: script testing (mcp-script-testing.md)
+use super::task_scripts::{self, TaskScripts}; // Folderstorm: task scripts (mcp-task-scripts.md)
 use super::tools::{self, Ctx};
 use super::{journal::Journal, landmark}; // Folderstorm: phase 3, part 2
 use folderstorm_mcp_bridge::protocol::assistant::{CANCEL, EXECUTE_PLAN};
+use folderstorm_mcp_bridge::protocol::building as build_tool; // Folderstorm: building
 use folderstorm_mcp_bridge::protocol::content as content_tool; // Folderstorm: content editing
+use folderstorm_mcp_bridge::protocol::gestures as gesture_tool; // Folderstorm: gestures
 use folderstorm_mcp_bridge::protocol::navigation as nav_tools;
 use folderstorm_mcp_bridge::protocol::objects as object_tool; // Folderstorm: object tools
+use folderstorm_mcp_bridge::protocol::posing as pose_tool; // Folderstorm: own posing
+use folderstorm_mcp_bridge::protocol::script_testing as test_tool; // Folderstorm: script testing
+use folderstorm_mcp_bridge::protocol::task_scripts as task_tool; // Folderstorm: task scripts
 use folderstorm_mcp_bridge::protocol::{self, ASK_TIMEOUT, BAKE_WAIT_DEFAULT, BAKE_WAIT_MAX, CHANGE_WAIT};
 use folderstorm_mcp_bridge::receipts::{self, Admission, Late, Ledger, Receipt, State, Tracked};
 use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::server::VIEWER_TIMEOUT;
 use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError, binding};
 use serde_json::{Value, json};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -62,6 +72,9 @@ struct Asking {
     summary: String,
     deadline: Instant,
     decision: Option<bool>,
+    /// Folderstorm: allowed with "Allow for this object this session"
+    /// (mcp-script-testing.md).
+    for_session: bool,
 }
 
 /// A change sent, waiting for the server.
@@ -159,6 +172,10 @@ pub struct Question {
     /// Folderstorm: a plan's rows under its sentence (at most 5, "and N
     /// more", the entries left out); empty for any other change.
     pub detail: Vec<String>,
+    /// Folderstorm: a touch: the dialog offers "Allow once" and "Allow for
+    /// this object this session" ([`Desk::decide_for_session`],
+    /// mcp-script-testing.md).
+    pub per_object: bool,
 }
 
 /// A change allowed, to run on this frame.
@@ -206,6 +223,21 @@ pub struct Desk {
     content: Content,
     /// Folderstorm: this login's object snapshots, listings and watches.
     objects: Objects,
+    /// Folderstorm: this login's task script reads, snapshots and changes.
+    task_scripts: TaskScripts,
+    /// Folderstorm: this login's test runs and channel lines.
+    testing: ScriptTesting,
+    /// Folderstorm: this login's object revisions, edits and rezzes.
+    building: Building,
+    /// Folderstorm: this login's gesture reads and the assistant's playback.
+    gestures: Gestures,
+    /// Folderstorm: the assistant's pose session, presets and saves.
+    posing: Posing,
+    /// Folderstorm: the objects whose touches the user allowed for this
+    /// session from the Ask dialog (mcp-script-testing.md): cleared at a
+    /// login change, when access is turned off and when the Interact level
+    /// changes; never saved.
+    touch_grants: HashSet<Uuid>,
 }
 
 fn refused(message: &str) -> ToolError {
@@ -290,7 +322,24 @@ pub fn decision(permissions: &Permissions, tool: &str) -> Decision {
 pub fn call_decision(permissions: &Permissions, call: &Pending) -> Decision {
     match call.plan_class {
         Some(class) => permissions.decide(class),
-        None => decision(permissions, &call.tool),
+        None => {
+            // Folderstorm: a task script save also needs Read, and Scripts
+            // when it leaves the script running (mcp-task-scripts.md)
+            let mut extra = task_tool::extra_classes(&call.tool, &call.arguments);
+            // Folderstorm: a test recipe reads, and touches or speaks
+            // (mcp-script-testing.md)
+            extra.extend(test_tool::extra_classes(&call.tool, &call.arguments));
+            let base = decision(permissions, &call.tool);
+            if extra.is_empty() || base == Decision::Refuse {
+                base
+            } else {
+                match permissions.decide_all(extra) {
+                    Decision::Refuse => Decision::Refuse,
+                    Decision::Ask => Decision::Ask,
+                    Decision::Run => base,
+                }
+            }
+        }
     }
 }
 
@@ -346,7 +395,14 @@ impl Desk {
         }
         // Folderstorm: an object change needs its client_request_id
         // (mcp-objects.md; decision 3 of mcp-receipts.md)
-        if fresh && object_tool::needs_client_request_id(&call.tool) && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none() {
+        // Folderstorm: and a task script change (mcp-task-scripts.md)
+        if fresh
+            && (object_tool::needs_client_request_id(&call.tool)
+                || task_tool::needs_client_request_id(&call.tool)
+                || test_tool::needs_client_request_id(&call.tool)
+                || build_tool::needs_client_request_id(&call.tool))
+            && call.arguments.get(receipts::CLIENT_REQUEST_ID).is_none()
+        {
             return call.answer(Err(ToolError::new(
                 ErrorCode::InvalidArguments,
                 "`client_request_id` is required for an object change: choose a new one for each change, and send the same one again only to ask for that change's receipt",
@@ -394,10 +450,17 @@ impl Desk {
             }
         }
         // the levels may have changed while the call was queued
-        match call_decision(&self.permissions, &call) {
+        match self.decide_call(&call) {
             Decision::Refuse => return call.answer(Err(refused(PERMISSIONS_CHANGED))),
             Decision::Ask => call.ask = true,
-            Decision::Run => {}
+            Decision::Run => {
+                // Folderstorm: a touch of an object allowed for this
+                // session needs no question (mcp-script-testing.md)
+                if self.touch_granted(&call) {
+                    call.ask = false;
+                    call.receipt(|r| r.decide(receipts::Decision::ApprovedForSession));
+                }
+            }
         }
         // Folderstorm: a teleport (and a picture with the interface) asks
         // even on Allow, a call made in the process too
@@ -455,10 +518,80 @@ impl Desk {
             return;
         }
         if call.tool == object_tool::STATUS {
-            let result = self
+            let mut result = self
                 .objects
                 .status(&call.arguments, &self.receipts, self.session.as_deref(), self.names());
+            // Folderstorm: a task script operation's facts (mcp-task-scripts.md)
+            if let Ok(answer) = &mut result
+                && let Some(facts) = answer["receipt"]["operation_id"]
+                    .as_str()
+                    .and_then(|op| self.task_scripts.facts(op))
+            {
+                answer["script"] = facts;
+            }
             return call.answer(result);
+        }
+        // Folderstorm: the task script tools' reads (mcp-task-scripts.md)
+        if call.tool == task_tool::GET {
+            self.task_scripts.start_get(call, &self.objects, cx, now);
+            return;
+        }
+        if call.tool == task_tool::STATUS {
+            self.task_scripts.start_status(call, &self.objects, cx, now);
+            return;
+        }
+        if call.tool == task_tool::PREVIEW {
+            let save = self.permissions.decide_all([Class::Content, Class::Objects, Class::Read]);
+            let result = self.task_scripts.preview(&call.arguments, &self.objects, cx, save, now);
+            return call.answer(result);
+        }
+        if call.tool == task_tool::DEBUG_POLL {
+            let result = super::script_feed::poll(&call.arguments, cx);
+            return call.answer(result);
+        }
+        // Folderstorm: the script testing tools' reads, and the stop that
+        // needs no class (mcp-script-testing.md)
+        if call.tool == test_tool::DIALOG_LIST {
+            let result = self.testing.dialogs(&call.arguments, &self.objects, cx);
+            return call.answer(result);
+        }
+        if call.tool == test_tool::STATUS {
+            let result = self.testing.status(&call.arguments, cx, now);
+            return call.answer(result);
+        }
+        if call.tool == test_tool::STOP {
+            let result = self.testing.stop(&call.arguments, now);
+            return call.answer(result);
+        }
+        // Folderstorm: the building tools' reads (mcp-building.md)
+        if call.tool == build_tool::OBJECT_GET {
+            self.building.start_get(call, &mut self.objects, cx, now);
+            return;
+        }
+        if call.tool == build_tool::PERMISSIONS_GET {
+            let result = self.building.permissions(&call.arguments, cx);
+            return call.answer(result);
+        }
+        // Folderstorm: the gesture and pose tools' reads (mcp-gestures.md)
+        if call.tool == gesture_tool::LIST {
+            let result = self.gestures.list(&call.arguments, cx);
+            return call.answer(result);
+        }
+        if call.tool == gesture_tool::STATUS {
+            self.gestures.start_status(call, cx, now);
+            return;
+        }
+        if call.tool == pose_tool::STATUS {
+            let result = self.posing.status(&call.arguments, cx);
+            return call.answer(result);
+        }
+        if call.tool == pose_tool::JOINTS {
+            let result = self.posing.joints(&call.arguments, cx);
+            return call.answer(result);
+        }
+        if call.tool == pose_tool::PRESETS {
+            self.posing.start_presets(call, cx, now);
+            return;
         }
         if !spec.changes() {
             let result = tools::answer(&call.tool, &call.arguments, cx);
@@ -473,9 +606,33 @@ impl Desk {
                 Err(e) => return call.answer(Err(e)),
             }
         }
+        // Folderstorm: a task script save is checked and frozen, once
+        if fresh && call.tool == task_tool::SAVE {
+            match self.task_scripts.freeze(&call.arguments, &self.objects, cx, now) {
+                Ok(frozen) => call.arguments = frozen,
+                Err(e) => return call.answer(Err(e)),
+            }
+        }
+        // Folderstorm: a script testing change is checked and frozen, once
+        if fresh && script_testing::is_change(&call.tool) {
+            match self.testing.freeze(&call.tool, &call.arguments, &self.objects, cx, now) {
+                Ok(frozen) => call.arguments = frozen,
+                Err(e) => return call.answer(Err(e)),
+            }
+        }
         // Folderstorm: an object change is planned against its snapshot
         let planned = if objects::handles(&call.tool) {
             self.objects.plan(&call, cx, now, false)
+        } else if task_scripts::is_change(&call.tool) {
+            self.task_scripts.plan(&call, &self.objects, cx, now, false)
+        } else if script_testing::is_change(&call.tool) {
+            self.testing.plan(&call, &self.objects, cx, now, false)
+        } else if building::is_change(&call.tool) {
+            self.building.plan(&call, &self.objects, cx, now, false)
+        } else if gestures::is_change(&call.tool) {
+            self.gestures.plan(&call, cx) // Folderstorm: mcp-gestures.md
+        } else if posing::is_change(&call.tool) {
+            self.posing.plan(&call, cx)
         } else {
             changes::plan(&call.tool, &call.arguments, cx)
         };
@@ -487,6 +644,11 @@ impl Desk {
                 ..
             }) => call.answer(Ok(reply)),
             Ok(planned) => {
+                // Folderstorm: a gesture that says something always asks
+                // (mcp-gestures.md)
+                if matches!(&planned.work, Work::Gesture(w) if w.says()) {
+                    call.ask = true;
+                }
                 call.receipt(|r| {
                     r.set_summary(&planned.summary);
                     if r.targets.is_empty() {
@@ -817,6 +979,11 @@ impl Desk {
     /// The user's levels in force, given each frame before the calls: the
     /// calls waiting are decided again with them ([`Desk::tick`]).
     pub fn set_permissions(&mut self, permissions: Permissions) {
+        // Folderstorm: the touches allowed for this session end with the
+        // Interact level they were allowed under (mcp-script-testing.md)
+        if permissions.level(Class::Interact) != self.permissions.level(Class::Interact) {
+            self.touch_grants.clear();
+        }
         self.permissions = permissions;
     }
 
@@ -841,6 +1008,13 @@ impl Desk {
         self.receipts.with(receipts::Store::clear);
         self.content.clear(&refusal); // Folderstorm: content editing
         self.objects.clear(&refusal); // Folderstorm: object tools
+        self.task_scripts.clear(&refusal); // Folderstorm: task scripts
+        self.testing.clear(); // Folderstorm: script testing
+        self.building.clear(&refusal); // Folderstorm: building
+        self.gestures.clear(&refusal); // Folderstorm: gestures
+        self.posing.clear(&refusal, "login_changed"); // Folderstorm: own posing
+        self.touch_grants.clear(); // Folderstorm: touches allowed for the session
+        super::script_feed::clear();
     }
 
     fn refuse_waiting(&mut self, refusal: &ToolError) {
@@ -857,6 +1031,10 @@ impl Desk {
         landmark::refuse_all(&mut self.landmarks, refusal);
         self.content.refuse_all(refusal); // Folderstorm: content reads
         self.objects.refuse_all(refusal); // Folderstorm: object listings
+        self.task_scripts.refuse_all(refusal); // Folderstorm: task script reads
+        self.building.refuse_all(refusal); // Folderstorm: building reads
+        self.gestures.refuse_all(refusal); // Folderstorm: gesture reads
+        self.posing.refuse_all(refusal); // Folderstorm: pose reads
     }
 
     /// Access is turned off: every call still waiting is refused, the
@@ -884,6 +1062,22 @@ impl Desk {
         // Folderstorm: the object operations' facts stay, the snapshots go
         old.objects.close(&refused(ACCESS_OFF));
         self.objects = old.objects;
+        // Folderstorm: the task script operations' facts stay, the snapshots go
+        old.task_scripts.close(&refused(ACCESS_OFF));
+        self.task_scripts = old.task_scripts;
+        // Folderstorm: a test run stops, its status stays
+        old.testing.close(now);
+        self.testing = old.testing;
+        // Folderstorm: the building watches end, the revisions go
+        old.building.close(&refused(ACCESS_OFF));
+        self.building = old.building;
+        // Folderstorm: the playback stops and the pose session ends; the
+        // stops for the app and a save under way stay
+        old.gestures.clear(&refused(ACCESS_OFF));
+        self.gestures = old.gestures;
+        old.posing.clear(&refused(ACCESS_OFF), "access_off");
+        self.posing = old.posing;
+        super::script_feed::set_capturing(false);
     }
 
     /// Folderstorm: `flight` answers that it may still land, and listens on
@@ -927,7 +1121,7 @@ impl Desk {
         }
         let taken = self.login;
         self.set_login(login, session);
-        match self.review_as(taken, call_decision(&self.permissions, &call)) {
+        match self.review_as(taken, self.decide_call(&call)) {
             Review::Refuse(refusal) => {
                 call.answer(Err(refusal));
                 None
@@ -958,6 +1152,7 @@ impl Desk {
                     detail
                 }
             },
+            per_object: script_testing::touched_object(&first.call.tool, &first.call.arguments).is_some(),
         })
     }
 
@@ -977,6 +1172,42 @@ impl Desk {
         self.asks[index].decision = Some(allow);
     }
 
+    /// Folderstorm: "Allow for this object this session" on a touch's
+    /// question (mcp-script-testing.md): allowed, and that object's next
+    /// touches need no question until the login changes, access is turned
+    /// off or the Interact level changes. Any other question ignores it.
+    pub fn decide_for_session(&mut self, number: u64) {
+        let Some(index) = self.asks.iter().position(|a| a.number == number && a.decision.is_none()) else {
+            return;
+        };
+        let call = &self.asks[index].call;
+        let Some(object) = script_testing::touched_object(&call.tool, &call.arguments) else {
+            return;
+        };
+        if call_decision(&self.permissions, call) != Decision::Ask {
+            // Never meanwhile refuses at once; Allow needs no grant
+            return self.decide(number, true);
+        }
+        self.touch_grants.insert(object);
+        self.asks[index].decision = Some(true);
+        self.asks[index].for_session = true;
+    }
+
+    /// Folderstorm: whether `call` is a touch of an object the user allowed
+    /// for this session.
+    fn touch_granted(&self, call: &Pending) -> bool {
+        script_testing::touched_object(&call.tool, &call.arguments).is_some_and(|object| self.touch_grants.contains(&object))
+    }
+
+    /// What the levels say of `call` now ([`call_decision`]), a touch of an
+    /// object allowed for this session running without a question.
+    fn decide_call(&self, call: &Pending) -> Decision {
+        match call_decision(&self.permissions, call) {
+            Decision::Ask if self.touch_granted(call) => Decision::Run,
+            decided => decided,
+        }
+    }
+
     /// Once per frame: settle the questions (answered or timed out), the
     /// changes the server never confirmed and the bake waits; returns the
     /// changes the app runs now.
@@ -989,7 +1220,18 @@ impl Desk {
             }
             match ask.decision {
                 Some(true) => {
-                    ask.call.receipt(|r| r.decide(receipts::Decision::Approved));
+                    let decision = if ask.for_session {
+                        receipts::Decision::ApprovedForSession
+                    } else {
+                        receipts::Decision::Approved
+                    };
+                    ask.call.receipt(|r| r.decide(decision));
+                    self.queue(ask.call, ask.summary);
+                }
+                // Folderstorm: another touch of an object just allowed for
+                // this session (mcp-script-testing.md)
+                None if self.touch_granted(&ask.call) && call_decision(&self.permissions, &ask.call) == Decision::Ask => {
+                    ask.call.receipt(|r| r.decide(receipts::Decision::ApprovedForSession));
                     self.queue(ask.call, ask.summary);
                 }
                 Some(false) => refuse_as(ask.call, receipts::Decision::RefusedByUser, "the user refused this change"),
@@ -1020,7 +1262,7 @@ impl Desk {
         }
         let mut runs = Vec::new();
         for ready in std::mem::take(&mut self.ready) {
-            match call_decision(&self.permissions, &ready.call) {
+            match self.decide_call(&ready.call) {
                 Decision::Refuse => ready.call.answer(Err(refused(PERMISSIONS_CHANGED))),
                 // not asked yet, and its class asks now
                 Decision::Ask if !ready.call.ask => self.ask(ready.call, ready.summary, now),
@@ -1049,6 +1291,7 @@ impl Desk {
             summary,
             deadline: now + ASK_TIMEOUT,
             decision: None,
+            for_session: false,
         });
     }
 
@@ -1289,6 +1532,98 @@ impl Desk {
         self.content
             .tick(&world.inventory, &limits, read, &refused(PERMISSIONS_CHANGED), now);
         self.objects.tick(world, now); // Folderstorm: object tools
+        // Folderstorm: task scripts: reads, waits, and the prims to list again
+        let limits = content::Limits::of(&world.rlva);
+        self.task_scripts
+            .tick(&self.objects, world, &limits, read, &refused(PERMISSIONS_CHANGED), now);
+        for (handle, local_id, object) in self.task_scripts.take_relists() {
+            self.objects.relist(handle, local_id, object);
+            self.objects.touched(object);
+        }
+        // Folderstorm: the test run under way moves on (mcp-script-testing.md)
+        self.testing.tick(&self.objects, world, &self.permissions, now);
+        // Folderstorm: the building reads, watches and rezzes (mcp-building.md)
+        self.building.tick(&mut self.objects, world, now);
+    }
+
+    /// Folderstorm: a building change planned again just before the send
+    /// (mcp-building.md).
+    pub fn building_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
+        self.building.plan(call, &self.objects, cx, now, true)
+    }
+
+    /// Folderstorm: once per frame, the gesture and pose tools' waits, the
+    /// playback and the session (mcp-gestures.md).
+    pub fn tick_avatar(&mut self, cx: &Ctx, now: Instant) {
+        self.gestures.tick(cx, &self.permissions, now);
+        self.posing.tick(cx, &self.permissions, now);
+    }
+
+    /// Folderstorm: whether the gesture or pose tools wait for something
+    /// (their tick then needs the frame's context).
+    pub fn avatar_busy(&self) -> bool {
+        self.gestures.busy() || self.posing.busy()
+    }
+
+    /// Folderstorm: a gesture or pose change planned again just before it
+    /// runs.
+    pub fn avatar_plan(&self, call: &Pending, cx: &Ctx) -> Result<Planned, ToolError> {
+        if gestures::is_change(&call.tool) {
+            self.gestures.plan(call, cx)
+        } else {
+            self.posing.plan(call, cx)
+        }
+    }
+
+    /// Folderstorm: the gesture tools' state (the app's loads, plays and
+    /// stops).
+    pub fn gestures(&mut self) -> &mut Gestures {
+        &mut self.gestures
+    }
+
+    /// Folderstorm: the pose tools' state (the app's layer and runs).
+    pub fn posing(&mut self) -> &mut Posing {
+        &mut self.posing
+    }
+
+    /// Folderstorm: the app sends a building change now.
+    pub fn build_sending(&mut self, call: Pending, send: &building::Send, reply: Value, world: &crate::world::World, now: Instant) {
+        self.building.sending(call, send, reply, &mut self.objects, world, now);
+    }
+
+    /// Folderstorm: the script testing state (the runs' sends, the app's
+    /// answers).
+    pub fn testing(&mut self) -> &mut ScriptTesting {
+        &mut self.testing
+    }
+
+    /// Folderstorm: a script testing change planned again just before the
+    /// send (mcp-script-testing.md).
+    pub fn script_test_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
+        self.testing.plan(call, &self.objects, cx, now, true)
+    }
+
+    /// Folderstorm: the task script state (the app's fetch answers, sends
+    /// and the scripts saved).
+    pub fn task_scripts(&mut self) -> &mut TaskScripts {
+        &mut self.task_scripts
+    }
+
+    /// Folderstorm: a script answer of the server for the task script
+    /// tools; a confirmed save marks its prim changed for the object tools
+    /// at once (their snapshots taken before are stale) and lists it again.
+    pub fn task_script_observe(&mut self, event: &aurora_net::NetEvent, now: Instant) {
+        self.task_scripts.observe(event, now);
+        for (handle, local_id, object) in self.task_scripts.take_relists() {
+            self.objects.relist(handle, local_id, object);
+            self.objects.touched(object);
+        }
+    }
+
+    /// Folderstorm: a task script change planned again just before the
+    /// send, against the object tools' snapshots (mcp-task-scripts.md).
+    pub fn task_script_plan(&self, call: &Pending, cx: &Ctx, now: Instant) -> Result<Planned, ToolError> {
+        self.task_scripts.plan(call, &self.objects, cx, now, true)
     }
 
     /// Folderstorm: what the waiting content reads need fetched (each once).

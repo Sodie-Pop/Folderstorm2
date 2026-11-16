@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+// Folderstorm: a custom tab scoped to folders (view/folder_scope.rs)
+mod folder_scope;
 
 #[test]
 fn my_suitcase_sorts_with_the_system_folders() {
@@ -387,6 +389,8 @@ pub struct InventoryPreferences {
     pub folder_colors: std::collections::BTreeMap<Uuid, [u8; 3]>,
     // Folderstorm: custom Inventory tabs (custom_tabs.rs)
     pub custom_tabs: Vec<super::custom_tabs::CustomTab>,
+    // Folderstorm: each Inventory window's pin and quiet mode (window_mode.rs)
+    pub window_modes: super::window_mode::Modes,
 }
 impl Default for InventoryPreferences {
     fn default() -> Self {
@@ -435,7 +439,8 @@ impl Default for InventoryPreferences {
             folder_colors_enabled: true,
             context_wear: false, // Folderstorm: outfit safety
             folder_colors: Default::default(),
-            custom_tabs: Vec::new(), // Folderstorm: custom Inventory tabs
+            custom_tabs: Vec::new(),          // Folderstorm: custom Inventory tabs
+            window_modes: Default::default(), // Folderstorm: pin and quiet mode
         }
     }
 }
@@ -579,6 +584,8 @@ pub struct ViewCache {
     /// With Always show folders, the folders that hold a matching item: the
     /// others it lists start closed (`TreeState::prepare`).
     holding: Option<IdSet>,
+    // Folderstorm: a custom tab's folders and pinned items (view/folder_scope.rs)
+    folder_scope: folder_scope::Scope,
 }
 
 impl ViewCache {
@@ -789,6 +796,7 @@ impl ViewCache {
             worn,
             names,
         };
+        let query = self.folder_scope_query(query); // Folderstorm: a custom tab's folders
         if self.query.as_ref() == Some(&query) {
             return;
         }
@@ -808,6 +816,7 @@ impl ViewCache {
         } else {
             within(inv, &[root])
         };
+        let scope = self.within_folder_scope(inv, scope); // Folderstorm: a custom tab's folders
         // A favorite folder shows its whole content, favorite or not
         // (LLInventoryFavoritesItemsPanel::findAndInitRootContent builds the
         // full tree under each favorite folder, llinventorypanel.cpp).
@@ -841,7 +850,8 @@ impl ViewCache {
             .entries
             .par_iter()
             .filter(|e| {
-                if !scope.contains(if e.folder { &e.id } else { &e.parent }) {
+                if !self.in_scope(&scope, e) {
+                    // Folderstorm: or a custom tab's pinned item (view/folder_scope.rs)
                     return false;
                 }
                 if e.id == root || e.id == inv.lib_root {
@@ -991,6 +1001,9 @@ impl ViewCache {
         // other tabs retain every real ancestor. Each path is walked once.
         let mut included = IdSet::default();
         for id in &self.results {
+            if self.skips_path(id) {
+                continue; // Folderstorm: a pinned item goes on top (view/folder_scope.rs)
+            }
             let mut parent = *id;
             while parent != root && included.insert(parent) {
                 if received && received_roots.contains(&parent) {
@@ -1064,6 +1077,7 @@ impl ViewCache {
                 }
             }
         }
+        self.quick_access_tree(root); // Folderstorm: pinned items, flat list (view/folder_scope.rs)
         self.revision = self.revision.wrapping_add(1);
         self.query = Some(query);
     }

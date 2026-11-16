@@ -248,7 +248,8 @@ pub(super) fn contents(
     images: &std::collections::HashMap<Uuid, egui::TextureHandle>,
     actions: &mut Vec<InvAction>,
 ) {
-    let layout = Layout::for_width(ui.available_width());
+    // Folderstorm: narrow in quiet mode and in a tab window (window_mode.rs)
+    let layout = super::window_mode::layout(st, Layout::for_width(ui.available_width()));
     st.aurora = Some(Frame {
         layout,
         rights: prefs.rights,
@@ -265,6 +266,8 @@ pub(super) fn contents(
         st.browse = base;
     }
     match layout {
+        // Folderstorm: quiet mode, the list alone (window_mode.rs)
+        _ if super::window_mode::quiet(st) => super::window_mode::aurora_list(ui, p, icons, inv, st, prefs, facts, actions),
         Layout::Compact => compact(ui, p, icons, inv, st, prefs, facts, images, actions),
         Layout::Medium | Layout::Wide => explorer(ui, p, icons, inv, st, prefs, facts, images, actions, layout),
     }
@@ -346,7 +349,8 @@ fn compact(
     actions: &mut Vec<InvAction>,
 ) {
     // a folder window has no tabs
-    if st.scope.is_nil() {
+    // Folderstorm: nor a custom tab's own window (custom_tabs/window.rs)
+    if st.scope.is_nil() && custom_tabs::window::of(st).is_none() {
         toolbar::tabs(ui, p, inv, st, prefs);
         ui.add_space(6.0);
     }

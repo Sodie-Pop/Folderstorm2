@@ -294,6 +294,11 @@ mod tests {
                 + super::super::navigation::NAVIGATION_TOOLS.len() // Folderstorm: navigation
                 + super::super::content::CONTENT_TOOLS.len() // Folderstorm: content editing
                 + super::super::objects::OBJECT_TOOLS.len() // Folderstorm: object tools
+                + super::super::task_scripts::TASK_SCRIPT_TOOLS.len() // Folderstorm: task scripts
+                + super::super::script_testing::SCRIPT_TESTING_TOOLS.len() // Folderstorm: script testing
+                + super::super::building::BUILDING_TOOLS.len() // Folderstorm: building
+                + super::super::gestures::GESTURE_TOOLS.len() // Folderstorm: gestures
+                + super::super::posing::POSE_TOOLS.len() // Folderstorm: own posing
         );
         for read in [
             "inventory_get_many",
@@ -319,10 +324,14 @@ mod tests {
             assert!(t.changes(), "{edit} may ask");
             assert_eq!(t.wait, CHANGE_WAIT);
         }
-        // never a way to the next owner's rights, to uploads or to L$
-        for absent in ["inventory_next_owner_set", "inventory_snapshot_upload", "inventory_upload_execute"] {
+        // never a way to uploads or to L$; the next owner's rights only
+        // through the building group, under their own class (mcp-building.md)
+        for absent in ["inventory_snapshot_upload", "inventory_upload_execute"] {
             assert!(tool(absent).is_none(), "{absent}");
         }
+        let next_owner = tool("inventory_next_owner_set").expect("next owner");
+        assert_eq!(next_owner.group, crate::binding::BUILDING);
+        assert_eq!(next_owner.class, Some(Class::NextOwner));
     }
 
     #[test]

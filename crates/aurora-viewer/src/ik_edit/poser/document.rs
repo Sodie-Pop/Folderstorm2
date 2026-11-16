@@ -3,6 +3,8 @@ use super::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+pub(crate) mod folderstorm; // Folderstorm: the local assistant's presets (mcp-gestures.md)
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum LoadMode {
     #[default]
