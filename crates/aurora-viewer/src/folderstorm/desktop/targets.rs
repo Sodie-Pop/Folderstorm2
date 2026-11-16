@@ -436,12 +436,7 @@ pub fn refuses_adding(id: &str) -> Option<Greyed> {
 /// The commands a desktop's *Add a command* lists: (id, label, icon, why
 /// it cannot be added), sorted by their label in the interface's language.
 pub fn addable() -> Vec<(&'static str, &'static str, &'static str, Option<Greyed>)> {
-    let mut out: Vec<_> = COMMANDS
-        .iter()
-        .map(|c| {
-            (c.id, c.label(), c.icon, refuses_adding(c.id))
-        })
-        .collect();
+    let mut out: Vec<_> = COMMANDS.iter().map(|c| (c.id, c.label(), c.icon, refuses_adding(c.id))).collect();
     out.sort_by_key(|(_, label, _, _)| label.to_lowercase());
     out
 }

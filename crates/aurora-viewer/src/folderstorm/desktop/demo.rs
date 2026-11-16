@@ -14,6 +14,12 @@
 //!   unnamed, and opening one at frame 200 is refused.
 //! - `single`: the same shortcuts with the world filling the window:
 //!   nothing shows.
+//! - `edit`: the same; at frame 200 the name of the People shortcut is
+//!   edited in place (as *Rename* or F2 does), at frame 300 the first
+//!   folder shortcut gets a name and an icon of its own.
+//! - `unused`: the same, and two shortcuts on a monitor the window does
+//!   not have; at frame 200 Preferences opens on the desktop's group, with
+//!   its note and *Bring them here*.
 
 use super::store::{Desktop, Target};
 use crate::folderstorm::viewport::ViewportSettings;
@@ -35,6 +41,12 @@ const DROPPED: u128 = 14;
 /// The cell of the first of them, on the left monitor; the others follow
 /// down its column.
 pub const FOLDERS_AT: (u16, u16) = (1, 0);
+/// The name and the icon `edit` gives the first folder shortcut.
+pub const EDITED: (&str, &str) = ("Everyday outfits", "hanger-2-filled");
+/// The slot of the shortcuts of `unused`: a monitor no demo window has.
+pub const UNUSED_SLOT: u8 = 7;
+/// The commands of `unused`, kept on that slot.
+const UNUSED: &[&str] = &["gestures", "appearance"];
 /// The cell `drop` drops its folder on.
 pub const DROPPED_AT: (u16, u16) = (2, 1);
 /// Where `drop` then moves it: a slot and a cell.
@@ -79,7 +91,7 @@ const RIGHT: &[&str] = &["preferences", "build"];
 /// world in the middle third of a window of `width` pixels) when it is
 /// off, or off for `single`. False for a mode it does not know.
 pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, width: u32) -> bool {
-    if !matches!(mode, "1" | "open" | "drop" | "rlva" | "single") {
+    if !matches!(mode, "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused") {
         return false;
     }
     *desktop = Desktop {
@@ -91,6 +103,11 @@ pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, 
     }
     for (row, command) in RIGHT.iter().enumerate() {
         let _ = desktop.add(Target::command(command), 2, (0, row as u16));
+    }
+    if mode == "unused" {
+        for (row, command) in UNUSED.iter().enumerate() {
+            let _ = desktop.add(Target::command(command), UNUSED_SLOT, (0, row as u16));
+        }
     }
     // a name and an icon of its own
     if let Some(map) = desktop.shortcuts.iter_mut().find(|s| s.target == Target::command("worldmap")) {

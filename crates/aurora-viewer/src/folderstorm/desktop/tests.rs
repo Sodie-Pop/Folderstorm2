@@ -676,9 +676,16 @@ fn the_demo_seeds_its_desktops() {
     // `single`: the world fills the window
     assert!(demo::seed("single", &mut desktop, &mut chosen, 5760));
     assert!(!chosen.enabled && desktop.shortcuts_on && !desktop.shortcuts.is_empty());
+    // `unused`: two more, on a monitor no window has
+    assert!(demo::seed("unused", &mut desktop, &mut view, 5760));
+    assert_eq!(desktop.unused(&[0, 2]), 2);
+    assert!(desktop.shortcuts.iter().filter(|s| s.slot == demo::UNUSED_SLOT).count() == 2);
+    // `edit` gives an icon of the list
+    assert!(super::icons::CHOICES.contains(&demo::EDITED.1));
     // the folders of the demo inventory, and one that is gone
-    for mode in ["drop", "rlva"] {
+    for mode in ["drop", "rlva", "edit"] {
         assert!(demo::seed(mode, &mut desktop, &mut view, 5760), "{mode}");
+        assert_eq!(desktop.unused(&[0, 2]), 0, "{mode}");
     }
     demo::seed_folders(&mut desktop);
     let folders: Vec<_> = desktop
@@ -1162,7 +1169,11 @@ fn a_shortcut_is_renamed_in_place_from_its_menu_and_with_f2() {
     b.frames(3);
     b.menu(b.cell_of(people).center(), aurora_i18n::tr!("fs-desktop-rename"));
     assert_eq!(surface::state(&b.ctx).rename, Some(people));
-    assert_eq!(surface::rename_text(&b.ctx), label_of("people"), "the field starts from the name shown");
+    assert_eq!(
+        surface::rename_text(&b.ctx),
+        label_of("people"),
+        "the field starts from the name shown"
+    );
     // the name is selected: typing replaces it; Enter keeps
     b.type_text("My friends");
     b.picture("desktop-rename");

@@ -294,7 +294,9 @@ impl App {
     /// What the demo asks at this frame, as a shortcut would: `open` opens
     /// a folder shortcut then a command, `drop` adds a folder where a drop
     /// from the Inventory would then moves it to the third monitor, `rlva`
-    /// tries to open a folder shortcut under `@showinv`.
+    /// tries to open a folder shortcut under `@showinv`, `edit` edits a
+    /// name in place then gives a folder shortcut a name and an icon,
+    /// `unused` opens Preferences on the desktop's group.
     fn desktop_demo_frame(&mut self, ctx: &egui::Context) -> Vec<Request> {
         use desktop::demo;
         if !self.demo || ![demo::OPEN_FRAME, demo::SECOND_FRAME].contains(&self.frame_count) {
@@ -318,6 +320,42 @@ impl App {
                 }]
             }
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
+            // the name of the People shortcut edited in place, as F2 does
+            ("edit", true) => {
+                let people = d
+                    .shortcuts
+                    .iter()
+                    .find(|s| s.target == desktop::store::Target::command(demo::OPENED));
+                if let Some(shortcut) = people {
+                    let face = targets::face(
+                        shortcut,
+                        &Facts::default(),
+                        &Folders {
+                            inv: &self.world.inventory,
+                            no_inventory: false,
+                            colors: None,
+                        },
+                    );
+                    desktop::surface::begin_rename(ctx, shortcut.id, &face.name);
+                }
+                Vec::new()
+            }
+            // a name and an icon of its own for the first folder shortcut
+            ("edit", false) => {
+                let first = demo::folder(0);
+                let id = d
+                    .shortcuts
+                    .iter()
+                    .find(|s| matches!(s.target, desktop::store::Target::Folder { folder } if folder == first))
+                    .map(|s| s.id);
+                if let Some(id) = id {
+                    d.rename(id, demo::EDITED.0);
+                    d.set_icon(id, Some(demo::EDITED.1));
+                }
+                Vec::new()
+            }
+            // Preferences on the desktop's group: its note and *Bring them here*
+            ("unused", true) => vec![Request::Settings],
             ("drop", true) => {
                 desktop::add_folders(d, &rooms, &[demo::dropped()], Some(0), Some(demo::DROPPED_AT));
                 Vec::new()

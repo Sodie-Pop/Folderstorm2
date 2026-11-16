@@ -60,6 +60,19 @@ pub fn select(ctx: &egui::Context, id: u32) {
     ctx.data_mut(|d| d.insert_temp(state_id(), state));
 }
 
+/// Opens the name field of the shortcut `id` on `text` (the name it
+/// shows), as *Rename* and F2 do; for the demo.
+pub fn begin_rename(ctx: &egui::Context, id: u32, text: &str) {
+    let mut state = state(ctx);
+    state.rename = Some(id);
+    state.rename_fresh = true;
+    state.selected = Some(id);
+    ctx.data_mut(|d| {
+        d.insert_temp(state_id(), state);
+        d.insert_temp(rename_id(), text.to_owned());
+    });
+}
+
 fn rename_id() -> egui::Id {
     egui::Id::unique("folderstorm_desktop_rename")
 }

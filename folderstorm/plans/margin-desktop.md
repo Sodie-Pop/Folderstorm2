@@ -3,8 +3,10 @@
 Plan for [FEATURES.md](../FEATURES.md) row **1.10**. Branch
 `claude/margin-desktop`. **Checkpoint 1 is built** (command shortcuts, the
 desktops, Preferences, the demo), and **checkpoint 2** on
-`claude/margin-desktop-folders` (folder shortcuts); checkpoints 3 and 4
-are not. What they changed against this plan is in sections 19 and 20.
+`claude/margin-desktop-folders` (folder shortcuts), and **checkpoint 3**
+on `claude/margin-desktop-cp3` (editing, the toolbar, the keyboard);
+checkpoint 4 (the taskbar) and checkpoint 5 (item shortcuts) are not. What
+they changed against this plan is in sections 19 to 22.
 The human's request (2026-11-16):
 
 > On a 2nd or 3rd monitor, which we've been referring to as margins (where
@@ -359,8 +361,8 @@ All new, ours:
 | `settings.rs` | 526, 2051, 3322 | the field, its default, kept by the reset | 1, **done** |
 | `ui/inventory.rs` (`InvAction`) | 152 | one variant, `FolderstormDesktopAdd(Vec<Uuid>)` | 2, **done** |
 | `app/inventory.rs` | 302 | its arm, one line | 2, **done** |
-| `ui/toolbar.rs` | 473, beside `dragging` | `pub(crate) fn carried_command(ctx) -> Option<String>` (5 lines: the payload is private) | 3 |
-| `ui/toolbar.rs` (`context`) | 387 | one line in a button's menu: `crate::folderstorm::desktop::toolbar_menu(ui, p, button);` | 3 |
+| `ui/toolbar.rs` | 477, beside `dragging` | `pub(crate) fn carried_command(ctx) -> Option<String>` (5 lines: the payload is private) | 3, **done** |
+| `ui/toolbar.rs` (`context`) | 406 | one line in a button's menu: `crate::folderstorm::desktop::toolbar_menu(ui, p, button.map(…));` | 3, **done** |
 | `ui/widgets.rs` (`Floater::show`) | 596, after `toggle_min` is known | 5 lines, the shape of the `window_hidden` block above it: `if crate::folderstorm::desktop::taskbar::holds(ctx, &self, workspace::window_icon(self.id), minimized && !compact && !close && !toggle_min) { if self.cascade.is_some() { cascade::hidden(…) } return None; }` | 4 |
 | `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | the `fs-` block | `fs-desktop-*`, `fs-taskbar-*` (about 60 keys in all; 19 with checkpoint 1) | each |
 | `docs/TESTING.md` | after the backgrounds' paragraph (438), and its row in the table | `AURORA_DEMO_DESKTOP` | 1 (**done**), then each |
@@ -505,9 +507,10 @@ Sizes are added lines, tests and translations included.
 | 0 | This plan in `folderstorm/plans/`, row 1.10 in FEATURES.md | – (docs) | 1 file |
 | 1 | **Command shortcuts.** The store, slots, rooms and cells; the desktops drawn and taking the pointer; *Add a command ›* from the desktop's menu; open (double click), move by drag with snapping, remove; the switch and icon size in Preferences; `AURORA_DEMO_DESKTOP=1` | `app.rs` (2), `click_pick.rs`, `settings.rs` | ~1,900 |
 | 2 | **Folder shortcuts.** *Add to desktop* in the Inventory menu, the drop from Inventory, one window per folder placed beside the shortcut, gone and other-account folders, `@showinv`; *Show in Inventory* | `ui/inventory.rs`, `app/inventory.rs` | ~1,000 |
-| 3 | **Editing and the toolbar.** Rename, the icon list, *Arrange by name*, single-click switch, the unused-monitor note; drag and *Add to desktop* from a toolbar; keyboard (focus, arrows, F2, Delete) and the two desktop key actions | `ui/toolbar.rs` (2) | ~1,000 |
+| 3 | **Editing and the toolbar** (built, section 22)**.** Rename, the icon list, *Arrange by name*, single-click switch, the unused-monitor note; drag and *Add to desktop* from a toolbar; keyboard (focus, arrows, F2, Delete) and the two desktop key actions | `ui/toolbar.rs` (2) | ~1,000 |
 | 4 | **The taskbar.** The windows seen, held windows, the island, clicks and menus, overflow, attention, its Preferences rows, its key action; demos `taskbar`, `overflow` | `ui/widgets.rs` | ~1,200 |
-| 5 | **Later, each on request.** Item shortcuts (landmarks first); a layout's own desktop and taskbar choices; *Keep the taskbar above the windows*; several selected at once; lit while open; MCP tools | to be planned | – |
+| 5 | **Item shortcuts** (asked by the human). In this order: landmarks (opening teleports, `InvAction::TeleportLandmark`), notecards (its window), outfits (through outfit safety, row 2.7), then wearables, whose shortcut **adds** the item to what is worn (*Add*, never *Replace*). Each kind through `world::inventory::actions` (`agent_mask`, as the gesture boards): an item id is kept, never an asset id. The record already keeps a target it cannot read (`kept`), so a build without them loses nothing | to be planned (the Inventory's menu entry is ours already) | to be planned |
+| 6 | **Later, each on request.** A layout's own desktop and taskbar choices; *Keep the taskbar above the windows*; several selected at once; lit while open; a colour of its own for a shortcut; the menu key on a focused shortcut; MCP tools | to be planned | – |
 
 Checkpoint 4 needs only checkpoint 1's `place` and settings field. If the
 taskbar matters more to the human than the shortcuts, it can go second.
@@ -795,3 +798,105 @@ replaces what sections 5, 6, 19 and 20 said of accounts.
   (frames: a second account sees none of the first's shortcuts and
   cannot open them from where they stood; back to the first; logged out),
   `targets.rs` (the other-account face removed).
+
+## 22. Checkpoint 3 as built
+
+Editing, the toolbar and the keyboard, on `claude/margin-desktop-cp3`
+(over the per-account desktop of section 21). What the build changed
+against the sections above, and what it decided.
+
+- **Rename** (*Rename* in a shortcut's menu, F2 on the focused one): the
+  name is edited in a field under the icon, its text selected. Enter, or a
+  click elsewhere, keeps it; Esc leaves it as it was. An empty name, **or
+  the target's own name typed back**, gives the shortcut no name of its own
+  (it then follows its folder's name again). The name is cleaned and cut at
+  64 characters (`store::clean_name`); the folder is never renamed. After
+  Enter or Esc the keyboard stays on the shortcut.
+- **Under `@showinv`** a folder shortcut's *Rename* and *Icon ›* are greyed
+  ("Blocked by RLVa") and F2 does nothing: its name and icon are hidden
+  then, and nothing is typed over them. *Arrange by name* orders by the
+  names shown, so the hidden folders sort among themselves by their age.
+- **The icon list** is 40 Tabler icons **the viewer already embeds**
+  (`desktop/icons.rs`): `ui/icons.rs` lists its icons one by one, so a new
+  one would be one more upstream hook each. *Icon ›* is *Default* (ticked
+  while the shortcut has none of its own) over a grid of 8 × 5; the one in
+  use is outlined. The icons have no text of their own (40 names in three
+  languages for a picture): the screen reader hears their Tabler name.
+- ***Arrange by name*** (the desktop's menu) puts that desktop's shortcuts
+  from its first cell, down then right, by the name shown (case ignored),
+  then by age. Greyed with fewer than two shortcuts.
+- ***Move to ›*** lists the monitors that show a desktop now, but the
+  shortcut's own ("Monitor 3"); absent with one desktop. The shortcut goes
+  to that desktop's first free cell; refused with a notice when that
+  desktop has a shortcut to the same thing (it is selected) or is full.
+- ***Toolbar buttons…*** in the desktop's menu opens Aurora's window
+  (`ToolbarUi::open`), with Aurora's own label (`toolbar-edit`).
+- **A toolbar button dropped on a desktop** (from a toolbar, or from the
+  *Toolbar buttons* window; toolbars unlocked, as today) adds a shortcut in
+  the cell under the pointer: a copy, the button stays. The desktop is
+  outlined and the cursor says copy; for Favorites, VR view, Speak and a
+  command Aurora cannot run yet, the outline is red and the drop says why
+  in the chat's notices. The payload is cleared, so no toolbar takes it.
+- ***Add to desktop* in a toolbar button's menu** (after Aurora's own
+  entries for that button, before the alignment choices): greyed with the
+  reason for the same commands. It asks (`desktop::ask`); the app's glue
+  adds the shortcut at its next frame, in the first free cell of the first
+  desktop, turns the shortcuts on when they were off, and says what it did
+  in the chat's notices, as *Add to desktop* of the Inventory does. Without
+  a margin the shortcut is kept for when there is one.
+- **A command that never opens from a shortcut is no longer added** by any
+  way (`surface::add_command`, `CommandAdded::Never`); one that has nothing
+  to do now (an empty Photo roll) still is.
+- **The keyboard is on a focused shortcut, not on the selected one**: F2,
+  Delete, Enter / Space and the arrows work on the shortcut that has the
+  keyboard (Tab, or the key action *Focus the desktop*). A click selects
+  without taking the keyboard, as checkpoint 1 decided, so that the avatar
+  keeps its keys: **F2 after a mere click does nothing**. The other way
+  (a click gives the keyboard, a click in the world gives it back) is one
+  line in `surface::show`; to decide by the human.
+- **The arrows** go to the nearest shortcut on that side of the same
+  desktop, one of the same row or column being preferred
+  (`place::neighbour`); at the edge they stay. They do not cross to another
+  monitor's desktop. egui's own arrow navigation is turned off on a focused
+  shortcut (`set_focus_lock_filter`).
+- **Two keyboard actions** in `folderstorm/keys.rs`, without a default
+  key: *Show or hide the desktop shortcuts* (the switch, saved) and *Focus
+  the desktop* (the selected shortcut, else the first of the first
+  desktop). Their section of Preferences › Shortcuts is now "Layouts and
+  desktop". *Focus the taskbar* comes with checkpoint 4. **Not done**: the
+  menu key / Shift+F10 on a focused shortcut (Aurora's menus open on the
+  pointer only).
+- **Preferences** (*Desktop in the margins*): *Open with a single click*
+  (the profile's, off by default); "N shortcuts are on a monitor that is
+  not in use" with *Bring them here*, shown only while it is so; *Remove
+  all shortcuts…*, which asks in its row before removing (this account's
+  only; what this version cannot read is kept).
+- **"On a monitor not in use"** counts the shortcuts of slots without a
+  room while another slot has one. While no desktop shows at all (the
+  world fills the window) nothing is counted: the group's first note says
+  why nothing shows. ***Bring them here*** moves them to the first free
+  cells of the first desktop; **one whose target that desktop has already
+  is removed** (a desktop never holds the same thing twice), and those a
+  full desktop cannot take stay where they were.
+- **Upstream hooks**: the two of `ui/toolbar.rs` (section 9). The second
+  passes the button's command id rather than the button.
+- **Demo**: `edit` (the name field at frame 200, a name and an icon given
+  at 300) and `unused` (two shortcuts on a monitor not in use, Preferences
+  on the group at frame 200).
+- **Tests**: `store.rs` (rename, icon, arrange, unused, clear for one
+  account), `place.rs` (`neighbour`), `icons.rs` (40, embedded, once),
+  `tests.rs` (frames: rename from the menu and with F2, Enter, Esc, the
+  own name typed back, the limit; nothing edited under `@showinv`; the
+  icon menu and *Default*; *Arrange by name*; *Move to ›* and its refusal;
+  *Toolbar buttons…*; a toolbar button dropped, twice, refused, over the
+  world; the first free cell from a button's menu, without a room, the
+  notices; the hook's menu entry and its ask; the key action, the arrows,
+  Enter, Delete, and no key without the keyboard; the count and *Bring
+  them here*, a full desktop, no desktop at all; the demo's modes),
+  `folderstorm_search.rs` (the group's rows found), `keys.rs` and
+  `workspaces/tests/switcher.rs` (the two actions, without a key). The
+  Preferences rows themselves are not drawn in a test.
+- **Left for checkpoint 4**: the taskbar, as planned (the `Floater::show`
+  hook, `desktop/taskbar.rs`, its Preferences rows, *Focus the taskbar*,
+  demos `taskbar` and `overflow`). **Checkpoint 5**: item shortcuts
+  (section 15).

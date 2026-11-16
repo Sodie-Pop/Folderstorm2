@@ -74,11 +74,9 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             );
         }
         let count = cx.s.folderstorm_desktop.shortcuts.len();
-        words(cx, &["fs-search-desktop"]).wide().row(
-            tr!("fs-desktop-clear"),
-            tr!("fs-desktop-clear-help"),
-            &Nothing,
-            |ui, s| {
+        words(cx, &["fs-search-desktop"])
+            .wide()
+            .row(tr!("fs-desktop-clear"), tr!("fs-desktop-clear-help"), &Nothing, |ui, s| {
                 let asking = count > 0 && ui.data(|d| d.get_temp::<bool>(asking_id())).unwrap_or(false);
                 let mut answer = None;
                 let mut removed = false;
@@ -109,7 +107,6 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     ui.data_mut(|d| d.insert_temp(asking_id(), asking));
                 }
                 removed
-            },
-        );
+            });
     });
 }
