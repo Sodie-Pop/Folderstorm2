@@ -8,5 +8,6 @@ pub mod chat_upload;
 pub mod diagram;
 pub mod keys;
 pub mod photo_viewport;
+pub mod rez_overrides;
 pub mod viewport;
 pub mod workspaces;
