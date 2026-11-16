@@ -30,18 +30,24 @@ pub const OPENED: &str = "people";
 /// Folders of the demo's inventory (`crate::demo`, the login's skeleton:
 /// Clothes, Landmarks, the Photo Album), then one that does not exist.
 const FOLDERS: [u128; 4] = [11, 12, 31, 0xF01D_E400];
+/// The folder `drop` adds: Objects.
+const DROPPED: u128 = 14;
 /// The cell of the first of them, on the left monitor; the others follow
 /// down its column.
 pub const FOLDERS_AT: (u16, u16) = (1, 0);
-/// The folder `drop` adds (Objects), and the cell it is dropped on.
-pub const DROPPED: Uuid = Uuid::from_u128(14);
+/// The cell `drop` drops its folder on.
 pub const DROPPED_AT: (u16, u16) = (2, 1);
 /// Where `drop` then moves it: a slot and a cell.
 pub const MOVED_TO: (u8, (u16, u16)) = (2, (1, 0));
 
 /// The n-th folder of the demo's shortcuts.
 pub fn folder(n: usize) -> Uuid {
-    Uuid::from_u128(FOLDERS[n % FOLDERS.len()])
+    crate::demo::u(FOLDERS[n % FOLDERS.len()])
+}
+
+/// The folder `drop` adds.
+pub fn dropped() -> Uuid {
+    crate::demo::u(DROPPED)
 }
 
 /// The demo's folder shortcuts, for the account `agent`.

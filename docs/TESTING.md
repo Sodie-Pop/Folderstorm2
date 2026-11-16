@@ -471,7 +471,8 @@ shortcuts in its second column (Clothes, Landmarks and the Photo Album of
 the demo inventory, and one whose folder is gone, greyed) and two commands on the third monitor
 (Preferences, Build); `open` does the same, opens the first folder
 shortcut at frame 200 as a double click does (its window beside it) and
-the People shortcut at frame 300; `drop` adds a folder at frame 200 where
+the People shortcut at frame 300 (a toggle, as its toolbar button: People
+closes when the demo had it open, which uncovers the first desktop); `drop` adds a folder at frame 200 where
 a drop from the Inventory would put it (third column) and moves it to the
 third monitor at frame 300; `rlva` puts `@showinv` in force: the folder
 shortcuts are locked and unnamed, and the one opened at frame 200 is

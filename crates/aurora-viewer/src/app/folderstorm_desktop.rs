@@ -252,14 +252,14 @@ impl App {
             }
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
             ("drop", true) => {
-                desktop::add_folders(d, &rooms, self.world.agent_id, &[demo::DROPPED], Some(0), Some(demo::DROPPED_AT));
+                desktop::add_folders(d, &rooms, self.world.agent_id, &[demo::dropped()], Some(0), Some(demo::DROPPED_AT));
                 Vec::new()
             }
             ("drop", false) => {
                 let dropped = d
                     .shortcuts
                     .iter()
-                    .find(|s| matches!(s.target, desktop::store::Target::Folder { folder, .. } if folder == demo::DROPPED))
+                    .find(|s| matches!(s.target, desktop::store::Target::Folder { folder, .. } if folder == demo::dropped()))
                     .map(|s| s.id);
                 if let Some(id) = dropped {
                     d.place(id, demo::MOVED_TO.0, demo::MOVED_TO.1);
