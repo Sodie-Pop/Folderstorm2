@@ -194,6 +194,19 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                     tr!("fs-mcp-interact-hint"),
                     field!(local_assistant.permissions.interact),
                 ),
+                // Folderstorm: building (mcp-building.md)
+                (
+                    Class::Build,
+                    tr!("fs-mcp-build"),
+                    tr!("fs-mcp-build-hint"),
+                    field!(local_assistant.permissions.build),
+                ),
+                (
+                    Class::NextOwner,
+                    tr!("fs-mcp-next-owner"),
+                    tr!("fs-mcp-next-owner-hint"),
+                    field!(local_assistant.permissions.next_owner),
+                ),
             ];
             for (class, label, hint, saved) in rows {
                 let mut levels = vec![(Level::Allow, tr!("fs-mcp-level-allow"), false)];

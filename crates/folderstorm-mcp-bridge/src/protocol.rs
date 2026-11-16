@@ -42,6 +42,9 @@ pub mod task_scripts;
 // Folderstorm: script testing (mcp-script-testing.md)
 pub mod script_testing;
 
+// Folderstorm: building (mcp-building.md)
+pub mod building;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CallRequest {
     pub tool: String,
@@ -319,6 +322,7 @@ impl ToolSpec {
         if objects::needs_client_request_id(self.name)
             || task_scripts::needs_client_request_id(self.name)
             || script_testing::needs_client_request_id(self.name)
+            || building::needs_client_request_id(self.name)
         {
             match schema["required"].as_array_mut() {
                 Some(required) => required.push(json!(crate::receipts::CLIENT_REQUEST_ID)),
@@ -867,6 +871,7 @@ pub fn all() -> impl Iterator<Item = &'static ToolSpec> {
         .chain(objects::OBJECT_TOOLS) // Folderstorm: object inspection and lifecycle
         .chain(task_scripts::TASK_SCRIPT_TOOLS) // Folderstorm: scripts inside objects
         .chain(script_testing::SCRIPT_TESTING_TOOLS) // Folderstorm: script testing
+        .chain(building::BUILDING_TOOLS) // Folderstorm: building
 }
 
 #[cfg(test)]

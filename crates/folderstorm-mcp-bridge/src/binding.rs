@@ -62,6 +62,9 @@ pub const TASK_SCRIPTS: &str = "task_scripts";
 /// Folderstorm: script testing (mcp-script-testing.md): touch, script
 /// dialogs, channel lines, test recipes and the `interact` class.
 pub const SCRIPT_TESTING: &str = "script_testing";
+/// Folderstorm: building (mcp-building.md): the `build_*` tools, the
+/// inventory permission tools and the `build` class.
+pub const BUILDING: &str = "building";
 
 /// What this build implements. Later groups add theirs.
 pub const CAPABILITIES: &[(&str, u32)] = &[
@@ -79,6 +82,7 @@ pub const CAPABILITIES: &[(&str, u32)] = &[
     (OBJECTS, 1),        // Folderstorm: object inspection and lifecycle (mcp-objects.md)
     (TASK_SCRIPTS, 1),   // Folderstorm: scripts inside objects (mcp-task-scripts.md)
     (SCRIPT_TESTING, 1), // Folderstorm: script testing (mcp-script-testing.md)
+    (BUILDING, 1),       // Folderstorm: building (mcp-building.md)
 ];
 
 /// [`CAPABILITIES`] as a map.
@@ -273,7 +277,8 @@ mod tests {
                 CONTENT,
                 OBJECTS,
                 TASK_SCRIPTS,
-                SCRIPT_TESTING
+                SCRIPT_TESTING,
+                BUILDING
             ]
         );
         // a newer viewer: a later version and a group this build lacks

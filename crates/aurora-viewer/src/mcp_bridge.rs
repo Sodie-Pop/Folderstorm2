@@ -33,6 +33,9 @@
 //! frame just before the autopilot runs ([`navigation_frame`]).
 
 pub mod ask;
+pub mod building; // Folderstorm: building (mcp-building.md)
+#[cfg(test)]
+mod building_tests;
 pub mod camera;
 #[cfg(test)]
 mod camera_tests;
@@ -128,6 +131,9 @@ struct Runtime {
     /// Folderstorm: `AURORA_DEMO_MCP=script-testing`: the demo's step and
     /// the answer it waits for.
     demo_test: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
+    /// Folderstorm: `AURORA_DEMO_MCP=building`: the demo's step and the
+    /// answer it waits for.
+    demo_build: Option<(u8, Receiver<Result<serde_json::Value, ToolError>>)>,
     /// The bridge could not start for the access turned on now; tried
     /// again when access is turned off and on.
     failure: Option<String>,
@@ -262,6 +268,7 @@ fn demo_asks() -> bool {
             || v == "objects"
             || v == "task-scripts"
             || v == "script-testing"
+            || v == "building" // Folderstorm: mcp-building.md
     })
 }
 
@@ -479,7 +486,8 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
             && (!content::demo::wanted() || view.world.inventory.items.contains_key(&content::demo::NOTES))
             && (!objects::demo::wanted() || objects::demo::ready(view.world))
             && (!task_scripts::demo::wanted() || task_scripts::demo::ready(view.world))
-            && (!script_testing::demo::wanted() || script_testing::demo::ready(view.world));
+            && (!script_testing::demo::wanted() || script_testing::demo::ready(view.world))
+            && (!building::demo::wanted() || (view.stage.in_world && building::demo::ready(view.world)));
         if view.demo && !rt.demo_asked && demo_asks() && demo_ready {
             rt.demo_asked = true;
             let requests = if demo_camera() {
@@ -519,6 +527,13 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     rt.desk.take(call, cx.get_or_insert_with(context), now);
                     rt.demo_reads.push(answer);
                 }
+                Vec::new()
+            } else if building::demo::wanted() {
+                // Folderstorm: the read now, then a move, a rez and a next owner change
+                let (tool, arguments) = building::demo::get();
+                let (call, answer) = Pending::detached(tool, arguments, false, Some("Demo assistant"));
+                rt.desk.take(call, cx.get_or_insert_with(context), now);
+                rt.demo_build = Some((0, answer));
                 Vec::new()
             } else if script_testing::demo::wanted() {
                 // Folderstorm: the listing now, then a touch, the dialog and a recipe
@@ -647,6 +662,29 @@ pub fn frame(saved: &LocalAssistant, view: &View) -> Vec<Pending> {
                     }
                 }
                 Err(TryRecvError::Empty) => rt.demo_test = Some((step, answer)),
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
+        // Folderstorm: the building demo's next step
+        if let Some((step, answer)) = rt.demo_build.take() {
+            match answer.try_recv() {
+                Ok(result) => {
+                    log_demo_build(step, &result);
+                    let next = result.ok().and_then(|value| match step {
+                        0 => building::demo::move_after(&value).map(|n| (1, n)),
+                        1 => Some((2, building::demo::rez(view.world.agent.position))),
+                        2 => Some((3, building::demo::permissions())),
+                        3 => building::demo::next_owner_after(&value).map(|n| (4, n)),
+                        _ => None,
+                    });
+                    if let Some((step, (tool, arguments))) = next {
+                        let ask = step != 3;
+                        let (call, answer) = Pending::detached(tool, arguments, ask, Some("Demo assistant"));
+                        rt.desk.take(call, cx.get_or_insert_with(context), now);
+                        rt.demo_build = Some((step, answer));
+                    }
+                }
+                Err(TryRecvError::Empty) => rt.demo_build = Some((step, answer)),
                 Err(TryRecvError::Disconnected) => {}
             }
         }
@@ -840,6 +878,12 @@ pub fn script_test_start(call: Pending, recipe: script_testing::Recipe) {
     with(|rt| rt.desk.testing().start(call, recipe, Instant::now()));
 }
 
+/// Folderstorm: the app sends a building change now (`send`, planned with
+/// `reply`): the viewer watches for its outcome (mcp-building.md).
+pub fn build_sending(call: Pending, send: &building::Send, reply: serde_json::Value, world: &World) {
+    with(|rt| rt.desk.build_sending(call, send, reply, world, Instant::now()));
+}
+
 /// Folderstorm: the landmark assets `inventory_landmark` waits for (the app
 /// asks the landmark cache for them, phase 3).
 pub fn wanted_landmarks() -> Vec<Uuid> {
@@ -878,6 +922,8 @@ pub fn replan(call: Pending, view: &View) -> Option<(Pending, changes::Planned)>
         // Folderstorm: and a script testing change (mcp-script-testing.md)
         let planned =
             planned.or_else(|| script_testing::is_change(&call.tool).then(|| rt.desk.script_test_plan(&call, &cx, Instant::now())));
+        // Folderstorm: and a building change (mcp-building.md)
+        let planned = planned.or_else(|| building::is_change(&call.tool).then(|| rt.desk.building_plan(&call, &cx, Instant::now())));
         Some((call, planned))
     })?;
     match object_plan.unwrap_or_else(|| changes::plan(&call.tool, &call.arguments, &cx)) {
@@ -999,6 +1045,23 @@ fn log_demo_test(step: u8, result: &Result<serde_json::Value, ToolError>) {
             log::info!("local assistant demo: script testing step {step} answered {value}");
         }
         Err(e) => log::info!("local assistant demo: script testing step {step} ended with {e}"),
+    }
+}
+
+/// Folderstorm: the building demo's step answered: what it did, never the
+/// grid's text.
+fn log_demo_build(step: u8, result: &Result<serde_json::Value, ToolError>) {
+    match result {
+        Ok(value) => {
+            let mut value = value.clone();
+            if let Some(object) = value.as_object_mut() {
+                object.remove("faces");
+                object.remove("name");
+                object.remove("note");
+            }
+            log::info!("local assistant demo: building step {step} answered {value}");
+        }
+        Err(e) => log::info!("local assistant demo: building step {step} ended with {e}"),
     }
 }
 
