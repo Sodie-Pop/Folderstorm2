@@ -83,7 +83,8 @@ pub(crate) fn bars(
 ) -> (Rect, BarAction) {
     let mut room = room;
     let mut action = BarAction::None;
-    let screen = crate::folderstorm::viewport::bars_screen(ui.ctx()); // Folderstorm: world viewport
+    let (screen, mut outside) = crate::folderstorm::viewport::bars::sides(ui, &mut room, islands); // Folderstorm: world viewport
+    let ui = outside.as_mut().unwrap_or(ui); // Folderstorm: side toolbars outside the world
     let mut edges = [screen.left(), screen.right()];
     let dragging = ToolbarUi::dragging(ui.ctx()) && !settings.locked;
     for (bar, shown) in [(Bar::Left, shown[0]), (Bar::Right, shown[1])] {
@@ -114,7 +115,7 @@ pub(crate) fn bars(
 /// The inner sides of the left and right toolbars last frame (the screen's
 /// edges without them), for the hidden interface's edges.
 pub fn edges(ctx: &egui::Context) -> [f32; 2] {
-    let screen = crate::folderstorm::viewport::bars_screen(ctx); // Folderstorm: world viewport
+    let screen = crate::folderstorm::viewport::bars::side_screen(ctx); // Folderstorm: world viewport
     ctx.data(|d| d.get_temp::<[f32; 2]>(Id::unique("toolbar_side_edges")))
         .unwrap_or([screen.left(), screen.right()])
 }
@@ -144,7 +145,7 @@ fn column(
     action: &mut BarAction,
 ) -> Rect {
     let ctx = ui.ctx().clone();
-    let screen = crate::folderstorm::viewport::bars_screen(&ctx); // Folderstorm: world viewport
+    let (screen, room) = crate::folderstorm::viewport::bars::side(&ctx, row.bar, room); // Folderstorm: world viewport
     let style = row.style;
     let natural = |square: f32| -> Vec<f32> {
         buttons

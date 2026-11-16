@@ -4,7 +4,8 @@
 //! A window's place comes from egui's state for its id (position, and size
 //! once shown in this session) and from Aurora's two entries for a floater
 //! (`ui/widgets.rs`): whether it is minimized, and the size it has when
-//! expanded. Nothing is read from the windows' contents or from the world.
+//! expanded. Whether it is open is the app's word (`apply::Shell`). Nothing
+//! is read from the windows' contents or from the world.
 
 use super::monitors;
 use super::store::{Frame, MAX_MARGIN, Monitor, Placement, Placements, WindowFrame};
@@ -12,6 +13,7 @@ use super::window::Seen;
 use super::windows::{self, Kind, Window};
 use crate::folderstorm::viewport::ViewportSettings;
 use egui::{Pos2, Vec2};
+use std::collections::BTreeSet;
 
 /// An interface smaller than this is not one to place windows in: a
 /// minimized viewer window, the first frames before the surface has its
@@ -51,6 +53,40 @@ pub fn room(ctx: &egui::Context) -> Option<Room> {
     })
 }
 
+fn open_id() -> egui::Id {
+    egui::Id::unique("folderstorm_workspaces_open")
+}
+
+/// The allowlisted windows that are open, as the app has them
+/// (`apply::Shell::is_open`): said each frame by `apply::frame`.
+pub(super) fn set_open(ctx: &egui::Context, open: BTreeSet<&'static str>) {
+    let same = ctx.data(|d| d.get_temp::<Open>(open_id())).is_some_and(|said| *said == open);
+    if !same {
+        ctx.data_mut(|d| d.insert_temp::<Open>(open_id(), std::sync::Arc::new(open)));
+    }
+}
+
+type Open = std::sync::Arc<BTreeSet<&'static str>>;
+
+/// Whether the window `id` is open; closed where nothing was said (no
+/// app: a test of the places alone).
+fn is_open(ctx: &egui::Context, id: &str) -> bool {
+    ctx.data(|d| d.get_temp::<Open>(open_id())).is_some_and(|open| open.contains(id))
+}
+
+/// The windows open now that a workspace opens and closes
+/// (`super::workspace::switched`), by id.
+pub fn open(ctx: &egui::Context) -> BTreeSet<String> {
+    ctx.data(|d| d.get_temp::<Open>(open_id()))
+        .map(|open| {
+            open.iter()
+                .filter(|id| super::workspace::switched(id))
+                .map(|id| (*id).to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn expanded_size(ctx: &egui::Context, id: egui::Id) -> Option<Vec2> {
     ctx.data_mut(|d| d.get_persisted::<Vec2>(id.with(EXPANDED_SIZE)))
 }
@@ -62,10 +98,16 @@ fn sized(size: Vec2) -> Option<Vec2> {
 /// Where `window` is, open or closed: None for a window the viewer has
 /// never placed, or whose size is not known yet (closed since the start).
 pub fn window(ctx: &egui::Context, window: &Window, origin: Pos2) -> Option<Placement> {
-    let id = egui::Id::unique(window.id);
+    place(ctx, window.id, window.kind == Kind::Floater, origin, is_open(ctx, window.id))
+}
+
+/// Where the window made with `name` is (`floater`: one of Aurora's
+/// floaters, which may be minimized), said `open` or not.
+fn place(ctx: &egui::Context, name: &str, floater: bool, origin: Pos2, open: bool) -> Option<Placement> {
+    let id = egui::Id::unique(name);
     let state = egui::AreaState::load(ctx, id)?;
     state.pivot_pos?;
-    let minimized = window.kind == Kind::Floater && crate::ui::widgets::floater_minimized(ctx, window.id);
+    let minimized = floater && crate::ui::widgets::floater_minimized(ctx, name);
     // minimized, the window's own size is its title bar's
     let shown = state.size.and_then(sized).filter(|_| !minimized);
     let size = shown.or_else(|| expanded_size(ctx, id).and_then(sized))?;
@@ -78,8 +120,56 @@ pub fn window(ctx: &egui::Context, window: &Window, origin: Pos2) -> Option<Plac
         width: size.x,
         height: size.y,
         minimized,
+        open,
     };
     place.ok().then_some(place)
+}
+
+/// The Inventory folder windows as the app has them: the account logged in
+/// and, for each open folder window, its floater's id and its folder
+/// (`apply::Shell`): said each frame by `apply::frame`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct FolderView {
+    pub account: Option<uuid::Uuid>,
+    pub windows: Vec<(String, uuid::Uuid)>,
+}
+
+fn folders_id() -> egui::Id {
+    egui::Id::unique("folderstorm_workspaces_folders")
+}
+
+pub(super) fn set_folders(ctx: &egui::Context, view: FolderView) {
+    let same = ctx
+        .data(|d| d.get_temp::<std::sync::Arc<FolderView>>(folders_id()))
+        .is_some_and(|said| *said == view);
+    if !same {
+        ctx.data_mut(|d| d.insert_temp(folders_id(), std::sync::Arc::new(view)));
+    }
+}
+
+/// *Remember Inventory folders*: the folder windows open now, each with
+/// its folder and its place, for the account logged in. At most
+/// `MAX_FOLDERS`; a window not laid out yet is left out. None without an
+/// account or an interface to place windows in.
+pub fn folders(ctx: &egui::Context) -> Option<super::workspace::Folders> {
+    use super::workspace::{FolderWindow, Folders, MAX_FOLDERS};
+    let room = room(ctx)?;
+    let view = ctx.data(|d| d.get_temp::<std::sync::Arc<FolderView>>(folders_id()))?;
+    Some(Folders {
+        account: view.account?,
+        frame: room.frame,
+        windows: view
+            .windows
+            .iter()
+            .filter_map(|(window, folder)| {
+                Some(FolderWindow {
+                    folder: *folder,
+                    place: place(ctx, window, true, room.origin, true)?,
+                })
+            })
+            .take(MAX_FOLDERS)
+            .collect(),
+    })
 }
 
 /// The *Window positions* part of now: every allowlisted window the viewer
