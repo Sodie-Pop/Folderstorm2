@@ -2,8 +2,8 @@
 //! it is greyed when it is (folderstorm/plans/margin-desktop.md,
 //! "Shortcuts: what can be one"). Pure, but for the catalogue's labels.
 //!
-//! A folder shortcut keeps the folder's id and its account's: its name is
-//! read from the inventory when it is drawn, and nothing of what the
+//! A folder shortcut keeps the folder's id, in its account's desktop: its
+//! name is read from the inventory when it is drawn, and nothing of what the
 //! folder holds is read here. Only a folder of the user's own inventory,
 //! out of the Trash, can be one (the rule of the folder tabs,
 //! `ui/inventory/custom_tabs/folders.rs` `status`).
@@ -165,8 +165,6 @@ pub enum Greyed {
     NotYet,
     /// The folder was deleted, or is in the Trash.
     FolderGone,
-    /// The folder is of another account of this profile.
-    OtherAccount,
 }
 
 impl Greyed {
@@ -181,7 +179,6 @@ impl Greyed {
             Greyed::ToggleUnset => tr!("fs-switcher-toggle-unset"),
             Greyed::Rlva => tr!("fs-desktop-greyed-rlva"),
             Greyed::FolderGone => tr!("fs-desktop-greyed-folder-gone"),
-            Greyed::OtherAccount => tr!("fs-desktop-greyed-other-account"),
         }
     }
 
@@ -296,8 +293,6 @@ pub fn offer(inv: &Inventory, ids: &[Uuid], no_inventory: bool) -> Result<Picked
 #[derive(Clone, Copy)]
 pub struct Folders<'a> {
     pub inv: &'a Inventory,
-    /// The account logged in.
-    pub account: Uuid,
     /// RLVa hides the Inventory (`@showinv`): a folder shortcut does not
     /// open, and says nothing of its folder.
     pub no_inventory: bool,
@@ -380,7 +375,7 @@ pub const ICON_LOCKED: &str = "lock-filled";
 
 /// The face of `shortcut` with what the app knows this frame.
 pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
-    let (folder, account) = match &shortcut.target {
+    let folder = match &shortcut.target {
         Target::Command { command: id } => {
             let (target_name, icon, greyed) = match COMMANDS.iter().find(|c| c.id == id) {
                 Some(command) => (command.label().to_owned(), command.icon, command_gate(id, facts).err()),
@@ -395,7 +390,7 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
                 tint: None,
             };
         }
-        Target::Folder { folder, account } => (*folder, *account),
+        Target::Folder { folder } => *folder,
     };
     // a folder that says nothing of itself: its own name is not read
     let unnamed = |icon: &str, why: Greyed, own_name: bool| {
@@ -409,9 +404,6 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
             tint: None,
         }
     };
-    if account != folders.account {
-        return unnamed(ICON_FOLDER, Greyed::OtherAccount, true);
-    }
     // (nor the name the user gave the shortcut: it is often the folder's)
     if folders.no_inventory {
         return unnamed(ICON_LOCKED, Greyed::Rlva, false);
@@ -529,7 +521,6 @@ mod tests {
         let inv = Inventory::default();
         let folders = Folders {
             inv: &inv,
-            account: Uuid::from_u128(1),
             no_inventory: false,
             colors: None,
         };
@@ -554,7 +545,6 @@ mod tests {
         // a folder while the inventory is not known: greyed, unnamed
         shortcut.target = Target::Folder {
             folder: Uuid::from_u128(5),
-            account: Uuid::from_u128(1),
         };
         shortcut.name = None;
         let folder = face_of(&shortcut);
@@ -662,11 +652,9 @@ mod tests {
     #[test]
     fn a_folder_shortcut_shows_its_folder_or_why_it_cannot() {
         let inv = inventory();
-        let me = Uuid::from_u128(42);
         let colors = BTreeMap::from([(Uuid::from_u128(MINE), [1, 2, 3])]);
         let folders = Folders {
             inv: &inv,
-            account: me,
             no_inventory: false,
             colors: Some(&colors),
         };
@@ -674,7 +662,6 @@ mod tests {
             id: 1,
             target: Target::Folder {
                 folder: Uuid::from_u128(MINE),
-                account: me,
             },
             slot: 0,
             col: 0,
@@ -705,23 +692,11 @@ mod tests {
         assert_eq!(locked.name, tr!("fs-desktop-folder"));
         assert_eq!((locked.folder, locked.tint), (None, None));
         assert!(!locked.tip().contains("secret") && !locked.tip().contains(&live.target_name));
-        // another account of the profile: greyed, the folder's name unread
-        let other = face(
-            &shortcut,
-            &facts,
-            &Folders {
-                account: Uuid::from_u128(43),
-                ..folders
-            },
-        );
-        assert_eq!((other.greyed, other.folder), (Some(Greyed::OtherAccount), None));
-        assert_eq!(other.target_name, tr!("fs-desktop-folder"));
         // in the Trash, or deleted: greyed, to be removed
         shortcut.name = None;
         for gone in [9001, 123_456] {
             shortcut.target = Target::Folder {
                 folder: Uuid::from_u128(gone),
-                account: me,
             };
             let face = face(&shortcut, &facts, &folders);
             assert_eq!((face.greyed, face.folder), (Some(Greyed::FolderGone), None), "{gone}");

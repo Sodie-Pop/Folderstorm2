@@ -183,23 +183,16 @@ pub(super) fn add_command(
 /// columns of this many cells; a room shows them where they fit.
 const UNSEEN_ROWS: u16 = 8;
 
-/// Adds a shortcut to each of `folders` (of `account`) in the desktop of
+/// Adds a shortcut to each of `folders` in the desktop of
 /// `slot` (None: the first room's): from `cell` when one is given, each in
 /// the free cell nearest to it; else in the first free cells. Without a
 /// room for that slot they are kept for when it has one.
-pub fn add_folders(
-    desktop: &mut Desktop,
-    rooms: &[Room],
-    account: Uuid,
-    folders: &[Uuid],
-    slot: Option<u8>,
-    cell: Option<(u16, u16)>,
-) -> Added {
+pub fn add_folders(desktop: &mut Desktop, rooms: &[Room], folders: &[Uuid], slot: Option<u8>, cell: Option<(u16, u16)>) -> Added {
     let slot = slot.or(rooms.first().map(|room| room.slot)).unwrap_or(0);
     let grid = rooms.iter().find(|room| room.slot == slot).map(|room| room.grid);
     let mut out = Added::default();
     for folder in folders {
-        let target = Target::Folder { folder: *folder, account };
+        let target = Target::Folder { folder: *folder };
         // (a full desktop still shows the one it has)
         if let Some(id) = existing(desktop, slot, &target) {
             out.existing += 1;
@@ -429,7 +422,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
             Op::ShowFolder(folder) => out.push(Request::ShowFolder(folder)),
             Op::DropFolders { slot, cell, offer } => match offer {
                 Ok(picked) => {
-                    let added = add_folders(desktop, rooms, env.folders.account, &picked.folders, Some(slot), cell);
+                    let added = add_folders(desktop, rooms, &picked.folders, Some(slot), cell);
                     changed |= added.added > 0;
                     if added.first.is_some() {
                         state.selected = added.first;

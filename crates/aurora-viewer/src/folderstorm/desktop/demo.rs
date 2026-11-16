@@ -50,13 +50,10 @@ pub fn dropped() -> Uuid {
     crate::demo::u(DROPPED)
 }
 
-/// The demo's folder shortcuts, for the account `agent`.
-pub fn seed_folders(desktop: &mut Desktop, agent: Uuid) {
+/// The demo's folder shortcuts (in the desktop of the demo's account).
+pub fn seed_folders(desktop: &mut Desktop) {
     for n in 0..FOLDERS.len() {
-        let target = Target::Folder {
-            folder: folder(n),
-            account: agent,
-        };
+        let target = Target::Folder { folder: folder(n) };
         let _ = desktop.add(target, 0, (FOLDERS_AT.0, FOLDERS_AT.1 + n as u16));
     }
 }

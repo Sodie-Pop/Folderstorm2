@@ -8,8 +8,10 @@
 //! button runs (`ui::bars::run_command`, through the app's glue,
 //! `app/folderstorm_desktop.rs`), behind the same gates. A shortcut to an
 //! Inventory folder opens that folder's own window (Aurora's *Open in a
-//! new window*), one window per folder; it keeps the folder's id and its
-//! account's, nothing else. Renaming and the taskbar are the plan's next
+//! new window*), one window per folder; it keeps the folder's id, nothing else.
+//! Each account has its own desktop ([`store`]): the shortcuts shown are
+//! those of the account logged in, and the choices of Preferences are the
+//! profile's. Renaming and the taskbar are the plan's next
 //! checkpoints; the record ([`store`]) already has their fields.
 //!
 //! - [`store`]: what `settings.json` keeps (field `folderstorm_desktop`).
@@ -52,8 +54,7 @@ pub struct Env<'a> {
     pub icons: &'a Icons,
     /// What greys a toolbar button now.
     pub facts: Facts,
-    /// The Inventory as the folder shortcuts read it: the account logged
-    /// in, RLVa's `@showinv`, the folders' colours.
+    /// The Inventory as the folder shortcuts read it: RLVa's `@showinv`, the folders' colours.
     pub folders: Folders<'a>,
     /// The interface is hidden (its shortcut, immersive mode, mouselook
     /// without the interface): no desktop.

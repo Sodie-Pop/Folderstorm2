@@ -108,9 +108,13 @@ impl Bench {
             size,
             world: Some([640, 0, 640, 400]),
             monitors: Some(three_monitors()),
-            desktop: Desktop {
-                shortcuts_on: true,
-                ..Default::default()
+            desktop: {
+                let mut desktop = Desktop {
+                    shortcuts_on: true,
+                    ..Default::default()
+                };
+                desktop.sign_in(ME);
+                desktop
             },
             facts: Facts::default(),
             inv: {
@@ -134,11 +138,10 @@ impl Bench {
         }
     }
 
-    /// A shortcut to the folder `n` of the account `account`.
-    fn add_folder(&mut self, n: u128, account: Uuid, slot: u8, cell: (u16, u16)) -> u32 {
+    /// A shortcut to the folder `n`.
+    fn add_folder(&mut self, n: u128, slot: u8, cell: (u16, u16)) -> u32 {
         let target = Target::Folder {
             folder: Uuid::from_u128(n),
-            account,
         };
         self.desktop.add(target, slot, cell).expect("added")
     }
@@ -196,7 +199,6 @@ impl Bench {
         let (desktop, icons) = (&mut self.desktop, &self.icons);
         let folders = Folders {
             inv: &self.inv,
-            account: ME,
             no_inventory: self.no_inventory,
             colors: None,
         };
@@ -667,11 +669,11 @@ fn the_demo_seeds_its_desktops() {
     for mode in ["drop", "rlva"] {
         assert!(demo::seed(mode, &mut desktop, &mut view, 5760), "{mode}");
     }
-    demo::seed_folders(&mut desktop, ME);
+    demo::seed_folders(&mut desktop);
     let folders: Vec<_> = desktop
         .shortcuts
         .iter()
-        .filter(|s| matches!(s.target, Target::Folder { account, .. } if account == ME))
+        .filter(|s| matches!(s.target, Target::Folder { .. }))
         .map(|s| (s.slot, s.cell()))
         .collect();
     assert_eq!(
@@ -687,7 +689,7 @@ fn the_demo_seeds_its_desktops() {
     for size in Size::ALL {
         let mut b = Bench::new();
         assert!(demo::seed("1", &mut b.desktop, &mut view, 1920));
-        demo::seed_folders(&mut b.desktop, ME);
+        demo::seed_folders(&mut b.desktop);
         b.desktop.size = size;
         b.frames(3);
         for shortcut in b.desktop.shortcuts.clone() {
@@ -706,7 +708,7 @@ const ITEM: u128 = 710;
 #[test]
 fn a_folder_shortcut_shows_its_folder_and_asks_for_its_window() {
     let mut b = Bench::new();
-    let mine = b.add_folder(MINE, ME, 0, (0, 0));
+    let mine = b.add_folder(MINE, 0, (0, 0));
     b.frames(3);
     let name = b.folder_name(MINE);
     let cell = b.cell_of(mine);
@@ -744,18 +746,15 @@ fn a_folder_shortcut_shows_its_folder_and_asks_for_its_window() {
 }
 
 #[test]
-fn a_folder_that_is_gone_or_of_another_account_is_greyed_and_removed_from_its_menu() {
+fn a_folder_that_is_gone_is_greyed_and_removed_from_its_menu() {
     let mut b = Bench::new();
-    let gone = b.add_folder(123_456, ME, 0, (0, 0));
-    let theirs = b.add_folder(MINE, Uuid::from_u128(2), 0, (0, 1));
+    let gone = b.add_folder(123_456, 0, (0, 0));
+    let live = b.add_folder(MINE, 0, (0, 1));
     b.frames(3);
-    // neither says a folder's name, neither opens
-    assert!(b.drawn(&b.folder_name(MINE)).is_none(), "another account's folder is not named");
-    for id in [gone, theirs] {
-        assert!(b.painted(b.cell_of(id)) > 100, "shown, greyed");
-        b.time += 2.0;
-        b.double_click(b.cell_of(id).center());
-    }
+    // shown greyed, and it does not open
+    assert!(b.painted(b.cell_of(gone)) > 100, "shown, greyed");
+    b.time += 2.0;
+    b.double_click(b.cell_of(gone).center());
     assert!(b.opened().is_empty());
     // the menu: Open greyed, Remove works
     b.time += 2.0;
@@ -769,13 +768,63 @@ fn a_folder_that_is_gone_or_of_another_account_is_greyed_and_removed_from_its_me
     let remove = b.drawn(aurora_i18n::tr!("fs-desktop-remove")).expect("Remove is in the menu");
     b.click(remove.center());
     assert!(b.desktop.shortcut(gone).is_none());
-    assert!(b.desktop.shortcut(theirs).is_some());
+    assert!(b.desktop.shortcut(live).is_some());
+}
+
+/// Another account of the profile.
+const OTHER: Uuid = Uuid::from_u128(2);
+
+#[test]
+fn each_account_sees_its_own_desktop_and_never_another_s() {
+    let mut b = Bench::new();
+    assert_eq!(b.desktop.account, Some(ME));
+    let people = b.add("people", 0, (0, 0));
+    let mine = b.add_folder(MINE, 0, (0, 1));
+    b.frames(3);
+    let name = b.folder_name(MINE);
+    let (people_at, mine_at) = (b.cell_of(people), b.cell_of(mine));
+    assert!(b.drawn(label_of("people")).is_some() && b.drawn(&name).is_some());
+    b.picture("desktop-account-first");
+    // another account logs in on the same profile: an empty desktop, the
+    // same choices; nothing of the first account shows, not even greyed
+    b.desktop.size = Size::Small;
+    assert!(!b.desktop.sign_in(OTHER));
+    b.frames(3);
+    assert!(b.desktop.shortcuts_on && b.desktop.shortcuts.is_empty());
+    assert!(b.drawn(label_of("people")).is_none() && b.drawn(&name).is_none());
+    assert_eq!(b.painted(people_at) + b.painted(mine_at), 0, "its cells are bare");
+    // and the first account's shortcuts do not open from where they stood
+    b.time += 2.0;
+    b.double_click(people_at.center());
+    b.time += 2.0;
+    b.double_click(mine_at.center());
+    assert!(b.ran().is_empty() && b.opened().is_empty());
+    // its own shortcuts, in the same cells
+    let map = b.add("worldmap", 0, (0, 0));
+    b.frames(3);
+    assert!(b.drawn(label_of("worldmap")).is_some());
+    b.picture("desktop-account-second");
+    // back to the first: its desktop as it was, at the profile's size
+    assert!(!b.desktop.sign_in(ME));
+    b.frames(3);
+    assert_eq!(b.desktop.size, Size::Small);
+    assert_eq!(b.desktop.shortcut(people).map(|s| s.cell()), Some((0, 0)));
+    assert_eq!(b.desktop.shortcut(mine).map(|s| s.cell()), Some((0, 1)));
+    assert_eq!(b.desktop.shortcuts.len(), 2);
+    assert!(b.drawn(label_of("people")).is_some() && b.drawn(&name).is_some());
+    assert!(b.drawn(label_of("worldmap")).is_none());
+    // logged out (the login screen): nothing
+    assert!(!b.desktop.sign_in(Uuid::nil()));
+    b.frames(3);
+    assert!(b.drawn(label_of("people")).is_none() && b.drawn(label_of("worldmap")).is_none());
+    assert!(!b.desktop.sign_in(OTHER));
+    assert!(b.desktop.shortcut(map).is_some());
 }
 
 #[test]
 fn showinv_locks_the_folder_shortcuts_and_hides_their_names() {
     let mut b = Bench::new();
-    let mine = b.add_folder(MINE, ME, 0, (0, 0));
+    let mine = b.add_folder(MINE, 0, (0, 0));
     b.desktop.shortcuts[0].name = Some("My own name for it".into());
     b.frames(3);
     assert!(b.drawn("My own name for it").is_some());
@@ -828,8 +877,7 @@ fn inventory_dropped_on_a_desktop_adds_its_folders_and_leaves_its_items_out() {
     assert_eq!(
         added.target,
         Target::Folder {
-            folder: Uuid::from_u128(MINE),
-            account: ME
+            folder: Uuid::from_u128(MINE)
         }
     );
     assert_eq!((added.slot, added.cell()), (0, (2, 2)));
@@ -882,13 +930,13 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     let rooms = b.rooms();
     let ids: Vec<Uuid> = [MINE, SUB].into_iter().map(Uuid::from_u128).collect();
     // from a menu: the first free cells of the first room, down its column
-    let added = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
+    let added = super::add_folders(&mut b.desktop, &rooms, &ids, None, None);
     assert_eq!((added.added, added.existing, added.no_room), (2, 0, 0));
     let cells: Vec<_> = b.desktop.shortcuts[1..].iter().map(|s| (s.slot, s.cell())).collect();
     assert_eq!(cells, [(0, (0, 1)), (0, (0, 2))]);
     assert_eq!(added.first, Some(b.desktop.shortcuts[1].id));
     // again: there already
-    let again = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
+    let again = super::add_folders(&mut b.desktop, &rooms, &ids, None, None);
     assert_eq!((again.added, again.existing, again.first), (0, 2, added.first));
     assert_eq!(
         super::added_notice(&again, 0, false, true).as_deref(),
@@ -896,7 +944,7 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     );
     // the world fills the window: kept for when it leaves room, and said
     let mut unseen = Desktop::default();
-    let kept = super::add_folders(&mut unseen, &[], ME, &ids, None, None);
+    let kept = super::add_folders(&mut unseen, &[], &ids, None, None);
     assert_eq!((kept.added, kept.no_room), (2, 0));
     let cells: Vec<_> = unseen.shortcuts.iter().map(|s| (s.slot, s.cell())).collect();
     assert_eq!(cells, [(0, (0, 0)), (0, (0, 1))]);
@@ -908,7 +956,7 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     for (n, cell) in grid.cells().enumerate() {
         full.add(Target::command(&format!("c{n}")), 0, cell).expect("room");
     }
-    let none = super::add_folders(&mut full, &rooms, ME, &ids, Some(0), Some((1, 1)));
+    let none = super::add_folders(&mut full, &rooms, &ids, Some(0), Some((1, 1)));
     assert_eq!((none.added, none.no_room), (0, 2));
     assert_eq!(super::added_notice(&none, 0, false, true), Some(NoRoom::Full.text()));
 }
@@ -974,7 +1022,7 @@ fn a_full_desktop_says_so_for_every_way_of_adding() {
     // folders (Add to desktop, a drop): none added, one there already found
     let ids: Vec<Uuid> = [MINE, SUB].into_iter().map(Uuid::from_u128).collect();
     let rooms = b.rooms();
-    let none = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
+    let none = super::add_folders(&mut b.desktop, &rooms, &ids, None, None);
     assert_eq!((none.added, none.no_room, none.limit), (0, 2, 0));
     // a drop on that desktop: nothing added, and said
     b.out.clear();
@@ -1025,7 +1073,7 @@ fn a_full_desktop_says_so_for_every_way_of_adding() {
 }
 
 #[test]
-fn the_profile_s_limit_is_said_rather_than_a_full_room() {
+fn the_account_s_limit_is_said_rather_than_a_full_room() {
     let mut b = Bench::new();
     b.frames(2);
     // the shortcuts kept on a monitor not in use
@@ -1038,7 +1086,7 @@ fn the_profile_s_limit_is_said_rather_than_a_full_room() {
         surface::add_command(&mut b.desktop, &room, &[], "people", None),
         surface::CommandAdded::Refused(NoRoom::Limit)
     );
-    let added = super::add_folders(&mut b.desktop, &[room], ME, &[Uuid::from_u128(MINE)], None, None);
+    let added = super::add_folders(&mut b.desktop, &[room], &[Uuid::from_u128(MINE)], None, None);
     assert_eq!((added.added, added.no_room, added.limit), (0, 0, 1));
     b.out.clear();
     b.drop_inventory(&[MINE], room.grid.rect((1, 1)).center());

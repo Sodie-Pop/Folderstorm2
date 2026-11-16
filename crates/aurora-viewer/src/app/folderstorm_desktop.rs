@@ -84,6 +84,7 @@ impl App {
     /// of the margins, and what their shortcuts ask.
     pub(super) fn folderstorm_desktop(&mut self, ctx: &egui::Context, p: &crate::theme::Palette, a: &mut UiActions) {
         self.desktop_demo(ctx);
+        self.desktop_sign_in();
         if !self.settings.folderstorm_desktop.shortcuts_on {
             return;
         }
@@ -99,7 +100,6 @@ impl App {
             facts,
             folders: Folders {
                 inv: &self.world.inventory,
-                account: self.world.agent_id,
                 no_inventory,
                 colors: prefs.folder_colors_enabled.then_some(&prefs.folder_colors),
             },
@@ -163,10 +163,10 @@ impl App {
                 return;
             }
         };
-        let account = self.world.agent_id;
+        self.desktop_sign_in();
         let d = &mut self.settings.folderstorm_desktop;
         let rooms = desktop::rooms(&ctx, d.size);
-        let added = desktop::add_folders(d, &rooms, account, &picked.folders, None, None);
+        let added = desktop::add_folders(d, &rooms, &picked.folders, None, None);
         let turned_on = added.added > 0 && !d.shortcuts_on;
         if added.added > 0 {
             d.shortcuts_on = true;
@@ -174,6 +174,16 @@ impl App {
         }
         if let Some(text) = desktop::added_notice(&added, picked.left_out, turned_on, !rooms.is_empty()) {
             self.world.system_notice(text, Topic::Items);
+        }
+    }
+
+    /// Each account has its own desktop: the shortcuts are those of the
+    /// account logged in (none at the login screen). Shortcuts of an older
+    /// version, kept for the profile, go to the first account that logs in;
+    /// saved at once, so that they stay its own.
+    fn desktop_sign_in(&mut self) {
+        if self.settings.folderstorm_desktop.sign_in(self.world.agent_id) {
+            self.settings.save();
         }
     }
 
@@ -216,7 +226,8 @@ impl App {
             return;
         }
         // folders of the demo's inventory
-        desktop::demo::seed_folders(&mut s.folderstorm_desktop, self.world.agent_id);
+        s.folderstorm_desktop.sign_in(self.world.agent_id);
+        desktop::demo::seed_folders(&mut s.folderstorm_desktop);
         if mode == "rlva" {
             self.settings.rlva_enabled = true;
             self.world.rlva_configure(true);
@@ -252,7 +263,7 @@ impl App {
             }
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
             ("drop", true) => {
-                desktop::add_folders(d, &rooms, self.world.agent_id, &[demo::dropped()], Some(0), Some(demo::DROPPED_AT));
+                desktop::add_folders(d, &rooms, &[demo::dropped()], Some(0), Some(demo::DROPPED_AT));
                 Vec::new()
             }
             ("drop", false) => {
