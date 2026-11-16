@@ -14,9 +14,9 @@
 //!   two buttons. The search and filters in effect stay in effect.
 //!
 //! Both are kept per window in the preferences (`InventoryPreferences::
-//! window_modes`): the main and additional windows, each tab window by its
-//! tab, each folder window by its folder; only windows out of the default
-//! mode are written.
+//! window_modes`): the main window, each additional window by its slot
+//! (`extra_windows.rs`), each tab window by its tab, each folder window by
+//! its folder; only windows out of the default mode are written.
 
 use super::*;
 use serde::{Deserialize, Serialize};
@@ -43,7 +43,8 @@ pub const MAX_FOLDER_WINDOWS: usize = 32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
     Main,
-    Additional,
+    /// An additional window, by its slot (1 to 16, `extra_windows.rs`).
+    Additional(u8),
     Tab(u64),
     Folder(Uuid),
 }
@@ -52,7 +53,9 @@ impl Key {
     fn text(self) -> String {
         match self {
             Self::Main => "main".into(),
-            Self::Additional => "additional".into(),
+            // slot 1 keeps the key it had when there was one additional window
+            Self::Additional(slot) if slot <= 1 => "additional".into(),
+            Self::Additional(slot) => format!("additional:{slot}"),
             Self::Tab(id) => format!("tab:{id}"),
             Self::Folder(id) => format!("folder:{id}"),
         }
@@ -64,7 +67,7 @@ impl Key {
         if let Some(tab) = custom_tabs::window::of(&w.state) {
             Some(Self::Tab(tab))
         } else if w.additional {
-            Some(Self::Additional)
+            Some(Self::Additional(extra_windows::slot_of(w.id).unwrap_or(1)))
         } else if w.id != listings::PANEL && !w.root.is_nil() {
             Some(Self::Folder(w.root))
         } else {
