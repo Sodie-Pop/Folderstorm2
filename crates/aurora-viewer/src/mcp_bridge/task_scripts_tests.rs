@@ -115,6 +115,7 @@ fn ctx_with(world: &World, open: HashSet<Uuid>) -> Ctx<'_> {
             world: Some(world),
             props: &[],
         },
+        avatar: Default::default(),
     }
 }
 

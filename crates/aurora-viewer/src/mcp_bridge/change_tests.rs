@@ -80,6 +80,7 @@ pub(super) fn ctx(inv: &Inventory) -> Ctx<'_> {
         nav: Default::default(),
         content: Default::default(),
         objects: Default::default(),
+        avatar: Default::default(),
     }
 }
 
@@ -113,6 +114,7 @@ fn apply(inv: &mut Inventory, planned: Planned) {
         Work::TaskScript(_) => panic!("not run here (task_scripts_tests)"),
         Work::Interact(_) | Work::ScriptTest(_) => panic!("not run here (script_testing_tests)"),
         Work::Build(_) => panic!("not run here (building_tests)"),
+        Work::Gesture(_) | Work::Pose(_) => panic!("not run here (gesture_tests)"),
     }
 }
 

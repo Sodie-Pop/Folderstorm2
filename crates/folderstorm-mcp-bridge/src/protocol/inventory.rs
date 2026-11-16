@@ -297,6 +297,8 @@ mod tests {
                 + super::super::task_scripts::TASK_SCRIPT_TOOLS.len() // Folderstorm: task scripts
                 + super::super::script_testing::SCRIPT_TESTING_TOOLS.len() // Folderstorm: script testing
                 + super::super::building::BUILDING_TOOLS.len() // Folderstorm: building
+                + super::super::gestures::GESTURE_TOOLS.len() // Folderstorm: gestures
+                + super::super::posing::POSE_TOOLS.len() // Folderstorm: own posing
         );
         for read in [
             "inventory_get_many",

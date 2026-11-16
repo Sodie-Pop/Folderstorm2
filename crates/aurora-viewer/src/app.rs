@@ -10543,6 +10543,7 @@ impl App {
                 self.settings.save();
             }
             self.scene.poser = self.ik_editor.pose_layers(&self.world);
+            self.local_assistant_pose(); // Folderstorm: the local assistant's pose (mcp-gestures.md)
             self.outfit_portrait_pose();
             self.ik_editor.tick_pose_storage(&self.scene.jobs, &self.egui_ctx, &self.world);
             if !self.scene.poser.is_empty() {

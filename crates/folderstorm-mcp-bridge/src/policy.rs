@@ -51,10 +51,17 @@ pub enum Class {
     /// inventory may do (copy, modify, transfer), with the Properties
     /// window's rules (folderstorm/plans/mcp-building.md).
     NextOwner,
+    /// Folderstorm: play gestures on the user's avatar (their animations,
+    /// sounds and lines reach everyone nearby)
+    /// (folderstorm/plans/mcp-gestures.md).
+    Gestures,
+    /// Folderstorm: pose the user's own avatar on this screen, and save
+    /// that pose as a new file (folderstorm/plans/mcp-gestures.md).
+    Pose,
 }
 
 impl Class {
-    pub const ALL: [Class; 14] = [
+    pub const ALL: [Class; 16] = [
         Class::Read,
         Class::Edit,
         Class::Move,
@@ -69,6 +76,8 @@ impl Class {
         Class::Interact,  // Folderstorm: mcp-script-testing.md
         Class::Build,     // Folderstorm: mcp-building.md
         Class::NextOwner, // Folderstorm: mcp-building.md
+        Class::Gestures,  // Folderstorm: mcp-gestures.md
+        Class::Pose,      // Folderstorm: mcp-gestures.md
     ];
 
     /// Whether the class can ask the user before each call (every class
@@ -95,7 +104,9 @@ pub enum Level {
 /// and Take levels missing from settings saved before them, the camera,
 /// navigation and content included; and the Scripts level, objects and take
 /// included; and the Interact level, Scripts included; and the Build
-/// level, Interact included; and the NextOwner level, Build included.
+/// level, Interact included; and the NextOwner level, Build included;
+/// and the Gestures level, NextOwner included, then the Pose level,
+/// Gestures included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "Saved")]
 pub struct Permissions {
@@ -121,6 +132,10 @@ pub struct Permissions {
     pub build: Level,
     /// Folderstorm: next owners' rights (mcp-building.md).
     pub next_owner: Level,
+    /// Folderstorm: playing gestures (mcp-gestures.md).
+    pub gestures: Level,
+    /// Folderstorm: posing the user's own avatar (mcp-gestures.md).
+    pub pose: Level,
 }
 
 /// [`Permissions`] as saved: Camera came with phase 3, Navigation and
@@ -143,6 +158,8 @@ struct Saved {
     interact: Option<Level>,
     build: Option<Level>,
     next_owner: Option<Level>,
+    gestures: Option<Level>,
+    pose: Option<Level>,
 }
 
 impl Default for Saved {
@@ -163,6 +180,8 @@ impl Default for Saved {
             interact: None,
             build: None,
             next_owner: None,
+            gestures: None,
+            pose: None,
         }
     }
 }
@@ -225,6 +244,21 @@ impl From<Saved> for Permissions {
                 Level::Never
             },
         );
+        // Folderstorm: the same for gestures, building and next owners'
+        // rights included, then for posing, gestures included
+        let built = later == Level::Ask
+            && objects == Level::Ask
+            && take == Level::Ask
+            && scripts == Level::Ask
+            && interact == Level::Ask
+            && build == Level::Ask
+            && next_owner == Level::Ask;
+        let gestures = s.gestures.unwrap_or(if built { Level::Ask } else { Level::Never });
+        let pose = s.pose.unwrap_or(if built && gestures == Level::Ask {
+            Level::Ask
+        } else {
+            Level::Never
+        });
         Permissions {
             read: s.read,
             edit: s.edit,
@@ -240,6 +274,8 @@ impl From<Saved> for Permissions {
             interact,
             build,
             next_owner,
+            gestures,
+            pose,
         }
     }
 }
@@ -268,6 +304,8 @@ impl Permissions {
             Class::Interact => self.interact,
             Class::Build => self.build,
             Class::NextOwner => self.next_owner,
+            Class::Gestures => self.gestures,
+            Class::Pose => self.pose,
         };
         // Read has no Ask: a hand-edited file cannot give it one
         if level == Level::Ask && !class.can_ask() {
@@ -298,6 +336,8 @@ impl Permissions {
             Class::Interact => self.interact = level,
             Class::Build => self.build = level,
             Class::NextOwner => self.next_owner = level,
+            Class::Gestures => self.gestures = level,
+            Class::Pose => self.pose = level,
         }
     }
 
@@ -385,6 +425,8 @@ impl Preset {
             interact: changes,
             build: changes,
             next_owner: changes,
+            gestures: changes,
+            pose: changes,
         }
     }
 }
@@ -422,6 +464,8 @@ mod tests {
             Class::Interact,
             Class::Build,
             Class::NextOwner,
+            Class::Gestures,
+            Class::Pose,
         ] {
             assert_eq!(d.permissions.check(class), Err(Level::Never));
         }
@@ -589,6 +633,46 @@ mod tests {
         assert_eq!(kept.level(Class::NextOwner), Level::Allow);
         let json = serde_json::to_string(&kept).expect("serialized");
         assert!(json.contains(r#""next_owner":"allow""#), "{json}");
+    }
+
+    /// Folderstorm: gestures and posing (mcp-gestures.md).
+    #[test]
+    fn gestures_and_pose_ask_in_ask_before_changes_and_keep_older_presets() {
+        for class in [Class::Gestures, Class::Pose] {
+            assert_eq!(Preset::AskBeforeChanges.permissions().level(class), Level::Ask);
+            assert_eq!(Preset::ReadOnly.permissions().level(class), Level::Never);
+            assert!(class.can_ask());
+        }
+        for saved in [
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask","next_owner":"ask"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask"}"#,
+        ] {
+            let asked: Permissions = serde_json::from_str(saved).expect("parsed");
+            assert_eq!(asked.level(Class::Gestures), Level::Ask, "{saved}");
+            assert_eq!(asked.level(Class::Pose), Level::Ask, "{saved}");
+            assert_eq!(asked.preset(), Preset::AskBeforeChanges, "{saved}");
+        }
+        // building, or next owners' rights, allowed by hand: neither is
+        for saved in [
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"allow"}"#,
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask","next_owner":"allow"}"#,
+        ] {
+            let custom: Permissions = serde_json::from_str(saved).expect("parsed");
+            assert_eq!(custom.level(Class::Gestures), Level::Never, "{saved}");
+            assert_eq!(custom.level(Class::Pose), Level::Never, "{saved}");
+        }
+        // gestures saved as Never: posing does not ask either
+        let no_gestures: Permissions = serde_json::from_str(
+            r#"{"edit":"ask","move":"ask","wear":"ask","trash":"ask","camera":"ask","objects":"ask","take":"ask","scripts":"ask","interact":"ask","build":"ask","gestures":"never"}"#,
+        )
+        .expect("parsed");
+        assert_eq!(no_gestures.level(Class::Pose), Level::Never);
+        let kept: Permissions = serde_json::from_str(r#"{"gestures":"allow","pose":"ask"}"#).expect("parsed");
+        assert_eq!(kept.level(Class::Gestures), Level::Allow);
+        assert_eq!(kept.level(Class::Pose), Level::Ask);
+        let json = serde_json::to_string(&kept).expect("serialized");
+        assert!(json.contains(r#""gestures":"allow""#) && json.contains(r#""pose":"ask""#), "{json}");
     }
 
     #[test]

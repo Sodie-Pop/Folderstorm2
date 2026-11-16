@@ -70,6 +70,12 @@ pub enum Work {
     /// Folderstorm: an object moved, turned, resized or repainted, or a
     /// new one rezzed, as the build tools send it (mcp-building.md).
     Build(Box<super::building::Send>),
+    /// Folderstorm: a gesture played or stopped under the assistant's own
+    /// key, as the gesture editor's Preview plays it (mcp-gestures.md).
+    Gesture(Box<super::gestures::Work>),
+    /// Folderstorm: the assistant's pose session of the user's own avatar
+    /// (mcp-gestures.md).
+    Pose(Box<super::posing::Work>),
 }
 
 #[derive(Debug, Clone)]

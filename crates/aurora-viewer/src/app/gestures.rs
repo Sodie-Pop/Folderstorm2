@@ -10,6 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 use uuid::Uuid;
 
+mod folderstorm; // Folderstorm: the local assistant's gestures (mcp-gestures.md)
+
 #[derive(Default)]
 pub(super) struct State {
     pub manager: Manager,
