@@ -522,6 +522,8 @@ pub struct Settings {
     pub folderstorm_workspaces: crate::folderstorm::workspaces::Store,
     // Folderstorm: gesture boards (folderstorm/gesture_boards), per account
     pub folderstorm_gesture_boards: crate::folderstorm::gesture_boards::store::Store,
+    // Folderstorm: the margins' desktop (folderstorm/desktop)
+    pub folderstorm_desktop: crate::folderstorm::desktop::Desktop,
     /// The crosshair in mouselook (ShowCrosshairs; #1166).
     pub crosshair: crate::ui::crosshair::Settings,
     /// LLViewerJoystick: device, axis mapping and separate avatar/flycam tuning.
@@ -2046,6 +2048,7 @@ impl Default for Settings {
             folderstorm_workspaces: Default::default(),  // Folderstorm: layouts
             // Folderstorm: gesture boards
             folderstorm_gesture_boards: Default::default(),
+            folderstorm_desktop: Default::default(), // Folderstorm: the margins' desktop
             crosshair: Default::default(),
             joystick: Default::default(),
             gamepad: crate::joystick::Settings::gamepad_defaults(),
@@ -3316,6 +3319,7 @@ impl Settings {
             graphics_saved: old.graphics_saved,
             folderstorm_workspaces: old.folderstorm_workspaces, // Folderstorm: layouts are user content too
             folderstorm_gesture_boards: old.folderstorm_gesture_boards, // Folderstorm: gesture boards too
+            folderstorm_desktop: old.folderstorm_desktop,       // Folderstorm: the desktop's shortcuts too
             // Reset this avatar's hover options while keeping other accounts.
             hover_height_accounts: old.hover_height_accounts,
             hover_height_account: old.hover_height_account,
