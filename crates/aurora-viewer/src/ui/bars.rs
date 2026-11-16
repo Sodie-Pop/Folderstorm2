@@ -1150,6 +1150,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         if menu::item(ui, p, "map", aurora_i18n::tr!("owned-land-title")) {
             *action = BarAction::OwnedLand;
         }
+        crate::folderstorm::gesture_boards::menu_item(ui, p); // Folderstorm: World › Gesture board…
         crate::folderstorm::workspaces::menu::show(ui, p); // Folderstorm: the Layouts submenu
         menu::submenu(ui, p, "dots-filled", aurora_i18n::tr!("world-show-more"), true, |ui| {
             flip_window(
@@ -2466,6 +2467,7 @@ pub fn run_command(ctx: &egui::Context, cmd: &str, panels: &mut Panels) -> BarAc
         "resync_animations" => return BarAction::ResyncAnimations,
         "immersive" => return BarAction::ToggleImmersive,
         "workspaces" | "layout_toggle" => crate::folderstorm::workspaces::toolbar::run(ctx, cmd), // Folderstorm: the layouts' buttons
+        "gesture_board" => crate::folderstorm::gesture_boards::run(ctx, cmd),                     // Folderstorm: gesture boards
         _ => {}
     }
     BarAction::None
@@ -3291,6 +3293,7 @@ pub(crate) fn toolbar_row(
         };
         // Folderstorm: the layouts' two buttons, lit, dimmed and named by their module
         let (active, usable, tip) = crate::folderstorm::workspaces::toolbar::look(ui.ctx(), &b.command, active, usable, tip);
+        let (active, usable, tip) = crate::folderstorm::gesture_boards::look(ui.ctx(), &b.command, active, usable, tip); // Folderstorm: gesture boards
         // the Favorites button: its grid of favourites opens upwards
         let grid_id = egui::Id::unique("bars_favorites_grid_open");
         let active = active || (b.command == "favorites" && ui.ctx().data(|d| d.get_temp::<bool>(grid_id)).unwrap_or(false));
