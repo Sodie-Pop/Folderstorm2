@@ -1133,6 +1133,62 @@ inventory-custom-tab-delete-question = Delete the custom tab “{ $name }”? It
 inventory-custom-tab-clone-name = { $name } copy
 inventory-custom-tab-demo-media = Textures and sounds
 inventory-custom-tab-demo-named = Demo items
+inventory-folder-tab-create = Create tab
+inventory-folder-tab-add-to = Add to
+inventory-folder-tab-new = New tab…
+inventory-folder-tab-has-tip = Already in this tab.
+inventory-folder-tab-why-empty = Select folders or items first.
+inventory-folder-tab-why-refused = The inventory's root, the Library, the Trash and what it holds cannot go into a tab.
+inventory-folder-tab-why-loading = The inventory is not loaded yet.
+inventory-folder-tab-why-window = A window opened on one folder has no custom tabs.
+inventory-folder-tab-added-one = Added “{ $folder }” to “{ $tab }”.
+inventory-folder-tab-added-many = { $count ->
+    [one] Added { $count } entry to “{ $tab }”.
+   *[other] Added { $count } entries to “{ $tab }”.
+    }
+inventory-folder-tab-added-already = { $count ->
+    [one] { $count } was already there.
+   *[other] { $count } were already there.
+    }
+inventory-folder-tab-already-one = “{ $folder }” is already in “{ $tab }”.
+inventory-folder-tab-already-many = These are already in “{ $tab }”.
+inventory-folder-tab-add = Add the selection
+inventory-folder-tab-replace = Use only the selection
+inventory-folder-tab-clear = Show everything
+inventory-folder-tab-clear-tip = Show the whole inventory in this tab again: no folders, no pinned items. Its filters and search stay.
+inventory-folder-tab-select-tip = Select folders or items in the Inventory list first: up to { $count } folders, not the Trash or the Library.
+inventory-folder-tab-limit = A tab can show up to { $count } folders.
+inventory-folder-tab-heading = Folders and pinned items
+inventory-folder-tab-all = All folders
+inventory-folder-tab-elsewhere = This tab's folders and items were chosen on another account: here it shows all folders.
+inventory-folder-tab-help = The tab shows these folders and everything inside them, and the pinned items at the top, with its filters and search. Select folders (up to { $count }) or items in the Inventory list, then add them.
+inventory-folder-tab-remove = Remove from the tab
+inventory-folder-tab-deleted-folder = Deleted folder
+inventory-folder-tab-status-missing = deleted
+inventory-folder-tab-status-trash = in the Trash
+inventory-folder-tab-status-refused = not allowed
+inventory-folder-tab-note-gone = { $count ->
+    [one] { $count } folder or item of this tab is deleted or in the Trash.
+   *[other] { $count } folders or items of this tab are deleted or in the Trash.
+    }
+inventory-folder-tab-note-remove = Remove from tab
+inventory-folder-tab-note-remove-tip = Forget them in this tab. What is restored from the Trash would not come back in it.
+inventory-folder-tab-demo-name = Clothing and body
+inventory-folder-tab-demo-other = Everyday
+inventory-folder-tab-why-broken = A link in the selection points to nothing: it cannot go into a tab.
+inventory-folder-tab-item-limit = A tab can pin up to { $count } items.
+inventory-folder-tab-deleted-item = Deleted item
+inventory-quick-pinned = Pinned item
+inventory-quick-open-window = Open in a window
+inventory-quick-open-window-tip = Show this tab in a small window of its own.
+inventory-quick-flat = Flat list
+inventory-quick-flat-tip = List every item of this tab without folders, each with its folder.
+inventory-quick-in-folder = In { $path }
+inventory-quick-pin = Pin: keep this window above the others
+inventory-quick-unpin = Unpin: let other windows cover it
+inventory-quick-quiet = Simple view: only the list
+inventory-quick-full = Full view: search, tabs and tools
+inventory-quick-demo-name = Quick access
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations
@@ -1769,6 +1825,24 @@ fs-chat-upload-max-help = Larger images are refused before anything is sent. Fol
 fs-chat-upload-confirm = Ask before each upload
 fs-chat-upload-confirm-help = Shows the image, its size and the host, and waits for Upload. Off, an image is uploaded as soon as it is pasted or chosen. A dropped file always asks first: the viewer cannot tell exactly which field it was dropped on.
 fs-chat-upload-public = On Folderstorm's host, images are kept up to 180 days, or less when the host needs room. They are not listed publicly, but anyone with a link can view the image.
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = activity history log receipts operations stop
+fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
+fs-search-photo = photo mode snapshot picture camera
+fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
+fs-search-layouts-list = favorite favorites star apply rename delete
+fs-search-layouts-save = save new capture
+fs-search-layouts-previous = undo back restore revert
+fs-search-layouts-lock = lock unlock window size borderless full screen
+fs-search-layouts-monitors = unplug plug screens monitors changed
+fs-search-layouts-reset = default reset bars viewport
+fs-search-layouts-quick = quick switch switcher toggle toolbar button shortcut keyboard hotkey favorite favorites
+fs-search-characters = multiple accounts alts alt characters character multibox session host background monitors
+fs-search-chat-upload = image upload picture photo screenshot paste drop share link Zipline host
+fs-search-outfit-safety = outfit safety wear misclick replace protect
+
 ui-options-place-bar-stretch = Stretch the place bar to the right
 ui-options-place-bar-stretch-help = The place island reaches the account island; off, it is as wide as what it shows.
 ui-options-place-bar-rights-text = Name the parcel rights

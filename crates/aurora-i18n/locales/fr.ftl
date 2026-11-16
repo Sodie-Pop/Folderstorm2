@@ -1136,6 +1136,62 @@ inventory-custom-tab-delete-question = Supprimer l'onglet personnalisé « { $na
 inventory-custom-tab-clone-name = { $name } (copie)
 inventory-custom-tab-demo-media = Textures et sons
 inventory-custom-tab-demo-named = Objets de démo
+inventory-folder-tab-create = Créer un onglet
+inventory-folder-tab-add-to = Ajouter à
+inventory-folder-tab-new = Nouvel onglet…
+inventory-folder-tab-has-tip = Déjà dans cet onglet.
+inventory-folder-tab-why-empty = Sélectionnez d'abord des dossiers ou des objets.
+inventory-folder-tab-why-refused = La racine de l'inventaire, la Bibliothèque, la Corbeille et ce qu'elle contient ne peuvent pas aller dans un onglet.
+inventory-folder-tab-why-loading = L'inventaire n'est pas encore chargé.
+inventory-folder-tab-why-window = Une fenêtre ouverte sur un seul dossier n'a pas d'onglets personnalisés.
+inventory-folder-tab-added-one = « { $folder } » ajouté à « { $tab } ».
+inventory-folder-tab-added-many = { $count ->
+    [one] { $count } élément ajouté à « { $tab } ».
+   *[other] { $count } éléments ajoutés à « { $tab } ».
+    }
+inventory-folder-tab-added-already = { $count ->
+    [one] { $count } y était déjà.
+   *[other] { $count } y étaient déjà.
+    }
+inventory-folder-tab-already-one = « { $folder } » est déjà dans « { $tab } ».
+inventory-folder-tab-already-many = Ils sont déjà dans « { $tab } ».
+inventory-folder-tab-add = Ajouter la sélection
+inventory-folder-tab-replace = N'utiliser que la sélection
+inventory-folder-tab-clear = Tout afficher
+inventory-folder-tab-clear-tip = Afficher à nouveau tout l'inventaire dans cet onglet : aucun dossier, aucun objet épinglé. Ses filtres et sa recherche restent.
+inventory-folder-tab-select-tip = Sélectionnez d'abord des dossiers ou des objets dans la liste de l'inventaire : { $count } dossiers au plus, ni la Corbeille ni la Bibliothèque.
+inventory-folder-tab-limit = Un onglet peut afficher au plus { $count } dossiers.
+inventory-folder-tab-heading = Dossiers et objets épinglés
+inventory-folder-tab-all = Tous les dossiers
+inventory-folder-tab-elsewhere = Les dossiers et objets de cet onglet ont été choisis sur un autre compte : ici, il affiche tous les dossiers.
+inventory-folder-tab-help = L'onglet affiche ces dossiers et tout ce qu'ils contiennent, et les objets épinglés en tête, avec ses filtres et sa recherche. Sélectionnez des dossiers ({ $count } au plus) ou des objets dans la liste de l'inventaire, puis ajoutez-les.
+inventory-folder-tab-remove = Retirer de l'onglet
+inventory-folder-tab-deleted-folder = Dossier supprimé
+inventory-folder-tab-status-missing = supprimé
+inventory-folder-tab-status-trash = dans la Corbeille
+inventory-folder-tab-status-refused = non autorisé
+inventory-folder-tab-note-gone = { $count ->
+    [one] { $count } dossier ou objet de cet onglet est supprimé ou dans la Corbeille.
+   *[other] { $count } dossiers ou objets de cet onglet sont supprimés ou dans la Corbeille.
+    }
+inventory-folder-tab-note-remove = Retirer de l'onglet
+inventory-folder-tab-note-remove-tip = Les oublier dans cet onglet. Ce qui sera restauré depuis la Corbeille n'y reviendrait pas.
+inventory-folder-tab-demo-name = Vêtements et corps
+inventory-folder-tab-demo-other = Au quotidien
+inventory-folder-tab-why-broken = Un lien de la sélection ne mène à rien : il ne peut pas aller dans un onglet.
+inventory-folder-tab-item-limit = Un onglet peut épingler au plus { $count } objets.
+inventory-folder-tab-deleted-item = Objet supprimé
+inventory-quick-pinned = Objet épinglé
+inventory-quick-open-window = Ouvrir dans une fenêtre
+inventory-quick-open-window-tip = Afficher cet onglet dans une petite fenêtre à lui.
+inventory-quick-flat = Liste à plat
+inventory-quick-flat-tip = Lister tous les objets de cet onglet sans dossiers, chacun avec son dossier.
+inventory-quick-in-folder = Dans { $path }
+inventory-quick-pin = Épingler : garder cette fenêtre au-dessus des autres
+inventory-quick-unpin = Désépingler : laisser d'autres fenêtres la couvrir
+inventory-quick-quiet = Vue simple : la liste seule
+inventory-quick-full = Vue complète : recherche, onglets et outils
+inventory-quick-demo-name = Accès rapide
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar
@@ -1772,6 +1828,24 @@ fs-chat-upload-max-help = Les images plus lourdes sont refusées avant tout envo
 fs-chat-upload-confirm = Demander avant chaque envoi
 fs-chat-upload-confirm-help = Montre l'image, son poids et l'hébergeur, et attend Envoyer. Désactivé, une image est envoyée dès qu'elle est collée ou choisie. Un fichier déposé demande toujours d'abord : le viewer ne peut pas savoir exactement sur quel champ il a été déposé.
 fs-chat-upload-public = Sur l'hébergeur de Folderstorm, les images sont gardées jusqu'à 180 jours, ou moins s'il a besoin de place. Elles ne sont pas listées publiquement, mais toute personne qui a un lien peut voir l'image.
+
+# Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
+fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
+fs-search-mcp-activity = activité historique journal reçus opérations arrêter
+fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
+fs-search-photo = mode photo capture image appareil
+fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
+fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer
+fs-search-layouts-save = enregistrer nouvelle capturer
+fs-search-layouts-previous = annuler retour restaurer revenir
+fs-search-layouts-lock = verrouiller déverrouiller taille de la fenêtre sans bordure plein écran
+fs-search-layouts-monitors = débrancher brancher écrans moniteurs changés
+fs-search-layouts-reset = défaut réinitialiser barres zone du monde
+fs-search-layouts-quick = bascule rapide changement sélecteur bouton barre d'outils raccourci clavier touche favori favoris
+fs-search-characters = plusieurs comptes alts alt personnages personnage multibox hôte de session arrière-plan moniteurs
+fs-search-chat-upload = image envoi téléverser photo capture d'écran coller déposer partager lien Zipline hébergeur
+fs-search-outfit-safety = tenue sécurité porter clic de travers remplacer protéger
+
 ui-options-place-bar-stretch = Étirer la barre du lieu jusqu'à droite
 ui-options-place-bar-stretch-help = L'îlot du lieu va jusqu'à l'îlot du compte ; désactivé, il prend la largeur de ce qu'il affiche.
 ui-options-place-bar-rights-text = Nommer les droits de la parcelle

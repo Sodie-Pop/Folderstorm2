@@ -16,6 +16,7 @@
 mod workspaces_group;
 
 use super::super::cx::{Cx, Nothing};
+use super::folderstorm_search::words;
 use crate::folderstorm::workspaces::apply::{self, Live, Parts};
 use crate::folderstorm::workspaces::monitors;
 use crate::folderstorm::workspaces::store::{Layout, MAX_NAME, Monitor, MonitorPolicy, Record, Store, StoreError, Unusable, WindowFrame};
@@ -94,14 +95,15 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-layouts-group"), |cx| {
         cx.note(tr!("fs-layouts-intro"));
         // (the search words of Folderstorm (C++): "dual monitor", "layout")
-        cx.keywords("layout layouts profile dual monitor two monitors arrangement windows")
-            .section_body()
-            .row(tr!("fs-layouts-list"), tr!("fs-layouts-list-help"), &Nothing, |ui, s| {
-                list(ui, &p, s)
-            });
+        words(cx, &["fs-search-layouts", "fs-search-layouts-list"]).section_body().row(
+            tr!("fs-layouts-list"),
+            tr!("fs-layouts-list-help"),
+            &Nothing,
+            |ui, s| list(ui, &p, s),
+        );
     });
     cx.group(tr!("fs-layouts-save-group"), |cx| {
-        cx.keywords("layout save dual monitor").section_body().row(
+        words(cx, &["fs-search-layouts", "fs-search-layouts-save"]).section_body().row(
             tr!("fs-layouts-save-new"),
             tr!("fs-layouts-save-new-help"),
             &Nothing,
@@ -109,8 +111,11 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
         );
     });
     cx.group(tr!("fs-layouts-arrangement"), |cx| {
-        cx.keywords("undo layout")
-            .row(tr!("fs-layouts-previous"), tr!("fs-layouts-previous-help"), &Nothing, |ui, s| {
+        words(cx, &["fs-search-layouts", "fs-search-layouts-previous"]).row(
+            tr!("fs-layouts-previous"),
+            tr!("fs-layouts-previous-help"),
+            &Nothing,
+            |ui, s| {
                 let enabled = apply::has_previous(ui.ctx());
                 let clicked = widgets::action_button_if(
                     ui,
@@ -130,8 +135,9 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 tab.selected = active_index(&s.folderstorm_workspaces).or(tab.selected);
                 store(ui.ctx(), tab);
                 true
-            });
-        cx.keywords("layout lock unlock window size borderless").row(
+            },
+        );
+        words(cx, &["fs-search-layouts", "fs-search-layouts-lock"]).row(
             tr!("fs-layouts-unlock"),
             tr!("fs-layouts-unlock-help"),
             &Nothing,
@@ -155,14 +161,17 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
             (MonitorPolicy::Apply, tr!("fs-layouts-monitors-apply"), false),
             (MonitorPolicy::Nothing, tr!("fs-layouts-monitors-nothing"), false),
         ];
-        cx.keywords("layout dual monitor two monitors unplug screen change").wide().row(
+        words(cx, &["fs-search-layouts", "fs-search-layouts-monitors"]).wide().row(
             tr!("fs-layouts-monitors"),
             tr!("fs-layouts-monitors-help"),
             &Nothing,
             |ui, s| super::super::segmented(ui, &p, &mut s.folderstorm_workspaces.on_monitor_change, &policies),
         );
-        cx.keywords("layout default bars viewport")
-            .row(tr!("fs-layouts-reset"), tr!("fs-layouts-reset-help"), &Nothing, |ui, s| {
+        words(cx, &["fs-search-layouts", "fs-search-layouts-reset"]).row(
+            tr!("fs-layouts-reset"),
+            tr!("fs-layouts-reset-help"),
+            &Nothing,
+            |ui, s| {
                 let enabled = s.folderstorm_viewport != Default::default();
                 let clicked = widgets::action_button_if(
                     ui,
@@ -175,13 +184,14 @@ pub(in crate::ui::options) fn page(cx: &mut Cx) {
                 )
                 .clicked();
                 clicked && apply::reset_world(ui.ctx(), &mut Live::of(s))
-            });
+            },
+        );
     });
     workspaces_group::groups(cx);
     cx.group(tr!("fs-layouts-quick"), |cx| {
         cx.note(tr!("fs-layouts-quick-intro"));
         for (place, label) in [(0, tr!("fs-layouts-toggle-first")), (1, tr!("fs-layouts-toggle-second"))] {
-            cx.keywords("layout toggle switch switcher workspace toolbar button dual monitor two monitors shortcut keyboard favorite")
+            words(cx, &["fs-search-layouts", "fs-search-layouts-quick"])
                 .row(label, tr!("fs-layouts-toggle-help"), &Nothing, |ui, s| toggle_picker(ui, s, place));
         }
     });

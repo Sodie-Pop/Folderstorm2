@@ -22,6 +22,9 @@ pub mod demo_sim;
 pub mod draw;
 mod edge_pan;
 pub mod edits;
+#[cfg(test)]
+#[path = "../folderstorm/viewport/build_tools_tests.rs"]
+mod folderstorm_viewport_tests; // Folderstorm: world viewport
 pub mod geom;
 pub mod grab;
 pub mod hud_drag;
@@ -2622,6 +2625,7 @@ impl BuildTool {
             return;
         }
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::unique("build_overlay")));
+        let painter = crate::folderstorm::viewport::build_tools::clip(ctx, painter); // Folderstorm: world viewport
         let cam = self.cam;
         let mut p = draw::Painter3d::new(painter, &cam, *pal);
         let now = Instant::now();

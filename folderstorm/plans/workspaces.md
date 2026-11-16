@@ -1742,7 +1742,8 @@ in the checkpoint's report.
 - **1.8 Backgrounds.** An image painted in the margins outside the world, on
   egui's background layer, before the windows; no renderer change. Optional
   per layout.
-- **1.9 Search keywords.** Help texts (section 9.2).
+- **1.9 Search keywords.** Help texts (section 9.2). Built on its own:
+  [settings-search.md](settings-search.md).
 - Startup restore of a workspace (opt-in), export / import, toolbar button
   sets per workspace: only if the human asks.
 
