@@ -188,8 +188,8 @@ pub(crate) fn terms_link(ui: &mut egui::Ui, p: &Palette, url: &str) {
 /// last view).
 pub fn draw_background(ui: &egui::Ui, p: &Palette) {
     let ctx = ui.ctx();
-    let rect = ctx.content_rect();
-    let painter = ctx.layer_painter(egui::LayerId::background());
+    let rect = crate::folderstorm::login_screen::sky(ctx); // Folderstorm: the whole window while the login keeps to one monitor
+    let painter = egui::Painter::new(ctx.clone(), egui::LayerId::background(), rect); // Folderstorm: (same)
     let t = ctx.input(|i| i.time) as f32;
     super::aurora_bg::paint(&painter, p, rect, t, 1.0);
     // slow animation: ~30 images/s are plenty
@@ -533,7 +533,8 @@ fn glass_card<R>(
             ),
         ];
         behind.0.set(behind.1, egui::Shape::Vec(lights.clone()));
-        let mut shapes = super::aurora_bg::frosted_pane(p, ctx.content_rect(), ctx.input(|i| i.time) as f32, rect, lights);
+        let sky = crate::folderstorm::login_screen::sky(ctx); // Folderstorm: the sky behind, as `draw_background` paints it
+        let mut shapes = super::aurora_bg::frosted_pane(p, sky, ctx.input(|i| i.time) as f32, rect, lights);
         let top = |height: f32| egui::Rect::from_min_size(rect.min, Vec2::new(rect.width(), height));
         if accent {
             shapes.push(strip(top(2.0), &[(0.0, p.violet), (1.0, p.teal)]));
