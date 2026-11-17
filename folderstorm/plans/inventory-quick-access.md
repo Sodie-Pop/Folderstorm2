@@ -34,7 +34,7 @@ behaviour reference is Aurora's own Inventory windows.
 | A tab of pins only | Shows only its pins (pins scope a tab as folders do: adding one to a tab that showed everything makes it show only what was added, as adding a folder does in row 2.2) |
 | Deleted / Trash | Skipped but kept, as folders: the note above the list counts folders and items, *Remove from tab* forgets them all |
 | Customize tab… | Its *Folders* part becomes *Folders and items*: each pin by name with its folder path, a remove button |
-| Clear | The tab menu's *Show all folders* becomes *Show everything*: no folders, no pins |
+| Clear | The tab menu's *Show all items* (was *Show everything*, which removed the folders and pins: "that kinda just ruins your custom tab", the human) **keeps the folders and pins** and clears what hides items: the item types, required permissions, links, creator, creation date, *coalesced objects only*, the advanced search's rules, and the search text (a typed search hides items as surely as a type filter); *Also show folders without matching items* and the flat list stay. Greyed when nothing is hidden. Removing every folder and pin at once is *Remove all…* in *Customize tab…* only, after a question (each one still has its own × there) |
 | Storage | `inventory.custom_tabs[].items`: account id → item ids, beside `folders` |
 
 ### Tab windows

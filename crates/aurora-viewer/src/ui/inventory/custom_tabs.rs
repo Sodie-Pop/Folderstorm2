@@ -4,8 +4,8 @@
 //! Inventory tabs"): a tab of its own after the built-in ones, which keeps
 //! its filters and its search by itself. "Customize tab…" beside the search
 //! box edits the filters of the tab shown; a right click on a tab's name
-//! offers Customize tab…, Rename… and Clone (and Delete…); customizing an
-//! inactive tab selects it first.
+//! offers Customize tab…, Show all items, Rename… and Clone (and Delete…);
+//! customizing an inactive tab selects it first.
 //!
 //! What a custom tab remembers is Aurora's own filter model
 //! (`view::Filters`, the dialog of "Inventory filters", advanced search
@@ -215,6 +215,35 @@ pub fn from_builtin(tab: usize, mut filters: Filters, search: String, prefs: &In
     (filters, search)
 }
 
+/// The tab's filters once "Show all items" has cleared what hides items:
+/// the item types, required permissions, links, creator, creation date,
+/// "coalesced objects only" and the advanced search's rules. "Also show
+/// folders without matching items" hides nothing and stays, as does the
+/// period typed for the date (unused once the date is "All dates").
+pub fn showing_all(filters: &Filters) -> Filters {
+    Filters {
+        hours: filters.hours,
+        always_folders: filters.always_folders,
+        ..Filters::default()
+    }
+}
+
+/// Whether the tab's filters or search hide some of its items.
+pub fn hides_items(tab: &CustomTab) -> bool {
+    showing_all(&tab.filters) != tab.filters || !tab.search.is_empty()
+}
+
+/// "Show all items": the tab shows every item of its folders and pins (of
+/// the whole inventory if it has none): what hides items in its filters
+/// goes, and its search. Its folders, pins, flat list and name stay.
+/// Returns whether anything changed.
+pub fn show_all_items(tab: &mut CustomTab) -> bool {
+    let changed = hides_items(tab);
+    tab.filters = showing_all(&tab.filters);
+    tab.search.clear();
+    changed
+}
+
 // ---- The window's state ----
 
 #[derive(Default)]
@@ -225,6 +254,9 @@ pub(super) struct State {
     name: String,
     rename: Option<Rename>,
     delete: Option<(u64, String)>,
+    /// "Remove all…" of the Customize dialog, waiting for its confirmation:
+    /// the tab and its name (`folder_ui::remove_all_dialog`).
+    unscope: Option<(u64, String)>,
     /// What the folder scope read of the inventory this frame.
     seen: folder_ui::Seen,
     /// A tab window (`window.rs`): the custom tab it is locked to.
@@ -399,6 +431,17 @@ pub(super) fn customize(st: &mut InventoryUi) {
     st.filters_open = true;
 }
 
+/// "Show all items" on the tab `id` (`show_all_items`). The window showing
+/// it takes the change up through `sync`, as it takes up one made in another
+/// window: what was typed there first goes to the tab, then is cleared.
+fn show_all(st: &mut InventoryUi, prefs: &mut InventoryPreferences, id: u64) {
+    sync(st, prefs);
+    if let Some(tab) = prefs.custom_tabs.iter_mut().find(|t| t.id == id) {
+        show_all_items(tab);
+    }
+    sync(st, prefs);
+}
+
 // ---- Tabs: the right-click menu ----
 
 fn builtin_name(tab: usize) -> &'static str {
@@ -486,6 +529,21 @@ pub(super) fn tab_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, pre
     if menu::item(ui, p, "adjustments-filled", aurora_i18n::tr!("inventory-custom-tab-customize")) {
         select_custom(st, prefs, id);
         customize(st);
+    }
+    let hides = prefs.custom_tabs.iter().find(|t| t.id == id).is_some_and(hides_items);
+    if menu::item_tip(
+        ui,
+        p,
+        "eye-filled",
+        aurora_i18n::tr!("inventory-custom-tab-show-all"),
+        hides,
+        if hides {
+            aurora_i18n::tr!("inventory-custom-tab-show-all-tip")
+        } else {
+            aurora_i18n::tr!("inventory-custom-tab-show-all-none")
+        },
+    ) {
+        show_all(st, prefs, id);
     }
     if menu::item(ui, p, "pencil-filled", aurora_i18n::tr!("inventory-custom-tab-rename")) {
         let text = prefs
@@ -597,6 +655,7 @@ pub(super) fn frame(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, pref
     sync(st, prefs);
     rename_dialog(ctx, p, st, prefs);
     delete_dialog(ctx, p, st, prefs);
+    folder_ui::remove_all_dialog(ctx, p, st, prefs);
 }
 
 fn rename_dialog(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
@@ -678,22 +737,40 @@ fn delete_dialog(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: 
     if position(prefs, id).is_none() {
         return;
     }
+    let answer = confirm(
+        ctx,
+        p,
+        &format!("inventory_custom_tab_delete_{}", st.ui_id),
+        aurora_i18n::tr!("inventory-custom-tab-delete-title"),
+        &aurora_i18n::tr!("inventory-custom-tab-delete-question", name = name.as_str()),
+        aurora_i18n::tr!("common-delete"),
+    );
+    match answer {
+        Some(true) => delete_and_leave(st, prefs, id),
+        Some(false) => {}
+        None => st.custom_tabs.delete = Some((id, name)),
+    }
+}
+
+/// A question that changes a tab for good (Delete, Remove all): Some(true)
+/// once `action` is clicked, Some(false) when cancelled or closed, None
+/// while it waits.
+fn confirm(ctx: &egui::Context, p: &Palette, window_id: &str, title: &str, question: &str, action: &str) -> Option<bool> {
     let mut open = true;
     let mut cancel = false;
     let mut accept = false;
-    let window_id = format!("inventory_custom_tab_delete_{}", st.ui_id);
     Floater::new(
-        &window_id,
-        aurora_i18n::tr!("inventory-custom-tab-delete-title"),
+        window_id,
+        title,
         ctx.content_rect().center() - egui::vec2(210.0, 70.0),
         Vec2::new(420.0, 140.0),
     )
     .fixed()
     .show(ctx, p, &mut open, |ui| {
-        ui.label(aurora_i18n::tr!("inventory-custom-tab-delete-question", name = name.as_str()));
+        ui.label(question);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            // Cancel first and focused: Enter or Escape never delete
+            // Cancel first and focused: Enter or Escape never confirm
             let cancel_button = flat_button(ui, p, aurora_i18n::tr!("common-cancel"));
             if !ui.memory(|m| m.focused().is_some()) {
                 cancel_button.request_focus();
@@ -701,17 +778,17 @@ fn delete_dialog(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: 
             if cancel_button.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 cancel = true;
             }
-            if flat_button(ui, p, aurora_i18n::tr!("common-delete")).clicked() {
+            if flat_button(ui, p, action).clicked() {
                 accept = true;
             }
         });
     });
     if accept {
-        delete_and_leave(st, prefs, id);
-        return;
-    }
-    if open && !cancel {
-        st.custom_tabs.delete = Some((id, name));
+        Some(true)
+    } else if !open || cancel {
+        Some(false)
+    } else {
+        None
     }
 }
 
