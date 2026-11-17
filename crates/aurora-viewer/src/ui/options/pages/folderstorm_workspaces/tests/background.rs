@@ -1,6 +1,6 @@
 //! The background of the margins in Preferences (row 1.8): the default's
-//! group on Layout › Bars and windows, and a layout's own under the
-//! selected layout.
+//! group on Workspaces › Margins, and a layout's own under the selected
+//! layout on Saved.
 
 use super::*;
 use crate::folderstorm::backgrounds::record::{Background, Fit, Kind, Picture};
@@ -25,12 +25,13 @@ fn chosen() -> Background {
 fn the_background_group_is_drawn() {
     let mut s = Settings::default();
     s.folderstorm_workspaces.background = chosen();
-    let texts = drawn("preferences-background", 0, s, false);
+    let texts = drawn("preferences-background", tab::MARGINS, s, false);
     // (the group's title in small capitals)
     let title = tr!("fs-background-group").to_uppercase();
     assert!(texts.iter().any(|t| t.to_uppercase() == title), "the group's title");
     for expected in [
-        tr!("fs-background-intro"),
+        tr!("fs-margins-off"),
+        tr!("fs-margins-turn-on"),
         tr!("fs-background-kind"),
         tr!("fs-background-kind-none"),
         tr!("fs-background-kind-colour"),
@@ -47,18 +48,23 @@ fn the_background_group_is_drawn() {
         assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
     }
     assert!(crate::ui::icons::global("photo-filled").is_some(), "the icon is embedded");
-    // the viewport on: no note
+    // the viewport on: no notice; nothing chosen: only the kind's row
     let mut s = Settings::default();
     s.folderstorm_viewport.enabled = true;
-    let texts = drawn_found("preferences-background-found", 0, s, false, "wallpaper");
+    let texts = drawn("preferences-background-none", tab::MARGINS, s.clone(), false);
     assert!(texts.iter().any(|t| t == tr!("fs-background-kind")));
-    assert!(!texts.iter().any(|t| t == tr!("fs-background-intro")));
+    assert!(!texts.iter().any(|t| t == tr!("fs-margins-off")));
+    assert!(!texts.iter().any(|t| t == tr!("fs-background-fit")), "the picture's rows wait for a picture");
+    // the search still finds them
+    let texts = drawn_found("preferences-background-found", tab::MARGINS, s, false, "wallpaper");
+    assert!(texts.iter().any(|t| t == tr!("fs-background-picture")));
 }
 
 #[test]
 fn the_default_is_chosen_in_its_group() {
     let mut w = Window::new();
-    w.st.open(Page::Layout, 0);
+    w.s.folderstorm_viewport.enabled = true;
+    w.st.open(Page::Workspaces, tab::MARGINS);
     w.st.query = "wallpaper".into();
     w.settle();
     w.changed = false;
@@ -110,7 +116,7 @@ fn a_layout_s_own_background_is_drawn() {
     });
     let mut s = Settings::default();
     s.folderstorm_workspaces.add(layout).expect("added");
-    let texts = drawn("preferences-layout-background", 3, s, false);
+    let texts = drawn("preferences-layout-background", tab::SAVED, s, false);
     // the layout in use is selected: its background under its actions
     for expected in [
         "Wall",

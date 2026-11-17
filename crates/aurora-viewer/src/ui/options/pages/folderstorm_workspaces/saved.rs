@@ -579,25 +579,23 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pic
         if widgets::action_button(ui, p, ICON_DELETE, tr!("common-delete"), ActionKind::FlatDanger, size).clicked() {
             st.ask = Some(Ask::Delete);
         }
-        // (a favorite's place is the favorites' order: no arrows)
-        if !favorite {
-            let store = &mut s.folderstorm_workspaces;
-            let shift = |store: &mut crate::folderstorm::workspaces::store::Store, up: bool| match pick.kind {
-                Kind::Layout => store.shift(pick.index, up),
-                Kind::Workspace => store.shift_workspace(pick.index, up),
-            };
-            if widgets::icon_button(ui, p, ICON_UP, tr!("fs-layouts-move-up"), pick.index > 0)
-                && let Some(to) = shift(store, true)
-            {
-                st.selected = Some(Pick { index: to, ..pick });
-                changed = true;
-            }
-            if widgets::icon_button(ui, p, ICON_DOWN, tr!("fs-layouts-move-down"), pick.index + 1 < count)
-                && let Some(to) = shift(store, false)
-            {
-                st.selected = Some(Pick { index: to, ..pick });
-                changed = true;
-            }
+        // (a favorite's place is the favorites' order: its arrows greyed)
+        let store = &mut s.folderstorm_workspaces;
+        let shift = |store: &mut crate::folderstorm::workspaces::store::Store, up: bool| match pick.kind {
+            Kind::Layout => store.shift(pick.index, up),
+            Kind::Workspace => store.shift_workspace(pick.index, up),
+        };
+        if widgets::icon_button(ui, p, ICON_UP, tr!("fs-layouts-move-up"), !favorite && pick.index > 0)
+            && let Some(to) = shift(store, true)
+        {
+            st.selected = Some(Pick { index: to, ..pick });
+            changed = true;
+        }
+        if widgets::icon_button(ui, p, ICON_DOWN, tr!("fs-layouts-move-down"), !favorite && pick.index + 1 < count)
+            && let Some(to) = shift(store, false)
+        {
+            st.selected = Some(Pick { index: to, ..pick });
+            changed = true;
         }
         // a favorite: first here, in the switcher, in World › Layouts, in
         // the strip and in the keyboard's round

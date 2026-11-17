@@ -343,7 +343,10 @@ fn window_editor(ui: &mut egui::Ui, p: &Palette, layout: &Layout, frame: &Window
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::folderstorm::workspaces::apply::Report;
+    use crate::folderstorm::workspaces::apply::{self, Live, Report};
+    use crate::folderstorm::workspaces::store::{MonitorPolicy, Store};
+    use crate::folderstorm::workspaces::words::report_text;
+    use crate::settings::Settings;
     use crate::folderstorm::workspaces::window::{Command, Pretend};
     use crate::ui::options::{OptionsUi, Page, show};
     use crate::ui::widgets::Floater;
@@ -353,7 +356,7 @@ mod tests {
     mod background;
     mod workspaces;
 
-    /// Preferences on the Layouts tab, over a viewer with two windows open.
+    /// Preferences on Workspaces › Saved, over a viewer with two windows open.
     struct Window {
         frames: Frames,
         p: Palette,
@@ -425,7 +428,7 @@ mod tests {
             frames.ctx.all_styles_mut(|s| s.animation_time = 0.0);
             let icons = crate::ui::icons::Icons::load(&frames.ctx, None);
             let mut st = OptionsUi::default();
-            st.open(Page::Layout, 3);
+            st.open(Page::Workspaces, tab::SAVED);
             let mut window = Window {
                 frames,
                 p: theme.palette(),
@@ -521,10 +524,10 @@ mod tests {
         }
 
         /// Scrolls the page down, with the wheel over it, until `text` is
-        /// shown (at most a few turns).
+        /// shown well above the window's footer (at most a few turns).
         fn reveal(&mut self, text: &str) {
-            for _ in 0..12 {
-                if self.shows(text) {
+            for _ in 0..16 {
+                if self.rect_of(text).is_some_and(|rect| rect.bottom() < 620.0) {
                     return;
                 }
                 let at = pos2(700.0, 500.0);
@@ -544,10 +547,52 @@ mod tests {
             }
         }
 
+        /// Scrolls the page back to its top.
+        fn scroll_top(&mut self) {
+            let at = pos2(700.0, 500.0);
+            for _ in 0..6 {
+                self.run(vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, 2000.0),
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Unknown,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+            }
+            self.settle();
+        }
+
         /// Clicks the text `label` (a button's, a line's of the list).
         fn click(&mut self, label: &str) {
             let rect = self.rect_of(label).unwrap_or_else(|| panic!("“{label}” is shown"));
             self.click_at(rect.center());
+        }
+
+        /// Clicks the last text `label` drawn (the page's, after the
+        /// sidebar's).
+        fn click_last(&mut self, label: &str) {
+            let texts = self.run(Vec::new());
+            let rect = texts
+                .iter()
+                .filter(|t| t.source == label)
+                .map(|t| t.rect)
+                .next_back()
+                .unwrap_or_else(|| panic!("“{label}” is shown"));
+            self.click_at(rect.center());
+        }
+
+        /// The save form on "Layout".
+        fn layout_form(&mut self) {
+            self.click_last(tr!("fs-workspaces-save-layout"));
+        }
+
+        /// Another tab of the page.
+        fn tab(&mut self, tab: usize) {
+            self.st.open(Page::Workspaces, tab);
+            self.settle();
         }
 
         fn type_text(&mut self, text: &str) {
@@ -556,6 +601,7 @@ mod tests {
         }
 
         fn save_as(&mut self, name: &str) {
+            self.layout_form();
             self.click(tr!("fs-layouts-name-hint"));
             self.type_text(name);
             self.click(tr!("fs-layouts-save"));
@@ -579,7 +625,7 @@ mod tests {
     #[test]
     fn the_tab_saves_the_arrangement_under_a_name_and_marks_it_in_use() {
         let mut w = Window::new();
-        assert!(w.shows(tr!("fs-layouts-empty")));
+        assert!(w.shows(tr!("fs-saved-empty")));
         assert!(!w.shows(tr!("fs-layouts-apply")), "nothing selected, no actions");
         w.s.folderstorm_viewport = wide();
         w.changed = false;
@@ -596,7 +642,7 @@ mod tests {
         assert_eq!((windows.windows["inventory"].x, windows.windows["inventory"].y), (20.0, 600.0));
         // listed, selected, in use; the field is ready for another name
         assert!(w.shows("Wide") && w.shows(tr!("fs-layouts-active")));
-        assert!(!w.shows(tr!("fs-layouts-empty")));
+        assert!(!w.shows(tr!("fs-saved-empty")));
         assert!(w.shows(tr!("fs-layouts-name-hint")));
         assert!(w.shows(tr!("fs-layouts-apply")));
         let holds = format!("{} · {}", tr!("fs-layouts-part-world"), tr!("fs-layouts-holds-windows", count = 2));
@@ -606,6 +652,7 @@ mod tests {
     #[test]
     fn a_name_that_cannot_be_used_is_refused_with_the_reason() {
         let mut w = Window::new();
+        w.layout_form();
         w.click(tr!("fs-layouts-save"));
         assert!(w.shows(tr!("fs-layouts-error-empty")));
         assert!(w.store().layouts.is_empty());
@@ -654,12 +701,15 @@ mod tests {
         widgets::move_floater(&w.frames.ctx, "people", pos2(700.0, 620.0));
         w.settle();
         assert!(w.shows(tr!("fs-layouts-modified")));
-        // Previous arrangement: "Single" again, and its line selected
-        w.click(tr!("fs-layouts-previous-button"));
+        // Previous arrangement (Switching): "Single" again, and its line
+        // selected
+        w.tab(tab::SWITCHING);
+        w.click(tr!("fs-layouts-previous"));
         w.settle();
         assert_eq!(w.s.folderstorm_viewport, Default::default());
         assert!(w.store().is_active(1));
         assert!(w.shows(tr!("fs-layouts-previous-done")));
+        w.tab(tab::SAVED);
         // a double click on a line applies it
         let line = w.rect_of("Wide").expect("listed").center();
         w.click_at(line);
@@ -701,7 +751,7 @@ mod tests {
         w.settle();
         assert!(w.store().layouts.is_empty());
         assert_eq!(w.store().active_layout, None);
-        assert!(w.shows(tr!("fs-layouts-empty")));
+        assert!(w.shows(tr!("fs-saved-empty")));
         // deleting a layout changes nothing of the arrangement
         assert_eq!(w.s.folderstorm_viewport, wide());
     }
@@ -776,17 +826,18 @@ mod tests {
     #[test]
     fn reset_bars_and_world_and_previous_are_greyed_until_they_have_something_to_do() {
         let mut w = Window::new();
+        w.tab(tab::SWITCHING);
         // nothing to reset, nothing to go back to: clicks do nothing
-        w.click(tr!("fs-layouts-reset-button"));
-        w.click(tr!("fs-layouts-previous-button"));
+        w.click(tr!("fs-layouts-reset"));
+        w.click(tr!("fs-layouts-previous"));
         assert!(!w.changed);
         w.s.folderstorm_viewport = wide();
-        w.click(tr!("fs-layouts-reset-button"));
+        w.click(tr!("fs-layouts-reset"));
         w.settle();
         assert_eq!(w.s.folderstorm_viewport, Default::default());
         assert!(w.changed);
         // and Previous brings the viewport back
-        w.click(tr!("fs-layouts-previous-button"));
+        w.click(tr!("fs-layouts-previous"));
         w.settle();
         assert_eq!(w.s.folderstorm_viewport, wide());
     }
@@ -797,24 +848,68 @@ mod tests {
             let mut w = Window::new();
             w.st.query = query.to_owned();
             w.settle();
-            assert!(w.shows(tr!("fs-layouts-list")), "{query}");
+            assert!(w.shows(tr!("fs-saved-list")), "{query}");
         }
     }
 
     #[test]
-    fn resetting_the_page_keeps_the_layouts() {
+    fn resetting_the_page_keeps_the_saved_entries_and_resets_the_standing_preferences() {
         let mut w = Window::new();
         w.save_as("Wide");
         let saved = w.store().clone();
+        // the four standing preferences of Switching, changed
+        let store = &mut w.s.folderstorm_workspaces;
+        store.strip = true;
+        store.keep_huds = true;
+        store.on_monitor_change = MonitorPolicy::Nothing;
+        assert!(store.set_toggle(0, Some("Wide")));
         let d = Settings::default();
         let mut r = crate::ui::options::OptionsResult::default();
         let (p, s, st) = (w.p, &mut w.s, &mut w.st);
         w.frames.run(Vec::new(), |ui| {
             let mut cx = Cx::new(ui, p, s, &d, st, &mut r, super::super::super::cx::Mode::Reset, "");
-            cx.enter(Page::Layout, 3);
-            page(&mut cx);
+            for tab in 0..tabs().len() {
+                cx.enter(Page::Workspaces, tab);
+                page(&mut cx, tab);
+            }
         });
-        assert_eq!(w.store(), &saved);
+        assert_eq!(w.store(), &saved, "the layouts kept, the four back to their defaults");
+    }
+
+    /// The four standing preferences are tracked: their modified dots, the
+    /// Modified settings, the page's reset.
+    #[test]
+    fn the_standing_preferences_count_as_modified() {
+        let mut s = Settings::default();
+        let modified = |s: &mut Settings| {
+            let ctx = egui::Context::default();
+            let p = crate::theme::Theme::default().palette();
+            let d = Settings::default();
+            let mut st = OptionsUi::default();
+            let mut r = crate::ui::options::OptionsResult::default();
+            let mut n = 0;
+            crate::ui::options::run_ui(&ctx, egui::RawInput::default(), |ui| {
+                let mut cx = Cx::new(ui, p, s, &d, &mut st, &mut r, super::super::super::cx::Mode::Count, "");
+                for tab in 0..tabs().len() {
+                    cx.enter(Page::Workspaces, tab);
+                    page(&mut cx, tab);
+                }
+                n = cx.counts.modified(Page::Workspaces);
+            });
+            n
+        };
+        assert_eq!(modified(&mut s), 0);
+        s.folderstorm_workspaces.strip = true;
+        s.folderstorm_workspaces.keep_huds = true;
+        s.folderstorm_workspaces.on_monitor_change = MonitorPolicy::Apply;
+        s.folderstorm_workspaces.toggle = [None, Some("Single".into())];
+        assert_eq!(modified(&mut s), 4);
+        // a saved layout is not a modified setting
+        let mut s = Settings::default();
+        s.folderstorm_workspaces
+            .add(Layout::new("Wide", Some(wide()), None, Vec::new()))
+            .expect("added");
+        assert_eq!(modified(&mut s), 0);
     }
 
     fn two_monitors() -> Vec<Monitor> {
@@ -838,6 +933,7 @@ mod tests {
         assert_eq!(w.store().layout(0).and_then(|layout| layout.window.clone()), None);
         // with one: saved by default, locked when the box is ticked
         let mut w = Window::with_viewer();
+        w.layout_form();
         assert!(w.shows(tr!("fs-layouts-part-window")) && w.shows(tr!("fs-layouts-lock")));
         w.click(tr!("fs-layouts-lock"));
         w.changed = false;
@@ -871,16 +967,19 @@ mod tests {
     #[test]
     fn unlock_is_greyed_until_a_layout_holds_the_window() {
         let mut w = Window::with_viewer();
-        w.click(tr!("fs-layouts-unlock-button"));
+        w.tab(tab::SWITCHING);
+        w.click(tr!("fs-layouts-unlock"));
         assert!(w.seen().resizable);
+        w.tab(tab::SAVED);
+        w.layout_form();
         w.click(tr!("fs-layouts-lock"));
         w.save_as("Locked");
         assert!(!w.seen().resizable);
-        // (the row is below the fold with a layout selected: found by the search)
+        // (found by the search, from any tab)
         w.st.query = "unlock".to_owned();
         w.settle();
         w.changed = false;
-        w.click(tr!("fs-layouts-unlock-button"));
+        w.click(tr!("fs-layouts-unlock"));
         w.run(Vec::new());
         w.st.query.clear();
         w.settle();
@@ -982,6 +1081,7 @@ mod tests {
     #[test]
     fn what_happens_when_the_monitors_change_is_a_choice_of_three() {
         let mut w = Window::new();
+        w.tab(tab::SWITCHING);
         assert_eq!(w.store().on_monitor_change, MonitorPolicy::Ask);
         w.changed = false;
         w.click(tr!("fs-layouts-monitors-nothing"));
@@ -1105,8 +1205,8 @@ mod tests {
         let mut w = Window::new();
         w.save_as("Wide");
         w.save_as("Single");
-        // the group is the last of the page, under the fold: found by the
-        // window's search, which then shows its two rows alone
+        // on Switching, also found by the window's search, which then
+        // shows its two rows
         w.st.query = "switcher".into();
         w.settle();
         assert!(w.shows(tr!("fs-layouts-toggle-first")) && w.shows(tr!("fs-layouts-toggle-second")));
@@ -1137,7 +1237,7 @@ mod tests {
         assert_eq!(w.store().toggle, [None, Some("Single".to_owned())]);
     }
 
-    /// Draws Preferences on `tab` of the Layout page for a few frames with
+    /// Draws Preferences on `tab` of the Workspaces page for a few frames with
     /// the software painter; the texts of the last frame.
     /// `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the picture as
     /// `<folder>/<name>.png`.
@@ -1168,7 +1268,7 @@ mod tests {
         ctx.all_styles_mut(|s| s.animation_time = 0.0);
         let icons = crate::ui::icons::Icons::load(&ctx, None);
         let mut st = OptionsUi::default();
-        st.open(Page::Layout, tab);
+        st.open(Page::Workspaces, tab);
         st.demo_open_cogs = cogs;
         st.query = query.to_owned();
         let (width, height) = (1280u32, 900u32);
@@ -1240,8 +1340,8 @@ mod tests {
         texts
     }
 
-    /// The two pickers of *Quick switch*, the last group of the tab, as
-    /// the window's search shows them (`preferences-layouts-quick.png`).
+    /// The two pickers of the *Switch layout* button, as the window's
+    /// search shows them (`preferences-layouts-quick.png`).
     #[test]
     fn the_quick_switch_pickers_are_drawn() {
         let s = Settings {
@@ -1256,7 +1356,7 @@ mod tests {
             .expect("read"),
             ..Default::default()
         };
-        let texts = drawn_found("preferences-layouts-quick", 3, s, false, "switcher");
+        let texts = drawn_found("preferences-layouts-quick", tab::SWITCHING, s, false, "switcher");
         for expected in [
             tr!("fs-layouts-toggle-first"),
             tr!("fs-layouts-toggle-second"),
@@ -1285,7 +1385,7 @@ mod tests {
             folderstorm_viewport: wide(),
             ..Default::default()
         };
-        let texts = drawn("preferences-layouts", 3, s, false);
+        let texts = drawn("preferences-layouts", tab::SAVED, s, false);
         for icon in [
             ICON_CHECK,
             ICON_SAVE,
@@ -1308,8 +1408,6 @@ mod tests {
             tr!("fs-layouts-newer"),
             tr!("fs-layouts-apply"),
             tr!("fs-layouts-save"),
-            tr!("fs-layouts-previous-button"),
-            tr!("fs-layouts-reset-button"),
         ] {
             assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }
@@ -1346,7 +1444,7 @@ mod tests {
             ..Default::default()
         };
         assert!(s.folderstorm_workspaces.window_held);
-        let texts = drawn("preferences-layouts-window", 3, s, false);
+        let texts = drawn("preferences-layouts-window", tab::SAVED, s.clone(), false);
         for icon in [ICON_LOCK, ICON_UNLOCK] {
             assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
         }
@@ -1357,24 +1455,36 @@ mod tests {
             tr!("fs-layouts-mode-borderless"),
             tr!("fs-layouts-mode-pick-borderless"),
             tr!("fs-layouts-lock"),
-            tr!("fs-layouts-unlock-button"),
+        ] {
+            assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
+        }
+        // Unlock and the monitors' rule, on Switching
+        let texts = drawn("preferences-workspaces-switching", tab::SWITCHING, s, false);
+        for expected in [
+            tr!("fs-strip-show"),
+            tr!("fs-layouts-toggle-first"),
+            tr!("fs-switching-keys-button"),
+            tr!("fs-layouts-previous"),
+            tr!("fs-layouts-unlock"),
+            tr!("fs-layouts-reset"),
             tr!("fs-layouts-monitors-ask"),
             tr!("fs-layouts-monitors-apply"),
             tr!("fs-layouts-monitors-nothing"),
+            tr!("fs-context-take-off"),
         ] {
             assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }
     }
 
-    /// The bars' three places are one choice of the World viewport group
-    /// (`preferences-bars-place.png`).
+    /// The bars' three places are one choice of the World viewport group,
+    /// out of its cog (`preferences-bars-place.png`).
     #[test]
     fn the_bars_place_is_one_choice_of_three() {
         let s = Settings {
             folderstorm_viewport: wide(),
             ..Default::default()
         };
-        let texts = drawn("preferences-bars-place", 0, s, true);
+        let texts = drawn("preferences-bars-place", tab::VIEWPORT, s, false);
         for expected in [
             tr!("folderstorm-viewport-bars"),
             tr!("folderstorm-viewport-bars-inside"),
@@ -1383,5 +1493,62 @@ mod tests {
         ] {
             assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }
+    }
+
+    /// The Margins tab with the viewport off: one notice with its button,
+    /// the rows greyed; a click on it turns the viewport on.
+    #[test]
+    fn the_margins_wait_for_the_viewport_behind_one_notice() {
+        let mut w = Window::new();
+        w.tab(tab::MARGINS);
+        assert!(w.shows(tr!("fs-margins-off")));
+        w.changed = false;
+        w.click(tr!("fs-margins-turn-on"));
+        w.settle();
+        assert!(w.s.folderstorm_viewport.enabled && w.changed);
+        assert!(!w.shows(tr!("fs-margins-off")), "no notice once it is on");
+    }
+
+    /// The Saved tab's list: favorites first, then the workspaces, then the
+    /// layouts, each under its title.
+    #[test]
+    fn the_list_puts_the_favorites_first_then_workspaces_then_layouts() {
+        let mut w = Window::new();
+        w.s.folderstorm_workspaces = serde_json::from_value(serde_json::json!({
+            "layouts": [
+                Layout::new("Wide", Some(wide()), None, Vec::new()),
+                Layout::new("Single", Some(Default::default()), None, Vec::new()),
+            ],
+            "workspaces": [
+                { "schema": 1, "name": "Sorting", "open": ["inventory"] },
+                { "schema": 1, "name": "Exploring", "open": ["worldmap"] },
+            ],
+            "favorites": [{ "layout": "Single" }, { "workspace": "Exploring" }],
+        }))
+        .expect("read");
+        let texts = w.settle();
+        let top = |name: &str| texts.iter().find(|t| t.source == name).map(|t| t.rect.top()).unwrap_or_else(|| panic!("{name}"));
+        let favorites = top(&tr!("fs-switcher-favorites").to_uppercase());
+        let workspaces = top(&tr!("fs-workspaces-list").to_uppercase());
+        let layouts = top(&tr!("fs-layouts-list").to_uppercase());
+        assert!(favorites < top("Single") && top("Single") < top("Exploring"));
+        assert!(top("Exploring") < workspaces && workspaces < top("Sorting"));
+        assert!(top("Sorting") < layouts && layouts < top("Wide"));
+    }
+
+    /// Each list's own report: what the last apply did, in one line under
+    /// the buttons.
+    #[test]
+    fn the_report_is_one_line_with_the_rest_on_hover() {
+        let report = Report {
+            name: Some("Wide".into()),
+            windows: 2,
+            fitted: 1,
+            ..Default::default()
+        };
+        let text = report_text(&report, 0);
+        let first = text.split_inclusive(". ").next().unwrap_or(&text).trim_end().to_owned();
+        assert_eq!(first, tr!("fs-layouts-applied-windows", name = "Wide", count = 2));
+        assert_ne!(first, text, "the rest is on hover");
     }
 }
