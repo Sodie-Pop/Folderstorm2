@@ -2,7 +2,7 @@
 //! margins' background and the windows, its shortcuts on the grid, their
 //! hover, selection, drag between cells and menus, the Inventory folders
 //! and the toolbar buttons dropped on it, the name edited in place and
-//! the keyboard on a focused shortcut (F2, Delete, the arrows)
+//! the keyboard on a focused (clicked) shortcut (F2, Delete, the arrows)
 //! (folderstorm/plans/margin-desktop.md, "Drawing order and input",
 //! "Arranging and editing", "Accessibility and keyboard").
 
@@ -543,8 +543,13 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     let by_pointer = response.clicked_by(egui::PointerButton::Primary);
                     // (Enter or Space on the focused one, or the screen reader's click)
                     let by_key = response.clicked() && !by_pointer;
+                    // a click selects and takes the keyboard, so F2, Delete
+                    // and the arrows work at once; a press anywhere else
+                    // (the world, a window, the room) gives it back, as egui
+                    // surrenders a focused widget's focus on a press off it
                     if by_pointer {
                         state.selected = Some(id);
+                        response.request_focus();
                     }
                     let opened = by_key
                         || if desktop.single_click {
