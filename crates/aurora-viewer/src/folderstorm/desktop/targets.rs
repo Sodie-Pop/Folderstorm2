@@ -1300,25 +1300,8 @@ mod tests {
             ..Default::default()
         }]);
         assert_eq!(item_state(&inv, id(9120)), ItemState::Refused);
-        // in a Marketplace listing: not worn
-        let listings = id(9130);
-        inv.folders.insert(
-            listings,
-            crate::world::inventory::Folder {
-                info: aurora_net::inventory::InvFolder {
-                    id: listings,
-                    parent: inv.root,
-                    name: "Marketplace listings".into(),
-                    type_default: crate::world::marketplace::LISTINGS,
-                    version: 1,
-                    ..Default::default()
-                },
-                children: Vec::new(),
-                items: Vec::new(),
-                state: crate::world::inventory::FetchState::Fetched,
-                library: false,
-            },
-        );
+        // in a Marketplace listing (the demo inventory's own folder): not worn
+        let listings = crate::world::marketplace::root(&inv).expect("the demo's Marketplace listings");
         inv.add_items(vec![InvItem {
             id: id(9131),
             parent: listings,
