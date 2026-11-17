@@ -50,7 +50,7 @@ pub const RESERVE_STEP_MB: u32 = 256;
 pub const RELEASE_WAIT: Duration = Duration::from_secs(5);
 /// During the release, a frame is drawn by the viewer itself when the
 /// window got none for this long.
-pub const DRAW_AFTER: Duration = Duration::from_millis(150);
+pub const DRAW_AFTER: Duration = Duration::from_millis(500);
 /// Frames drawn since the release began before it can be done: the first
 /// one pauses the 3D, the next ones draw it with its targets at their
 /// smallest.
