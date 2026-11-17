@@ -60,14 +60,17 @@ pub(in crate::ui::options) fn link(cx: &mut Cx) {
     use aurora_i18n::tr;
     let p = cx.p;
     let on = mcp_bridge::session().unwrap_or(cx.s.local_assistant).enabled;
-    words(cx, &["fs-search-mcp"]).row_with(tr!("fs-mcp-group"), tr!("fs-mcp-link-help"), &Nothing, |ui, _, st, _| {
-        let state = if on { tr!("fs-mcp-link-on") } else { tr!("fs-mcp-status-off") };
-        ui.label(egui::RichText::new(state).size(12.5).color(p.muted));
-        let button = tr!("fs-mcp-link-button");
-        if widgets::action_button(ui, &p, "arrow-right", button, widgets::ActionKind::Flat, egui::vec2(0.0, 26.0)).clicked() {
-            st.go_to = Some((super::super::Page::LocalAssistant, 0, None));
-        }
-        false
+    // its own group, so that the search names its place (Privacy ›)
+    cx.group(tr!("fs-mcp-group"), |cx| {
+        words(cx, &["fs-search-mcp"]).row_with(tr!("fs-mcp-group"), tr!("fs-mcp-link-help"), &Nothing, |ui, _, st, _| {
+            let state = if on { tr!("fs-mcp-link-on") } else { tr!("fs-mcp-status-off") };
+            ui.label(egui::RichText::new(state).size(12.5).color(p.muted));
+            let button = tr!("fs-mcp-link-button");
+            if widgets::action_button(ui, &p, "arrow-right", button, widgets::ActionKind::Flat, egui::vec2(0.0, 26.0)).clicked() {
+                st.go_to = Some((super::super::Page::LocalAssistant, 0, None));
+            }
+            false
+        });
     });
 }
 
