@@ -21,7 +21,9 @@
 //! read it; an outfit is worn as *Replace Current Outfit* of the
 //! Inventory's menu wears it, behind what greys that entry and always
 //! after the question of outfit safety (FEATURES row 2.7), the wearing
-//! itself going through `apply_appearance_action`, RLVa included. A toolbar button's menu
+//! itself going through `apply_appearance_action`, RLVa included; clothing
+//! and an object are added to what is worn through the Inventory's *Add*
+//! (`Action::WearItems { replace: false }`), never replacing anything. A toolbar button's menu
 //! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
 //! is run here), and three keyboard actions of `crate::folderstorm::keys`
 //! show or hide the shortcuts and give the desktop or the taskbar the
@@ -207,7 +209,8 @@ impl App {
     /// (`targets::item_open`, checked again here: what greys it may have
     /// changed since the shortcut was drawn). What cannot open says why.
     fn desktop_open_item(&mut self, item: Uuid, facts: &Facts, no_inventory: bool) {
-        match targets::item_open(&self.world.inventory, item, facts, no_inventory) {
+        let wearing = self.desktop_wearing_now(true);
+        match targets::item_open_worn(&self.world.inventory, item, facts, Some(&wearing), no_inventory) {
             // LLLandmarkBridgeAction::doIt: TeleportFromLandmark asks first
             // (unless its "do not show again" box was ticked); the answer
             // goes through `request_user_teleport`, RLVa included
@@ -216,24 +219,55 @@ impl App {
             // @viewnote and the right to read it (LLPreviewNotecard::loadAsset)
             // before it asks for the content, and opens Aurora's window
             Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item)),
+            // the Inventory's *Add*: added to what is worn, nothing
+            // replaced. What the outfit's plan would refuse (the limit of
+            // attachments, an outfit not loaded yet) is said here: on its
+            // own that message only shows in the Appearance window.
+            Ok(targets::ItemOpen::Add(item)) => {
+                use crate::world::appearance::{Action, plan};
+                let action = Action::WearItems {
+                    items: vec![item],
+                    replace: false,
+                    point: 0,
+                };
+                match plan(&self.world.inventory, action.clone(), &self.world.outfit_attachment_points()) {
+                    // (`apply_appearance_action`: the same plan, then RLVa's
+                    // `rlva_prepare_outfit` and `rlva_allows_command`)
+                    Ok(_) => self.apply_inventory_action(ui::inventory::InvAction::Appearance(action)),
+                    Err(reason) => self.world.system_notice(reason, Topic::Warning),
+                }
+            }
             Err(why) => self.world.system_notice(why.text(), Topic::Warning),
         }
     }
 
-    /// What is worn and what RLVa locks, for the outfit shortcuts; None
-    /// while the desktop has none.
+    /// What is worn and what RLVa locks, for the outfit and the wearable
+    /// shortcuts drawn this frame; None while the desktop has none. What
+    /// is worn is only gathered for a desktop with an item shortcut.
     fn desktop_wearing(&self) -> Option<Wearing> {
         use desktop::store::Target;
         let d = &self.settings.folderstorm_desktop;
-        if !d.shortcuts.iter().any(|s| matches!(s.target, Target::Outfit { .. })) {
+        let items = d.shortcuts.iter().any(|s| matches!(s.target, Target::Item { .. }));
+        if !items && !d.shortcuts.iter().any(|s| matches!(s.target, Target::Outfit { .. })) {
             return None;
         }
-        Some(Wearing {
+        Some(self.desktop_wearing_now(items))
+    }
+
+    /// What is worn (when `worn`) and what RLVa locks, now.
+    fn desktop_wearing_now(&self, worn: bool) -> Wearing {
+        Wearing {
             // (ERlvWearMask, LLAppearanceMgr::getCanReplaceCOF: what greys
             // the Inventory's own entries)
             locks: self.world.rlva_wear_locks(),
+            // (what the Inventory marks "worn")
+            worn: if worn {
+                ui::appearance::items::worn_items(&self.world)
+            } else {
+                Default::default()
+            },
             busy: self.appearance_ui.pending.is_some(),
-        })
+        }
     }
 
     /// Wears the outfit of a shortcut: checked as *Replace Current Outfit*
@@ -242,10 +276,7 @@ impl App {
     /// (`InvAction::Appearance(WearContents)`, from the Inventory's pass,
     /// to `apply_appearance_action`, where RLVa is checked again).
     fn desktop_wear_outfit(&mut self, outfit: Uuid, no_inventory: bool) {
-        let wearing = Wearing {
-            locks: self.world.rlva_wear_locks(),
-            busy: self.appearance_ui.pending.is_some(),
-        };
+        let wearing = self.desktop_wearing_now(false);
         match targets::outfit_open(&self.world.inventory, outfit, Some(&wearing), no_inventory) {
             Ok(()) => self.inventory_ui.folderstorm_ask_outfit(outfit),
             Err(why) => {

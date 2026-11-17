@@ -27,7 +27,8 @@
 //! - `overflow`: the taskbar with twenty collapsed windows (opened at
 //!   frame 200): buttons that are their icon alone, and *More*.
 //! - `items`: the same, and a third column of item shortcuts: a landmark,
-//!   a notecard, an outfit and one whose item is gone. At frame 200 the
+//!   a notecard, an outfit, a shirt that is not worn (opening it adds
+//!   it), a jacket that is (greyed) and one whose item is gone. At frame 200 the
 //!   landmark is opened (Aurora's question before the teleport), at frame
 //!   300 the notecard (its window).
 //! - `outfit`: the same as `items`; at frame 200 the outfit shortcut is
@@ -103,6 +104,11 @@ pub fn outfit() -> Uuid {
     Uuid::from_u128(703)
 }
 
+/// The clothing of `items` that is not worn: opening its shortcut adds it.
+pub fn wearable() -> Uuid {
+    Uuid::from_u128(722)
+}
+
 /// The demo's items, added to the demo's inventory, and their shortcuts
 /// (in the desktop of the demo's account).
 pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inventory, agent: Uuid) {
@@ -139,6 +145,11 @@ pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inve
             item: crate::demo::u(NOTECARD),
         },
         Target::Outfit { outfit: outfit() },
+        // (of the demo's wearables: a spare shirt, the jacket it wears)
+        Target::Item { item: wearable() },
+        Target::Item {
+            item: Uuid::from_u128(715),
+        },
         Target::Item {
             item: crate::demo::u(ITEM_GONE),
         },

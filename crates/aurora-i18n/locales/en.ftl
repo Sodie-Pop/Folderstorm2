@@ -2096,7 +2096,7 @@ fs-background-shows = Shows
 fs-desktop-group = Desktop in the margins
 fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
-fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders, landmarks, notecards and outfits of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders, landmarks, notecards, outfits and clothing and objects of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
 fs-desktop-size = Icon size
 fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
 fs-desktop-size-small = Small
@@ -2122,8 +2122,10 @@ fs-desktop-greyed-outfit-gone = This outfit is no longer in your inventory.
 fs-desktop-greyed-outfit-loading = This outfit is still loading: try again in a moment.
 fs-desktop-greyed-outfit-empty = This outfit has nothing to wear.
 fs-desktop-greyed-busy = An outfit change is under way: try again in a moment.
+fs-desktop-greyed-worn = You are wearing it already.
+fs-desktop-greyed-listing = An item of a Marketplace listing cannot be worn.
 fs-desktop-add = Add to desktop
-fs-desktop-add-refused = Only folders, landmarks, notecards and outfits of your inventory, out of the Trash, can be desktop shortcuts.
+fs-desktop-add-refused = Only folders, landmarks, notecards, outfits and clothing and objects of your inventory, out of the Trash, can be desktop shortcuts.
 fs-desktop-added =
     { $count ->
         [one] Shortcut added to the desktop.

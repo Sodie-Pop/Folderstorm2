@@ -1064,7 +1064,8 @@ What is built is listed kind by kind; each kind is its own commit.
   icon for its type (`ui::inventory::item_icon`, the skin's `Inv_*`); its
   path in the Inventory as tooltip; *Rename*, *Icon ›*, *Move to ›*,
   *Remove* as any shortcut. Its menu's first entry says what opening does
-  (*Teleport* for a landmark, *Open* for a notecard), then *Show in inventory* (the main
+  (*Teleport* for a landmark, *Open* for a notecard, *Add to current
+  outfit* for clothing and objects), then *Show in inventory* (the main
   Inventory window on the item, `InvAction::ShowMain`).
 - **Greyed, with the reason**: not in the inventory ("deleted, or its
   folder is not loaded yet": the inventory loads folder by folder, and
@@ -1176,3 +1177,55 @@ What is built is listed kind by kind; each kind is its own commit.
 - **Not tested here**: the greyed state under an RLVa folder lock
   (`WearLocks` cannot be built outside `world::rlva` without a hook; the
   rule itself is upstream's, with its tests).
+
+### Wearables: clothing and objects, added
+
+Built: Aurora's *Add* made it straightforward.
+
+- **Clothing (asset type 5) and objects (6: attachments, HUDs,
+  accessories)** can be shortcuts. Opening one **adds** it to what is
+  worn, as *Add* of the Inventory's menu does:
+  `Action::WearItems { items: [item], replace: false, point: 0 }` through
+  `apply_inventory_action(InvAction::Appearance(…))`. Nothing is replaced:
+  clothing goes on as one more layer, an object on its own point beside
+  what is there. A shortcut never takes anything off.
+- **A body part (13) is never a shortcut** (refused when added, greyed
+  "This kind of item cannot be opened from the desktop" if one is in the
+  file): a shape, a skin, hair or eyes can only **replace** the one worn
+  (the Inventory offers *Wear* alone for it), and the human asked for
+  "add, never replace".
+- **Behind what greys *Add*** (`item_attachments` of
+  `ui/inventory/context_catalog.rs`; ERlvWearMask in
+  LLWearableBridge / LLObjectBridge::buildContextMenu): greyed "You are
+  wearing it already" while worn (`ui::appearance::items::worn_items`:
+  what the Inventory marks worn), "Blocked by RLVa" while a wear lock
+  forbids adding it (`WearLocks::wear(…).add`: `@addoutfit`,
+  `@addattach`, a locked point or layer, a locked folder), and an item of
+  a Marketplace listing is never worn (AlertMerchantListingCannotWear).
+  "An outfit change is under way" is said when it is opened.
+- **Limits**: before the action is handed over, the glue runs
+  `appearance::plan` on it, and what it refuses (the 38 attachments, an
+  outfit not loaded yet) is said in the chat's notices; on its own that
+  message only shows in the Appearance window. Then
+  `apply_appearance_action` runs the same plan and RLVa's
+  `rlva_prepare_outfit` / `rlva_allows_command`.
+- **Outfit safety** (row 2.7) greys *Wear* (which replaces) and makes the
+  folder entries ask; it leaves *Add* and the double click as they are,
+  and so does the desktop: no question before an item is added. The
+  double click of the Inventory can replace (by a preference); the
+  shortcut never does.
+- **The Library**: refused (wearing an item of the Library first copies
+  it into the inventory, and Aurora's *Add* is greyed there).
+- **What is worn is gathered** once a frame, only for a desktop that has
+  an item shortcut (`desktop_wearing`), and RLVa's locks cost nothing
+  while RLVa locks nothing.
+- **Not tested here**: the greyed state under an RLVa wear lock (as for
+  the outfits), and the app's arms themselves (a teleport question set,
+  an action applied): they need an `App`. The rules they call are tested.
+- **A place for later** (asked for after this checkpoint: an "X" on a
+  worn object's shortcut that detaches it): the face of a worn wearable
+  is already known (`Greyed::Worn`, with its item), so the "X" is a small
+  hit area on that face in `surface.rs`, a `Request::Detach(item)`, and
+  the glue's `Action::Remove(item)` through `apply_appearance_action`
+  (RLVa's `@remattach` / `@detach` are checked there, and `WearLocks`
+  says beforehand whether to show it).

@@ -742,6 +742,17 @@ fn the_demo_seeds_its_desktops() {
         Ok(()),
         "the demo's outfit can be worn"
     );
+    assert!(
+        desktop
+            .shortcuts
+            .iter()
+            .any(|s| s.target == Target::Item { item: demo::wearable() })
+    );
+    assert_eq!(
+        super::targets::item_open(&inv, demo::wearable(), &Facts::default(), false),
+        Ok(super::targets::ItemOpen::Add(demo::wearable())),
+        "the demo's shirt can be added"
+    );
     assert!(demo::seed("outfit", &mut desktop, &mut view, 5760));
     // the demo's desktop drawn: every size holds its names in its cells
     for size in Size::ALL {

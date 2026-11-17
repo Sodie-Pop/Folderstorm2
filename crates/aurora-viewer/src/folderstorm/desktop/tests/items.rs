@@ -1,6 +1,7 @@
 //! Frame tests of the item shortcuts (checkpoint 5 of the plan): a
 //! landmark and a notecard on a desktop, drawn, opened, greyed, hidden by
-//! RLVa, dropped from the Inventory; an outfit, worn after a question.
+//! RLVa, dropped from the Inventory; an outfit, worn after a question; clothing and
+//! objects, added.
 
 use super::*;
 use crate::folderstorm::desktop::targets::{self, Greyed};
@@ -467,4 +468,43 @@ fn an_outfit_shortcut_asks_to_be_worn_and_keeps_its_folder_s_window_in_its_menu(
     b.double_click(b.cell_of(window).center());
     assert_eq!(b.opened(), vec![outfit]);
     assert!(b.out.iter().all(|r| !matches!(r, Request::WearOutfit(_))));
+}
+
+/// Wearables of the bench's inventory (the demo's): a shirt that is not
+/// worn, a jacket.
+const SHIRT: u128 = 722;
+const JACKET: u128 = 715;
+
+#[test]
+fn a_wearable_shortcut_asks_to_be_added_and_is_greyed_while_worn() {
+    let mut b = Bench::with_items();
+    let shirt = b.add_item(SHIRT, 0, (0, 0));
+    let jacket = b.add_item(JACKET, 0, (0, 1));
+    b.frames(3);
+    let name = b.inv.items.get(&Uuid::from_u128(SHIRT)).expect("there").name.clone();
+    assert!(b.drawn(&name).is_some_and(|text| b.cell_of(shirt).contains_rect(text)));
+    b.picture("desktop-wearable");
+    // opening asks for the item to be added: the glue's Add, never Wear
+    b.double_click(b.cell_of(shirt).center());
+    assert_eq!(b.opened_items(), vec![Uuid::from_u128(SHIRT)]);
+    b.out.clear();
+    b.menu(
+        b.cell_of(shirt).center(),
+        aurora_i18n::tr!("ui-inventory-context-add-to-current-outfit"),
+    );
+    assert_eq!(b.out, vec![Request::OpenItem(Uuid::from_u128(SHIRT))]);
+    assert!(b.drawn(aurora_i18n::tr!("common-wear")).is_none());
+    // dropped from the Inventory: clothing is welcome, a body part is not
+    let mut b = Bench::with_items();
+    b.frames(3);
+    b.drop_inventory(&[ITEM, SHIRT], b.room(0).grid.rect((1, 1)).center());
+    let targets: Vec<_> = b.desktop.shortcuts.iter().map(|s| s.target.clone()).collect();
+    assert_eq!(
+        targets,
+        vec![Target::Item {
+            item: Uuid::from_u128(SHIRT)
+        }]
+    );
+    assert_eq!(b.notices(), vec![aurora_i18n::tr!("fs-desktop-left-out", count = 1).as_str()]);
+    let _ = jacket;
 }

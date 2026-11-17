@@ -19,6 +19,12 @@
 //! `InvAction::Preview`, the Inventory's own *Open*: that path checks the
 //! right to read it (LLPreviewNotecard::loadAsset: copy, or a god) and
 //! RLVa's `@viewnote`; nothing of its content is read here.
+//! Clothing and an object (an attachment, a HUD) are **added** to what is
+//! worn, never replacing it: the Inventory's *Add*
+//! (`Action::WearItems { replace: false }`), behind what greys that entry
+//! (worn already, RLVa's wear locks: ERlvWearMask in LLWearableBridge and
+//! LLObjectBridge::buildContextMenu; an item of a Marketplace listing). A
+//! body part can only replace the one worn, so it is never a shortcut.
 //!
 //! An outfit shortcut keeps the id of an outfit folder of My Outfits.
 //! Opening it wears the outfit as *Replace Current Outfit* of the
@@ -205,6 +211,10 @@ pub enum Greyed {
     OutfitEmpty,
     /// An outfit change is under way.
     Busy,
+    /// The clothing or the object is worn already.
+    Worn,
+    /// An item of a Marketplace listing is not worn.
+    Listing,
 }
 
 impl Greyed {
@@ -226,6 +236,8 @@ impl Greyed {
             Greyed::OutfitLoading => tr!("fs-desktop-greyed-outfit-loading"),
             Greyed::OutfitEmpty => tr!("fs-desktop-greyed-outfit-empty"),
             Greyed::Busy => tr!("fs-desktop-greyed-busy"),
+            Greyed::Worn => tr!("fs-desktop-greyed-worn"),
+            Greyed::Listing => tr!("fs-desktop-greyed-listing"),
         }
     }
 
@@ -280,6 +292,9 @@ pub enum ItemKind {
     /// Opening it opens Aurora's notecard window, as the Inventory's
     /// *Open* does.
     Notecard,
+    /// Clothing or an object: opening it adds it to what is worn (the
+    /// Inventory's *Add*), never replacing anything.
+    Wearable,
 }
 
 impl ItemKind {
@@ -289,16 +304,22 @@ impl ItemKind {
         match asset_type {
             3 => Some(ItemKind::Landmark),
             7 => Some(ItemKind::Notecard),
+            // (clothing, objects; a body part, 13, can only replace the
+            // one worn: LLWearableBridge, "wear" alone for a body part)
+            5 | 6 => Some(ItemKind::Wearable),
             _ => None,
         }
     }
 
     /// Whether an item of the Library can be a shortcut: what only reads
     /// it may (the Legacy Viewer teleports to a landmark of the Library,
-    /// and opens a notecard of it when its rights allow).
+    /// and opens a notecard of it when its rights allow). What is worn
+    /// is not: wearing an item of the Library first copies it into the
+    /// inventory, and Aurora's *Add* is greyed there.
     pub fn library(self) -> bool {
         match self {
             ItemKind::Landmark | ItemKind::Notecard => true,
+            ItemKind::Wearable => false,
         }
     }
 
@@ -307,6 +328,7 @@ impl ItemKind {
         match self {
             ItemKind::Landmark => tr!("common-teleport"),
             ItemKind::Notecard => tr!("fs-desktop-open"),
+            ItemKind::Wearable => tr!("ui-inventory-context-add-to-current-outfit"),
         }
     }
 }
@@ -382,11 +404,16 @@ pub enum ItemOpen {
     /// *Open* does: `InvAction::Preview`, which checks the right to read
     /// it before anything is asked of the grid.
     Notecard(Uuid),
+    /// Add this clothing or object (the item, a link followed) to what is
+    /// worn, as the Inventory's *Add* does
+    /// (`Action::WearItems { replace: false, point: 0 }`).
+    Add(Uuid),
 }
 
 /// Whether the live item `original` of `kind` opens now: what greys its
-/// entry in the Inventory's menu.
-fn item_gate(inv: &Inventory, original: Uuid, kind: ItemKind, facts: &Facts) -> Result<(), Greyed> {
+/// entry in the Inventory's menu. `wear`: None reads as nothing worn and
+/// nothing locked.
+fn item_gate(inv: &Inventory, original: Uuid, kind: ItemKind, facts: &Facts, wear: Option<&Wearing>) -> Result<(), Greyed> {
     let Some(item) = inv.items.get(&original) else {
         return Err(Greyed::ItemGone);
     };
@@ -400,12 +427,37 @@ fn item_gate(inv: &Inventory, original: Uuid, kind: ItemKind, facts: &Facts) -> 
         // the Inventory's own path)
         ItemKind::Notecard if !inv.can_preview(7) => Err(Greyed::Rlva),
         ItemKind::Notecard => Ok(()),
+        // the Inventory's *Add* (`item_attachments`): not what is worn
+        // already, not what an RLVa lock forbids adding; and nothing of a
+        // Marketplace listing is worn (AlertMerchantListingCannotWear)
+        ItemKind::Wearable => {
+            if crate::world::marketplace::root(inv).is_some_and(|root| rules::under(inv, original, root)) {
+                return Err(Greyed::Listing);
+            }
+            let Some(wear) = wear else {
+                return Ok(());
+            };
+            if wear.worn.contains(&original) {
+                Err(Greyed::Worn)
+            } else if !wear.locks.wear(inv, original, 0).add {
+                Err(Greyed::Rlva)
+            } else {
+                Ok(())
+            }
+        }
     }
 }
 
-/// What opening the shortcut to the item `id` does now, or why it does
-/// not open. `no_inventory`: RLVa hides the Inventory (`@showinv`).
+/// [`item_open_worn`] with nothing worn and nothing locked.
+#[cfg(test)]
 pub fn item_open(inv: &Inventory, id: Uuid, facts: &Facts, no_inventory: bool) -> Result<ItemOpen, Greyed> {
+    item_open_worn(inv, id, facts, None, no_inventory)
+}
+
+/// What opening the shortcut to the item `id` does now, or why it does
+/// not open. `wear`: what is worn and what RLVa locks; `no_inventory`:
+/// RLVa hides the Inventory (`@showinv`).
+pub fn item_open_worn(inv: &Inventory, id: Uuid, facts: &Facts, wear: Option<&Wearing>, no_inventory: bool) -> Result<ItemOpen, Greyed> {
     if no_inventory {
         return Err(Greyed::Rlva);
     }
@@ -416,7 +468,11 @@ pub fn item_open(inv: &Inventory, id: Uuid, facts: &Facts, no_inventory: bool) -
         ItemState::Refused => return Err(Greyed::ItemOther),
         ItemState::Unknown => return Err(Greyed::NotYet),
     };
-    item_gate(inv, original, kind, facts)?;
+    item_gate(inv, original, kind, facts, wear)?;
+    // (said when it is opened, not drawn: it lasts a moment)
+    if kind == ItemKind::Wearable && wear.is_some_and(|wear| wear.busy) {
+        return Err(Greyed::Busy);
+    }
     let item = inv.items.get(&original).ok_or(Greyed::ItemGone)?;
     Ok(match kind {
         ItemKind::Landmark => ItemOpen::Teleport {
@@ -424,6 +480,7 @@ pub fn item_open(inv: &Inventory, id: Uuid, facts: &Facts, no_inventory: bool) -
             name: item.name.clone(),
         },
         ItemKind::Notecard => ItemOpen::Notecard(original),
+        ItemKind::Wearable => ItemOpen::Add(original),
     })
 }
 
@@ -498,13 +555,16 @@ pub fn outfit_state(inv: &Inventory, id: Uuid) -> FolderState {
     }
 }
 
-/// What the app knows of what is worn this frame, for the outfit
-/// shortcuts.
+/// What the app knows of what is worn this frame, for the outfit and the
+/// wearable shortcuts.
 #[derive(Clone, Default)]
 pub struct Wearing {
     /// What RLVa's locks leave of wearing (`World::rlva_wear_locks`, what
     /// greys the Inventory's own entries).
     pub locks: WearLocks,
+    /// The items worn now (`ui::appearance::items::worn_items`: what the
+    /// Inventory marks "worn").
+    pub worn: std::collections::HashSet<Uuid>,
     /// An outfit change is under way (`AppearanceUi::pending`).
     pub busy: bool,
 }
@@ -597,8 +657,9 @@ pub struct Folders<'a> {
     /// The colours the user gave folders in the Inventory (Aurora's folder
     /// colours); None while they are turned off.
     pub colors: Option<&'a BTreeMap<Uuid, [u8; 3]>>,
-    /// What is worn and what RLVa locks, for the outfit shortcuts; None
-    /// when the desktop has none (nothing is then greyed for it).
+    /// What is worn and what RLVa locks, for the outfit and the wearable
+    /// shortcuts; None when the desktop has none (nothing is then greyed
+    /// for it).
     pub wear: Option<&'a Wearing>,
 }
 
@@ -840,7 +901,7 @@ fn item_face(shortcut: &Shortcut, id: Uuid, facts: &Facts, folders: &Folders) ->
         name: shortcut.name.clone().unwrap_or_else(|| item.name.clone()),
         target_name: item.name.clone(),
         icon: shortcut.icon.clone().unwrap_or_else(|| own.to_owned()),
-        greyed: item_gate(inv, original, kind, facts).err(),
+        greyed: item_gate(inv, original, kind, facts, folders.wear).err(),
         folder: None,
         item: Some(original),
         verb: kind.verb(),
@@ -1153,6 +1214,126 @@ mod tests {
         );
     }
 
+    /// Wearables of the demo inventory (`world::appearance::seed_demo`): a
+    /// shirt and an attachment that are not worn, a jacket of the current
+    /// outfit, a body part.
+    const SHIRT: u128 = 722;
+    const ATTACHMENT: u128 = 723;
+    const JACKET: u128 = 715;
+    const SHAPE: u128 = 710;
+
+    #[test]
+    fn clothing_and_objects_are_added_never_replaced_and_a_body_part_is_no_shortcut() {
+        use aurora_net::inventory::InvItem;
+        let mut inv = inventory();
+        let free = Facts::default();
+        let live = |n: u128| ItemState::Live {
+            original: id(n),
+            kind: ItemKind::Wearable,
+        };
+        assert_eq!(item_state(&inv, id(SHIRT)), live(SHIRT));
+        assert_eq!(item_state(&inv, id(ATTACHMENT)), live(ATTACHMENT));
+        assert_eq!(item_state(&inv, id(9004)), live(9004), "an object");
+        // a body part can only replace the one worn
+        assert_eq!(item_state(&inv, id(SHAPE)), ItemState::Refused);
+        assert_eq!(pick(&inv, &[id(SHAPE), id(SHIRT)]).targets, vec![Target::Item { item: id(SHIRT) }]);
+        // opening adds: the item's id, to the Inventory's Add
+        assert_eq!(item_open(&inv, id(SHIRT), &free, false), Ok(ItemOpen::Add(id(SHIRT))));
+        assert_eq!(item_open(&inv, id(ATTACHMENT), &free, false), Ok(ItemOpen::Add(id(ATTACHMENT))));
+        // through a link of an outfit to it
+        let link = inv
+            .items
+            .values()
+            .find(|it| it.asset_type == 24 && it.asset_id == id(JACKET))
+            .map(|it| it.id)
+            .expect("an outfit links the jacket");
+        assert_eq!(item_state(&inv, link), live(JACKET));
+        // worn already: greyed, nothing is added (nor taken off)
+        let wearing = Wearing {
+            worn: [id(JACKET)].into(),
+            ..Default::default()
+        };
+        let open = |inv: &Inventory, n: u128, wear: &Wearing| item_open_worn(inv, id(n), &free, Some(wear), false);
+        assert_eq!(open(&inv, JACKET, &wearing), Err(Greyed::Worn));
+        assert_eq!(open(&inv, SHIRT, &wearing), Ok(ItemOpen::Add(id(SHIRT))));
+        // an outfit change under way: said when opened
+        let busy = Wearing {
+            busy: true,
+            ..Default::default()
+        };
+        assert_eq!(open(&inv, SHIRT, &busy), Err(Greyed::Busy));
+        // @showinv
+        assert_eq!(item_open(&inv, id(SHIRT), &free, true), Err(Greyed::Rlva));
+        // its face: the Inventory's icon of its type, *Add to current outfit*
+        let folders = Folders {
+            inv: &inv,
+            no_inventory: false,
+            colors: None,
+            wear: Some(&wearing),
+        };
+        let shirt = face(&item_shortcut(SHIRT), &free, &folders);
+        let own = inv.items.get(&id(SHIRT)).expect("there");
+        assert_eq!(shirt.icon, crate::ui::inventory::item_icon(own.asset_type, own.inv_type, own.flags));
+        assert_eq!(
+            (shirt.greyed, shirt.verb),
+            (None, tr!("ui-inventory-context-add-to-current-outfit"))
+        );
+        let jacket = face(&item_shortcut(JACKET), &free, &folders);
+        assert_eq!((jacket.greyed, jacket.item), (Some(Greyed::Worn), Some(id(JACKET))));
+        assert!(jacket.tip().contains(Greyed::Worn.text()));
+        // busy does not grey what is drawn
+        let drawn_busy = Folders {
+            wear: Some(&busy),
+            ..folders
+        };
+        assert_eq!(face(&item_shortcut(SHIRT), &free, &drawn_busy).greyed, None);
+        // of the Library: never (wearing it would first copy it)
+        inv.add_items(vec![InvItem {
+            id: id(9120),
+            parent: id(9002),
+            name: "Library shirt".into(),
+            asset_type: 5,
+            inv_type: 18,
+            flags: 4,
+            owner: inv.lib_owner,
+            everyone_mask: rules::COPY,
+            ..Default::default()
+        }]);
+        assert_eq!(item_state(&inv, id(9120)), ItemState::Refused);
+        // in a Marketplace listing: not worn
+        let listings = id(9130);
+        inv.folders.insert(
+            listings,
+            crate::world::inventory::Folder {
+                info: aurora_net::inventory::InvFolder {
+                    id: listings,
+                    parent: inv.root,
+                    name: "Marketplace listings".into(),
+                    type_default: crate::world::marketplace::LISTINGS,
+                    version: 1,
+                    ..Default::default()
+                },
+                children: Vec::new(),
+                items: Vec::new(),
+                state: crate::world::inventory::FetchState::Fetched,
+                library: false,
+            },
+        );
+        inv.add_items(vec![InvItem {
+            id: id(9131),
+            parent: listings,
+            name: "Shirt for sale".into(),
+            asset_type: 5,
+            inv_type: 18,
+            flags: 4,
+            owner: id(42),
+            owner_mask: rules::FULL,
+            base_mask: rules::FULL,
+            ..Default::default()
+        }]);
+        assert_eq!(item_open(&inv, id(9131), &free, false), Err(Greyed::Listing));
+    }
+
     /// Outfits of the demo inventory (`world::appearance::seed_demo`): one
     /// that holds nothing, one with clothes and attachments.
     const EMPTY_OUTFIT: u128 = 702;
@@ -1430,19 +1611,19 @@ mod tests {
         let inv = inventory();
         let ids = |list: &[u128]| list.iter().map(|n| Uuid::from_u128(*n)).collect::<Vec<_>>();
         // folders once each, in the selection's order; a link gives its folder
-        let picked = pick(&inv, &ids(&[SUB, MINE, 9003, 9004, 9001, 9002, 123_456]));
+        let picked = pick(&inv, &ids(&[SUB, MINE, 9003, 9105, 9001, 9002, 123_456]));
         assert_eq!(picked.folders(), ids(&[SUB, MINE]));
         assert_eq!(picked.left_out, 4, "an item, the Trash's, the Library's, an unknown id");
         assert_eq!(pick(&inv, &ids(&[9003])).folders(), ids(&[SUB]));
         // nothing to add says why
-        assert_eq!(offer(&inv, &ids(&[9004]), false), Err(Refusal::Nothing));
+        assert_eq!(offer(&inv, &ids(&[9105]), false), Err(Refusal::Nothing));
         assert_eq!(offer(&inv, &ids(&[9001, 9002]), false), Err(Refusal::Nothing));
         assert_eq!(offer(&inv, &[], false), Err(Refusal::Nothing));
         assert_eq!(offer(&inv, &[inv.root], false), Err(Refusal::Nothing));
         // @showinv: nothing is added
         assert_eq!(offer(&inv, &ids(&[MINE]), true), Err(Refusal::Rlva));
         assert_eq!(
-            offer(&inv, &ids(&[MINE, 9004]), false).map(|p| (p.targets.len(), p.left_out)),
+            offer(&inv, &ids(&[MINE, 9105]), false).map(|p| (p.targets.len(), p.left_out)),
             Ok((1, 1))
         );
     }

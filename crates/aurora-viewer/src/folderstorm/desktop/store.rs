@@ -93,7 +93,7 @@ pub enum Target {
     Folder { folder: Uuid },
     /// A command of the toolbar catalogue, by its id.
     Command { command: String },
-    /// An Inventory item of the desktop's account (a landmark, a notecard): its item
+    /// An Inventory item of the desktop's account (a landmark, a notecard, clothing, an object): its item
     /// id there, a link followed when it was added. Never its asset id,
     /// its name or its kind, which are read from the inventory when it is
     /// drawn or opened.

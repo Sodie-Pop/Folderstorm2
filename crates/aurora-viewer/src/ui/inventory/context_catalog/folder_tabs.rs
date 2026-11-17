@@ -7,7 +7,7 @@
 //! And "Add to desktop" (the margins' desktop, FEATURES row 1.10): a
 //! shortcut to each folder of the selection (an outfit's folder gives an
 //! outfit shortcut, which wears it), and to each item of a kind a
-//! shortcut opens (a landmark, a notecard), through `InvAction::FolderstormDesktopAdd`.
+//! shortcut opens (a landmark, a notecard, clothing, an object), through `InvAction::FolderstormDesktopAdd`.
 //! Which folders and items can be shortcuts is in
 //! `crate::folderstorm::desktop::targets`.
 use super::*;

@@ -13,7 +13,8 @@
 //! landmark: the teleport, after Aurora's question; a notecard: its
 //! window); it keeps the item's id, never its asset's. A shortcut to an
 //! outfit wears it, as *Replace Current Outfit* does, after the question
-//! of outfit safety.
+//! of outfit safety; one to clothing or an object adds it to what is
+//! worn, as the Inventory's *Add* does, never replacing anything.
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
@@ -91,7 +92,7 @@ pub enum Request {
     ShowFolder(Uuid),
     /// Open this item of the Inventory as the Inventory opens its kind (a
     /// landmark: teleport there, after Aurora's question; a notecard: its
-    /// window).
+    /// window; clothing or an object: added to what is worn).
     OpenItem(Uuid),
     /// Show this item in the main Inventory window.
     ShowItem(Uuid),
