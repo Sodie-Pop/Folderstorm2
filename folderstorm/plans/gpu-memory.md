@@ -172,11 +172,11 @@ and its settings page.
 - Demo: `AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_MEMORY=economy,512`
   (`docs/TESTING.md`).
 
-## Proposed, not changed
+## Decided
 
-**Economy as the default standby for new characters.** It now frees what
-the UI says, and coming back costs a second or two of loading. Warm stays
-the default until the human decides.
+**Warm stays the default standby for new characters** (the human's choice,
+2026-11-17). Economy now frees what the UI says and costs a second or two of
+loading on return; it remains a per-character choice.
 
 ## Left
 
