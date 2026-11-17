@@ -17,13 +17,17 @@
 //! A shortcut keeps a command id, an inventory folder id or an inventory
 //! item id, never an asset id, a name read from the inventory or a window
 //! title: what it shows, and what kind of item it opens, is read when it
-//! is drawn. Only a name the user typed is saved.
+//! is drawn. Only a name the user typed is saved. A shortcut's icon style
+//! ([`super::style`]) keeps a colour, the name of a picture copied into
+//! the account's folder, or an Inventory texture's item id (never its
+//! asset id).
 //!
 //! Reading never fails and never loses what it cannot use: a shortcut that
 //! cannot be read (a newer version's target, a damaged file) is kept as it
 //! was read ([`Desktop::kept`]) and written back unchanged; values out of
 //! their range are brought back into it.
 
+use super::style::{Picture, Style};
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
@@ -130,6 +134,11 @@ pub struct Shortcut {
     /// A Tabler icon shown instead of the target's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// The icon's colour, or a picture instead of it ([`super::style`]);
+    /// left out while it is the default, read leniently (an older file has
+    /// none, a damaged one loses only what cannot be read).
+    #[serde(default, skip_serializing_if = "Style::is_default", deserialize_with = "super::style::lenient")]
+    pub style: Style,
 }
 
 impl Shortcut {
@@ -143,6 +152,7 @@ impl Shortcut {
         self.row = self.row.min(MAX_CELL - 1);
         self.name = self.name.map(|n| clean_name(&n)).filter(|n| !n.is_empty());
         self.icon = self.icon.map(|i| clean_name(&i)).filter(|i| !i.is_empty());
+        self.style = self.style.normalized();
         self
     }
 }
@@ -451,6 +461,7 @@ impl Desktop {
                 row,
                 name: None,
                 icon: None,
+                style: Default::default(),
             }
             .normalized(),
         );
@@ -499,16 +510,64 @@ impl Desktop {
     }
 
     /// Gives the shortcut `id` the icon `icon` (a Tabler name); None gives
-    /// it its target's own back. True when its icon changed.
+    /// it its target's own back. Either way an icon is shown again: a
+    /// picture it wore goes (its colour stays). True when it changed.
     pub fn set_icon(&mut self, id: u32, icon: Option<&str>) -> bool {
         let icon = icon.map(clean_name).filter(|icon| !icon.is_empty());
         match self.shortcut_mut(id) {
-            Some(shortcut) if shortcut.icon != icon => {
+            Some(shortcut) if shortcut.icon != icon || shortcut.style.picture.is_some() => {
                 shortcut.icon = icon;
+                shortcut.style.picture = None;
                 true
             }
             _ => false,
         }
+    }
+
+    /// Gives the icon of the shortcut `id` the colour `colour`; None gives
+    /// it the theme's (or its folder's) back. True when it changed.
+    pub fn set_colour(&mut self, id: u32, colour: Option<[u8; 3]>) -> bool {
+        match self.shortcut_mut(id) {
+            Some(shortcut) if shortcut.style.colour != colour => {
+                shortcut.style.colour = colour;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Shows `picture` instead of the icon of the shortcut `id` (None: the
+    /// icon again). A picture that cannot be used (not one of our copies, a
+    /// nil texture) is none. True when it changed.
+    pub fn set_picture(&mut self, id: u32, picture: Option<Picture>) -> bool {
+        let picture = Style { colour: None, picture }.normalized().picture;
+        match self.shortcut_mut(id) {
+            Some(shortcut) if shortcut.style.picture != picture => {
+                shortcut.style.picture = picture;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The shortcut `id` as its target shows it: its target's own icon, in
+    /// the theme's colour, without a picture. True when it changed.
+    pub fn reset_icon(&mut self, id: u32) -> bool {
+        match self.shortcut_mut(id) {
+            Some(shortcut) if shortcut.icon.is_some() || !shortcut.style.is_default() => {
+                shortcut.icon = None;
+                shortcut.style = Style::default();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The copies of pictures the account logged in refers to: its
+    /// shortcuts', and those of its shortcuts this version keeps unread
+    /// (what [`super::style::prune`] keeps).
+    pub fn pictures(&self) -> std::collections::BTreeSet<String> {
+        super::style::referenced(self.shortcuts.iter().map(|s| &s.style), &self.kept)
     }
 
     /// Puts the shortcuts `order` of `slot` in a grid of `rows` rows, from
@@ -593,6 +652,93 @@ mod tests {
         assert_eq!(d.unused(&[0, 2]), 0);
         assert_eq!(d.unused(&[0]), 1);
         assert_eq!(d.unused(&[]), 3);
+    }
+
+    #[test]
+    fn an_icon_s_colour_and_picture_are_kept_with_the_account_s_desktop() {
+        let account = Uuid::from_u128(1);
+        let mut d = Desktop::default();
+        d.sign_in(account);
+        let people = d.add(Target::command("people"), 0, (0, 0)).expect("added");
+        let map = d.add(Target::command("worldmap"), 0, (0, 1)).expect("added");
+        let build = d.add(Target::command("build"), 0, (0, 2)).expect("added");
+        // nothing chosen: no style written
+        let value = written(&d);
+        let mine = &value["accounts"][account.to_string()]["shortcuts"];
+        assert!(mine[0].get("style").is_none());
+        // a colour, a copied picture, an Inventory texture (its item id)
+        assert!(d.set_colour(people, Some([0x30, 0xA4, 0x6C])));
+        assert!(!d.set_colour(people, Some([0x30, 0xA4, 0x6C])));
+        let file = Picture::File {
+            file: "0123456789abcdef.png".into(),
+            name: "cat.png".into(),
+        };
+        assert!(d.set_picture(map, Some(file.clone())));
+        let texture = Picture::Texture {
+            texture: Uuid::from_u128(9001),
+        };
+        assert!(d.set_picture(build, Some(texture.clone())));
+        // a path or a nil texture is never kept
+        assert!(!d.set_picture(
+            people,
+            Some(Picture::File {
+                file: "/etc/x.png".into(),
+                name: String::new()
+            })
+        ));
+        assert!(!d.set_picture(people, Some(Picture::Texture { texture: Uuid::nil() })));
+        let value = written(&d);
+        let mine = &value["accounts"][account.to_string()]["shortcuts"];
+        assert_eq!(mine[0]["style"], json!({ "colour": [0x30, 0xA4, 0x6C] }));
+        assert_eq!(
+            mine[1]["style"],
+            json!({ "picture": { "file": "0123456789abcdef.png", "name": "cat.png" } })
+        );
+        assert_eq!(mine[2]["style"], json!({ "picture": { "texture": Uuid::from_u128(9001) } }));
+        assert!(value.to_string().find(&Uuid::from_u128(9001 + 0x1000).to_string()).is_none());
+        // read back the same, for that account only
+        let mut back = Desktop::from_value(value.clone());
+        back.sign_in(account);
+        assert_eq!(back.shortcuts, d.shortcuts);
+        assert_eq!(written(&back), value);
+        assert_eq!(back.pictures(), ["0123456789abcdef.png".to_owned()].into());
+        // a stock icon chosen takes the picture's place; the colour stays
+        d.set_colour(map, Some([1, 2, 3]));
+        assert!(d.set_icon(map, Some("star-filled")));
+        let s = d.shortcut(map).expect("kept");
+        assert_eq!((s.style.picture.clone(), s.style.colour), (None, Some([1, 2, 3])));
+        d.set_picture(map, Some(file));
+        assert!(d.set_icon(map, None), "Default: the picture goes too");
+        assert_eq!(d.shortcut(map).and_then(|s| s.style.picture.clone()), None);
+        // reset: everything of the icon
+        assert!(d.reset_icon(map));
+        assert!(!d.reset_icon(map));
+        assert!(d.shortcut(map).is_some_and(|s| s.icon.is_none() && s.style.is_default()));
+        assert!(d.set_picture(build, None));
+        assert!(!d.set_colour(999, None));
+    }
+
+    #[test]
+    fn a_desktop_without_styles_loads_as_it_was_and_a_damaged_style_loses_only_itself() {
+        // checkpoint 5's file: no `style` anywhere
+        let account = Uuid::from_u128(1);
+        let old = json!({
+            "shortcuts_on": true,
+            "accounts": { (account.to_string()): { "next_id": 3, "shortcuts": [
+                { "id": 1, "target": { "command": "people" }, "slot": 0, "col": 0, "row": 0, "icon": "star-filled" },
+                { "id": 2, "target": { "item": Uuid::from_u128(7) }, "slot": 0, "col": 0, "row": 1,
+                  "style": { "colour": "green", "picture": { "file": "../../x.png" } } },
+            ] } },
+        });
+        let mut read = Desktop::from_value(old);
+        read.sign_in(account);
+        assert_eq!(read.shortcuts.len(), 2, "both shortcuts load");
+        assert!(read.kept.is_empty());
+        assert!(read.shortcuts.iter().all(|s| s.style.is_default()));
+        assert_eq!(read.shortcut(1).and_then(|s| s.icon.as_deref()), Some("star-filled"));
+        // written back without a style
+        let value = written(&read);
+        assert!(value["accounts"][account.to_string()]["shortcuts"][1].get("style").is_none());
     }
 
     #[test]

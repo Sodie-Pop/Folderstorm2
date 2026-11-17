@@ -139,6 +139,7 @@ impl App {
         let env = desktop::Env {
             p,
             icons: &self.skin.icons,
+            images: &self.ui_images,
             facts,
             folders: Folders {
                 inv: &self.world.inventory,
@@ -198,6 +199,12 @@ impl App {
                 // (Aurora's window of every command: one is dragged from
                 // it onto a desktop)
                 Request::ToolbarButtons => self.toolbar_ui.open = true,
+                // an Inventory texture a shortcut wears, fetched as the
+                // Inventory's own images are: the app drains that set each
+                // frame into `ui_images` (no hook of our own in app.rs)
+                Request::Fetch(asset) => {
+                    self.inventory_ui.wanted_images.insert(asset);
+                }
             }
         }
         // saved once the pointer is up, as the gesture boards are

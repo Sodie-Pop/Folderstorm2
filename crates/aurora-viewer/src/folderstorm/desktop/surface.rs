@@ -9,6 +9,7 @@
 
 use super::place::Grid;
 use super::store::{Desktop, Error, MAX_NAME, MAX_SHORTCUTS, Size, Target};
+use super::style_ui::{self, Drawn, Edit};
 use super::targets::{self, Face, Greyed};
 use super::{Env, Request};
 use crate::theme::Palette;
@@ -124,6 +125,10 @@ enum Op {
     },
     /// An icon of [`super::icons::CHOICES`]; None: its target's own.
     Icon(u32, Option<&'static str>),
+    /// Its colour or picture ([`style_ui::Edit`]).
+    Style(Edit),
+    /// The window *Shortcut icon* on this shortcut.
+    EditStyle(u32),
     /// To the first free cell of another monitor's desktop.
     MoveTo {
         id: u32,
@@ -155,6 +160,10 @@ const ICON_WINDOW: &str = "app-window-filled";
 const ICON_RENAME: &str = "pencil-filled";
 const ICON_ICON: &str = "mood-smile-filled";
 const ICON_DEFAULT: &str = "restore";
+/// *Icon › Colour…*.
+const ICON_COLOUR: &str = "palette-filled";
+/// *Icon › Inventory texture…* (the Inventory's own for a texture).
+const ICON_TEXTURE: &str = "Inv_Texture";
 const ICON_MOVE: &str = "arrows-move";
 const ICON_ARRANGE: &str = "sort-ascending-letters";
 const ICON_TOOLBAR: &str = "layout-bottombar-filled";
@@ -178,6 +187,9 @@ pub(super) const ICONS: &[&str] = &[
     ICON_RENAME,
     ICON_ICON,
     ICON_DEFAULT,
+    ICON_COLOUR,
+    ICON_TEXTURE,
+    style_ui::ICON_FILE,
     ICON_MOVE,
     ICON_ARRANGE,
     ICON_TOOLBAR,
@@ -475,6 +487,15 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
     // buttons window)
     let button = super::toolbar_cargo(ctx);
     let mut ops = Vec::new();
+    // the picture chosen in the file dialog, once it is copied
+    if let Some((id, result)) = style_ui::chosen(ctx, desktop.account) {
+        ops.push(match result {
+            Ok(picture) => Op::Style(Edit::Picture(id, Some(picture))),
+            Err(error) => Op::Say(style_ui::refusal_text(error).to_owned()),
+        });
+    }
+    // Inventory textures the shortcuts wear, to be fetched
+    let mut fetch = Vec::new();
     let mut dragged = None;
     // a shortcut that went while its name was edited
     if state.rename.is_some_and(|id| desktop.shortcut(id).is_none()) {
@@ -521,8 +542,11 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                 for &(id, cell) in cells {
                     let Some(shortcut) = desktop.shortcut(id) else { continue };
                     let face = targets::face(shortcut, &env.facts, &env.folders);
+                    let drawn = style_ui::drawn(ctx, desktop.account, &shortcut.style, face.hidden, env, &mut fetch);
                     let is_folder = matches!(shortcut.target, Target::Folder { .. });
                     let own_icon = shortcut.icon.clone();
+                    let pictured = shortcut.style.picture.is_some();
+                    let custom = own_icon.is_some() || !shortcut.style.is_default();
                     let rect = room.grid.rect(cell);
                     // (a folder's window; a command, and an item as the
                     // Inventory opens its kind, through `Op::Open`)
@@ -611,7 +635,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     }
                     let dragging = state.drag == Some(id) && response.dragged();
                     if dragging {
-                        dragged = Some((face.clone(), room.grid.cell));
+                        dragged = Some((face.clone(), drawn, room.grid.cell));
                     }
                     if state.drag == Some(id) && response.drag_stopped() {
                         state.drag = None;
@@ -625,7 +649,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         focused: response.has_focus(),
                         dim: dragging,
                     };
-                    paint_face(ui.painter(), ui.style(), env.p, env.icons, rect, &face, desktop.size, look);
+                    paint_face(ui.painter(), ui.style(), env.p, env.icons, rect, &face, drawn, desktop.size, look);
                     // a worn item: the "X" that takes it off, at its icon's
                     // corner. Registered after the shortcut, so it takes
                     // the click there: the shortcut is neither opened nor
@@ -652,6 +676,9 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         room: room.rect,
                         editable,
                         own_icon: own_icon.as_deref(),
+                        pictured,
+                        custom,
+                        no_inventory: env.folders.no_inventory,
                         slot: room.slot,
                         rooms,
                     };
@@ -792,15 +819,39 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
     if state.drag.is_some() && !ctx.input(|i| i.pointer.any_down()) {
         state.drag = None;
     }
-    if let (Some((face, cell)), Some(pos)) = (dragged, pointer) {
+    if let (Some((face, drawn, cell)), Some(pos)) = (dragged, pointer) {
         let size = desktop.size;
         crate::ui::widgets::drag_ghost(ctx, env.p, "folderstorm_desktop_ghost", pos - cell / 2.0, |ui| {
             let (rect, _) = ui.allocate_exact_size(cell, Sense::hover());
-            paint_face(ui.painter(), ui.style(), env.p, env.icons, rect, &face, size, Look::default());
+            paint_face(
+                ui.painter(),
+                ui.style(),
+                env.p,
+                env.icons,
+                rect,
+                &face,
+                drawn,
+                size,
+                Look::default(),
+            );
         });
+    }
+    // the window *Shortcut icon*, above the desktops; it closes when its
+    // shortcut goes or RLVa hides its face (no style is given meanwhile)
+    if let Some(id) = style_ui::editing(ctx) {
+        match desktop.shortcut(id).map(|s| targets::face(s, &env.facts, &env.folders)) {
+            Some(face) if !face.hidden => {
+                let mut edits = Vec::new();
+                style_ui::window(ctx, env.p, desktop, env, &face.name, &mut edits);
+                ops.extend(edits.into_iter().map(Op::Style));
+            }
+            _ => style_ui::close(ctx),
+        }
     }
     let mut out = Vec::new();
     let mut changed = false;
+    // a copied picture may no longer be referred to: its file goes
+    let mut prune = false;
     for op in ops {
         match op {
             Op::Open(id) => match desktop.shortcut(id).map(|s| &s.target) {
@@ -828,7 +879,10 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                 Err(why) => out.push(Request::Notice(why.text().to_owned())),
             },
             Op::Remove(id) => {
-                changed |= desktop.remove(id).is_ok();
+                if let Ok(gone) = desktop.remove(id) {
+                    changed = true;
+                    prune |= gone.style.file().is_some();
+                }
                 if state.selected == Some(id) {
                     state.selected = None;
                 }
@@ -853,7 +907,34 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                 let text = super::store::clean_name(&text);
                 changed |= desktop.rename(id, if text == own { "" } else { &text });
             }
-            Op::Icon(id, icon) => changed |= desktop.set_icon(id, icon),
+            Op::Icon(id, icon) => {
+                let pictured = desktop.shortcut(id).is_some_and(|s| s.style.file().is_some());
+                if desktop.set_icon(id, icon) {
+                    changed = true;
+                    prune |= pictured;
+                }
+            }
+            Op::EditStyle(id) => style_ui::open(ctx, id),
+            Op::Style(edit) => match edit {
+                Edit::Colour(id, colour) => changed |= desktop.set_colour(id, colour),
+                Edit::Picture(id, picture) => {
+                    if desktop.set_picture(id, picture) {
+                        changed = true;
+                        prune = true;
+                    }
+                }
+                Edit::Reset(id) => {
+                    if desktop.reset_icon(id) {
+                        changed = true;
+                        prune = true;
+                    }
+                }
+                Edit::ChooseFile(id) => {
+                    if let Some(account) = desktop.account {
+                        style_ui::choose_file(ctx, account, id);
+                    }
+                }
+            },
             Op::MoveTo { id, slot } => {
                 let Some(room) = rooms.iter().find(|room| room.slot == slot) else {
                     continue;
@@ -907,6 +988,17 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
     if changed {
         out.push(Request::Changed);
     }
+    // (not while a dialog writes a copy that nothing refers to yet)
+    if prune
+        && let Some(account) = desktop.account
+        && !style_ui::dialog_open(ctx)
+    {
+        super::style::prune(&super::style::folder(account), &desktop.pictures());
+    }
+    style_ui::keep_pictures(ctx, &desktop.pictures());
+    fetch.sort_unstable();
+    fetch.dedup();
+    out.extend(fetch.into_iter().map(Request::Fetch));
     if state != before {
         ctx.data_mut(|d| d.insert_temp(state_id(), state));
     }
@@ -933,6 +1025,12 @@ struct MenuOf<'a> {
     editable: bool,
     /// The icon of its own, when it has one.
     own_icon: Option<&'a str>,
+    /// It shows a picture instead of its icon.
+    pictured: bool,
+    /// Its icon is not its target's own (an icon, a colour, a picture).
+    custom: bool,
+    /// RLVa hides the Inventory: no texture of it is offered.
+    no_inventory: bool,
     slot: u8,
     rooms: &'a [Room],
 }
@@ -1012,8 +1110,23 @@ fn shortcut_menu(response: &egui::Response, p: &Palette, of: &MenuOf, open: impl
         let locked = if of.editable { "" } else { why };
         rename = menu::item_tip(ui, p, ICON_RENAME, tr!("fs-desktop-rename"), of.editable, locked);
         let icons = menu::submenu_heading(ui, p, ICON_ICON, tr!("fs-desktop-icon"), of.editable, |ui| {
-            if menu::check(ui, p, ICON_DEFAULT, tr!("fs-desktop-icon-default"), of.own_icon.is_none(), true) {
+            let default = of.own_icon.is_none() && !of.pictured;
+            if menu::check(ui, p, ICON_DEFAULT, tr!("fs-desktop-icon-default"), default, true) {
                 ops.push(Op::Icon(id, None));
+            }
+            // a colour, a picture (a file, a texture of the Inventory)
+            if menu::item(ui, p, ICON_COLOUR, tr!("fs-desktop-icon-colour")) {
+                ops.push(Op::EditStyle(id));
+            }
+            if menu::item(ui, p, style_ui::ICON_FILE, tr!("fs-desktop-icon-file")) {
+                ops.push(Op::Style(Edit::ChooseFile(id)));
+            }
+            let blocked = if of.no_inventory { tr!("rlva-blocked") } else { "" };
+            if menu::item_tip(ui, p, ICON_TEXTURE, tr!("fs-desktop-icon-texture"), !of.no_inventory, blocked) {
+                ops.push(Op::EditStyle(id));
+            }
+            if menu::item_if(ui, p, ICON_DEFAULT, tr!("fs-desktop-icon-reset"), of.custom) {
+                ops.push(Op::Style(Edit::Reset(id)));
             }
             menu::separator(ui, p);
             for line in super::icons::CHOICES.chunks(super::icons::PER_ROW) {
@@ -1135,7 +1248,17 @@ struct Look {
 /// theme's pill when it is hovered or selected. The name stands on a
 /// discreet pill of its own, so that it reads over any wallpaper.
 #[allow(clippy::too_many_arguments)]
-fn paint_face(painter: &egui::Painter, style: &egui::Style, p: &Palette, icons: &Icons, rect: Rect, face: &Face, size: Size, look: Look) {
+fn paint_face(
+    painter: &egui::Painter,
+    style: &egui::Style,
+    p: &Palette,
+    icons: &Icons,
+    rect: Rect,
+    face: &Face,
+    drawn: Drawn,
+    size: Size,
+    look: Look,
+) {
     let mut painter = painter.clone();
     if look.dim {
         painter.multiply_opacity(0.35);
@@ -1153,17 +1276,24 @@ fn paint_face(painter: &egui::Painter, style: &egui::Style, p: &Palette, icons: 
     let greyed = face.greyed.is_some();
     let side = size.icon();
     let icon = Rect::from_min_size(egui::pos2(rect.center().x - side / 2.0, rect.top() + 8.0), vec2(side, side));
-    // a folder wears the colour the user gave it in the Inventory
-    let own = face.tint.map(|[r, g, b]| egui::Color32::from_rgb(r, g, b));
-    let tint = if greyed { p.muted_dim } else { own.unwrap_or(p.violet_light) };
-    match icons.get(&face.icon).cloned().or_else(|| crate::ui::icons::global(&face.icon)) {
-        Some(texture) => {
-            let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-            painter.image(texture.id(), icon, uv, tint);
-        }
-        // no such icon in this skin: its place is kept
-        None => {
-            painter.rect_stroke(icon.shrink(side / 4.0), radius, Stroke::new(1.0, tint), StrokeKind::Inside);
+    match drawn {
+        // a picture instead of the icon, in its own colours
+        Drawn::Picture(texture, own) => style_ui::paint_picture(&painter, icon, texture, own, greyed),
+        Drawn::Icon(colour) => {
+            // the shortcut's own colour, else the colour the user gave a
+            // folder in the Inventory
+            let own = colour.or(face.tint.map(|[r, g, b]| egui::Color32::from_rgb(r, g, b)));
+            let tint = if greyed { p.muted_dim } else { own.unwrap_or(p.violet_light) };
+            match icons.get(&face.icon).cloned().or_else(|| crate::ui::icons::global(&face.icon)) {
+                Some(texture) => {
+                    let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                    painter.image(texture.id(), icon, uv, tint);
+                }
+                // no such icon in this skin: its place is kept
+                None => {
+                    painter.rect_stroke(icon.shrink(side / 4.0), radius, Stroke::new(1.0, tint), StrokeKind::Inside);
+                }
+            }
         }
     }
     // the name: two lines at most, cut with "…"

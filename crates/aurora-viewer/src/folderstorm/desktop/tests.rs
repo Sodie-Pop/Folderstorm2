@@ -28,6 +28,8 @@ struct Bench {
     ctx: egui::Context,
     p: crate::theme::Palette,
     icons: crate::ui::icons::Icons,
+    /// The interface's images by asset id (the app's `ui_images`).
+    images: std::collections::HashMap<Uuid, egui::TextureHandle>,
     size: [u32; 2],
     /// The world's part of the window in pixels; None: all of it.
     world: Option<[u32; 4]>,
@@ -116,6 +118,7 @@ impl Bench {
             ctx,
             p,
             icons,
+            images: Default::default(),
             size,
             world: Some([640, 0, 640, 400]),
             monitors: Some(three_monitors()),
@@ -210,7 +213,7 @@ impl Bench {
             .map(|[x, y, w, h]| Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)));
         let (window, label, hidden, facts, p) = (self.window, self.label, self.hidden, self.facts, self.p);
         let focus = std::mem::take(&mut self.focus);
-        let (desktop, icons) = (&mut self.desktop, &self.icons);
+        let (desktop, icons, images) = (&mut self.desktop, &self.icons, &self.images);
         let folders = Folders {
             inv: &self.inv,
             no_inventory: self.no_inventory,
@@ -241,6 +244,7 @@ impl Bench {
                 let env = Env {
                     p: &p,
                     icons,
+                    images,
                     facts,
                     folders,
                     hidden,
