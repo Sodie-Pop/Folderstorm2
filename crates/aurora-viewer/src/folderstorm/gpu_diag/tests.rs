@@ -4,7 +4,7 @@ fn sample(vram: (u64, u64), card: Option<(u64, u64)>, peers: &[(u64, bool)]) -> 
     Sample {
         vram_used: Some(vram.0),
         vram_budget: Some(vram.1),
-        allocated: Some(vram.0 - 100),
+        allocated: Some(vram.0.saturating_sub(100)),
         textures: 1800,
         texture_pages: 2100,
         texture_target: 2048,
@@ -152,13 +152,12 @@ fn the_notice_says_the_reason_in_plain_words_or_keeps_aurora_s_text() {
     assert!(unknown.contains("Show the log folder"), "{unknown}");
 }
 
+/// (the messages with variables are checked in every language by
+/// aurora-i18n's catalogs test)
 #[test]
 fn every_reason_has_its_words_in_each_language() {
     for key in [
         "fs-gpu-reason-memory",
-        "fs-gpu-reason-memory-used",
-        "fs-gpu-reason-memory-characters",
-        "fs-gpu-reason-memory-viewers",
         "fs-gpu-reason-hang",
         "fs-gpu-reason-fault",
         "fs-gpu-reset-then",
@@ -166,9 +165,10 @@ fn every_reason_has_its_words_in_each_language() {
         "fs-gpu-reset-log",
         "fs-gpu-show-logs",
     ] {
-        for language in ["en", "fr", "ja"] {
-            let text = aurora_i18n::text_in(language, key);
-            assert!(!text.is_empty() && text != key, "{language} {key}");
+        let english = aurora_i18n::text_in("en", key);
+        assert!(!english.is_empty() && english != key, "en {key}");
+        for language in ["fr", "ja"] {
+            assert_ne!(aurora_i18n::text_in(language, key), english, "{language} {key}");
         }
     }
 }
@@ -203,7 +203,7 @@ fn an_entry_holds_the_memory_picture_and_the_run_up_in_figures() {
         "card: 11878 MB used by every program, 12288 MB in all",
         "other viewers on the card: 1 (4200 MB in front)",
         "  - 5 s: vram 3000/3600 MB, textures 1800/2048 MB, card 10000/12288 MB, step 3, viewers 2, behind",
-        "  - 0 s: vram 3300/3400 MB",
+        "  at the loss: vram 3300/3400 MB",
     ] {
         assert!(text.contains(wanted), "missing {wanted:?} in\n{text}");
     }

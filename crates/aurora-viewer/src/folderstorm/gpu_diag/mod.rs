@@ -450,8 +450,12 @@ impl Entry {
             );
         }
         let _ = writeln!(out, "run-up (age: figures):");
-        for (age, s) in &self.history {
-            let _ = writeln!(out, "  -{:>2} s: {}", age.as_secs(), s.line());
+        for (i, (age, s)) in self.history.iter().enumerate() {
+            if i + 1 == self.history.len() {
+                let _ = writeln!(out, "  at the loss: {}", s.line());
+            } else {
+                let _ = writeln!(out, "  -{:>2} s: {}", age.as_secs(), s.line());
+            }
         }
         out
     }
