@@ -119,7 +119,7 @@ fn a_layout_s_own_background_is_drawn() {
     });
     let mut s = Settings::default();
     s.folderstorm_workspaces.add(layout).expect("added");
-    let texts = drawn("preferences-layout-background", tab::SAVED, s, false);
+    let texts = drawn("preferences-layout-background", tab::SAVED, s.clone(), false);
     // the layout in use is selected: its background under its actions
     for expected in [
         "Wall",
@@ -127,9 +127,12 @@ fn a_layout_s_own_background_is_drawn() {
         tr!("fs-background-layout-own"),
         tr!("fs-background-kind-picture"),
         "dusk.png",
-        tr!("fs-background-fit-tile"),
-        tr!("fs-background-brightness"),
     ] {
+        assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
+    }
+    // further down the editor
+    let texts = drawn_scrolled("preferences-layout-background-down", tab::SAVED, s, false, "", None, 400.0);
+    for expected in [tr!("fs-background-fit-tile"), tr!("fs-background-brightness")] {
         assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
     }
 }

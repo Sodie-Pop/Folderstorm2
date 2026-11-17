@@ -1,5 +1,6 @@
-//! The workspaces of the Saved tab (checkpoint 6): their lines in the one
-//! list, the selected one's editor, the save form on "Workspace".
+//! The workspaces of the Saved tab (checkpoint 6): their lines in the
+//! list, the selected one's editor beside it, *New from current…* on
+//! "Workspace".
 
 use super::*;
 use crate::folderstorm::workspaces::words::workspace_holds;
@@ -12,12 +13,11 @@ fn searched() -> Window {
     w
 }
 
-/// The save form on "Workspace", scrolled to.
+/// *New from current…*, on "Workspace".
 fn workspace_form(w: &mut Window) {
-    // (under a selected entry's settings: the page is scrolled to it)
-    w.reveal(tr!("fs-saved-save-group").to_uppercase().as_str());
+    w.scroll_top();
+    w.click(tr!("fs-saved-new"));
     w.click_last(tr!("fs-workspaces-save-workspace"));
-    w.reveal(tr!("fs-workspaces-name-hint"));
 }
 
 fn save_workspace(w: &mut Window, name: &str) {
@@ -55,6 +55,7 @@ fn the_tab_saves_a_workspace_and_edits_its_layout_and_its_windows() {
     w.click(tr!("common-places"));
     assert!(w.store().workspace(0).expect("saved").open.is_empty());
     // its layout: the one in use is kept, or a layout of the list
+    w.reveal(tr!("fs-workspaces-layout-keep"));
     w.click(tr!("fs-workspaces-layout-keep"));
     let wide = w
         .run(Vec::new())
@@ -149,7 +150,7 @@ fn the_workspaces_group_is_drawn() {
         workspace_holds(&sorting),
         tr!("fs-workspaces-layout").to_owned(),
         "1 monitor".to_owned(),
-        tr!("fs-workspaces-windows").to_owned(),
+        tr!("fs-workspaces-closes").to_owned(),
         tr!("common-inventory").to_owned(),
         crate::ui::inventory::extra_windows::slot_title(1),
         tr!("common-people").to_owned(),
