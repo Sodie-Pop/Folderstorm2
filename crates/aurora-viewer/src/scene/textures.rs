@@ -1115,6 +1115,8 @@ pub struct TextureStreamer {
     card_asked: bool,
     card_sharing: bool,
     relief: texture_budget::Relief,
+    /// Folderstorm: the session host's share and release (scene/folderstorm_textures.rs).
+    folderstorm: folderstorm_memory::Limits,
     target_ramp: texture_budget::TargetRamp,
     last_budget: Instant,
     /// Passes of `recompute_wants` since the step last changed.
@@ -1225,6 +1227,9 @@ fn legacy_bump_diagnostics() -> bool {
 
 #[path = "legacy_bump_stream.rs"]
 mod legacy_bump_stream;
+// Folderstorm: the session host's share of the video memory
+#[path = "folderstorm_textures.rs"]
+pub(crate) mod folderstorm_memory;
 
 impl PreviewSource {
     /// Appearance editing can use resident pixels immediately and improve
@@ -1533,6 +1538,7 @@ impl TextureStreamer {
             card_asked: false,
             card_sharing: false,
             relief: Default::default(),
+            folderstorm: Default::default(), // Folderstorm
             target_ramp: Default::default(),
             last_budget: Instant::now(),
             passes_at_step: 0,
@@ -3674,6 +3680,7 @@ impl TextureStreamer {
         let target = texture_budget::forced_target().unwrap_or_else(|| {
             let target = texture_budget::texture_target(setting, used, shared);
             let cap = self.relief.update(load.seq, used, over);
+            let cap = self.folderstorm.cap(cap, used, video); // Folderstorm: the session host's share (scene/folderstorm_textures.rs)
             self.target_ramp.update(texture_budget::relieve(target, cap), now)
         });
         let before = self.pressure.step();
@@ -3682,7 +3689,9 @@ impl TextureStreamer {
         // again once in front (LLViewerTexture::updateClass,
         // texture_budget::Background)
         let crowded = video.is_some_and(|v| v.usage > v.budget);
-        let away = self.background.update(now, self.in_front, self.minimized, crowded);
+        let crowded = crowded || self.folderstorm.economy(); // Folderstorm: Economy gives back as if crowded (scene/folderstorm_textures.rs)
+        let minimized = self.minimized || self.folderstorm.held(); // Folderstorm: a watched Economy character holds the highest step at once
+        let away = self.background.update(now, self.in_front, minimized, crowded);
         if away && !self.pressure.held() {
             self.pressure.hold_max(now);
             let place = if self.minimized { "minimised" } else { "in the background" };

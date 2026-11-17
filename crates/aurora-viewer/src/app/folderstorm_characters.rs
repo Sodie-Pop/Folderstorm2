@@ -9,6 +9,7 @@
 
 mod bar;
 mod chat;
+mod memory;
 mod monitor;
 
 use super::*;
@@ -223,7 +224,9 @@ impl App {
     /// the host's commands are carried out and the host is told how this
     /// viewer does. Never waits. Not the frame's job: frames may be rare
     /// while the window is minimised (Economy), commands must not be.
-    pub(super) fn folderstorm_managed_pump(&mut self) {
+    /// Economy's release, which needs frames, is driven from here too
+    /// (`folderstorm_characters/memory.rs`).
+    pub(super) fn folderstorm_managed_pump(&mut self, event_loop: &ActiveEventLoop) {
         let Some(link) = crate::folderstorm_characters::managed::link() else {
             return;
         };
@@ -255,17 +258,14 @@ impl App {
                             if assignment.voice_allowed { "allowed" } else { "off" }
                         );
                         self.sync_minimized_mute();
+                        // (the video memory's share and release, at once)
+                        self.folderstorm_memory_assign();
                     }
                 }
                 HostEvent::Command(ipc::ToViewer::Show { stage }) => self.folderstorm_characters.report.show = Some(stage),
-                HostEvent::Command(ipc::ToViewer::Minimise) => {
-                    // (never the active character, never a window with the keyboard)
-                    if !self.folderstorm_in_front()
-                        && let Some(g) = &self.gfx
-                    {
-                        g.window.set_minimized(true);
-                    }
-                }
+                // (never the active character, never a window with the
+                // keyboard; Economy gives its memory back first)
+                HostEvent::Command(ipc::ToViewer::Minimise) => self.folderstorm_memory_minimise(),
                 HostEvent::Command(
                     command @ (ipc::ToViewer::SendChat { .. } | ipc::ToViewer::MarkRead { .. } | ipc::ToViewer::Open { .. }),
                 ) => {
@@ -289,9 +289,12 @@ impl App {
                     // nothing of the bar outlives the link
                     self.folderstorm_characters.bar = None;
                     self.sync_minimized_mute();
+                    // nor its share of the video memory
+                    self.folderstorm_memory_assign();
                 }
             }
         }
+        self.folderstorm_memory_pump(event_loop);
         // (also once the host is gone: the window is as any window again)
         self.folderstorm_taskbar(Instant::now());
         if !self.folderstorm_characters.managed.linked() {
@@ -440,6 +443,7 @@ impl App {
                 Some(_) if window.minimised => ::folderstorm_session::monitor::State::Minimised,
                 Some(_) => state.monitor.state,
             },
+            vram_mb: self.folderstorm_vram_mb(),
         }
         .cleaned()
     }
