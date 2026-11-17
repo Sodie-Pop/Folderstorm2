@@ -203,6 +203,42 @@ pub struct Assignment {
     /// decides how, `bar::taskbar`, and puts everything back by itself).
     #[serde(default)]
     pub off_taskbar: bool,
+    /// What it may hold of the graphics card's memory, and what it gives
+    /// back while behind (`crate::memory`). An older host says nothing:
+    /// no share, nothing released beyond Aurora's own rules.
+    #[serde(default)]
+    pub memory: Memory,
+}
+
+/// A viewer's share of the graphics card's memory (`crate::memory`,
+/// `folderstorm/plans/gpu-memory.md`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Memory {
+    /// Megabytes of video memory it may hold in all (textures, geometry,
+    /// render targets): its textures keep what the rest leaves. 0: no
+    /// share (the active character, or no host).
+    pub share_mb: u32,
+    /// The active character: megabytes it leaves to the others on top of
+    /// what they hold already (the room up to their shares).
+    pub reserved_mb: u32,
+    pub release: Release,
+}
+
+/// What a background character gives back while it waits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Release {
+    /// Its share only, Aurora's own rules for the rest (Warm).
+    #[default]
+    Keep,
+    /// Economy watched by a monitor: its window stays behind for the
+    /// pictures, its textures are lowered at once and kept small (the
+    /// pictures are blurrier).
+    Lowered,
+    /// Economy: every texture to its last level, the avatars' bakes too,
+    /// the 3D paused with its targets at their smallest; then the window
+    /// is minimised.
+    Full,
 }
 
 /// Where the characters' windows go: the outer rectangle of a window in
@@ -796,6 +832,11 @@ pub struct Status {
     /// picture.
     #[serde(default)]
     pub monitor: monitor::State,
+    /// Megabytes of video memory the driver counts for this viewer, as of
+    /// its last budget pass (0: not known): the host leaves the others
+    /// the room up to their share (`crate::memory`).
+    #[serde(default)]
+    pub vram_mb: u32,
 }
 
 /// The longest texts a status may carry, in characters.
@@ -984,6 +1025,7 @@ mod tests {
             sound_muted: true,
             voice_allowed: false,
             off_taskbar: false,
+            memory: Memory::default(),
         }
     }
 
@@ -1061,6 +1103,39 @@ mod tests {
         // an assignment of before protocol 4 has no word on the taskbar
         let old = r#"{"seq":3,"role":"Background","behind":"Off","standby":"Warm","sound_muted":true,"voice_allowed":false}"#;
         assert!(!serde_json::from_str::<Assignment>(old).expect("reads").off_taskbar);
+    }
+
+    #[test]
+    fn a_share_of_the_video_memory_travels_and_an_older_host_says_none() {
+        let economy = Assignment {
+            memory: Memory {
+                share_mb: 1024,
+                reserved_mb: 0,
+                release: Release::Full,
+            },
+            ..assignment(4)
+        };
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToViewer::Assign(economy)).expect("written");
+        assert_eq!(
+            read_frame::<ToViewer>(&mut wire.as_slice()).expect("read"),
+            ToViewer::Assign(economy)
+        );
+        // an assignment and a status of before the shares: no share,
+        // nothing released, nothing known of the video memory
+        let old = r#"{"seq":3,"role":"Background","behind":"Off","standby":"Economy","sound_muted":true,"voice_allowed":false,"off_taskbar":true}"#;
+        let read = serde_json::from_str::<Assignment>(old).expect("reads");
+        assert_eq!(read.memory, Memory::default());
+        assert_eq!(read.memory.release, Release::Keep);
+        let status = serde_json::to_value(Status {
+            vram_mb: 812,
+            ..Status::default()
+        })
+        .expect("json");
+        assert_eq!(status["vram_mb"], 812);
+        let mut without = status;
+        without.as_object_mut().expect("an object").remove("vram_mb");
+        assert_eq!(serde_json::from_value::<Status>(without).expect("reads").vram_mb, 0);
     }
 
     #[test]

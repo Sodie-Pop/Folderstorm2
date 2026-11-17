@@ -294,6 +294,27 @@ These are the places where Aurora can show the same symptom or a related one:
 | Sound | `app.rs` `sync_minimized_mute` | OR in the session mute (never saved) |
 | Voice | Where `VoiceInputs { enabled, … }` is built | `&& voice allowed` |
 
+### 6.5 Video memory (2026-11-17)
+
+After a user's GPU resets with several characters on a 12 GB card, the
+host gives each character a share of the graphics card and Economy really
+gives its memory back ([gpu-memory.md](gpu-memory.md), phases 2 to 4, on
+`claude/gpu-memory-share`):
+
+- `Assignment::memory` (share, room left to the others, release) and
+  `Status::vram_mb`, both `#[serde(default)]`: no protocol change.
+- Host settings › Characters › "Background characters' video memory"
+  (1 GB by default, `session-host.json` `background_memory_mb`).
+- Economy: textures (bakes too) to their last level and the 3D paused,
+  then minimised once released or after 5 s; the pump draws frames itself
+  meanwhile (rule R2's frame driver, for the release only). Coming back
+  takes a second or two of loading.
+- A watched Economy character stays behind with a small share (blurrier
+  pictures) instead of turning Warm; the monitor swap is unchanged.
+- A watched window draws its world at the picture's size: no full-size
+  render targets per picture (section 12).
+- Proposed, not changed: Economy as the default standby.
+
 ## 7. Window hosting
 
 | Approach | Windows | Linux | Verdict |

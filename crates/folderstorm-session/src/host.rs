@@ -38,6 +38,10 @@
 //!   given. While the bar is docked and the user wants one taskbar
 //!   button, a character behind the active one is asked off the taskbar
 //!   (`Assignment::off_taskbar`), never when no character is in front.
+//! - **Video memory (`crate::memory`).** Each character behind the active
+//!   one holds the user's background share, and Economy gives its memory
+//!   back; the active character leaves the others the room up to their
+//!   share (`Assignment::memory`), from what they report holding.
 
 use crate::bar;
 use crate::behind::Behind3d;
@@ -45,6 +49,7 @@ use crate::controller;
 use crate::hotkeys;
 use crate::identity::{self, AliasError, Colour};
 use crate::ipc::{Assignment, MAX_SLOTS, Refusal, Role, Screen, Stage, Standby, Status, ToViewer};
+use crate::memory;
 use crate::monitor::{self, FrameHeader, MAX_MONITORS};
 use crate::monitor_windows;
 use crate::panels;
@@ -160,6 +165,9 @@ pub struct Config {
     pub settings_window: settings::Window,
     /// The MCP controller: on or off, metadata, the levels of its classes.
     pub controller: controller::Settings,
+    /// Megabytes of video memory each character behind the active one may
+    /// hold ("Background characters' video memory", `crate::memory`).
+    pub background_memory_mb: u32,
 }
 
 impl Default for Config {
@@ -181,6 +189,7 @@ impl Default for Config {
             attention: settings::Attention::default(),
             settings_window: settings::Window::default(),
             controller: controller::Settings::default(),
+            background_memory_mb: memory::DEFAULT_BACKGROUND_MB,
         }
     }
 }
@@ -215,6 +224,7 @@ impl Config {
         self.monitors = self.monitors.cleaned();
         self.reading = self.reading.cleaned();
         self.settings_window = self.settings_window.cleaned();
+        self.background_memory_mb = memory::clamp_background(self.background_memory_mb);
         self
     }
 
@@ -470,6 +480,8 @@ pub struct Desk {
     settings_window: settings::Window,
     /// The MCP controller's settings.
     controller: controller::Settings,
+    /// Megabytes of video memory each background character may hold.
+    background_memory_mb: u32,
     /// The character the cycling monitor shows on screen now.
     cycling_seen: Option<usize>,
     /// Monitors that moved from one character to another since the
@@ -542,6 +554,8 @@ mod bar_tests;
 #[cfg(test)]
 mod comfort_tests;
 #[cfg(test)]
+mod memory_tests;
+#[cfg(test)]
 mod monitor_tests;
 #[cfg(test)]
 mod monitor_window_tests;
@@ -590,6 +604,7 @@ impl Desk {
             attention: config.attention,
             settings_window: config.settings_window,
             controller: config.controller,
+            background_memory_mb: config.background_memory_mb,
             cycling_seen: None,
             monitor_moves: Vec::new(),
             quitting: None,
@@ -631,6 +646,7 @@ impl Desk {
             attention: self.attention,
             settings_window: self.settings_window,
             controller: self.controller,
+            background_memory_mb: self.background_memory_mb,
         }
     }
 
@@ -849,6 +865,23 @@ impl Desk {
         self.sync(None);
         // (a window already behind is left where it is: the choice applies
         // at the next switch)
+    }
+
+    /// Megabytes of video memory each character behind the active one may
+    /// hold.
+    pub fn background_memory_mb(&self) -> u32 {
+        self.background_memory_mb
+    }
+
+    /// The background characters' share, within its choices; every viewer
+    /// is told at once.
+    pub fn set_background_memory_mb(&mut self, mb: u32) {
+        let mb = memory::clamp_background(mb);
+        if self.background_memory_mb != mb {
+            self.background_memory_mb = mb;
+            self.effects.push(Effect::Save);
+            self.sync(None);
+        }
     }
 
     pub fn set_stage(&mut self, stage: bool) {
@@ -1820,6 +1853,23 @@ impl Desk {
             .map(|(i, _)| i)
     }
 
+    /// What the shares are made from: each running character's role, its
+    /// standby as chosen and whether a monitor keeps its window behind,
+    /// and what its viewer says it holds.
+    fn memory_characters(&self) -> [Option<memory::Character>; MAX_SLOTS] {
+        std::array::from_fn(|slot| {
+            let s = self.slot(slot).filter(|s| s.phase == Phase::Running)?;
+            let economy = s.standby == Standby::Economy;
+            Some(memory::Character {
+                active: self.active == Some(slot),
+                economy,
+                // (its window stays behind instead of minimised)
+                watched: economy && self.waits(s) == Standby::Warm,
+                held_mb: s.status.as_ref().map_or(0, |status| status.vram_mb),
+            })
+        })
+    }
+
     /// How a character waits behind: as [`Slot::waits`], and never
     /// minimised while the cycling monitor is open (it shows every
     /// background character in turn).
@@ -1872,6 +1922,7 @@ impl Desk {
         // one taskbar button: only behind a character that is in front
         let someone_in_front = active.is_some_and(|a| self.slot(a).is_some_and(|s| s.phase == Phase::Running));
         let one_button = self.bar.one_taskbar_button && self.bar.placement == bar::Placement::Docked && someone_in_front;
+        let memories = memory::shares(self.background_memory_mb, &self.memory_characters());
         for (slot, order) in self.orders().into_iter().enumerate() {
             let voice_held_elsewhere = self.slots().any(|(i, s)| i != slot && s.voice_out);
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running) else {
@@ -1893,6 +1944,7 @@ impl Desk {
                 sound_muted: !is_active && (mute_background || (s.sound == BackgroundSound::Muted && !holds_voice)),
                 voice_allowed: holds_voice && !voice_held_elsewhere,
                 off_taskbar: one_button && !is_active,
+                memory: memories[slot].unwrap_or_default(),
             };
             if s.sent.is_some_and(|(sent, _)| Assignment { seq: 0, ..sent } == wanted) {
                 continue;

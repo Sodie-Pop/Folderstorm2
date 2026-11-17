@@ -69,6 +69,9 @@ pub(super) enum Act {
     Recover,
     Diagnostics(bool),
     Credits(bool),
+    /// "Background characters' video memory", in megabytes
+    /// (`folderstorm_session::memory`).
+    BackgroundMemory(u32),
 }
 
 /// The width of the sections' list, and from which width of the window it
@@ -240,6 +243,7 @@ impl Window_ {
             }
             Act::Diagnostics(on) => self.settings.diagnostics = on,
             Act::Credits(on) => self.settings.credits = on,
+            Act::BackgroundMemory(mb) => self.host.desk.set_background_memory_mb(mb),
         }
     }
 
@@ -489,6 +493,9 @@ impl Window_ {
                 });
                 note(ui, p, tr!("folderstorm-host-economy-help"));
                 ui.add_space(4.0);
+                // (every character behind the active one: one setting for all)
+                this.background_memory(ui, p, acts);
+                ui.add_space(4.0);
                 this.sound_choice(ui, p, slot, &state, acts);
                 let mut included = state.attention;
                 if widgets::checkbox(ui, p, &mut included, tr!("folderstorm-settings-include-attention"))
@@ -558,6 +565,25 @@ impl Window_ {
         if !self.host.desk.chat_sound() {
             note(ui, p, tr!("folderstorm-settings-alerts-off"));
         }
+    }
+
+    /// "Background characters' video memory": what each character behind
+    /// the active one may hold of the graphics card, the active one keeping
+    /// the rest (`folderstorm_session::memory`).
+    fn background_memory(&self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<HostAct>) {
+        use ::folderstorm_session::memory::{BACKGROUND_STEP_MB, MAX_BACKGROUND_MB, MIN_BACKGROUND_MB};
+        let shown = self.host.desk.background_memory_mb();
+        let mut mb = shown;
+        row(ui, p, tr!("folderstorm-settings-background-memory"), |ui| {
+            let slider = egui::Slider::new(&mut mb, MIN_BACKGROUND_MB..=MAX_BACKGROUND_MB)
+                .step_by(f64::from(BACKGROUND_STEP_MB))
+                .suffix(tr!("memory-mb-suffix"));
+            ui.add(slider).on_hover_text(tr!("folderstorm-settings-background-memory-help"));
+        });
+        if mb != shown {
+            acts.push(HostAct::Settings(Act::BackgroundMemory(mb)));
+        }
+        note(ui, p, tr!("folderstorm-settings-background-memory-note"));
     }
 
     /// What the chats show, what Attention lists, reading.
@@ -779,13 +805,20 @@ impl Window_ {
                     ),
                     format!("{}: {}/{}", tr!("folderstorm-settings-diagnostics-running"), desk.live(), MAX_SLOTS),
                 ];
+                lines.push(format!(
+                    "{}: {} MB",
+                    tr!("folderstorm-settings-background-memory"),
+                    desk.background_memory_mb()
+                ));
                 for (slot, state) in desk.slots() {
                     // (the phase in the cards' words; the rest as the code
                     // names it, for a report)
                     let screen = state.status.as_ref().map_or_else(|| "-".to_owned(), |s| format!("{:?}", s.screen));
                     let watch = format!("{:?}", desk.watch(slot));
+                    // (the video memory its viewer last said it holds)
+                    let vram = state.status.as_ref().map_or(0, |s| s.vram_mb);
                     lines.push(format!(
-                        "{}: {} · {} · {:?} · {screen} · #{} · {}",
+                        "{}: {} · {} · {:?} · {screen} · #{} · {} · {vram} MB",
                         slot + 1,
                         state.profile.shown(),
                         super::status_line(state),

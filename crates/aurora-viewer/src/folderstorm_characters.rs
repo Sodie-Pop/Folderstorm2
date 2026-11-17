@@ -115,6 +115,9 @@ pub struct State {
     pub window_focus: std::cell::Cell<Option<bool>>,
     /// The monitor's pictures taken for the session host (checkpoint 5).
     pub monitor: Monitoring,
+    /// The session host's share of the video memory and Economy's release
+    /// (`app/folderstorm_characters/memory.rs`).
+    pub memory: MemoryState,
     /// The bar the session host asks this viewer to draw (checkpoint 8):
     /// kept here only, for the bar's drawing only, and dropped with the
     /// link. Nothing of it (an alias, a colour, another character's name)
@@ -155,6 +158,18 @@ pub fn window_focus(remembered: &std::cell::Cell<Option<bool>>, window: Option<b
         remembered.set(window);
     }
     remembered.get()
+}
+
+/// What a managed viewer keeps of the host's video memory word
+/// (`folderstorm_session::memory`): the release before Economy's minimise,
+/// the texture passes when it began, and the share last handed to the
+/// textures.
+#[derive(Debug, Default)]
+pub struct MemoryState {
+    pub releasing: ::folderstorm_session::memory::Releasing,
+    pub since_passes: u64,
+    pub began: Option<std::time::Instant>,
+    pub applied: ::folderstorm_session::ipc::Memory,
 }
 
 /// What a managed viewer keeps of its reports to the host.
