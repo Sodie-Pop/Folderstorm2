@@ -25,6 +25,15 @@ impl Bench {
     /// The bench with two textures in the folder [`MINE`].
     fn with_textures() -> Self {
         let mut b = Bench::new();
+        // taller monitors: the window *Shortcut icon* shows whole
+        b.size = [1920, 900];
+        b.world = Some([640, 0, 640, 900]);
+        b.monitors = Some(MonitorLayout {
+            window: [0, 0, 1920, 900],
+            monitors: vec![[0, 0, 640, 900], [640, 0, 640, 900], [1280, 0, 640, 900]],
+        });
+        b.pixels = vec![0; (b.size[0] * b.size[1]) as usize];
+        b.pointer = pos2(960.0, 450.0);
         let texture = |id: u128, name: &str, owner_mask: u32, asset: u128| InvItem {
             id: Uuid::from_u128(id),
             parent: Uuid::from_u128(MINE),

@@ -270,7 +270,7 @@ const SWATCH: f32 = 22.0;
 /// The colours of a line.
 const PER_ROW: usize = 6;
 /// The icon of *Picture from a file…*.
-pub(super) const ICON_FILE: &str = "file-upload";
+pub(super) const ICON_FILE: &str = "folder-open-filled";
 
 /// The window *Shortcut icon*, while it is open: the colour, the picture
 /// (from a file or the Inventory) and *Reset*. `name`: the shortcut's name
