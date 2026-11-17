@@ -348,20 +348,10 @@ fn filters_tip(st: &InventoryUi) -> &'static str {
 /// that window is open (the Legacy Viewer's `new_inv_btn`); the other
 /// windows have none.
 fn additional_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
-    if !st.is_main() {
-        return;
-    }
-    let button = tool_button(
-        ui,
-        p,
-        ADDITIONAL_ICON,
-        aurora_i18n::tr!("inventory-additional-window"),
-        st.additional_open(),
-    );
-    additional_button_drawn(ui, button.rect);
-    if button.clicked() {
-        st.toggle_additional_window(ui.ctx());
-    }
+    // Folderstorm: in every Inventory window, opens the next additional one (extra_windows.rs)
+    let draw = |ui: &mut egui::Ui, tip: &str, lit: bool| tool_button(ui, p, ADDITIONAL_ICON, tip, lit);
+    let rect = super::super::extra_windows::aurora_button(ui, p, st, draw);
+    additional_button_drawn(ui, rect);
 }
 
 /// Direct counterparts of LLPanelMainInventory's collapse_btn / expand_btn.

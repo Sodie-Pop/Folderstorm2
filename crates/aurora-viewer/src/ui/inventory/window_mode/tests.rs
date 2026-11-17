@@ -22,9 +22,9 @@ fn modes_are_kept_per_window_only_when_changed() {
             quiet: true,
         },
     );
-    modes.set(Key::Additional, Mode::default());
+    modes.set(Key::Additional(1), Mode::default());
     assert_eq!(modes.get(Key::Main), pinned);
-    assert_eq!(modes.get(Key::Additional), Mode::default());
+    assert_eq!(modes.get(Key::Additional(1)), Mode::default());
     assert!(modes.get(Key::Tab(3)).quiet && modes.get(Key::Folder(id(CLOTHING))).quiet);
     assert!(!modes.get(Key::Tab(4)).quiet, "another tab's window");
     let saved = serde_json::to_string(&modes).expect("serialize");
@@ -38,6 +38,39 @@ fn modes_are_kept_per_window_only_when_changed() {
     assert!(modes.retain_tabs(&[5]));
     assert_eq!(modes.get(Key::Tab(3)), Mode::default());
     assert!(modes.get(Key::Folder(id(CLOTHING))).quiet, "folder windows stay");
+}
+
+/// Each additional window has its own mode; the first keeps the key it had
+/// when there was one (`"additional"`), so a mode saved then still applies.
+#[test]
+fn each_additional_window_has_its_own_mode() {
+    let quiet = Mode {
+        pinned: false,
+        quiet: true,
+    };
+    let pinned = Mode {
+        pinned: true,
+        quiet: false,
+    };
+    let old: Modes = serde_json::from_str(r#"{"additional":{"pinned":true,"quiet":false}}"#).expect("saved before");
+    assert_eq!(old.get(Key::Additional(1)), pinned, "slot 1 reads the old key");
+    assert_eq!(old.get(Key::Additional(2)), Mode::default());
+    let mut modes = Modes::default();
+    modes.set(Key::Additional(1), pinned);
+    for slot in 2..=crate::ui::inventory::extra_windows::MAX_SLOTS {
+        modes.set(Key::Additional(slot), if slot % 2 == 0 { quiet } else { Mode::default() });
+    }
+    let saved = serde_json::to_string(&modes).expect("serialize");
+    assert!(
+        saved.contains(r#""additional":"#) && saved.contains(r#""additional:2":"#),
+        "{saved}"
+    );
+    assert!(!saved.contains("additional:3"), "the default mode is not written: {saved}");
+    let loaded: Modes = serde_json::from_str(&saved).expect("deserialize");
+    assert_eq!(loaded, modes);
+    assert_eq!(loaded.get(Key::Additional(1)), pinned);
+    assert_eq!(loaded.get(Key::Additional(16)), quiet);
+    assert_eq!(loaded.get(Key::Additional(15)), Mode::default());
 }
 
 #[test]

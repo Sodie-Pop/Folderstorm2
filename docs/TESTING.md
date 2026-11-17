@@ -11360,6 +11360,27 @@ separate searches enabled and disabled; that preference controls only the text.
   tab, and no such button. Click the lit button: the additional window
   closes; click it again: it reopens at the same place, its folders and
   search forgotten. Drag an item from one window onto a folder of the other.
+- **`extra-windows`, `aurora-extra-windows`, `extra-windows-full`**
+  (Folderstorm2, multiple Inventory windows; in Folderstorm2 the button no
+  longer closes the additional window, it opens the next one): the main
+  window and three additional windows side by side, titled "Inventory 2",
+  "Inventory 3" and "Inventory 4"; "Inventory 3" on the Recent tab with
+  "shirt" typed, "Inventory 4" minimized at about frame 30. Each has the
+  "New Inventory window" button (the second briefcase), lit, its tooltip
+  "New Inventory window (3 of 16 open)". Click it in any window: the next
+  free window opens a step down and right of the first one's place; close
+  one with its cross and click again: that one comes back, afresh, where it
+  was. Right click the button: *New Inventory window*, *Close all additional
+  windows* (closes the numbered windows only, not a folder or tab window).
+  Folder windows and custom-tab windows have the same button (beside "+" in
+  the Legacy style, in the tools row in the Aurora style), except in quiet
+  mode where their toolbar is hidden. Ctrl+Shift+I does the same as the button. `extra-windows-full`: all 16
+  open in a cascade, the status line says that all 16 are open (again at
+  about frame 400), the button greyed with the same tooltip, and its menu
+  open at about frame 40 with *New Inventory window* greyed. Under RLVa's
+  `@showinv` every one of them closes. Each window keeps its place and size
+  after a restart, but none reopens at login; layouts and workspaces list
+  them as "Inventory 2" … "Inventory 17" and open, place and close each one.
 - `smart`, `aurora-smart`, `aurora-smart-wide`: advanced search. The window
   is in advanced mode on a saved smart search: objects or scripts, or a name
   ending in a number (an Any group), but not the no-copy object (a Not

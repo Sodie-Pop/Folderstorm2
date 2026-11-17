@@ -1218,6 +1218,12 @@ inventory-quick-unpin = ピン留めを外す: 他のウィンドウで隠れる
 inventory-quick-quiet = シンプル表示: 一覧だけ
 inventory-quick-full = 通常表示: 検索、タブ、ツール
 inventory-quick-demo-name = クイックアクセス
+# Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
+inventory-windows-title = 持ち物 { $number }
+inventory-windows-new = 新しい持ち物ウィンドウ
+inventory-windows-new-tip = 新しい持ち物ウィンドウ（{ $max } 個中 { $open } 個を表示中）
+inventory-windows-close-all = 追加の持ち物ウィンドウをすべて閉じる
+inventory-windows-all-open = 追加の持ち物ウィンドウ { $max } 個がすべて開いています。先にどれかを閉じてください。
 inventory-move-connection-unavailable = 移動できません：リージョンとの接続が利用できません。
 inventory-move-invalid-target = アイテムまたは移動先フォルダが見つかりませんでした。インベントリを再読み込みしてください。
 ao-title = ＡＯ・アバターのアニメーション
