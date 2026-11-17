@@ -27,9 +27,11 @@
 //! - `overflow`: the taskbar with twenty collapsed windows (opened at
 //!   frame 200): buttons that are their icon alone, and *More*.
 //! - `items`: the same, and a third column of item shortcuts: a landmark,
-//!   a notecard and one whose item is gone. At frame 200 the landmark is
-//!   opened (Aurora's question before the teleport), at frame 300 the
-//!   notecard (its window).
+//!   a notecard, an outfit and one whose item is gone. At frame 200 the
+//!   landmark is opened (Aurora's question before the teleport), at frame
+//!   300 the notecard (its window).
+//! - `outfit`: the same as `items`; at frame 200 the outfit shortcut is
+//!   opened: the question of outfit safety, nothing worn before its answer.
 
 use super::store::{Desktop, Target, Taskbar};
 use crate::folderstorm::viewport::ViewportSettings;
@@ -95,6 +97,12 @@ pub fn notecard() -> Uuid {
     crate::demo::u(NOTECARD)
 }
 
+/// The outfit of `items` and `outfit`: one of the demo's own
+/// (`world::appearance::seed_demo`).
+pub fn outfit() -> Uuid {
+    Uuid::from_u128(703)
+}
+
 /// The demo's items, added to the demo's inventory, and their shortcuts
 /// (in the desktop of the demo's account).
 pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inventory, agent: Uuid) {
@@ -121,8 +129,21 @@ pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inve
             ..item(NOTECARD, DROPPED, "Shopping list", 7)
         },
     ]);
-    for (n, id) in [LANDMARK, NOTECARD, ITEM_GONE].into_iter().enumerate() {
-        let target = Target::Item { item: crate::demo::u(id) };
+    // the demo's outfits (My Outfits and what they hold)
+    crate::world::appearance::seed_demo(inv, agent);
+    let targets = [
+        Target::Item {
+            item: crate::demo::u(LANDMARK),
+        },
+        Target::Item {
+            item: crate::demo::u(NOTECARD),
+        },
+        Target::Outfit { outfit: outfit() },
+        Target::Item {
+            item: crate::demo::u(ITEM_GONE),
+        },
+    ];
+    for (n, target) in targets.into_iter().enumerate() {
         let _ = desktop.add(target, 0, (ITEMS_AT.0, ITEMS_AT.1 + n as u16));
     }
 }
@@ -158,7 +179,7 @@ const RIGHT: &[&str] = &["preferences", "build"];
 pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, width: u32) -> bool {
     if !matches!(
         mode,
-        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow" | "items"
+        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow" | "items" | "outfit"
     ) {
         return false;
     }

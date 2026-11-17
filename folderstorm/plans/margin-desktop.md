@@ -1133,3 +1133,46 @@ What is built is listed kind by kind; each kind is its own commit.
   section "Landmarks").
 - The notecard's window is Aurora's own floater, so it is placed by
   Aurora's cascade, not beside the shortcut.
+
+### Outfits
+
+- **A fourth target**, `{ outfit: <uuid> }` (`store::Target::Outfit`): the
+  id of an outfit folder (LLFolderType::FT_OUTFIT, the folders of My
+  Outfits). **Decision**: from this checkpoint on, an outfit folder added
+  to a desktop (menu or drop, or a link to it) gives an **outfit
+  shortcut**, whose opening **wears** it; any other folder still gives a
+  folder shortcut. A folder shortcut made earlier to an outfit's folder
+  stays one (it opens the window). An outfit shortcut's menu keeps the
+  folder's side: *Open in a new window* (checkpoint 2's window, beside
+  the shortcut) and *Show in inventory*.
+- **Opening wears it as *Replace Current Outfit*** of the Inventory's
+  menu, **always after the question of outfit safety** (row 2.7): the
+  glue checks what greys that entry (`targets::outfit_open`: the folder
+  is a live outfit, RLVa does not lock adding from it
+  (`WearLocks::folder_allows`), no outfit change is under way, what it
+  holds is loaded and has something to wear), then sets the question
+  through `InventoryUi::folderstorm_ask_outfit` (in our
+  `ui/inventory/outfit_safety.rs`). The window is outfit safety's own:
+  Cancel first and focused, Escape cancels, no "do not ask again". Only
+  its answer wears: it checks the folder again and emits
+  `InvAction::Appearance(WearContents { ReplaceOutfit })` from the
+  Inventory's pass, which reaches `apply_appearance_action`, the path of
+  every outfit change (`appearance::plan`, then RLVa's
+  `rlva_prepare_outfit` and `rlva_allows_command`: `@addoutfit`,
+  `@remoutfit`, locked attachments and layers).
+- **Not loaded yet**: opening says "This outfit is still loading" and asks
+  for what it holds (`InvAction::PrepareOutfit`, as the Inventory's menu
+  does when it opens on such a folder); the next try wears.
+- **Greyed**: gone, in the Trash, no longer an outfit ("This outfit is no
+  longer in your inventory"); an RLVa add lock on its folder ("Blocked by
+  RLVa"). What it holds is not walked while it is drawn, so "nothing to
+  wear", "still loading" and "an outfit change is under way" are said
+  when it is opened, in the chat's notices.
+- **The Library**: refused, as its folders are (Aurora's *Replace Current
+  Outfit* is greyed there too).
+- **No new upstream hook**: the question is set by a method of ours on
+  `InventoryUi` and drawn by outfit safety's existing line
+  (`ui/inventory.rs:2330`).
+- **Not tested here**: the greyed state under an RLVa folder lock
+  (`WearLocks` cannot be built outside `world::rlva` without a hook; the
+  rule itself is upstream's, with its tests).

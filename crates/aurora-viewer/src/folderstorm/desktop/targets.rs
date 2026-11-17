@@ -20,6 +20,13 @@
 //! right to read it (LLPreviewNotecard::loadAsset: copy, or a god) and
 //! RLVa's `@viewnote`; nothing of its content is read here.
 //!
+//! An outfit shortcut keeps the id of an outfit folder of My Outfits.
+//! Opening it wears the outfit as *Replace Current Outfit* of the
+//! Inventory's menu does, behind what greys that entry there
+//! (LLAppearanceMgr::getCanReplaceCOF, RLVa's folder locks), and always
+//! through the question of outfit safety (FEATURES row 2.7,
+//! `ui/inventory/outfit_safety.rs`).
+//!
 //! A command shortcut runs what its toolbar button runs
 //! (`ui::bars::run_command`), and stops where the button stops: the gates
 //! of the toolbar's row (`ui::bars`, the loop over a toolbar's buttons) are
@@ -30,7 +37,9 @@
 
 use super::store::{Shortcut, Target};
 use crate::ui::toolbar::COMMANDS;
+use crate::world::appearance::FT_OUTFIT;
 use crate::world::inventory::{Inventory, actions as rules};
+use crate::world::rlva::WearLocks;
 use aurora_i18n::tr;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -187,6 +196,15 @@ pub enum Greyed {
     ItemTrash,
     /// An item of a kind a shortcut does not open.
     ItemOther,
+    /// The outfit's folder was deleted, is in the Trash, or is no longer
+    /// an outfit.
+    OutfitGone,
+    /// What the outfit holds is not all loaded yet.
+    OutfitLoading,
+    /// The outfit holds nothing to wear.
+    OutfitEmpty,
+    /// An outfit change is under way.
+    Busy,
 }
 
 impl Greyed {
@@ -204,6 +222,10 @@ impl Greyed {
             Greyed::ItemGone => tr!("fs-desktop-greyed-item-gone"),
             Greyed::ItemTrash => tr!("fs-desktop-greyed-item-trash"),
             Greyed::ItemOther => tr!("fs-desktop-greyed-item-other"),
+            Greyed::OutfitGone => tr!("fs-desktop-greyed-outfit-gone"),
+            Greyed::OutfitLoading => tr!("fs-desktop-greyed-outfit-loading"),
+            Greyed::OutfitEmpty => tr!("fs-desktop-greyed-outfit-empty"),
+            Greyed::Busy => tr!("fs-desktop-greyed-busy"),
         }
     }
 
@@ -465,11 +487,66 @@ impl Picked {
 /// A selection has at most this many entries looked at.
 pub const MAX_PICKED: usize = super::store::MAX_SHORTCUTS;
 
-/// What `id` gives the desktop: its folder, or its item when it is of a
-/// kind a shortcut opens. A link gives what it points to.
+/// Where the outfit folder `id` stands in `inv`: a live folder
+/// ([`folder_state`]) that is an outfit (LLFolderType::FT_OUTFIT, as
+/// `world::outfit_folders` tells one). A folder that is no longer an
+/// outfit is refused.
+pub fn outfit_state(inv: &Inventory, id: Uuid) -> FolderState {
+    match folder_state(inv, id) {
+        FolderState::Live if !inv.folders.get(&id).is_some_and(|f| f.info.type_default == FT_OUTFIT) => FolderState::Refused,
+        state => state,
+    }
+}
+
+/// What the app knows of what is worn this frame, for the outfit
+/// shortcuts.
+#[derive(Clone, Default)]
+pub struct Wearing {
+    /// What RLVa's locks leave of wearing (`World::rlva_wear_locks`, what
+    /// greys the Inventory's own entries).
+    pub locks: WearLocks,
+    /// An outfit change is under way (`AppearanceUi::pending`).
+    pub busy: bool,
+}
+
+/// Whether the outfit `id` can be worn now: what greys *Replace Current
+/// Outfit* on its folder in the Inventory's menu
+/// (`ui/inventory/context_catalog.rs`; LLAppearanceMgr::getCanReplaceCOF,
+/// an RLVa add lock on the folder). Ok: ask first (outfit safety), then
+/// wear. `wear`: None reads as nothing locked and nothing under way.
+pub fn outfit_open(inv: &Inventory, id: Uuid, wear: Option<&Wearing>, no_inventory: bool) -> Result<(), Greyed> {
+    if no_inventory {
+        return Err(Greyed::Rlva);
+    }
+    match outfit_state(inv, id) {
+        FolderState::Live => {}
+        FolderState::Unknown => return Err(Greyed::NotYet),
+        FolderState::Gone | FolderState::Refused => return Err(Greyed::OutfitGone),
+    }
+    if wear.is_some_and(|wear| !wear.locks.folder_allows(id, true)) {
+        return Err(Greyed::Rlva);
+    }
+    if wear.is_some_and(|wear| wear.busy) {
+        return Err(Greyed::Busy);
+    }
+    // (links still loading, or a folder not fetched yet: the app asks for
+    // them, as the Inventory's menu does when it opens on that folder)
+    match crate::world::appearance::wearable_contents(inv, id) {
+        Err(_) => Err(Greyed::OutfitLoading),
+        Ok(content) if content.is_empty() => Err(Greyed::OutfitEmpty),
+        Ok(_) => Ok(()),
+    }
+}
+
+/// What `id` gives the desktop: its folder (an outfit when it is one), or
+/// its item when it is of a kind a shortcut opens. A link gives what it
+/// points to.
 fn target_of(inv: &Inventory, id: Uuid) -> Option<Target> {
     let original = rules::original(inv, id)?;
     if inv.folders.contains_key(&original) {
+        if outfit_state(inv, original) == FolderState::Live {
+            return Some(Target::Outfit { outfit: original });
+        }
         return (folder_state(inv, original) == FolderState::Live).then_some(Target::Folder { folder: original });
     }
     match item_state(inv, id) {
@@ -520,6 +597,9 @@ pub struct Folders<'a> {
     /// The colours the user gave folders in the Inventory (Aurora's folder
     /// colours); None while they are turned off.
     pub colors: Option<&'a BTreeMap<Uuid, [u8; 3]>>,
+    /// What is worn and what RLVa locks, for the outfit shortcuts; None
+    /// when the desktop has none (nothing is then greyed for it).
+    pub wear: Option<&'a Wearing>,
 }
 
 /// Whether the command `id` runs from a shortcut now: its button's gates,
@@ -602,6 +682,8 @@ const ICON_UNKNOWN: &str = "help-circle-filled";
 pub const ICON_FOLDER: &str = "folder-filled";
 /// The icon of a folder or item shortcut while RLVa hides the Inventory.
 pub const ICON_LOCKED: &str = "lock-filled";
+/// The icon of an outfit.
+pub const ICON_OUTFIT: &str = "hanger-2-filled";
 /// The icon of an item that is gone (the Inventory's own for no type).
 pub const ICON_ITEM: &str = "Inv_Invalid";
 
@@ -626,6 +708,7 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
             };
         }
         Target::Item { item } => return item_face(shortcut, *item, facts, folders),
+        Target::Outfit { outfit } => return outfit_face(shortcut, *outfit, folders),
         Target::Folder { folder } => *folder,
     };
     // a folder that says nothing of itself: its own name is not read
@@ -663,6 +746,55 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
                 verb: tr!("fs-desktop-open"),
                 hidden: false,
                 tint: folders.colors.and_then(|colors| colors.get(&folder)).copied(),
+            }
+        }
+    }
+}
+
+/// The face of the shortcut to the outfit `id`: the folder's name, read
+/// now, under a hanger; greyed with the reason when it is gone or when
+/// RLVa locks its folder. What it holds is not walked here (it is when it
+/// is opened): a shortcut is drawn every frame.
+fn outfit_face(shortcut: &Shortcut, id: Uuid, folders: &Folders) -> Face {
+    let unnamed = |icon: &str, why: Greyed, own_name: bool| {
+        let target_name = if own_name {
+            tr!("fs-desktop-outfit")
+        } else {
+            tr!("fs-desktop-folder")
+        }
+        .to_owned();
+        Face {
+            name: shortcut.name.clone().filter(|_| own_name).unwrap_or_else(|| target_name.clone()),
+            target_name,
+            icon: icon.to_owned(),
+            greyed: Some(why),
+            folder: None,
+            item: None,
+            verb: tr!("fs-desktop-wear-outfit"),
+            hidden: !own_name,
+            tint: None,
+        }
+    };
+    // (@showinv: as a folder shortcut, nothing of it is said)
+    if folders.no_inventory {
+        return unnamed(ICON_LOCKED, Greyed::Rlva, false);
+    }
+    match outfit_state(folders.inv, id) {
+        FolderState::Unknown => unnamed(ICON_OUTFIT, Greyed::NotYet, true),
+        FolderState::Gone | FolderState::Refused => unnamed(ICON_OUTFIT, Greyed::OutfitGone, true),
+        FolderState::Live => {
+            let target_name = crate::ui::inventory::folder_name(folders.inv, id);
+            let locked = folders.wear.is_some_and(|wear| !wear.locks.folder_allows(id, true));
+            Face {
+                name: shortcut.name.clone().unwrap_or_else(|| target_name.clone()),
+                target_name,
+                icon: shortcut.icon.clone().unwrap_or_else(|| ICON_OUTFIT.to_owned()),
+                greyed: locked.then_some(Greyed::Rlva),
+                folder: Some(id),
+                item: None,
+                verb: tr!("fs-desktop-wear-outfit"),
+                hidden: false,
+                tint: None,
             }
         }
     }
@@ -816,6 +948,7 @@ mod tests {
             inv: &inv,
             no_inventory: false,
             colors: None,
+            wear: None,
         };
         let face_of = |s: &Shortcut| face(s, &Facts::default(), &folders);
         let people = face_of(&shortcut);
@@ -990,6 +1123,7 @@ mod tests {
             inv: &inv,
             no_inventory: false,
             colors: None,
+            wear: None,
         };
         let face_of = |n: u128, folders: &Folders| face(&item_shortcut(n), &free, folders);
         let rules_card = face_of(9110, &folders);
@@ -1010,12 +1144,112 @@ mod tests {
             inv: &inv,
             no_inventory: false,
             colors: None,
+            wear: None,
         };
         let greyed = face_of(9110, &folders);
         assert_eq!(
             (greyed.greyed, greyed.hidden, greyed.name.as_str()),
             (Some(Greyed::Rlva), false, "Rules")
         );
+    }
+
+    /// Outfits of the demo inventory (`world::appearance::seed_demo`): one
+    /// that holds nothing, one with clothes and attachments.
+    const EMPTY_OUTFIT: u128 = 702;
+    const OUTFIT: u128 = 703;
+
+    fn outfit_shortcut(n: u128) -> Shortcut {
+        Shortcut {
+            target: Target::Outfit { outfit: id(n) },
+            ..item_shortcut(0)
+        }
+    }
+
+    #[test]
+    fn an_outfit_folder_gives_an_outfit_shortcut_and_wears_as_the_inventory_s_menu_allows() {
+        let mut inv = inventory();
+        assert_eq!(outfit_state(&inv, id(OUTFIT)), FolderState::Live);
+        // a plain folder is not an outfit; gone is gone
+        assert_eq!(outfit_state(&inv, id(MINE)), FolderState::Refused);
+        assert_eq!(outfit_state(&inv, id(123_456)), FolderState::Gone);
+        assert_eq!(outfit_state(&Inventory::default(), id(OUTFIT)), FolderState::Unknown);
+        // a selection: an outfit folder is an outfit shortcut, another
+        // folder a folder shortcut; the link to an outfit (as the current
+        // outfit holds one) gives the outfit
+        let link = inv
+            .items
+            .values()
+            .find(|it| it.asset_type == 25 && outfit_state(&inv, it.asset_id) == FolderState::Live)
+            .map(|it| (it.id, it.asset_id))
+            .expect("the current outfit links its base outfit");
+        let picked = pick(&inv, &[id(OUTFIT), id(MINE), link.0]);
+        assert_eq!(
+            picked.targets,
+            vec![
+                Target::Outfit { outfit: id(OUTFIT) },
+                Target::Folder { folder: id(MINE) },
+                Target::Outfit { outfit: link.1 }
+            ]
+        );
+        // worn when Replace Current Outfit would be offered
+        assert_eq!(outfit_open(&inv, id(OUTFIT), None, false), Ok(()));
+        let free = Wearing::default();
+        assert_eq!(outfit_open(&inv, id(OUTFIT), Some(&free), false), Ok(()));
+        // nothing to wear, not an outfit, gone
+        assert_eq!(outfit_open(&inv, id(EMPTY_OUTFIT), Some(&free), false), Err(Greyed::OutfitEmpty));
+        assert_eq!(outfit_open(&inv, id(MINE), Some(&free), false), Err(Greyed::OutfitGone));
+        assert_eq!(outfit_open(&inv, id(123_456), Some(&free), false), Err(Greyed::OutfitGone));
+        assert_eq!(outfit_open(&Inventory::default(), id(OUTFIT), None, false), Err(Greyed::NotYet));
+        // @showinv; an outfit change under way
+        assert_eq!(outfit_open(&inv, id(OUTFIT), Some(&free), true), Err(Greyed::Rlva));
+        let busy = Wearing {
+            busy: true,
+            ..Default::default()
+        };
+        assert_eq!(outfit_open(&inv, id(OUTFIT), Some(&busy), false), Err(Greyed::Busy));
+        // its face: the folder's name under a hanger, and what opening does
+        let folders = Folders {
+            inv: &inv,
+            no_inventory: false,
+            colors: None,
+            wear: Some(&free),
+        };
+        let facts = Facts::default();
+        let mut shortcut = outfit_shortcut(OUTFIT);
+        let live = face(&shortcut, &facts, &folders);
+        assert_eq!(live.name, rules::name(&inv, id(OUTFIT)));
+        assert_eq!(
+            (live.icon.as_str(), live.greyed, live.folder),
+            (ICON_OUTFIT, None, Some(id(OUTFIT)))
+        );
+        assert_eq!(live.verb, tr!("fs-desktop-wear-outfit"));
+        // @showinv: locked and unnamed, as a folder
+        shortcut.name = Some("Work clothes".into());
+        let locked = face(
+            &shortcut,
+            &facts,
+            &Folders {
+                no_inventory: true,
+                ..folders
+            },
+        );
+        assert_eq!(
+            (locked.icon.as_str(), locked.greyed, locked.hidden),
+            (ICON_LOCKED, Some(Greyed::Rlva), true)
+        );
+        assert!(!locked.tip().contains("Work clothes") && !locked.tip().contains(&live.target_name));
+        // gone: greyed, its own name kept
+        shortcut.target = Target::Outfit { outfit: id(123_456) };
+        let gone = face(&shortcut, &facts, &folders);
+        assert_eq!(
+            (gone.greyed, gone.folder, gone.name.as_str()),
+            (Some(Greyed::OutfitGone), None, "Work clothes")
+        );
+        // what it holds is not loaded yet: asked for, not worn
+        if let Some(folder) = inv.folders.get_mut(&id(OUTFIT)) {
+            folder.state = crate::world::inventory::FetchState::Unknown;
+        }
+        assert_eq!(outfit_open(&inv, id(OUTFIT), None, false), Err(Greyed::OutfitLoading));
     }
 
     fn id(n: u128) -> Uuid {
@@ -1104,6 +1338,7 @@ mod tests {
             inv: &inv,
             no_inventory: false,
             colors: None,
+            wear: None,
         };
         let facts = Facts::default();
         let mut shortcut = item_shortcut(9101);
@@ -1220,6 +1455,7 @@ mod tests {
             inv: &inv,
             no_inventory: false,
             colors: Some(&colors),
+            wear: None,
         };
         let mut shortcut = Shortcut {
             id: 1,

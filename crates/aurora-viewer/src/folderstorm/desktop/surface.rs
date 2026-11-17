@@ -148,6 +148,7 @@ const ICON_ADD: &str = "plus";
 const ICON_SIZE: &str = "dimensions";
 const ICON_SETTINGS: &str = "settings-filled";
 const ICON_SHOW: &str = "folder-open-filled";
+const ICON_WINDOW: &str = "app-window-filled";
 const ICON_RENAME: &str = "pencil-filled";
 const ICON_ICON: &str = "mood-smile-filled";
 const ICON_DEFAULT: &str = "restore";
@@ -164,6 +165,7 @@ pub(super) const ICONS: &[&str] = &[
     ICON_SIZE,
     ICON_SETTINGS,
     ICON_SHOW,
+    ICON_WINDOW,
     ICON_RENAME,
     ICON_ICON,
     ICON_DEFAULT,
@@ -601,6 +603,9 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         face: &face,
                         is_folder,
                         is_item: matches!(shortcut.target, Target::Item { .. }),
+                        is_outfit: matches!(shortcut.target, Target::Outfit { .. }),
+                        cell: rect,
+                        room: room.rect,
                         editable,
                         own_icon: own_icon.as_deref(),
                         slot: room.slot,
@@ -757,6 +762,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
             Op::Open(id) => match desktop.shortcut(id).map(|s| &s.target) {
                 Some(Target::Command { command }) => out.push(Request::Run(command.clone())),
                 Some(Target::Item { item }) => out.push(Request::OpenItem(*item)),
+                Some(Target::Outfit { outfit }) => out.push(Request::WearOutfit(*outfit)),
                 // (a folder that can open asks with `Op::OpenFolder`)
                 Some(Target::Folder { .. }) | None => {}
             },
@@ -873,6 +879,11 @@ struct MenuOf<'a> {
     face: &'a Face,
     is_folder: bool,
     is_item: bool,
+    /// An outfit: its folder's window is a second entry of its menu.
+    is_outfit: bool,
+    /// Its cell and its room: a folder's window opens beside it.
+    cell: Rect,
+    room: Rect,
     /// Its name and icon can be changed now (RLVa hides a folder's).
     editable: bool,
     /// The icon of its own, when it has one.
@@ -901,6 +912,31 @@ fn shortcut_menu(response: &egui::Response, p: &Palette, of: &MenuOf, open: impl
         let why = face.greyed.map_or("", |why| why.text());
         if menu::item_tip(ui, p, ICON_OPEN, face.verb, face.greyed.is_none(), why) {
             ops.push(open());
+        }
+        // an outfit is a folder too: its own window, as a folder shortcut
+        // opens (not while RLVa hides the Inventory, nor once it is gone)
+        if of.is_outfit {
+            let shown = face.folder.is_some();
+            let label = tr!("ui-inventory-context-open-in-a-new-window");
+            if menu::item_tip(ui, p, ICON_WINDOW, label, shown, if shown { "" } else { why })
+                && let Some(folder) = face.folder
+            {
+                ops.push(Op::OpenFolder {
+                    folder,
+                    cell: of.cell,
+                    room: of.room,
+                });
+            }
+            if menu::item_tip(
+                ui,
+                p,
+                ICON_SHOW,
+                tr!("ui-context-show-in-inventory"),
+                shown,
+                if shown { "" } else { why },
+            ) {
+                ops.extend(face.folder.map(Op::ShowFolder));
+            }
         }
         if of.is_folder && menu::item_tip(ui, p, ICON_SHOW, tr!("ui-context-show-in-inventory"), face.folder.is_some(), why) {
             ops.extend(face.folder.map(Op::ShowFolder));

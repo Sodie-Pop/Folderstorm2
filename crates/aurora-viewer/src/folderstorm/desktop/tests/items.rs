@@ -1,6 +1,6 @@
 //! Frame tests of the item shortcuts (checkpoint 5 of the plan): a
 //! landmark and a notecard on a desktop, drawn, opened, greyed, hidden by
-//! RLVa, dropped from the Inventory.
+//! RLVa, dropped from the Inventory; an outfit, worn after a question.
 
 use super::*;
 use crate::folderstorm::desktop::targets::{self, Greyed};
@@ -80,6 +80,7 @@ impl Bench {
 #[test]
 fn the_inventory_s_icons_of_the_items_are_in_the_skin() {
     let b = Bench::new();
+    assert!(crate::ui::icons::embedded(targets::ICON_OUTFIT));
     for icon in ["Inv_Landmark", "Inv_Notecard", targets::ICON_ITEM] {
         assert!(
             b.icons.get(icon).is_some() || crate::ui::icons::global(icon).is_some(),
@@ -237,6 +238,7 @@ fn an_item_that_is_gone_or_in_the_trash_is_greyed_and_removed_from_its_menu() {
             inv: &b.inv,
             no_inventory: false,
             colors: None,
+            wear: None,
         };
         targets::face(b.desktop.shortcut(id).expect("a shortcut"), &b.facts, &folders).greyed
     };
@@ -392,4 +394,77 @@ fn a_notecard_shortcut_shows_its_name_and_asks_to_be_opened() {
             }
         ]
     );
+}
+
+/// An outfit of the bench's inventory (the demo's, in My Outfits).
+const OUTFIT: u128 = 703;
+
+#[test]
+fn an_outfit_shortcut_asks_to_be_worn_and_keeps_its_folder_s_window_in_its_menu() {
+    let mut b = Bench::with_items();
+    let outfit = Uuid::from_u128(OUTFIT);
+    let id = b.desktop.add(Target::Outfit { outfit }, 0, (0, 0)).expect("added");
+    b.frames(3);
+    let cell = b.cell_of(id);
+    let name = b.folder_name(OUTFIT);
+    assert!(
+        b.drawn(&name).is_some_and(|text| cell.contains_rect(text)),
+        "the outfit's name, read now"
+    );
+    b.picture("desktop-outfit");
+    // a double click asks to wear it: no window, nothing else
+    b.double_click(cell.center());
+    assert_eq!(b.out.iter().filter(|r| **r == Request::WearOutfit(outfit)).count(), 1);
+    assert!(b.opened().is_empty() && b.opened_items().is_empty() && b.ran().is_empty());
+    // its menu: Wear, its folder's own window, Show in inventory
+    b.out.clear();
+    b.menu(cell.center(), aurora_i18n::tr!("fs-desktop-wear-outfit"));
+    assert_eq!(b.out, vec![Request::WearOutfit(outfit)]);
+    b.out.clear();
+    b.menu(cell.center(), aurora_i18n::tr!("ui-inventory-context-open-in-a-new-window"));
+    assert_eq!(
+        b.out,
+        vec![Request::OpenFolder {
+            folder: outfit,
+            cell,
+            room: b.room(0).rect
+        }]
+    );
+    b.out.clear();
+    b.menu(cell.center(), aurora_i18n::tr!("ui-context-show-in-inventory"));
+    assert_eq!(b.out, vec![Request::ShowFolder(outfit)]);
+    // @showinv: locked, unnamed, not worn
+    b.out.clear();
+    b.no_inventory = true;
+    b.frames(2);
+    assert!(b.texts.iter().all(|(text, _)| !text.contains(&name)));
+    b.time += 2.0;
+    b.double_click(cell.center());
+    assert!(b.out.is_empty());
+    b.no_inventory = false;
+    // an outfit folder dropped from the Inventory is an outfit shortcut;
+    // a plain folder stays a folder shortcut
+    let mut b = Bench::with_items();
+    b.frames(3);
+    b.drop_inventory(&[OUTFIT + 1, MINE], b.room(0).grid.rect((1, 1)).center());
+    let targets: Vec<_> = b.desktop.shortcuts.iter().map(|s| s.target.clone()).collect();
+    assert_eq!(
+        targets,
+        vec![
+            Target::Outfit {
+                outfit: Uuid::from_u128(OUTFIT + 1)
+            },
+            Target::Folder {
+                folder: Uuid::from_u128(MINE)
+            }
+        ]
+    );
+    // a folder shortcut made before to an outfit's folder still opens its window
+    let window = b.add_folder(OUTFIT, 0, (3, 0));
+    b.frames(2);
+    b.out.clear();
+    b.time += 2.0;
+    b.double_click(b.cell_of(window).center());
+    assert_eq!(b.opened(), vec![outfit]);
+    assert!(b.out.iter().all(|r| !matches!(r, Request::WearOutfit(_))));
 }

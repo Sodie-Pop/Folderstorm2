@@ -11,7 +11,9 @@
 //! new window*), one window per folder; it keeps the folder's id, nothing else.
 //! A shortcut to an Inventory item opens it as the Inventory does (a
 //! landmark: the teleport, after Aurora's question; a notecard: its
-//! window); it keeps the item's id, never its asset's.
+//! window); it keeps the item's id, never its asset's. A shortcut to an
+//! outfit wears it, as *Replace Current Outfit* does, after the question
+//! of outfit safety.
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
@@ -52,7 +54,7 @@ mod tests;
 
 pub use store::Desktop;
 pub use surface::{Added, add_folders, add_targets};
-pub use targets::{Facts, Folders};
+pub use targets::{Facts, Folders, Wearing};
 
 use crate::folderstorm::viewport;
 use crate::theme::Palette;
@@ -93,6 +95,9 @@ pub enum Request {
     OpenItem(Uuid),
     /// Show this item in the main Inventory window.
     ShowItem(Uuid),
+    /// Wear this outfit (its folder of My Outfits), after the question of
+    /// outfit safety.
+    WearOutfit(Uuid),
     /// Say this in the chat's notices (what a drop added, or why not).
     Notice(String),
     /// The desktop changed: save the settings once the pointer is up.

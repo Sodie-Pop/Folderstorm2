@@ -98,6 +98,10 @@ pub enum Target {
     /// its name or its kind, which are read from the inventory when it is
     /// drawn or opened.
     Item { item: Uuid },
+    /// An outfit of the desktop's account: the id of its folder in My
+    /// Outfits. Opening it wears the outfit (after the question of outfit
+    /// safety), where a folder shortcut opens the folder's window.
+    Outfit { outfit: Uuid },
 }
 
 impl Target {

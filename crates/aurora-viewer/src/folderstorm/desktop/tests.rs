@@ -211,6 +211,7 @@ impl Bench {
             inv: &self.inv,
             no_inventory: self.no_inventory,
             colors: None,
+            wear: None,
         };
         let mut out = Vec::new();
         let mut output = self.ctx.run_ui(
@@ -730,6 +731,18 @@ fn the_demo_seeds_its_desktops() {
             .get(&demo::notecard())
             .is_some_and(|it| it.asset_type == 7 && it.asset_id.is_nil())
     );
+    assert!(
+        desktop
+            .shortcuts
+            .iter()
+            .any(|s| s.target == Target::Outfit { outfit: demo::outfit() })
+    );
+    assert_eq!(
+        super::targets::outfit_open(&inv, demo::outfit(), None, false),
+        Ok(()),
+        "the demo's outfit can be worn"
+    );
+    assert!(demo::seed("outfit", &mut desktop, &mut view, 5760));
     // the demo's desktop drawn: every size holds its names in its cells
     for size in Size::ALL {
         let mut b = Bench::new();

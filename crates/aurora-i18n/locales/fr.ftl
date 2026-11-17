@@ -2105,7 +2105,7 @@ fs-background-shows = Affiche
 fs-desktop-group = Bureau dans les marges
 fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
-fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y les dossiers, les repères et les notes de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer. Chaque compte a ses propres raccourcis ; ce réglage et la taille des icônes sont communs à tous.
+fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y les dossiers, les repères, les notes et les tenues de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer. Chaque compte a ses propres raccourcis ; ce réglage et la taille des icônes sont communs à tous.
 fs-desktop-size = Taille des icônes
 fs-desktop-size-help = La taille des raccourcis et de la grille qui les porte.
 fs-desktop-size-small = Petite
@@ -2125,8 +2125,14 @@ fs-desktop-item = Objet de l'inventaire
 fs-desktop-greyed-item-gone = Cet objet n'est pas dans votre inventaire : il a été supprimé, ou son dossier n'est pas encore chargé.
 fs-desktop-greyed-item-trash = Cet objet est dans la corbeille.
 fs-desktop-greyed-item-other = Ce type d'objet ne s'ouvre pas depuis le bureau.
+fs-desktop-outfit = Tenue
+fs-desktop-wear-outfit = Porter cette tenue…
+fs-desktop-greyed-outfit-gone = Cette tenue n'est plus dans votre inventaire.
+fs-desktop-greyed-outfit-loading = Cette tenue est encore en cours de chargement : réessayez dans un instant.
+fs-desktop-greyed-outfit-empty = Cette tenue n'a rien à porter.
+fs-desktop-greyed-busy = Un changement de tenue est en cours : réessayez dans un instant.
 fs-desktop-add = Ajouter au bureau
-fs-desktop-add-refused = Seuls les dossiers, les repères et les notes de votre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
+fs-desktop-add-refused = Seuls les dossiers, les repères, les notes et les tenues de votre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
 fs-desktop-added =
     { $count ->
         [one] Raccourci ajouté au bureau.
