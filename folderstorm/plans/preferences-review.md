@@ -122,7 +122,10 @@ camera and HUDs, after it was applied.*
 9. **The background lives in two places.** The default is on *Bars and
    windows* (`background.rs:41`); a layout's own is under the selected
    layout (`background.rs:298`, called from
-   `folderstorm_workspaces.rs:626`).
+   `folderstorm_workspaces.rs:626`). Choosing *Its own* opens a second full
+   background editor, six rows long, inside the list (screenshot 04), with
+   other labels than the default's (*Shows* there, *Background* on the
+   other tab). The list's selected line is then far from the next line.
 10. **Two ways to say a workspace's layout.** When saving: a checkbox
     "Always use the layout “X” with it" (`workspaces_group.rs:637`), greyed
     with a different sentence when no layout is in use. After saving: a
@@ -157,8 +160,12 @@ camera and HUDs, after it was applied.*
 14. **Long and flat.** Under a selected workspace: a summary line, seven
     buttons, the layout combo, one checkbox per switchable window (all of
     them, wrapped: a wall of boxes), *Remember Inventory folders*, and a
-    folded *Graphics, camera and HUDs* (`workspaces_group.rs:418–423`). The
-    windows it opens and the ones it does not look the same at a glance.
+    folded *Graphics, camera and HUDs* (`workspaces_group.rs:418–423`). In
+    screenshot 05 the window boxes alone are **35 checkboxes in seven
+    lines**, among them *Inventory 2* to *Inventory 17* one by one; the one
+    window the workspace opens (World map) is hard to find. Then the report
+    of the last apply, four lines of text, sits between the editor and the
+    save row. The whole editor is about 550 px tall, inside the list.
 
 **Wording**
 
@@ -438,6 +445,11 @@ current…*), the selected entry's editor on the right.
    *Modified settings* and reset with the page; the saved layouts and
    workspaces stay untracked.
 8. **Short intros**: one sentence per group, the rest in the rows' help.
+9. **A workspace's windows**: show the windows it opens first, ticked; fold
+   the rest behind *All windows… (35)*; give the 16 additional Inventory
+   windows one entry ("Inventory 2–17", with the count of those ticked)
+   instead of 16 boxes; move the apply report under the buttons, one line,
+   with the details on hover.
 
 ---
 
