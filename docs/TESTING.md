@@ -352,6 +352,37 @@ it, that dragging a folder (or several entries) from the Inventory adds every
 gesture and sound of it and of its sub-folders, once, with a summary, and
 that Options creates, renames, duplicates, moves and deletes boards.
 
+**Media button and Nearby media (Folderstorm2).** The top bar's media button
+(left of the radio) turns all media off or on, parcel media and media on
+objects, as the Legacy Viewer's media toggle; the parcel music keeps its radio
+button. It shows a pause while any media plays. Hovering it opens Nearby
+media: the parcel media, the parcel music, then the media on objects nearest
+first, each with its state, zoom, start / stop, mute and volume, Stop all,
+Start all and the Media preferences. Its *Show* list keeps All, In this
+parcel, Outside this parcel or On other avatars, as the Legacy Viewer's.
+`AURORA_DEMO_NEARBY_MEDIA` (any value) adds a billboard past the east border
+of the demo parcel and a badge worn by Violet Wolf (and turns media on other
+avatars on for the demo); `=open` also pins the panel open. With the demo's
+media it lists real rows:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_NEARBY_MEDIA=open AURORA_DEMO_MEDIA=1 AURORA_DEMO_PARCEL_MEDIA=1 AURORA_DEMO_MUSIC=1 cargo run -p aurora-viewer -- --title "Test nearby media"
+```
+
+Check that a click on the button stops everything (its face goes back to the
+media glyph, the rows say Stopped) and a second click starts it again, that a
+row's button starts or stops its source alone, that the music row follows the
+radio button, that Stop all leaves the music playing, and that the panel
+closes a moment after the pointer leaves it (without `=open`). Check that
+*Outside this parcel* lists the billboard alone, *On other avatars* the badge
+alone, *In this parcel* the parcel's rows, the plaza screen and the badge, and
+that the choice stays when the panel closes and opens again (not after a
+restart). The zoom button (none on the parcel's rows) frames the screen and
+follows it; on that row it then zooms back out; a double click on a name zooms
+too. A row's slider changes that media's volume alone, under the media and
+master volumes. Without the media plugins, the rows stay on *Starting…* and
+the panel says the plugins are not installed.
+
 **Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
 demo's own settings, opens Inventory, the world map and People, and opens
 Preferences › Layout › Layouts. "Wide" has the world on the right half of the
@@ -11886,6 +11917,7 @@ What the inventory must show with these scenarios:
 | `AURORA_DEMO_MEDIA_PACK=consent`, `declined`, `downloading`, `installing` or `failed` | The download's consent card, or a fixed state of the media plugins download |
 | `AURORA_MEDIA_PACK_FEED=http://127.0.0.1:<port>/` | Media plugins pack taken from a local test server |
 | `AURORA_DEMO_MUSIC=<url>`, `1` or `fade` | Music of the demo parcel |
+| `AURORA_DEMO_NEARBY_MEDIA=1` or `open` (Folderstorm2) | Media outside the parcel and on another avatar for Nearby media; `open` pins the panel of the top bar's media button open |
 | `AURORA_DEMO_STREAM_TITLE=[window\|history\|text][,stop]` | Stream title window with changing titles and their history |
 | `AURORA_DEMO_MEDIA_FILTER=ask`, `first`, `data`, `script`, `music`, `list`, `worn` or `hud` | Media filter question or list; media on our own worn items |
 | `AURORA_DEMO_SOUND=1`, `hud` or `parcel-open\|parcel-local\|parcel-source` | World/HUD chime or parcel sound isolation; interface and media sounds audible |

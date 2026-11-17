@@ -2093,6 +2093,41 @@ fs-folder-upload-short = L$が足りません。このアップロードにはL$
 fs-folder-upload-receipt = フォルダー { $folder } のアップロード：{ $uploaded }個完了、{ $failed }個失敗、{ $cancelled }個未送信、L${ $spent }を使用しました。
 fs-folder-upload-receipt-failed = 失敗：{ $names }。
 
+# Folderstorm: the top bar's media button and its Nearby media panel (folderstorm/nearby_media)
+fs-nearby-media-title = 近くのメディア
+fs-nearby-media-preferences = メディアの初期設定
+fs-nearby-media-parcel-media = 区画のメディア
+fs-nearby-media-parcel-music = 区画の音楽
+fs-nearby-media-unnamed = （アドレスなし）
+fs-nearby-media-distance = { $metres } m
+fs-nearby-media-empty = 近くにメディアはありません。
+fs-nearby-media-disabled = メディアは初期設定 › メディアでオフになっています。
+fs-nearby-media-no-plugins = メディアプラグインがまだインストールされていません：Web ページと動画は再生できません。
+fs-nearby-media-state-stopped = 停止中
+fs-nearby-media-state-waiting = 確認待ち
+fs-nearby-media-state-starting = 開始中…
+fs-nearby-media-state-playing = 再生中
+fs-nearby-media-state-paused = 一時停止
+fs-nearby-media-state-failed = 失敗
+fs-nearby-media-start = 開始
+fs-nearby-media-stop = 停止
+fs-nearby-media-stop-all = すべて停止
+fs-nearby-media-start-all = すべて開始
+fs-nearby-media-stop-all-tip = 近くのメディアをすべてオフにします。区画の音楽には専用のボタンがあります。
+fs-nearby-media-start-all-tip = 近くのメディアをすべてオンにします。区画の音楽には専用のボタンがあります。
+fs-nearby-media-show = 表示：
+fs-nearby-media-filter-all = すべて
+fs-nearby-media-filter-within = この区画内
+fs-nearby-media-filter-outside = この区画外
+fs-nearby-media-filter-others = 他のアバター
+fs-nearby-media-empty-filter = この条件に合うメディアはありません。
+fs-nearby-media-others-off = 他のアバターのメディアは初期設定 › メディアでオフになっています。
+fs-nearby-media-zoom = このメディアにズーム
+fs-nearby-media-unzoom = ズームを戻す
+fs-nearby-media-volume = このメディアの音量
+fs-demo-nearby-media-outside-page = data:text/html;charset=utf-8,<html><head><title>隣の看板</title></head><body style='margin:0;height:100vh;background:%230f3d6d;color:white;font:72px sans-serif;text-align:center'><h1 style='padding-top:180px'>隣の看板</h1></body></html>
+fs-demo-nearby-media-worn-page = data:text/html;charset=utf-8,<html><head><title>Wolf のバッジ</title></head><body style='margin:0;height:100vh;background:%234a1f6d;color:white;font:96px sans-serif;text-align:center'><h1 style='padding-top:160px'>Wolf のバッジ</h1></body></html>
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP ローカル アシスタント AI エージェント ブリッジ API 自動化 Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = アクティビティ 履歴 ログ 受領 操作 停止

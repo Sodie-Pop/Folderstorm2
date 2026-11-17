@@ -2317,6 +2317,41 @@ fs-folder-upload-short = Pas assez de L$ : cet import coûte { $cost } L$ et le 
 fs-folder-upload-receipt = Import du dossier { $folder } : { $uploaded } importés, { $failed } en échec, { $cancelled } non envoyés, { $spent } L$ dépensés.
 fs-folder-upload-receipt-failed = En échec : { $names }.
 
+# Folderstorm: the top bar's media button and its Nearby media panel (folderstorm/nearby_media)
+fs-nearby-media-title = Médias à proximité
+fs-nearby-media-preferences = Préférences des médias
+fs-nearby-media-parcel-media = Média de la parcelle
+fs-nearby-media-parcel-music = Musique de la parcelle
+fs-nearby-media-unnamed = (sans adresse)
+fs-nearby-media-distance = { $metres } m
+fs-nearby-media-empty = Aucun média à proximité.
+fs-nearby-media-disabled = Les médias sont désactivés dans Préférences › Médias.
+fs-nearby-media-no-plugins = Les modules des médias ne sont pas encore installés : les pages web et les vidéos ne peuvent pas être lues.
+fs-nearby-media-state-stopped = Arrêté
+fs-nearby-media-state-waiting = Question posée
+fs-nearby-media-state-starting = Démarrage…
+fs-nearby-media-state-playing = En lecture
+fs-nearby-media-state-paused = En pause
+fs-nearby-media-state-failed = Échec
+fs-nearby-media-start = Démarrer
+fs-nearby-media-stop = Arrêter
+fs-nearby-media-stop-all = Tout arrêter
+fs-nearby-media-start-all = Tout démarrer
+fs-nearby-media-stop-all-tip = Arrêter tous les médias à proximité. La musique de la parcelle garde son propre bouton.
+fs-nearby-media-start-all-tip = Démarrer tous les médias à proximité. La musique de la parcelle garde son propre bouton.
+fs-nearby-media-show = Afficher :
+fs-nearby-media-filter-all = Tout
+fs-nearby-media-filter-within = Sur cette parcelle
+fs-nearby-media-filter-outside = Hors de cette parcelle
+fs-nearby-media-filter-others = Sur d'autres avatars
+fs-nearby-media-empty-filter = Aucun média ici ne correspond à ce choix.
+fs-nearby-media-others-off = Les médias sur d'autres avatars sont désactivés dans Préférences › Médias.
+fs-nearby-media-zoom = Zoomer sur ce média
+fs-nearby-media-unzoom = Revenir en arrière
+fs-nearby-media-volume = Volume de ce média
+fs-demo-nearby-media-outside-page = data:text/html;charset=utf-8,<html><head><title>Panneau d'à côté</title></head><body style='margin:0;height:100vh;background:%230f3d6d;color:white;font:72px sans-serif;text-align:center'><h1 style='padding-top:180px'>Panneau d'à côté</h1></body></html>
+fs-demo-nearby-media-worn-page = data:text/html;charset=utf-8,<html><head><title>Badge de Wolf</title></head><body style='margin:0;height:100vh;background:%234a1f6d;color:white;font:96px sans-serif;text-align:center'><h1 style='padding-top:160px'>Badge de Wolf</h1></body></html>
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter
