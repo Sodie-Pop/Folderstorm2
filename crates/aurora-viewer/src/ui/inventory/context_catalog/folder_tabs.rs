@@ -9,7 +9,7 @@
 //! `InvAction::FolderstormDesktopAdd`. Which folders can be shortcuts is in
 //! `crate::folderstorm::desktop::targets`.
 use super::*;
-use crate::ui::inventory::custom_tabs::folder_ui;
+use crate::ui::inventory::custom_tabs::{folder_ui, icon};
 
 pub(in crate::ui::inventory) enum Command {
     /// A new custom tab scoped to these folders (and pinning these items).
@@ -55,10 +55,12 @@ pub(super) fn entries(c: &mut Catalog, inv: &Inventory, st: &InventoryUi, prefs:
     }
     for tab in &offer.tabs {
         let id = tab_entry(tab.id);
+        // each tab with its own icon (custom_tabs/icon.rs)
+        let icon = prefs.custom_tabs.iter().find(|t| t.id == tab.id).map_or(icon::DEFAULT, icon::of);
         c.add(
             id.clone(),
             &zone,
-            "bookmark-filled",
+            icon,
             &tab.name,
             tab.refused.is_none(),
             Command::AddTo(tab.id, ids.to_vec()).into(),

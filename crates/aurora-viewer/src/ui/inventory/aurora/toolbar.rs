@@ -73,7 +73,7 @@ pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inv
     // Folderstorm: the custom tabs follow the built-in ones (custom_tabs.rs)
     let custom = custom_tabs::entries(prefs);
     for (slot, name) in &custom {
-        entries.push((*slot, "bookmark-filled", name.as_str()));
+        entries.push((*slot, custom_tabs::icon::of_slot(prefs, *slot), name.as_str())); // Folderstorm: its own icon
     }
     let unseen = unseen_received(inv, st);
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), Sense::hover());
