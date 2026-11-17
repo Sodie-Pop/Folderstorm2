@@ -167,16 +167,14 @@ fn sound_choice(
                         .hint_text(tr!("fs-alerts-inventory-search")),
                 );
                 let needle = search.trim().to_lowercase();
-                let mut shown = 0;
-                for (item, name) in list
+                let matching = list
                     .iter()
-                    .filter(|(_, name)| needle.is_empty() || name.to_lowercase().contains(&needle))
-                {
-                    if shown == INVENTORY_SHOWN {
+                    .filter(|(_, name)| needle.is_empty() || name.to_lowercase().contains(&needle));
+                for (n, (item, name)) in matching.enumerate() {
+                    if n == INVENTORY_SHOWN {
                         ui.label(egui::RichText::new(tr!("fs-alerts-inventory-more")).color(p.muted).small());
                         break;
                     }
-                    shown += 1;
                     ui.selectable_value(current, Some(Sound::Inventory { item: *item }), name.as_str());
                 }
                 if list.is_empty() {

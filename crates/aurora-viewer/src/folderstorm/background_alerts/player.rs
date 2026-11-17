@@ -110,7 +110,7 @@ pub struct Player {
 
 /// What became of a sound in [`Player::tick`] (for the log and the tests).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Played {
+pub enum Outcome {
     Played(&'static str),
     /// Its own sound could not be had: the fallback waits instead.
     FellBack(&'static str),
@@ -194,7 +194,7 @@ impl Player {
     /// ready, falls back or gives up on what cannot be had, closes the
     /// output after a while without alerts. `device`: the character's
     /// output device (empty: the system's).
-    pub fn tick(&mut self, assets: &mut impl Assets, device: &str, folder: &Path, now: Instant) -> Vec<Played> {
+    pub fn tick(&mut self, assets: &mut impl Assets, device: &str, folder: &Path, now: Instant) -> Vec<Outcome> {
         self.files.retain(|_, f| match f {
             FileClip::Ready(_, at) | FileClip::Failed(_, at) => now.saturating_duration_since(*at) < FILE_KEPT,
             FileClip::Loading(_) => true,
@@ -212,7 +212,7 @@ impl Player {
         self.open(device, now);
         if let Engine::Failed(_) = self.engine {
             for p in self.pending.drain(..) {
-                out.push(Played::Dropped(p.what));
+                out.push(Outcome::Dropped(p.what));
             }
             return out;
         }
@@ -243,17 +243,17 @@ impl Player {
                     if let (Engine::Ready { engine, .. }, Got::Ready(clip)) = (&self.engine, &got) {
                         engine.play_clip(Channel::Ui, clip, p.gain);
                         self.last_played = Some(now);
-                        out.push(Played::Played(p.what));
+                        out.push(Outcome::Played(p.what));
                     }
                 }
                 Next::Wait => self.pending.push(p),
                 Next::FallBack => {
-                    out.push(Played::FellBack(p.what));
+                    out.push(Outcome::FellBack(p.what));
                     p.clip = Clip::Asset(std::mem::take(&mut p.fallback));
                     p.asked = now;
                     self.pending.push(p);
                 }
-                Next::Drop => out.push(Played::Dropped(p.what)),
+                Next::Drop => out.push(Outcome::Dropped(p.what)),
             }
         }
         out

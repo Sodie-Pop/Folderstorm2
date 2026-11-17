@@ -160,11 +160,11 @@ impl App {
             .tick(&mut self.scene.sounds, &device, files::folder(), now);
         for outcome in played {
             match outcome {
-                player::Played::Played(what) => log::debug!(target: "fs_alerts", "{what}: played"),
-                player::Played::FellBack(what) => {
+                player::Outcome::Played(what) => log::debug!(target: "fs_alerts", "{what}: played"),
+                player::Outcome::FellBack(what) => {
                     log::info!("background alerts: the {what} sound cannot be had, its default plays instead")
                 }
-                player::Played::Dropped(what) => log::info!("background alerts: the {what} sound did not play"),
+                player::Outcome::Dropped(what) => log::info!("background alerts: the {what} sound did not play"),
             }
         }
     }
