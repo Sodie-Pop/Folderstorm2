@@ -461,6 +461,40 @@ Check that nothing is ever drawn over the world, that windows, bars, chat
 lines and HUD labels stay over the picture, and that the margins go black
 again when the viewport is turned off.
 
+**The margins' desktop (Folderstorm2).** `AURORA_DEMO_DESKTOP=<mode>` makes,
+once, a desktop of shortcuts in the margins around the world (row 1.10):
+`1` puts eight command shortcuts on the first monitor (Conversations,
+People, Inventory, the world map renamed "Where am I?" with a compass,
+Photo, Home, then two greyed ones: Favorites, which only works from its
+toolbar button, and a command the catalogue no longer has) and two on the
+third monitor (Preferences, Build); `open` does the same and opens the
+People shortcut at frame 200, as a double click does; `single` seeds the
+same shortcuts with the world filling the window, so nothing shows. The
+world viewport is turned on (the world in the middle third) unless
+`AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
+wallpaper under the shortcuts. Without pretend monitors the window is one
+monitor, and only the first one's shortcuts show, in the left margin.
+Preferences › Layout › Bars and windows has the group *Desktop in the
+margins*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=open AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
+  cargo run -p aurora-viewer -- --title "Test desktop open"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=single cargo run -p aurora-viewer -- --title "Test desktop single"
+```
+
+Check that a shortcut is never drawn over the world nor cut at its edge,
+that every window and bar stays over the shortcuts, that a click on a
+shortcut or on an empty part of a desktop never reaches the world (no
+selection, no camera move, the wheel does not zoom), that a double click
+opens what the toolbar button opens, that a drag snaps to the grid, swaps
+with the shortcut it is dropped on and goes to another monitor, and that
+the right-click menus add a command and remove a shortcut. The shortcuts
+go away with the interface (hidden, immersive mode, mouselook).
+
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
 closed: the four favorites stand in a small bar under the top bar, each one
@@ -6365,6 +6399,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_DESKTOP=1\|open\|single` (Folderstorm2) | The margins' desktop: command shortcuts on the first and third monitors of the window, two of them greyed (`1`); the People shortcut opened at frame 200 (`open`); the same shortcuts with the world filling the window, nothing shown (`single`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
