@@ -114,6 +114,12 @@ pub const GITHUB: &str = "https://github.com/Sodie-Pop/Folderstorm2";
 pub const NEW_ISSUE: &str = "https://github.com/Sodie-Pop/Folderstorm2/issues/new";
 pub const RELEASES_PAGE: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases";
 pub const RELEASES_API: &str = "https://api.github.com/repos/Sodie-Pop/Folderstorm2/releases?per_page=100";
+/// Where the media plugins pack (CEF, LibVLC or GStreamer) is downloaded
+/// from: Aurora Viewer's releases, `<this>/media-plugins-<n>/<archive>`.
+/// The fork publishes no pack of its own; the viewer pins the archive's size
+/// and SHA-256, so it installs only that exact build. Viewer updates still
+/// come only from the fork ([`RELEASES_API`]).
+pub const MEDIA_PACK_DOWNLOADS: &str = "https://github.com/Aurora-Viewer/Aurora-Viewer/releases/download";
 
 #[cfg(test)]
 mod tests {
@@ -164,5 +170,8 @@ mod tests {
             assert!(link.contains(REPOSITORY), "{link}");
         }
         assert_eq!(concat!(product!(), "/1"), "Folderstorm2/1");
+        // the one exception: the media plugins pack is Aurora Viewer's own
+        assert!(!MEDIA_PACK_DOWNLOADS.contains(REPOSITORY));
+        assert!(MEDIA_PACK_DOWNLOADS.starts_with("https://github.com/Aurora-Viewer/Aurora-Viewer/releases/download"));
     }
 }
