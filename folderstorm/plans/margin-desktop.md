@@ -642,8 +642,9 @@ What the build changed against the sections above, and what it found.
   checkpoint 3.
 - **Keyboard, so far**: a shortcut is a focusable button (Tab reaches it,
   Enter or Space opens it, Delete removes it, the screen reader names
-  it). A click does not take the keyboard focus, as for Aurora's buttons:
-  the avatar's keys keep working after a click on the desktop.
+  it). A click did not take the keyboard focus, as for Aurora's buttons;
+  since the human's decision of 2026-11-17 it does (see checkpoint 3's
+  decision on the keyboard).
 - **Not done in checkpoint 1**: a notice when a room has no free cell for
   *Add a command* (the command is then not added; done since, see "A full
   desktop" in section 20); the count of shortcuts on a monitor not in use;
@@ -847,13 +848,15 @@ against the sections above, and what it decided.
 - **A command that never opens from a shortcut is no longer added** by any
   way (`surface::add_command`, `CommandAdded::Never`); one that has nothing
   to do now (an empty Photo roll) still is.
-- **The keyboard is on a focused shortcut, not on the selected one**: F2,
-  Delete, Enter / Space and the arrows work on the shortcut that has the
-  keyboard (Tab, or the key action *Focus the desktop*). A click selects
-  without taking the keyboard, as checkpoint 1 decided, so that the avatar
-  keeps its keys: **F2 after a mere click does nothing**. The other way
-  (a click gives the keyboard, a click in the world gives it back) is one
-  line in `surface::show`; to decide by the human.
+- **A click gives the keyboard to the shortcut** (the human, 2026-11-17:
+  "F2 and Delete working on a selected icon would be cool"): F2, Delete,
+  Enter / Space and the arrows work on the clicked shortcut at once, as
+  well as on one reached with Tab or the key action *Focus the desktop*.
+  A press anywhere else (the world, a window, the room) gives the
+  keyboard back, as egui gives up a focused widget's focus on a press off
+  it, so the avatar's keys work again after a click in the world. One
+  line in `surface::show` (`request_focus` on a primary click). Checkpoint
+  1's first rule (a click kept the keyboard on the world) is replaced.
 - **The arrows** go to the nearest shortcut on that side of the same
   desktop, one of the same row or column being preferred
   (`place::neighbour`); at the edge they stay. They do not cross to another
