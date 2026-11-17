@@ -11,6 +11,7 @@ pub mod chat;
 pub mod commands;
 pub mod confirmations;
 pub mod controls;
+pub mod folderstorm_alerts; // Folderstorm: background characters' alert sounds
 pub mod folderstorm_characters; // Folderstorm: other Folderstorm2 windows
 pub mod folderstorm_chat_upload; // Folderstorm: chat image upload
 pub mod folderstorm_search; // Folderstorm: settings search keywords

@@ -72,6 +72,7 @@ mod tests {
         "fs-search-characters",
         "fs-search-chat-upload",
         "fs-search-outfit-safety",
+        "fs-search-background-alerts",
     ];
 
     /// What a user types, in each language, and the entry it must find.
@@ -125,6 +126,9 @@ mod tests {
         ("en", "outfit safety", "fs-search-outfit-safety"),
         ("fr", "tenue sécurité", "fs-search-outfit-safety"),
         ("ja", "誤クリック", "fs-search-outfit-safety"),
+        ("en", "notification sound", "fs-search-background-alerts"),
+        ("fr", "son alerte", "fs-search-background-alerts"),
+        ("ja", "アラート 通知", "fs-search-background-alerts"),
     ];
 
     #[test]

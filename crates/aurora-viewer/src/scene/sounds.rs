@@ -396,6 +396,11 @@ impl SoundManager {
         Some(clip)
     }
 
+    // Folderstorm: the background characters' alerts play a loaded clip on their own output
+    pub fn folderstorm_clip(&mut self, id: &Uuid) -> Option<Arc<SoundClip>> {
+        self.ready(id)
+    }
+
     fn failed(&self, id: &Uuid) -> bool {
         self.clips.get(id).is_some_and(|c| c.state == 4 && c.failures > 3)
     }

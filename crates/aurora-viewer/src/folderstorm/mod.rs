@@ -2,6 +2,7 @@
 //! upstream merges stay small (folderstorm/AGENT_RULES.md). Aurora's files
 //! reach them through one-line hooks marked `// Folderstorm:`.
 
+pub mod background_alerts;
 pub mod backgrounds;
 pub mod bulk_plan;
 pub mod chat_upload;

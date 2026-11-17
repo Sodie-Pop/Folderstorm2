@@ -72,6 +72,14 @@ pub struct Settings {
     /// A named profile reads and writes the main profile's asset cache
     /// instead of its own (applies at the next start).
     pub share_main_cache: bool,
+    /// This character's own choices for the alert sounds it plays while
+    /// the session host keeps it in the background
+    /// (`crate::folderstorm::background_alerts`); the shared ones are in
+    /// the main profile's folder. Left out of a profile copy with the rest
+    /// of this group (`copy::strip_settings`): an inventory sound is one
+    /// account's.
+    #[serde(skip_serializing_if = "crate::folderstorm::background_alerts::Override::is_default")]
+    pub background_alerts: crate::folderstorm::background_alerts::Override,
 }
 
 impl Default for Settings {
@@ -80,6 +88,7 @@ impl Default for Settings {
             behind_3d: Behind3d::default_for(profile::current().is_some()),
             behind_fps: behind::FPS_DEFAULT,
             share_main_cache: false,
+            background_alerts: Default::default(),
         }
     }
 }
@@ -122,6 +131,16 @@ pub struct State {
     pub bar: Option<::folderstorm_session::bar::State>,
     /// What this window was last made on the taskbar (checkpoint 8).
     pub taskbar: taskbar::Tracker,
+    /// The alert sounds of a background character (FEATURES.md 5.2).
+    pub alerts: crate::folderstorm::background_alerts::player::Player,
+    /// The inventory's generation last listed for Preferences' choice of
+    /// an inventory sound.
+    pub alerts_inventory: Option<u64>,
+    /// When what the alerts may play was last fetched ahead.
+    pub alerts_prefetched: Option<std::time::Instant>,
+    /// `AURORA_DEMO_BACKGROUND_ALERTS`: ended by a click in the window, and
+    /// when its next made-up event is due.
+    pub alerts_demo: (bool, Option<(std::time::Instant, u32)>),
 }
 
 /// What a managed viewer keeps of its monitor (plan section 12): when the
