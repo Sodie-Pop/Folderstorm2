@@ -5995,6 +5995,7 @@ folderstorm-settings-seconds-suffix = { " " }s
 folderstorm-settings-voice-and-sound = Voice and background sound
 folderstorm-settings-alert = Alert
 folderstorm-settings-alert-note = Which messages sound it is each character's choice (Characters). The system's sound plays at the system's volume; a sound file of your own is not available yet.
+folderstorm-settings-alert-replaced = Replaced by the alert sounds in Preferences › Sound
 folderstorm-settings-heard = Heard in the background
 folderstorm-settings-files = Files
 folderstorm-settings-open-folder = Open the settings folder

@@ -5745,6 +5745,7 @@ folderstorm-settings-seconds-suffix = { " " }秒
 folderstorm-settings-voice-and-sound = ボイスとバックグラウンドの音
 folderstorm-settings-alert = 通知音
 folderstorm-settings-alert-note = どのメッセージで鳴らすかはキャラクターごとの設定です（キャラクター）。システムの音がシステムの音量で鳴ります。独自のサウンドファイルはまだ使えません。
+folderstorm-settings-alert-replaced = 環境設定 › サウンドの通知音に置き換えられています
 folderstorm-settings-heard = バックグラウンドで聞こえる
 folderstorm-settings-files = ファイル
 folderstorm-settings-open-folder = 設定フォルダーを開く

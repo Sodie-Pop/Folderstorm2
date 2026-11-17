@@ -712,6 +712,28 @@ fn message_sound() {
 #[cfg(not(windows))]
 fn message_sound() {}
 
+/// Whether the host's own beep ([`message_sound`]) plays for a message to
+/// a background character: the host's setting ([`Desk::chat_sound`]),
+/// unless the background alert sounds are on. Each background viewer then
+/// plays its own alert (`crate::folderstorm::background_alerts`), and the
+/// two are never heard together; turning the alerts off brings the beep
+/// back as it was set.
+fn beep_wanted(chat_sound: bool, alert_sounds_on: bool) -> bool {
+    chat_sound && !alert_sounds_on
+}
+
+/// The background alert sounds' master switch (Preferences › Sound ›
+/// Interface sounds), from the shared choices' file of the main profile
+/// (`background-alerts.json`), read again when a viewer changes it.
+fn alert_sounds_on() -> bool {
+    use crate::folderstorm::background_alerts as alerts;
+    alerts::demo() || alert_sounds_on_in(&mut alerts::store::shared(), Instant::now())
+}
+
+fn alert_sounds_on_in(store: &mut crate::folderstorm::background_alerts::store::Store, now: Instant) -> bool {
+    store.get(now).enabled
+}
+
 /// The host's whole run: its window until it closes.
 pub fn run() -> anyhow::Result<()> {
     log::info!("session host: starting ({})", super::managed::build_id());
@@ -730,6 +752,36 @@ mod tests {
         for bad in ["0", "6", "-1", "", "three", "3.5"] {
             assert_eq!(demo_count(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn the_alert_sounds_replace_the_host_beep() {
+        use crate::folderstorm::background_alerts::{Shared, store};
+        // alerts on: no host beep, whatever the host's setting
+        assert!(!beep_wanted(true, true));
+        assert!(!beep_wanted(false, true));
+        // alerts off: the host's beep as set
+        assert!(beep_wanted(true, false));
+        assert!(!beep_wanted(false, false));
+
+        // the master switch, as the shared choices' file says
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join(store::FILE);
+        let now = Instant::now();
+        assert!(!alert_sounds_on_in(&mut store::Store::at(path.clone()), now), "no file: off");
+        let write = |enabled: bool| {
+            let shared = Shared {
+                enabled,
+                ..Shared::default()
+            };
+            std::fs::write(&path, serde_json::to_vec(&shared).expect("json")).expect("write");
+        };
+        write(true);
+        let on = alert_sounds_on_in(&mut store::Store::at(path.clone()), now);
+        assert!(on && !beep_wanted(true, on), "alerts on: no host beep");
+        write(false);
+        let on = alert_sounds_on_in(&mut store::Store::at(path.clone()), now);
+        assert!(!on && beep_wanted(true, on), "alerts off: the host beep is back");
     }
 
     #[test]

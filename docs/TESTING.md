@@ -7802,7 +7802,10 @@ failure. Grid validation and any paid upload are performed by the human.
   - with `AURORA_DEMO_SESSION_HOST=3` too, the demo viewers inherit the
     switch: a background character ticks for the shared chat's demo
     instant message and teleport offer, the active one does not, nor one
-    whose "Heard in the background" is on.
+    whose "Heard in the background" is on. The host's own "Sound when a
+    background character gets a message" switches off by itself while the
+    alerts are on (greyed in the host's settings, Sound and voice), so only
+    the tick is heard.
 - **`AURORA_DEMO_SESSION_BEHIND=1|off|limited|normal`** (Folderstorm2,
   session host checkpoint 1): the window counts as behind another
   Folderstorm2 window (the instances registry is off in demo mode) until a
@@ -7911,6 +7914,12 @@ failure. Grid validation and any paid upload are performed by the human.
     on Windows the system's notification sound plays when a character that
     is not the active one gets an instant message; the taskbar button of
     the host flashes either way while its window has not the keyboard.
+    While the alert sounds of background characters are on (Preferences ›
+    Sound › Interface sounds, `AURORA_DEMO_BACKGROUND_ALERTS=1`), the host's
+    beep switches off by itself, so the two are never heard together: in the
+    host's settings (Sound and voice) the row is greyed with "Replaced by the
+    alert sounds in Preferences › Sound", and the setting is kept. Turn the
+    alerts off and the beep plays again as it was set.
   - RLVa is covered by unit tests (`folderstorm_characters/chat_export.rs`):
     what the viewer's own chat hides (a name under `@shownames`, a line
     refused by `@recvchat` / `@recvim`) is hidden or absent in what the

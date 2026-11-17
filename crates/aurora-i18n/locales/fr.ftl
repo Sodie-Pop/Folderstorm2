@@ -6010,6 +6010,7 @@ folderstorm-settings-seconds-suffix = { " " }s
 folderstorm-settings-voice-and-sound = Voix et son d'arrière-plan
 folderstorm-settings-alert = Alerte
 folderstorm-settings-alert-note = Quels messages la déclenchent est le choix de chaque personnage (Personnages). Le son du système joue au volume du système ; un fichier son personnel n'est pas encore disponible.
+folderstorm-settings-alert-replaced = Remplacé par les sons d'alerte de Préférences › Son
 folderstorm-settings-heard = Entendu en arrière-plan
 folderstorm-settings-files = Fichiers
 folderstorm-settings-open-folder = Ouvrir le dossier des réglages
