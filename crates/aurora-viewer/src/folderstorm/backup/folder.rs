@@ -3,7 +3,7 @@
 //! import, the daily ones when chosen); Export… writes where the user says.
 //!
 //! A file's name says what it is: `<kind>_<YYYY-MM-DD_HHMMSS>_<account>.zip`,
-//! the account as the first 8 hex digits of its id (or `none`). Only names
+//! the account as its id's 32 hex digits (or `none`). Only names
 //! of that shape are listed, restored or removed.
 
 use super::file::{self, Kind, Manifest};
@@ -19,7 +19,7 @@ pub fn dir(config: &Path) -> PathBuf {
 
 /// The short form of an account in a file name.
 fn account_key(account: Option<Uuid>) -> String {
-    account.map_or_else(|| "none".to_owned(), |id| id.simple().to_string()[..8].to_owned())
+    account.map_or_else(|| "none".to_owned(), |id| id.simple().to_string())
 }
 
 pub fn file_name(kind: Kind, stamp: &str, account: Option<Uuid>) -> String {
@@ -34,7 +34,7 @@ pub fn parse_name(name: &str) -> Option<(Kind, String, String)> {
     let (date, time, account) = (parts.next()?, parts.next()?, parts.next()?);
     let kind = Kind::ALL.into_iter().find(|k| k.key() == kind)?;
     let digits = |s: &str, n: usize| s.len() == n && s.bytes().all(|b| b.is_ascii_digit() || b == b'-');
-    let account_ok = account == "none" || (account.len() == 8 && account.bytes().all(|b| b.is_ascii_hexdigit()));
+    let account_ok = account == "none" || (account.len() == 32 && account.bytes().all(|b| b.is_ascii_hexdigit()));
     (digits(date, 10) && digits(time, 6) && account_ok).then(|| (kind, format!("{date}_{time}"), account.to_owned()))
 }
 

@@ -374,8 +374,10 @@ fn the_safety_backups_and_the_daily_ones_are_pruned_per_account() {
     assert!(!folder::has_daily(&config.0, Some(ME), "2026-11-01"), "the oldest is gone");
     assert!(folder::has_daily(&config.0, Some(ALT), "2026-11-04"), "another account's stays");
     // only names of the folder's own shape count
-    assert!(folder::parse_name("daily_2026-11-01_120000_00000000.zip").is_some());
-    assert!(folder::parse_name("../daily_2026-11-01_120000_00000000.zip").is_none());
+    let id = ME.simple().to_string();
+    assert!(folder::parse_name(&format!("daily_2026-11-01_120000_{id}.zip")).is_some());
+    assert!(folder::parse_name("daily_2026-11-01_120000_none.zip").is_some());
+    assert!(folder::parse_name(&format!("../daily_2026-11-01_120000_{id}.zip")).is_none());
     assert!(folder::parse_name("daily_2026-11-01_120000_0000000z.zip").is_none());
     assert!(folder::parse_name("notes.zip").is_none());
 }
@@ -447,7 +449,8 @@ fn a_newer_file_is_read_for_what_this_version_knows() {
     let mut s = Settings::default();
     let report = import(&plan, &mut s, &main.0);
     assert!(report.failed.is_empty(), "{:?}", report.failed);
-    assert!(s.folderstorm_desktop.shortcuts_on);
+    // (Merge: the file's shortcuts are added, the switches here stay)
+    assert_eq!(s.folderstorm_desktop.shortcuts.len(), 2);
 }
 
 #[test]

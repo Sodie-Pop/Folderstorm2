@@ -157,7 +157,7 @@ by default.
 ## 6. Automatic backups
 
 The backups folder is `<settings>/folderstorm_backups/`, names
-`<kind>_<YYYY-MM-DD_HHMMSS>_<first 8 hex of the account>.zip`.
+`<kind>_<YYYY-MM-DD_HHMMSS>_<the account id's 32 hex digits>.zip`.
 
 - A safety backup before every import, always; the last 10 per account are
   kept.
