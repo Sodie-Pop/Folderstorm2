@@ -168,8 +168,9 @@ pub fn holds(ctx: &egui::Context, floater: &Floater<'_>, icon: &str, collapsed: 
 }
 
 /// Whether the taskbar holds the window `id` now (it is collapsed and its
-/// button stands for it).
-pub fn held(ctx: &egui::Context, id: &str) -> bool {
+/// button stands for it), for the tests.
+#[cfg(test)]
+pub(super) fn held(ctx: &egui::Context, id: &str) -> bool {
     let frame = ctx.cumulative_frame_nr();
     ctx.data(|d| d.get_temp::<Registry>(registry_id()))
         .is_some_and(|registry| registry.windows.iter().any(|w| w.id == id && w.held && w.seen + 1 >= frame))
