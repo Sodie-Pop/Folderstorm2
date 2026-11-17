@@ -6,8 +6,10 @@
 //! shortcuts on a grid, over the margins' background (row 1.8) and under
 //! every window. A shortcut to a toolbar command runs what its toolbar
 //! button runs (`ui::bars::run_command`, through the app's glue,
-//! `app/folderstorm_desktop.rs`), behind the same gates. Shortcuts to
-//! Inventory folders, renaming and the taskbar are the plan's next
+//! `app/folderstorm_desktop.rs`), behind the same gates. A shortcut to an
+//! Inventory folder opens that folder's own window (Aurora's *Open in a
+//! new window*), one window per folder; it keeps the folder's id and its
+//! account's, nothing else. Renaming and the taskbar are the plan's next
 //! checkpoints; the record ([`store`]) already has their fields.
 //!
 //! - [`store`]: what `settings.json` keeps (field `folderstorm_desktop`).
@@ -34,12 +36,14 @@ pub mod targets;
 mod tests;
 
 pub use store::Desktop;
-pub use targets::Facts;
+pub use surface::{Added, add_folders};
+pub use targets::{Facts, Folders};
 
 use crate::folderstorm::viewport;
 use crate::theme::Palette;
 use crate::ui::icons::Icons;
-use egui::vec2;
+use aurora_i18n::tr;
+use egui::{Rect, vec2};
 use uuid::Uuid;
 
 /// What the app gives the desktops each frame.
@@ -48,18 +52,26 @@ pub struct Env<'a> {
     pub icons: &'a Icons,
     /// What greys a toolbar button now.
     pub facts: Facts,
-    /// The account logged in: it sees its own folder shortcuts only.
-    pub account: Uuid,
+    /// The Inventory as the folder shortcuts read it: the account logged
+    /// in, RLVa's `@showinv`, the folders' colours.
+    pub folders: Folders<'a>,
     /// The interface is hidden (its shortcut, immersive mode, mouselook
     /// without the interface): no desktop.
     pub hidden: bool,
 }
 
 /// What the desktops ask the app.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Request {
     /// Run this command of the toolbar catalogue, as its button does.
     Run(String),
+    /// Open this folder's own window, or bring it to the front; a new one
+    /// goes beside the shortcut (`cell`) in its `room`.
+    OpenFolder { folder: Uuid, cell: Rect, room: Rect },
+    /// Show this folder in the main Inventory window.
+    ShowFolder(Uuid),
+    /// Say this in the chat's notices (what a drop added, or why not).
+    Notice(String),
     /// The desktop changed: save the settings once the pointer is up.
     Changed,
     /// Open Preferences on the desktop's group.
@@ -114,6 +126,34 @@ pub fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env) -> Vec<Reques
         return Vec::new();
     }
     surface::show(ctx, desktop, env, &rooms)
+}
+
+/// What to say after folders were added (`added`), `left_out` entries of
+/// the selection not being folders that can be shortcuts. `turned_on`: the
+/// shortcuts were off and this turned them on; `shown`: a desktop shows
+/// now. None when there is nothing to say (a plain drop that worked).
+pub fn added_notice(added: &Added, left_out: usize, turned_on: bool, shown: bool) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    // a drop is seen; an entry of a menu says what it did
+    if added.added > 0 && (turned_on || !shown) {
+        parts.push(tr!("fs-desktop-added", count = added.added));
+    }
+    if added.existing > 0 && added.added == 0 {
+        parts.push(tr!("fs-desktop-add-existing").to_owned());
+    }
+    if added.no_room > 0 {
+        parts.push(tr!("fs-desktop-add-full", count = added.no_room));
+    }
+    if left_out > 0 {
+        parts.push(tr!("fs-desktop-left-out", count = left_out));
+    }
+    if added.added > 0 && turned_on {
+        parts.push(tr!("fs-desktop-added-on").to_owned());
+    }
+    if added.added > 0 && !shown {
+        parts.push(tr!("fs-desktop-added-hidden").to_owned());
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
 }
 
 /// Whether the pointer at `pos` is a desktop's: the topmost layer under it

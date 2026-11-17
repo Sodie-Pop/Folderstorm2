@@ -125,7 +125,7 @@ impl Grid {
 
     /// The free cell nearest to `wanted` (which may be outside the grid);
     /// of two as near, the first in the filling order.
-    fn nearest_free(&self, wanted: (u16, u16), taken: &[(u16, u16)]) -> Option<(u16, u16)> {
+    pub fn nearest_free(&self, wanted: (u16, u16), taken: &[(u16, u16)]) -> Option<(u16, u16)> {
         let distance = |(col, row): (u16, u16)| {
             let (dx, dy) = (i64::from(col) - i64::from(wanted.0), i64::from(row) - i64::from(wanted.1));
             dx * dx + dy * dy
@@ -133,6 +133,24 @@ impl Grid {
         // (`min_by_key` keeps the first of equal ones)
         self.cells().filter(|cell| !taken.contains(cell)).min_by_key(|cell| distance(*cell))
     }
+}
+
+/// Where a window of `size` opened from the shortcut in `cell` goes: in the
+/// shortcut's `room`, beside it (to its right, else to its left), level
+/// with it as far as the room goes. A room smaller than the window gives
+/// its own corner.
+pub fn beside(cell: Rect, room: Rect, size: Vec2) -> Pos2 {
+    let right = cell.right() + PAD;
+    let left = cell.left() - PAD - size.x;
+    let x = if right + size.x <= room.right() {
+        right
+    } else if left >= room.left() {
+        left
+    } else {
+        (room.right() - size.x).max(room.left())
+    };
+    let y = cell.top().min(room.bottom() - size.y).max(room.top());
+    Pos2::new(x, y)
 }
 
 /// The cell each shortcut is shown in: `stored` gives each one's id and
@@ -174,6 +192,28 @@ mod tests {
     }
 
     const CELL: Vec2 = vec2(92.0, 84.0);
+
+    #[test]
+    fn a_window_opens_beside_its_shortcut_in_its_room() {
+        let room = px(8.0, 8.0, 624.0, 384.0);
+        let size = vec2(420.0, 300.0);
+        let grid = Grid::new(room, CELL).expect("a grid");
+        // to the right of the shortcut, level with it
+        let first = grid.rect((0, 0));
+        assert_eq!(beside(first, room, size), pos2(first.right() + PAD, first.top()));
+        // no room to the right: to its left
+        let far = grid.rect((5, 0));
+        assert_eq!(beside(far, room, size), pos2(far.left() - PAD - size.x, far.top()));
+        // neither: against the room's right edge
+        let middle = grid.rect((3, 0));
+        assert_eq!(beside(middle, room, size).x, room.right() - size.x);
+        // a shortcut low in the room: the window stays in the room
+        let low = grid.rect((0, 3));
+        assert_eq!(beside(low, room, size).y, room.bottom() - size.y);
+        // a room smaller than the window: its corner
+        let small = px(100.0, 50.0, 200.0, 200.0);
+        assert_eq!(beside(px(100.0, 50.0, 92.0, 84.0), small, size), small.min);
+    }
 
     fn three() -> MonitorLayout {
         MonitorLayout {
