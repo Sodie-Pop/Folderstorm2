@@ -1,7 +1,7 @@
 //! Frame tests of the item shortcuts (checkpoint 5 of the plan): a
 //! landmark and a notecard on a desktop, drawn, opened, greyed, hidden by
 //! RLVa, dropped from the Inventory; an outfit, worn after a question; clothing and
-//! objects, added.
+//! objects, added, and taken off by their "X" while worn.
 
 use super::*;
 use crate::folderstorm::desktop::targets::{self, Greyed};
@@ -507,4 +507,182 @@ fn a_wearable_shortcut_asks_to_be_added_and_is_greyed_while_worn() {
     );
     assert_eq!(b.notices(), vec![aurora_i18n::tr!("fs-desktop-left-out", count = 1).as_str()]);
     let _ = jacket;
+}
+
+/// Of the bench's inventory (the demo's): an attachment, a body part (a
+/// shape).
+const ATTACHMENT: u128 = 723;
+const SHAPE: u128 = 710;
+
+impl Bench {
+    /// What is worn: `worn`, nothing locked, no outfit change under way.
+    fn wearing(&mut self, worn: &[u128]) {
+        self.wear = Some(targets::Wearing {
+            worn: worn.iter().map(|n| Uuid::from_u128(*n)).collect(),
+            ..Default::default()
+        });
+    }
+
+    /// The items asked to be taken off.
+    fn taken_off(&self) -> Vec<Uuid> {
+        self.out
+            .iter()
+            .filter_map(|r| match r {
+                Request::TakeOff(item) => Some(*item),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Where the "X" of the shortcut `id` stands (whether it is drawn or not).
+    fn x_of(&self, id: u32) -> Rect {
+        surface::take_off_rect(self.cell_of(id), self.desktop.size)
+    }
+}
+
+/// RLVa's wear locks with `@remoutfit=n` in force (no clothing comes off),
+/// read from a world whose inventory is the bench's demo inventory.
+fn remoutfit_locks() -> crate::world::rlva::WearLocks {
+    let mut w = crate::world::World::new(std::sync::Arc::new(crate::scene::avatar::AvatarLibrary::load()));
+    w.inventory = crate::world::inventory::Inventory {
+        root: Uuid::from_u128(77),
+        ..Default::default()
+    };
+    crate::world::inventory::demo::seed(&mut w.inventory, ME);
+    w.rlva.configure(true);
+    assert!(w.rlva.receive(&aurora_net::ChatMessage {
+        from_name: "RLVa test object".to_owned(),
+        source_id: Uuid::from_u128(0x726c),
+        owner_id: ME,
+        source_type: aurora_net::ChatSourceType::Object,
+        chat_type: aurora_net::ChatType::OwnerSay,
+        position: glam::Vec3::ZERO,
+        message: "@remoutfit=n".to_owned(),
+    }));
+    w.rlva_wear_locks()
+}
+
+#[test]
+fn a_worn_item_s_x_takes_off_that_item_and_nothing_else() {
+    let mut b = Bench::with_items();
+    let shirt = b.add_item(SHIRT, 0, (0, 0));
+    let jacket = b.add_item(JACKET, 0, (0, 1));
+    let collar = b.add_item(ATTACHMENT, 0, (0, 2));
+    b.wearing(&[JACKET, ATTACHMENT]);
+    b.frames(3);
+    b.picture("desktop-take-off");
+    // the X of the worn jacket asks for that one item to be taken off; it
+    // neither opens nor selects the shortcut
+    b.click(b.x_of(jacket).center());
+    assert_eq!(b.out, vec![Request::TakeOff(Uuid::from_u128(JACKET))]);
+    assert_ne!(surface::state(&b.ctx).selected, Some(jacket));
+    // the worn object's X: detached
+    b.out.clear();
+    b.time += 2.0;
+    b.click(b.x_of(collar).center());
+    assert_eq!(b.taken_off(), vec![Uuid::from_u128(ATTACHMENT)]);
+    // the shirt is not worn: no X, the click is the shortcut's
+    b.out.clear();
+    b.time += 2.0;
+    b.click(b.x_of(shirt).center());
+    assert!(b.taken_off().is_empty());
+    assert_eq!(surface::state(&b.ctx).selected, Some(shirt));
+    // the menus: Take off for clothing, Detach for an object, neither for
+    // what is not worn
+    b.out.clear();
+    b.menu(b.cell_of(jacket).center(), aurora_i18n::tr!("fs-desktop-take-off"));
+    assert_eq!(b.out, vec![Request::TakeOff(Uuid::from_u128(JACKET))]);
+    b.out.clear();
+    b.menu(b.cell_of(collar).center(), aurora_i18n::tr!("fs-desktop-detach"));
+    assert_eq!(b.out, vec![Request::TakeOff(Uuid::from_u128(ATTACHMENT))]);
+    b.out.clear();
+    b.time += 2.0;
+    b.click_with(b.cell_of(shirt).center(), egui::PointerButton::Secondary);
+    assert!(b.drawn(aurora_i18n::tr!("fs-desktop-take-off")).is_none());
+    assert!(b.drawn(aurora_i18n::tr!("fs-desktop-detach")).is_none());
+    b.key(egui::Key::Escape);
+    // the keyboard: Shift+Delete on the focused worn shortcut takes it off
+    // and keeps the shortcut; on one not worn it does nothing
+    b.out.clear();
+    b.time += 2.0;
+    b.click(b.cell_of(jacket).center());
+    b.key_with(egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert_eq!(b.taken_off(), vec![Uuid::from_u128(JACKET)]);
+    assert!(b.desktop.shortcut(jacket).is_some(), "the shortcut stays");
+    b.out.clear();
+    b.time += 2.0;
+    b.click(b.cell_of(shirt).center());
+    b.key_with(egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert!(b.taken_off().is_empty() && b.desktop.shortcut(shirt).is_some());
+    // Delete alone still removes the shortcut, and takes nothing off
+    b.time += 2.0;
+    b.click(b.cell_of(jacket).center());
+    b.key(egui::Key::Delete);
+    assert!(b.desktop.shortcut(jacket).is_none() && b.taken_off().is_empty());
+}
+
+#[test]
+fn no_x_when_rlva_keeps_the_item_on_or_hides_the_inventory_nor_on_a_body_part() {
+    let mut b = Bench::with_items();
+    let jacket = b.add_item(JACKET, 0, (0, 0));
+    let collar = b.add_item(ATTACHMENT, 0, (0, 1));
+    // a body part in the file (it cannot be added, but may be there): worn,
+    // still no X
+    let shape = b
+        .desktop
+        .add(
+            Target::Item {
+                item: Uuid::from_u128(SHAPE),
+            },
+            0,
+            (0, 2),
+        )
+        .expect("added");
+    b.wearing(&[JACKET, ATTACHMENT, SHAPE]);
+    b.frames(3);
+    b.time += 2.0;
+    b.click(b.x_of(shape).center());
+    assert!(b.taken_off().is_empty(), "a body part has no X");
+    // @remoutfit: the jacket's X is hidden (and its menu has no Take off);
+    // the attachment, which no lock holds, keeps its own
+    b.wear = Some(targets::Wearing {
+        locks: remoutfit_locks(),
+        ..b.wear.take().expect("set")
+    });
+    b.frames(2);
+    b.time += 2.0;
+    b.click(b.x_of(jacket).center());
+    assert!(b.taken_off().is_empty(), "RLVa keeps the jacket on: no X");
+    b.time += 2.0;
+    b.click_with(b.cell_of(jacket).center(), egui::PointerButton::Secondary);
+    assert!(b.drawn(aurora_i18n::tr!("fs-desktop-take-off")).is_none());
+    b.key(egui::Key::Escape);
+    b.time += 2.0;
+    b.click(b.x_of(collar).center());
+    assert_eq!(b.taken_off(), vec![Uuid::from_u128(ATTACHMENT)]);
+    // what the glue checks again before it takes anything off
+    let wear = b.wear.as_ref();
+    assert_eq!(
+        targets::item_take_off(&b.inv, Uuid::from_u128(JACKET), wear, false),
+        Err(Greyed::Rlva)
+    );
+    assert!(targets::item_take_off(&b.inv, Uuid::from_u128(ATTACHMENT), wear, false).is_ok());
+    // @showinv: no X at all, nothing in the menu
+    b.out.clear();
+    b.wearing(&[JACKET, ATTACHMENT]);
+    b.no_inventory = true;
+    b.frames(2);
+    for id in [jacket, collar] {
+        b.time += 2.0;
+        b.click(b.x_of(id).center());
+    }
+    assert!(b.taken_off().is_empty(), "@showinv locks the item shortcuts");
+    b.time += 2.0;
+    b.click_with(b.cell_of(collar).center(), egui::PointerButton::Secondary);
+    assert!(b.drawn(aurora_i18n::tr!("fs-desktop-detach")).is_none());
+    b.key(egui::Key::Escape);
+    assert_eq!(
+        targets::item_take_off(&b.inv, Uuid::from_u128(ATTACHMENT), b.wear.as_ref(), true),
+        Err(Greyed::Rlva)
+    );
 }
