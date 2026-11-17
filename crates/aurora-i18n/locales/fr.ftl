@@ -2593,6 +2593,112 @@ fs-taskbar-empty-all = Aucune fenêtre ouverte
 fs-taskbar-spoken-collapsed = { $title }, réduite
 fs-taskbar-spoken-front = { $title }, au premier plan
 
+# Folderstorm: the account's setup backup (folderstorm/backup, Preferences › Language and updates)
+fs-backup-group = Sauvegarde de la configuration Folderstorm
+fs-backup-intro = Un seul fichier avec la configuration Folderstorm de ce compte : dispositions et espaces de travail, fonds, bureau, onglets et fenêtres de l'inventaire, tableaux de gestes, zone du monde, choix des médias et personnages de l'hôte de session. Jamais de mots de passe, d'identifiants, de discussions ni d'adresses e-mail.
+fs-backup-export = Exporter
+fs-backup-export-help = Écrit la configuration de ce profil et du compte connecté dans un fichier de votre choix, à garder ou à emporter sur un autre PC.
+fs-backup-export-button = Exporter…
+fs-backup-import = Importer
+fs-backup-import-help = Lit un fichier de sauvegarde et montre ce qu'il contient ; vous choisissez les parties et la façon de remettre chacune.
+fs-backup-import-button = Importer…
+fs-backup-folder = Dossier des sauvegardes
+fs-backup-folder-help = Où sont gardées les sauvegardes automatiques : une sauvegarde de sécurité avant chaque importation, et les quotidiennes.
+fs-backup-folder-button = Ouvrir le dossier des sauvegardes
+fs-backup-daily = Sauvegarde automatique quotidienne
+fs-backup-daily-help = Une fois par jour, pendant la connexion, une sauvegarde de la configuration du compte dans le dossier des sauvegardes.
+fs-backup-keep = Sauvegardes quotidiennes gardées
+fs-backup-keep-help = Les plus anciennes sont supprimées, pour chaque compte.
+fs-backup-list = Sauvegardes automatiques
+fs-backup-list-help = Restaurer remet une sauvegarde telle qu'elle était : utilisez celle faite avant une importation pour l'annuler.
+fs-backup-list-empty = Aucune pour l'instant.
+fs-backup-list-entry = { $date } · { $kind } · { $account } · { $count ->
+        [one] 1 partie
+       *[other] { $count } parties
+    }
+fs-backup-no-account-name = aucun compte
+fs-backup-restore-button = Restaurer…
+fs-backup-kind-manual = exportée
+fs-backup-kind-before-import = avant une importation
+fs-backup-kind-daily = quotidienne
+fs-backup-file-type = Sauvegarde de la configuration Folderstorm
+fs-backup-exported = Exportée dans { $path }
+fs-backup-write-failed = Le fichier n'a pas pu être écrit.
+fs-backup-read-failed = Le fichier n'a pas pu être lu.
+fs-backup-not-a-backup = Ce fichier n'est pas une sauvegarde de configuration Folderstorm.
+fs-backup-too-large = Ce fichier est trop gros pour être une sauvegarde de configuration.
+fs-backup-import-title = Importer une configuration Folderstorm
+fs-backup-restore-title = Restaurer une sauvegarde automatique
+fs-backup-from = Sauvegarde de { $account }, { $date }, version { $version }.
+fs-backup-newer = Faite par une version plus récente : seules les parties connues de cette version peuvent être importées.
+fs-backup-unknown = Laissées de côté (cette version ne les connaît pas) : { $sections }
+fs-backup-other-account = Cette sauvegarde est celle de { $account }, pas de { $current }. Ses tableaux de gestes restent à { $account } et s'affichent quand ce compte se connecte ici ; les dossiers et objets de l'inventaire n'existent que dans l'inventaire de ce compte.
+fs-backup-not-logged-in = Non connecté : ce qui pointe vers un inventaire est gardé pour le compte de la sauvegarde.
+fs-backup-skip-inventory = { $count ->
+        [one] Laisser de côté le raccourci ou l'entrée d'onglet qui pointe vers l'inventaire de ce compte
+       *[other] Laisser de côté les { $count } raccourcis et entrées d'onglets qui pointent vers l'inventaire de ce compte
+    }
+fs-backup-nothing = Rien dans ce fichier ne peut être importé par cette version.
+fs-backup-merge = Fusionner
+fs-backup-replace = Remplacer
+fs-backup-merge-help = Fusionner ajoute les entrées du fichier ; celle qui porte le même nom qu'une des vôtres prend sa place. Remplacer rend la partie exactement comme dans le fichier.
+fs-backup-safety-note = Une sauvegarde de votre configuration actuelle est faite d'abord : restaurez-la depuis Sauvegardes automatiques pour annuler l'importation.
+fs-backup-import-confirm = Importer
+fs-backup-restore-confirm = Restaurer
+fs-backup-safety-failed = La sauvegarde de sécurité n'a pas pu être écrite : rien n'a été importé.
+fs-backup-imported = { $count ->
+        [one] 1 partie importée.
+       *[other] { $count } parties importées.
+    }
+fs-backup-section-failed = { $section } non importé : { $reason }
+fs-backup-undo-hint = Pour annuler, restaurez la sauvegarde faite avant l'importation, dans Sauvegardes automatiques.
+fs-backup-unreadable = son contenu ne peut pas être lu
+fs-backup-no-account = la sauvegarde ne dit pas quel compte l'a faite
+fs-backup-host-running = fermez d'abord l'hôte de session
+fs-backup-section-layouts = Dispositions et espaces de travail
+fs-backup-section-background = Fond autour du monde
+fs-backup-section-desktop = Bureau dans les marges
+fs-backup-section-inventory-tabs = Onglets d'inventaire personnalisés
+fs-backup-section-inventory-windows = Fenêtres d'inventaire (épingle et mode discret)
+fs-backup-section-gesture-boards = Tableaux de gestes
+fs-backup-section-viewport = Zone du monde
+fs-backup-section-media = Choix des médias
+fs-backup-section-session-host = Personnages de l'hôte de session
+fs-backup-note-limit = { $count ->
+        [one] 1 entrée laissée de côté : la liste est pleine.
+       *[other] { $count } entrées laissées de côté : la liste est pleine.
+    }
+fs-backup-note-kept = { $count ->
+        [one] 1 entrée est gardée mais ne peut pas servir dans cette version.
+       *[other] { $count } entrées sont gardées mais ne peuvent pas servir dans cette version.
+    }
+fs-backup-note-unread = { $count ->
+        [one] 1 entrée illisible a été laissée de côté.
+       *[other] { $count } entrées illisibles ont été laissées de côté.
+    }
+fs-backup-note-workspace-inventory = { $count ->
+        [one] 1 dossier d'inventaire ou HUD d'un autre compte laissé hors des espaces de travail.
+       *[other] { $count } dossiers d'inventaire et HUD d'un autre compte laissés hors des espaces de travail.
+    }
+fs-backup-note-desktop-inventory = { $count ->
+        [one] 1 raccourci de dossier d'un autre compte laissé de côté.
+       *[other] { $count } raccourcis de dossiers d'un autre compte laissés de côté.
+    }
+fs-backup-note-desktop-there = { $count ->
+        [one] 1 raccourci était déjà sur votre bureau.
+       *[other] { $count } raccourcis étaient déjà sur votre bureau.
+    }
+fs-backup-note-tabs-inventory = { $count ->
+        [one] 1 dossier ou objet d'un autre compte laissé hors des onglets.
+       *[other] { $count } dossiers et objets d'un autre compte laissés hors des onglets.
+    }
+fs-backup-note-windows-inventory = { $count ->
+        [one] Le mode d'une fenêtre de dossier a été laissé de côté.
+       *[other] Les modes de { $count } fenêtres de dossiers ont été laissés de côté.
+    }
+fs-backup-note-boards-inventory = Tableaux de gestes laissés de côté : leurs boutons sont des objets de l'inventaire d'un autre compte.
+fs-search-backup = sauvegarde sauvegarder exporter importer restaurer copier transférer migrer configuration profil annuler
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
 fs-chat-upload-choose-title = Choisir une image à envoyer

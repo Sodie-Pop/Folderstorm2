@@ -85,6 +85,7 @@ mod tests {
         "fs-search-chat-upload",
         "fs-search-outfit-safety",
         "fs-search-background-huds",
+        "fs-search-backup",
     ];
 
     /// What a user types, in each language, and the entry it must find.
@@ -145,6 +146,10 @@ mod tests {
         ("en", "hud wallpaper", "fs-search-background-huds"),
         ("fr", "hud fond d'écran", "fs-search-background-huds"),
         ("ja", "HUD 壁紙", "fs-search-background-huds"),
+        ("en", "backup", "fs-search-backup"),
+        ("en", "migrate", "fs-search-backup"),
+        ("fr", "sauvegarde", "fs-search-backup"),
+        ("ja", "バックアップ", "fs-search-backup"),
     ];
 
     #[test]
@@ -231,6 +236,8 @@ mod tests {
             ("Zipline", Page::Chat, 4),
             // Inventory: outfit safety
             ("outfit safety", Page::Inventory, 1),
+            // Language and updates: the account's setup backup
+            ("migrate", Page::System, 5),
         ];
         for (query, page, at_least) in cases {
             let found = counts(query);
