@@ -305,11 +305,12 @@ pub(super) fn tab_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, pre
     actions(ui, p, st, prefs, id, true);
 }
 
-/// The "Folders" part of "Customize tab…", above the filters.
+/// The "Icon" and "Folders" parts of "Customize tab…", above the filters.
 pub(in crate::ui::inventory) fn editor(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
     let Some(id) = active(st) else {
         return;
     };
+    super::icon::editor(ui, p, prefs, id);
     ui.label(RichText::new(aurora_i18n::tr!("inventory-folder-tab-heading")).color(p.muted));
     let seen = &st.custom_tabs.seen;
     let mut drop = None;
