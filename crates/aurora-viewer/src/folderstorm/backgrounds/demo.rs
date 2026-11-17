@@ -53,6 +53,37 @@ pub fn png() -> Vec<u8> {
     out.into_inner()
 }
 
+/// `hud` and `hud-over`: one of the demo's HUDs (`crate::demo::hud`) worn on
+/// the centre point and moved left onto the edge of the HUD area `area`
+/// (left, top, right, bottom pixels: the world's part of the window), half
+/// in the left margin: shown over the background there with `hud`, under
+/// it with `hud-over`. None without a margin.
+pub fn margin_hud(mode: &str, area: Option<[f32; 4]>) -> Vec<aurora_net::NetEvent> {
+    let Some([left, top, right, bottom]) = area.filter(|_| matches!(mode, "hud" | "hud-over")) else {
+        return Vec::new();
+    };
+    // +Y is left; one unit is the area's height: its left edge is half its
+    // width away from its centre
+    let edge = 0.5 * (right - left) / (bottom - top).max(1.0);
+    let mut events = crate::demo::hud::events();
+    for event in &mut events {
+        if let aurora_net::NetEvent::ObjectUpdates { objects, .. } = event {
+            objects.retain(|o| o.local_id == crate::demo::hud::FIRST);
+            for o in objects.iter_mut() {
+                o.local_id = MARGIN_HUD;
+                o.full_id = crate::demo::u(u128::from(MARGIN_HUD));
+                o.name_values = format!("AttachItemID STRING RW SV {}", o.full_id);
+                o.position = glam::Vec3::new(0.0, edge, -0.25);
+                o.scale = glam::Vec3::new(0.012, 0.36, 0.3);
+            }
+        }
+    }
+    events
+}
+
+/// The local id of [`margin_hud`]'s HUD (none of `crate::demo::hud`'s).
+const MARGIN_HUD: u32 = 8299;
+
 /// The name of the copy `missing` points at: never written.
 pub const MISSING: &str = "0000000000000000.png";
 
@@ -63,7 +94,7 @@ pub const MISSING: &str = "0000000000000000.png";
 /// not know.
 pub fn seed(mode: &str, store: &mut Store, viewport: &mut ViewportSettings, width: u32, folder: &Path) -> bool {
     let fit = match mode {
-        "1" | "fill" | "span" | "dim" | "layout" => Fit::Fill,
+        "1" | "fill" | "span" | "dim" | "layout" | "hud" | "hud-over" => Fit::Fill,
         "fit" => Fit::Contain,
         "stretch" => Fit::Stretch,
         "centre" | "center" => Fit::Centre,
@@ -99,6 +130,8 @@ pub fn seed(mode: &str, store: &mut Store, viewport: &mut ViewportSettings, widt
         span: mode == "span",
         brightness: if mode == "dim" { 40 } else { 100 },
     };
+    // `hud-over`: *HUDs over the background* unticked
+    store.background_over_huds = mode == "hud-over";
     if mode == "layout" {
         let mut wall = Layout::new("Wall", None, None, Vec::new());
         wall.background = Some(Background {
