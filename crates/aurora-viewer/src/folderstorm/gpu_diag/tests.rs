@@ -127,7 +127,10 @@ fn the_notice_says_the_reason_in_plain_words_or_keeps_aurora_s_text() {
         used_total: Some((11_878, 12_288)),
     };
     let text = notice(memory, true, false, "AURORA");
-    assert!(text.starts_with("Video memory was full (3 characters open, 11.6 of 12 GB in use)."), "{text}");
+    assert!(
+        text.starts_with("Video memory was full (3 characters open, 11.6 of 12 GB in use)."),
+        "{text}"
+    );
     assert!(text.contains("you stayed logged in"), "{text}");
     assert!(text.contains("Show the log folder"), "{text}");
     assert!(!text.contains("AURORA"));
@@ -208,7 +211,10 @@ fn an_entry_holds_the_memory_picture_and_the_run_up_in_figures() {
         assert!(text.contains(wanted), "missing {wanted:?} in\n{text}");
     }
     let log = entry("x").log_line();
-    assert!(log.starts_with("GPU loss: likely reason video memory full; vram 3300/3400 MB"), "{log}");
+    assert!(
+        log.starts_with("GPU loss: likely reason video memory full; vram 3300/3400 MB"),
+        "{log}"
+    );
 }
 
 #[test]

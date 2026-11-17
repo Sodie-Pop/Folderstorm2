@@ -253,7 +253,10 @@ pub struct Context {
 pub enum Reason {
     /// The video memory was full: `viewers` open on the card (this one
     /// included) and the memory figures, when known.
-    Memory { viewers: u32, used_total: Option<(u64, u64)> },
+    Memory {
+        viewers: u32,
+        used_total: Option<(u64, u64)>,
+    },
     /// The card took too long to draw a frame (a TDR).
     Hang,
     /// The driver stopped on an error in the drawing.
@@ -366,7 +369,10 @@ pub enum Outcome {
     Pending,
     /// Not in front: the loss waits for the window to come to the front.
     Waiting,
-    Recovered { ms: u128, safe: bool },
+    Recovered {
+        ms: u128,
+        safe: bool,
+    },
 }
 
 impl Outcome {
@@ -376,7 +382,11 @@ impl Outcome {
             Outcome::Waiting => "waiting: the window recovers when it comes to the front".to_owned(),
             Outcome::Recovered { ms, safe } => format!(
                 "recovered in {ms} ms, {}",
-                if safe { "with the safe graphics level" } else { "settings unchanged" }
+                if safe {
+                    "with the safe graphics level"
+                } else {
+                    "settings unchanged"
+                }
             ),
         };
         format!("{OUTCOME}{text}")

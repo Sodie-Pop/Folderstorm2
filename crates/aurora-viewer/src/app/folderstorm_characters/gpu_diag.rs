@@ -46,11 +46,7 @@ impl App {
             in_front: self.folderstorm_in_front(),
         };
         let history = self.folderstorm_characters.gpu_diag.history.aged(now);
-        let recent: Vec<Sample> = history
-            .iter()
-            .filter(|(age, _)| *age <= RECENT)
-            .map(|(_, s)| s.clone())
-            .collect();
+        let recent: Vec<Sample> = history.iter().filter(|(age, _)| *age <= RECENT).map(|(_, s)| s.clone()).collect();
         let reason = gpu_diag::demo_reason(self.demo).unwrap_or_else(|| gpu_diag::reason(&context, &recent));
         let entry = Entry {
             when: chrono::Local::now().format("%Y-%m-%d %H:%M:%S %:z").to_string(),
