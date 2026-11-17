@@ -10,8 +10,8 @@
 //! Inventory folder opens that folder's own window (Aurora's *Open in a
 //! new window*), one window per folder; it keeps the folder's id, nothing else.
 //! A shortcut to an Inventory item opens it as the Inventory does (a
-//! landmark: the teleport, after Aurora's question); it keeps the item's
-//! id, never its asset's.
+//! landmark: the teleport, after Aurora's question; a notecard: its
+//! window); it keeps the item's id, never its asset's.
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
@@ -88,7 +88,8 @@ pub enum Request {
     /// Show this folder in the main Inventory window.
     ShowFolder(Uuid),
     /// Open this item of the Inventory as the Inventory opens its kind (a
-    /// landmark: teleport there, after Aurora's question).
+    /// landmark: teleport there, after Aurora's question; a notecard: its
+    /// window).
     OpenItem(Uuid),
     /// Show this item in the main Inventory window.
     ShowItem(Uuid),

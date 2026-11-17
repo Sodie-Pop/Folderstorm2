@@ -1064,7 +1064,7 @@ What is built is listed kind by kind; each kind is its own commit.
   icon for its type (`ui::inventory::item_icon`, the skin's `Inv_*`); its
   path in the Inventory as tooltip; *Rename*, *Icon ›*, *Move to ›*,
   *Remove* as any shortcut. Its menu's first entry says what opening does
-  (*Teleport* for a landmark), then *Show in inventory* (the main
+  (*Teleport* for a landmark, *Open* for a notecard), then *Show in inventory* (the main
   Inventory window on the item, `InvAction::ShowMain`).
 - **Greyed, with the reason**: not in the inventory ("deleted, or its
   folder is not loaded yet": the inventory loads folder by folder, and
@@ -1112,3 +1112,24 @@ What is built is listed kind by kind; each kind is its own commit.
   Library stay refused (checkpoint 2).
 - **No right is asked** for a teleport (the Legacy Viewer asks for none):
   a no-copy, no-modify, no-transfer landmark teleports as a full one.
+
+### Notecards
+
+- **Opening is the Inventory's own *Open***: the glue hands the item to
+  `apply_inventory_action(InvAction::Preview(item))`, the arm a double
+  click on a notecard of the Inventory reaches. That arm, not the
+  desktop, checks RLVa's `@viewnote` (`Inventory::can_preview`), opens
+  Aurora's notecard window (one per notecard: opened again, it comes to
+  the front with its unsaved text), checks the right to read
+  (LLPreviewNotecard::loadAsset: copy, or a god; otherwise the window
+  says "You are not allowed to read this content") and only then asks
+  the grid for the content. Saving goes through the same window, with
+  its own check (`preview::can_edit`).
+- **Nothing of the notecard is read by the desktop**: not its asset id,
+  not its text, not its rights. A notecard the agent may not read is
+  still a shortcut (the Inventory shows it too), and its window refuses.
+- **RLVa**: greyed "Blocked by RLVa" under `@viewnote`; the name stays.
+- **The Library**: allowed, read through the same rights (the rule of
+  section "Landmarks").
+- The notecard's window is Aurora's own floater, so it is placed by
+  Aurora's cascade, not beside the shortcut.

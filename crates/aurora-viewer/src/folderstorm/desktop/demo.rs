@@ -26,9 +26,10 @@
 //!   the Inventory is restored as a click on its button does.
 //! - `overflow`: the taskbar with twenty collapsed windows (opened at
 //!   frame 200): buttons that are their icon alone, and *More*.
-//! - `items`: the same, and a third column of item shortcuts: a landmark
-//!   and one whose item is gone. At frame 200 the landmark is opened:
-//!   Aurora's question before the teleport.
+//! - `items`: the same, and a third column of item shortcuts: a landmark,
+//!   a notecard and one whose item is gone. At frame 200 the landmark is
+//!   opened (Aurora's question before the teleport), at frame 300 the
+//!   notecard (its window).
 
 use super::store::{Desktop, Target, Taskbar};
 use crate::folderstorm::viewport::ViewportSettings;
@@ -76,8 +77,9 @@ pub fn dropped() -> Uuid {
 }
 
 /// The items of `items`, made up for the offline demo (they belong to no
-/// one): a landmark in the Landmarks folder.
+/// one): a landmark in the Landmarks folder, a notecard in Objects.
 const LANDMARK: u128 = 0xF01D_E500;
+const NOTECARD: u128 = 0xF01D_E501;
 /// An item that does not exist: its shortcut is greyed.
 const ITEM_GONE: u128 = 0xF01D_E5FF;
 /// The cell of the first item shortcut; the others follow down its column.
@@ -86,6 +88,11 @@ pub const ITEMS_AT: (u16, u16) = (2, 0);
 /// The landmark of `items`.
 pub fn landmark() -> Uuid {
     crate::demo::u(LANDMARK)
+}
+
+/// The notecard of `items`.
+pub fn notecard() -> Uuid {
+    crate::demo::u(NOTECARD)
 }
 
 /// The demo's items, added to the demo's inventory, and their shortcuts
@@ -106,8 +113,15 @@ pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inve
         owner_mask: 0x7fff_ffff,
         ..Default::default()
     };
-    inv.add_items(vec![item(LANDMARK, FOLDERS[1], "Aurora Welcome Area", 3)]);
-    for (n, id) in [LANDMARK, ITEM_GONE].into_iter().enumerate() {
+    inv.add_items(vec![
+        item(LANDMARK, FOLDERS[1], "Aurora Welcome Area", 3),
+        // (without an asset yet: it opens empty, as a new notecard does)
+        InvItem {
+            asset_id: Uuid::nil(),
+            ..item(NOTECARD, DROPPED, "Shopping list", 7)
+        },
+    ]);
+    for (n, id) in [LANDMARK, NOTECARD, ITEM_GONE].into_iter().enumerate() {
         let target = Target::Item { item: crate::demo::u(id) };
         let _ = desktop.add(target, 0, (ITEMS_AT.0, ITEMS_AT.1 + n as u16));
     }

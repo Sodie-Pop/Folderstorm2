@@ -1,6 +1,6 @@
 //! Frame tests of the item shortcuts (checkpoint 5 of the plan): a
-//! landmark on a desktop, drawn, opened, greyed, hidden by RLVa, dropped
-//! from the Inventory.
+//! landmark and a notecard on a desktop, drawn, opened, greyed, hidden by
+//! RLVa, dropped from the Inventory.
 
 use super::*;
 use crate::folderstorm::desktop::targets::{self, Greyed};
@@ -14,6 +14,8 @@ const LINK: u128 = 9101;
 const TRASHED: u128 = 9102;
 /// A texture: not a kind a shortcut opens.
 const TEXTURE: u128 = 9105;
+/// A notecard, in [`MINE`].
+const NOTECARD: u128 = 9110;
 /// The landmark's asset: never drawn, never asked for by the desktop.
 const ASSET: u128 = 0x00A5_5E70_0000_9900;
 
@@ -43,6 +45,7 @@ impl Bench {
             },
             item(TRASHED, trash, "Old place", 3, 9902),
             item(TEXTURE, Uuid::from_u128(MINE), "A picture", 0, 9905),
+            item(NOTECARD, Uuid::from_u128(MINE), "Rules", 7, 9910),
         ]);
         b
     }
@@ -77,7 +80,7 @@ impl Bench {
 #[test]
 fn the_inventory_s_icons_of_the_items_are_in_the_skin() {
     let b = Bench::new();
-    for icon in ["Inv_Landmark", targets::ICON_ITEM] {
+    for icon in ["Inv_Landmark", "Inv_Notecard", targets::ICON_ITEM] {
         assert!(
             b.icons.get(icon).is_some() || crate::ui::icons::global(icon).is_some(),
             "{icon} is not an icon of the skin"
@@ -345,4 +348,48 @@ fn item_shortcuts_fill_a_desktop_as_folders_do_and_each_account_has_its_own() {
     b.desktop.sign_in(ME);
     b.frames(2);
     assert!(b.drawn("Beach").is_some());
+}
+
+#[test]
+fn a_notecard_shortcut_shows_its_name_and_asks_to_be_opened() {
+    let mut b = Bench::with_items();
+    let rules = b.add_item(NOTECARD, 0, (0, 0));
+    let beach = b.add_item(LANDMARK, 0, (0, 1));
+    b.frames(3);
+    let cell = b.cell_of(rules);
+    assert!(b.drawn("Rules").is_some_and(|text| cell.contains_rect(text)));
+    assert!(b.says_no_id());
+    b.picture("desktop-notecard");
+    b.double_click(cell.center());
+    assert_eq!(b.opened_items(), vec![Uuid::from_u128(NOTECARD)]);
+    // its menu says Open, a landmark's Teleport
+    b.out.clear();
+    b.menu(cell.center(), aurora_i18n::tr!("fs-desktop-open"));
+    assert_eq!(b.out, vec![Request::OpenItem(Uuid::from_u128(NOTECARD))]);
+    // RLVa's @viewnote greys the notecard, not the landmark
+    b.out.clear();
+    b.inv.rlva_preview_mask = 2;
+    b.frames(2);
+    b.time += 2.0;
+    b.double_click(cell.center());
+    assert!(b.opened_items().is_empty());
+    b.time += 2.0;
+    b.double_click(b.cell_of(beach).center());
+    assert_eq!(b.opened_items(), vec![Uuid::from_u128(LANDMARK)]);
+    // dropped from the Inventory with a landmark: both
+    let mut b = Bench::with_items();
+    b.frames(3);
+    b.drop_inventory(&[NOTECARD, LINK], b.room(0).grid.rect((1, 1)).center());
+    let targets: Vec<_> = b.desktop.shortcuts.iter().map(|s| s.target.clone()).collect();
+    assert_eq!(
+        targets,
+        vec![
+            Target::Item {
+                item: Uuid::from_u128(NOTECARD)
+            },
+            Target::Item {
+                item: Uuid::from_u128(LANDMARK)
+            }
+        ]
+    );
 }

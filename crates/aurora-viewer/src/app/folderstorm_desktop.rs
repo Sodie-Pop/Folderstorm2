@@ -16,7 +16,9 @@
 //! opens as the Inventory opens that kind of item: a landmark teleports
 //! through Aurora's own question (`PlacesUi::confirm_landmark`, the Legacy
 //! Viewer's TeleportFromLandmark) and then `request_user_teleport`, where
-//! RLVa is checked as for every teleport. A toolbar button's menu
+//! RLVa is checked as for every teleport; a notecard opens in Aurora's
+//! notecard window through `InvAction::Preview`, which checks the right to
+//! read it. A toolbar button's menu
 //! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
 //! is run here), and three keyboard actions of `crate::folderstorm::keys`
 //! show or hide the shortcuts and give the desktop or the taskbar the
@@ -204,6 +206,10 @@ impl App {
             // (unless its "do not show again" box was ticked); the answer
             // goes through `request_user_teleport`, RLVa included
             Ok(targets::ItemOpen::Teleport { asset, name }) => self.places_ui.confirm_landmark(asset, name),
+            // the Inventory's own *Open* of a notecard: that arm checks
+            // @viewnote and the right to read it (LLPreviewNotecard::loadAsset)
+            // before it asks for the content, and opens Aurora's window
+            Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item)),
             Err(why) => self.world.system_notice(why.text(), Topic::Warning),
         }
     }
@@ -348,7 +354,7 @@ impl App {
 
     /// What the demo asks at this frame, as a shortcut would: `open` opens
     /// a folder shortcut then a command, `items` opens the landmark
-    /// shortcut (the teleport's question), `drop` adds a folder where a drop
+    /// shortcut (the teleport's question) then the notecard, `drop` adds a folder where a drop
     /// from the Inventory would then moves it to the third monitor, `rlva`
     /// tries to open a folder shortcut under `@showinv`, `edit` edits a
     /// name in place then gives a folder shortcut a name and an icon,
@@ -421,6 +427,8 @@ impl App {
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
             // the landmark shortcut opened: Aurora's question before a teleport
             ("items", true) => vec![Request::OpenItem(demo::landmark())],
+            // then the notecard: Aurora's notecard window
+            ("items", false) => vec![Request::OpenItem(demo::notecard())],
             // the name of the People shortcut edited in place, as F2 does
             ("edit", true) => {
                 let people = d

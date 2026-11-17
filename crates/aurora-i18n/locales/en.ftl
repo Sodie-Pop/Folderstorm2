@@ -2096,7 +2096,7 @@ fs-background-shows = Shows
 fs-desktop-group = Desktop in the margins
 fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
-fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders and landmarks of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders, landmarks and notecards of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
 fs-desktop-size = Icon size
 fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
 fs-desktop-size-small = Small
@@ -2117,7 +2117,7 @@ fs-desktop-greyed-item-gone = This item is not in your inventory: it was deleted
 fs-desktop-greyed-item-trash = This item is in the Trash.
 fs-desktop-greyed-item-other = This kind of item cannot be opened from the desktop.
 fs-desktop-add = Add to desktop
-fs-desktop-add-refused = Only folders and landmarks of your inventory, out of the Trash, can be desktop shortcuts.
+fs-desktop-add-refused = Only folders, landmarks and notecards of your inventory, out of the Trash, can be desktop shortcuts.
 fs-desktop-added =
     { $count ->
         [one] Shortcut added to the desktop.

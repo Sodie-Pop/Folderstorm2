@@ -725,6 +725,11 @@ fn the_demo_seeds_its_desktops() {
         "down the third column"
     );
     assert!(inv.items.get(&demo::landmark()).is_some_and(|it| it.asset_type == 3));
+    assert!(
+        inv.items
+            .get(&demo::notecard())
+            .is_some_and(|it| it.asset_type == 7 && it.asset_id.is_nil())
+    );
     // the demo's desktop drawn: every size holds its names in its cells
     for size in Size::ALL {
         let mut b = Bench::new();

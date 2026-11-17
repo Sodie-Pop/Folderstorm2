@@ -15,7 +15,10 @@
 //! Legacy Viewer), behind what greys that entry there. A landmark
 //! teleports (LLLandmarkBridgeAction::doIt: TeleportFromLandmark asks
 //! first), and one of the Library may be a shortcut, as the Legacy Viewer
-//! teleports to it.
+//! teleports to it. A notecard opens in Aurora's notecard window through
+//! `InvAction::Preview`, the Inventory's own *Open*: that path checks the
+//! right to read it (LLPreviewNotecard::loadAsset: copy, or a god) and
+//! RLVa's `@viewnote`; nothing of its content is read here.
 //!
 //! A command shortcut runs what its toolbar button runs
 //! (`ui::bars::run_command`), and stops where the button stops: the gates
@@ -252,6 +255,9 @@ pub enum ItemKind {
     /// Opening it teleports there, after Aurora's question
     /// (TeleportFromLandmark).
     Landmark,
+    /// Opening it opens Aurora's notecard window, as the Inventory's
+    /// *Open* does.
+    Notecard,
 }
 
 impl ItemKind {
@@ -260,15 +266,17 @@ impl ItemKind {
     pub fn of(asset_type: i32) -> Option<Self> {
         match asset_type {
             3 => Some(ItemKind::Landmark),
+            7 => Some(ItemKind::Notecard),
             _ => None,
         }
     }
 
     /// Whether an item of the Library can be a shortcut: what only reads
-    /// it may (the Legacy Viewer teleports to a landmark of the Library).
+    /// it may (the Legacy Viewer teleports to a landmark of the Library,
+    /// and opens a notecard of it when its rights allow).
     pub fn library(self) -> bool {
         match self {
-            ItemKind::Landmark => true,
+            ItemKind::Landmark | ItemKind::Notecard => true,
         }
     }
 
@@ -276,6 +284,7 @@ impl ItemKind {
     pub fn verb(self) -> &'static str {
         match self {
             ItemKind::Landmark => tr!("common-teleport"),
+            ItemKind::Notecard => tr!("fs-desktop-open"),
         }
     }
 }
@@ -347,6 +356,10 @@ pub enum ItemOpen {
     /// landmark in the teleport request, as `InvAction::TeleportLandmark`
     /// carries it: it is never shown nor kept.
     Teleport { asset: Uuid, name: String },
+    /// Open this notecard (the item, a link followed) as the Inventory's
+    /// *Open* does: `InvAction::Preview`, which checks the right to read
+    /// it before anything is asked of the grid.
+    Notecard(Uuid),
 }
 
 /// Whether the live item `original` of `kind` opens now: what greys its
@@ -361,6 +374,10 @@ fn item_gate(inv: &Inventory, original: Uuid, kind: ItemKind, facts: &Facts) -> 
         ItemKind::Landmark if item.asset_id.is_nil() => Err(Greyed::NotYet),
         ItemKind::Landmark if facts.landmark_blocked => Err(Greyed::Rlva),
         ItemKind::Landmark => Ok(()),
+        // (RLVa's @viewnote: `Inventory::can_preview`, the first check of
+        // the Inventory's own path)
+        ItemKind::Notecard if !inv.can_preview(7) => Err(Greyed::Rlva),
+        ItemKind::Notecard => Ok(()),
     }
 }
 
@@ -384,6 +401,7 @@ pub fn item_open(inv: &Inventory, id: Uuid, facts: &Facts, no_inventory: bool) -
             asset: item.asset_id,
             name: item.name.clone(),
         },
+        ItemKind::Notecard => ItemOpen::Notecard(original),
     })
 }
 
@@ -832,7 +850,9 @@ mod tests {
     /// and items: a box (9004), a landmark (9100), a link to it (9101), a
     /// landmark in the Trash (9102), one of the Library (9103), one without
     /// its asset yet (9104), one the next owner got with no right at all
-    /// (9106), and a texture (9105).
+    /// (9106), a texture (9105); a notecard (9110), a link to it (9111), a
+    /// notecard the agent may not read (9112, no copy) and one of the
+    /// Library (9113).
     fn inventory() -> Inventory {
         use crate::world::inventory::{FetchState, Folder};
         use aurora_net::inventory::{InvFolder, InvItem};
@@ -914,12 +934,89 @@ mod tests {
                 owner_mask: 0,
                 ..item(9106, mine, "Private club", 3, 9906)
             },
+            item(9110, mine, "Rules", 7, NOTECARD_ASSET),
+            InvItem {
+                asset_type: 24,
+                ..item(9111, Uuid::from_u128(8001), "Rules", 7, 9110)
+            },
+            InvItem {
+                owner_mask: rules::MODIFY | rules::TRANSFER,
+                ..item(9112, mine, "Sealed letter", 7, 9912)
+            },
+            InvItem {
+                owner: inv.lib_owner,
+                everyone_mask: rules::COPY,
+                ..item(9113, Uuid::from_u128(9002), "Welcome note", 7, 9913)
+            },
         ]);
         inv
     }
 
     /// The asset of the landmark 9100: never shown, never kept.
     const LANDMARK_ASSET: u128 = 0x00A5_5E70_0000_9900;
+
+    /// The asset of the notecard 9110: never shown, never kept, never read here.
+    const NOTECARD_ASSET: u128 = 0x00A5_5E70_0000_9910;
+
+    #[test]
+    fn a_notecard_shortcut_opens_through_the_inventory_s_own_path() {
+        let mut inv = inventory();
+        let free = Facts::default();
+        let live = |n: u128| ItemState::Live {
+            original: id(n),
+            kind: ItemKind::Notecard,
+        };
+        assert_eq!(item_state(&inv, id(9110)), live(9110));
+        assert_eq!(item_state(&inv, id(9111)), live(9110), "a link gives its notecard");
+        assert_eq!(item_state(&inv, id(9113)), live(9113), "of the Library: read-only, by its rights");
+        // what opens is the item, handed to `InvAction::Preview`: never
+        // its asset, and no right is decided here
+        assert_eq!(item_open(&inv, id(9110), &free, false), Ok(ItemOpen::Notecard(id(9110))));
+        assert_eq!(item_open(&inv, id(9111), &free, false), Ok(ItemOpen::Notecard(id(9110))));
+        assert_eq!(item_open(&inv, id(9113), &free, false), Ok(ItemOpen::Notecard(id(9113))));
+        // one the agent may not read is still handed to that path, which
+        // refuses it (LLPreviewNotecard::loadAsset: copy, or a god): the
+        // shared rule says so, and nothing is read here to find out
+        let sealed = inv.items.get(&id(9112)).expect("there");
+        assert_eq!(rules::held(&inv, sealed) & rules::COPY, 0);
+        assert_eq!(item_open(&inv, id(9112), &free, false), Ok(ItemOpen::Notecard(id(9112))));
+        // a selection: once, by its item id
+        let picked = pick(&inv, &[id(9111), id(9110), id(9112)]);
+        assert_eq!(picked.items(), vec![id(9110), id(9112)]);
+        let kept = serde_json::to_string(&picked.targets).expect("written");
+        assert!(!kept.contains(&id(NOTECARD_ASSET).to_string()));
+        // its face: the notecard's name and icon, *Open*
+        let folders = Folders {
+            inv: &inv,
+            no_inventory: false,
+            colors: None,
+        };
+        let face_of = |n: u128, folders: &Folders| face(&item_shortcut(n), &free, folders);
+        let rules_card = face_of(9110, &folders);
+        assert_eq!((rules_card.name.as_str(), rules_card.icon.as_str()), ("Rules", "Inv_Notecard"));
+        assert_eq!((rules_card.greyed, rules_card.verb), (None, tr!("fs-desktop-open")));
+        // @showinv hides it; the landmark's gate does not grey it
+        assert_eq!(item_open(&inv, id(9110), &free, true), Err(Greyed::Rlva));
+        let blocked = Facts {
+            landmark_blocked: true,
+            ..Default::default()
+        };
+        assert_eq!(item_open(&inv, id(9110), &blocked, false), Ok(ItemOpen::Notecard(id(9110))));
+        // RLVa's @viewnote: greyed, not opened; a landmark is untouched
+        inv.rlva_preview_mask = 2;
+        assert_eq!(item_open(&inv, id(9110), &free, false), Err(Greyed::Rlva));
+        assert!(matches!(item_open(&inv, id(9100), &free, false), Ok(ItemOpen::Teleport { .. })));
+        let folders = Folders {
+            inv: &inv,
+            no_inventory: false,
+            colors: None,
+        };
+        let greyed = face_of(9110, &folders);
+        assert_eq!(
+            (greyed.greyed, greyed.hidden, greyed.name.as_str()),
+            (Some(Greyed::Rlva), false, "Rules")
+        );
+    }
 
     fn id(n: u128) -> Uuid {
         Uuid::from_u128(n)
