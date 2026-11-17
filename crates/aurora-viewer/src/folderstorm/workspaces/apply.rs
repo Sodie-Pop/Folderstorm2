@@ -404,7 +404,7 @@ pub fn take_bare(ctx: &egui::Context, window: egui::Id) -> Option<egui::Rect> {
             request.last_frame = now;
         }
         if request.sized_frames >= BARE_HOLD {
-            d.remove_temp::<BareRequest>(id);
+            d.remove::<BareRequest>(id);
         } else {
             d.insert_temp(id, request);
         }
