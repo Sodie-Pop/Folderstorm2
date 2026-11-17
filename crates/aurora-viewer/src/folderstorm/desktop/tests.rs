@@ -5,8 +5,8 @@
 //! `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the pictures
 //! (`desktop-*.png`).
 
-use super::store::{Desktop, Size, Target};
-use super::surface::{self, Room};
+use super::store::{Desktop, MAX_SHORTCUTS, Size, Target};
+use super::surface::{self, NoRoom, Room};
 use super::targets::{Facts, Folders};
 use super::{Env, Request, demo};
 use crate::folderstorm::viewport::{self, MonitorLayout};
@@ -39,6 +39,8 @@ struct Bench {
     /// RLVa hides the Inventory (`@showinv`).
     no_inventory: bool,
     hidden: bool,
+    /// The key action *Focus the desktop* was pressed: for the next frame.
+    focus: bool,
     /// A window drawn over that rectangle, above the desktops.
     window: Option<Rect>,
     /// A label of the world painted over that rectangle, before the end of
@@ -82,6 +84,12 @@ fn world_labels_cut(primitives: &mut Vec<egui::ClippedPrimitive>, world: Option<
 /// The account logged in.
 const ME: Uuid = Uuid::from_u128(1);
 
+/// Where a test puts the command of a toolbar button being dragged (the
+/// toolbar's own payload is private to `ui/toolbar.rs`).
+pub(super) fn toolbar_cargo_id() -> egui::Id {
+    egui::Id::unique("folderstorm_desktop_test_toolbar_cargo")
+}
+
 /// Three monitors of 640 × 400 side by side under a window over the three.
 fn three_monitors() -> MonitorLayout {
     MonitorLayout {
@@ -108,9 +116,13 @@ impl Bench {
             size,
             world: Some([640, 0, 640, 400]),
             monitors: Some(three_monitors()),
-            desktop: Desktop {
-                shortcuts_on: true,
-                ..Default::default()
+            desktop: {
+                let mut desktop = Desktop {
+                    shortcuts_on: true,
+                    ..Default::default()
+                };
+                desktop.sign_in(ME);
+                desktop
             },
             facts: Facts::default(),
             inv: {
@@ -123,6 +135,7 @@ impl Bench {
             },
             no_inventory: false,
             hidden: false,
+            focus: false,
             window: None,
             label: None,
             out: Vec::new(),
@@ -134,11 +147,10 @@ impl Bench {
         }
     }
 
-    /// A shortcut to the folder `n` of the account `account`.
-    fn add_folder(&mut self, n: u128, account: Uuid, slot: u8, cell: (u16, u16)) -> u32 {
+    /// A shortcut to the folder `n`.
+    fn add_folder(&mut self, n: u128, slot: u8, cell: (u16, u16)) -> u32 {
         let target = Target::Folder {
             folder: Uuid::from_u128(n),
-            account,
         };
         self.desktop.add(target, slot, cell).expect("added")
     }
@@ -193,12 +205,13 @@ impl Bench {
             .world
             .map(|[x, y, w, h]| Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)));
         let (window, label, hidden, facts, p) = (self.window, self.label, self.hidden, self.facts, self.p);
+        let focus = std::mem::take(&mut self.focus);
         let (desktop, icons) = (&mut self.desktop, &self.icons);
         let folders = Folders {
             inv: &self.inv,
-            account: ME,
             no_inventory: self.no_inventory,
             colors: None,
+            wear: None,
         };
         let mut out = Vec::new();
         let mut output = self.ctx.run_ui(
@@ -227,6 +240,7 @@ impl Bench {
                     facts,
                     folders,
                     hidden,
+                    focus,
                 };
                 out = super::show(&ctx, desktop, &env);
                 // a window, drawn after the desktops as before them: its
@@ -298,7 +312,7 @@ impl Bench {
     }
 
     fn rooms(&self) -> Vec<Room> {
-        super::rooms(&self.ctx, self.desktop.size)
+        super::rooms(&self.ctx, &self.desktop)
     }
 
     fn room(&self, slot: u8) -> Room {
@@ -663,15 +677,22 @@ fn the_demo_seeds_its_desktops() {
     // `single`: the world fills the window
     assert!(demo::seed("single", &mut desktop, &mut chosen, 5760));
     assert!(!chosen.enabled && desktop.shortcuts_on && !desktop.shortcuts.is_empty());
+    // `unused`: two more, on a monitor no window has
+    assert!(demo::seed("unused", &mut desktop, &mut view, 5760));
+    assert_eq!(desktop.unused(&[0, 2]), 2);
+    assert!(desktop.shortcuts.iter().filter(|s| s.slot == demo::UNUSED_SLOT).count() == 2);
+    // `edit` gives an icon of the list
+    assert!(super::icons::CHOICES.contains(&demo::EDITED.1));
     // the folders of the demo inventory, and one that is gone
-    for mode in ["drop", "rlva"] {
+    for mode in ["drop", "rlva", "edit"] {
         assert!(demo::seed(mode, &mut desktop, &mut view, 5760), "{mode}");
+        assert_eq!(desktop.unused(&[0, 2]), 0, "{mode}");
     }
-    demo::seed_folders(&mut desktop, ME);
+    demo::seed_folders(&mut desktop);
     let folders: Vec<_> = desktop
         .shortcuts
         .iter()
-        .filter(|s| matches!(s.target, Target::Folder { account, .. } if account == ME))
+        .filter(|s| matches!(s.target, Target::Folder { .. }))
         .map(|s| (s.slot, s.cell()))
         .collect();
     assert_eq!(
@@ -683,11 +704,61 @@ fn the_demo_seeds_its_desktops() {
         desktop.shortcuts.iter().all(|s| s.cell() != demo::DROPPED_AT),
         "the drop's cell is free"
     );
+    // `items`: a third column of item shortcuts, their items made up in
+    // the demo's inventory
+    assert!(demo::seed("items", &mut desktop, &mut view, 5760));
+    let mut inv = crate::world::inventory::Inventory {
+        root: Uuid::from_u128(77),
+        ..Default::default()
+    };
+    desktop.sign_in(ME);
+    demo::seed_folders(&mut desktop);
+    demo::seed_items(&mut desktop, &mut inv, ME);
+    let items: Vec<_> = desktop
+        .shortcuts
+        .iter()
+        .filter(|s| matches!(s.target, Target::Item { .. }))
+        .map(|s| (s.slot, s.cell()))
+        .collect();
+    assert_eq!(items.first(), Some(&(0, demo::ITEMS_AT)));
+    assert!(
+        items.iter().all(|(slot, (col, _))| (*slot, *col) == (0, demo::ITEMS_AT.0)),
+        "down the third column"
+    );
+    assert!(inv.items.get(&demo::landmark()).is_some_and(|it| it.asset_type == 3));
+    assert!(
+        inv.items
+            .get(&demo::notecard())
+            .is_some_and(|it| it.asset_type == 7 && it.asset_id.is_nil())
+    );
+    assert!(
+        desktop
+            .shortcuts
+            .iter()
+            .any(|s| s.target == Target::Outfit { outfit: demo::outfit() })
+    );
+    assert_eq!(
+        super::targets::outfit_open(&inv, demo::outfit(), None, false),
+        Ok(()),
+        "the demo's outfit can be worn"
+    );
+    assert!(
+        desktop
+            .shortcuts
+            .iter()
+            .any(|s| s.target == Target::Item { item: demo::wearable() })
+    );
+    assert_eq!(
+        super::targets::item_open(&inv, demo::wearable(), &Facts::default(), false),
+        Ok(super::targets::ItemOpen::Add(demo::wearable())),
+        "the demo's shirt can be added"
+    );
+    assert!(demo::seed("outfit", &mut desktop, &mut view, 5760));
     // the demo's desktop drawn: every size holds its names in its cells
     for size in Size::ALL {
         let mut b = Bench::new();
         assert!(demo::seed("1", &mut b.desktop, &mut view, 1920));
-        demo::seed_folders(&mut b.desktop, ME);
+        demo::seed_folders(&mut b.desktop);
         b.desktop.size = size;
         b.frames(3);
         for shortcut in b.desktop.shortcuts.clone() {
@@ -706,7 +777,7 @@ const ITEM: u128 = 710;
 #[test]
 fn a_folder_shortcut_shows_its_folder_and_asks_for_its_window() {
     let mut b = Bench::new();
-    let mine = b.add_folder(MINE, ME, 0, (0, 0));
+    let mine = b.add_folder(MINE, 0, (0, 0));
     b.frames(3);
     let name = b.folder_name(MINE);
     let cell = b.cell_of(mine);
@@ -744,18 +815,15 @@ fn a_folder_shortcut_shows_its_folder_and_asks_for_its_window() {
 }
 
 #[test]
-fn a_folder_that_is_gone_or_of_another_account_is_greyed_and_removed_from_its_menu() {
+fn a_folder_that_is_gone_is_greyed_and_removed_from_its_menu() {
     let mut b = Bench::new();
-    let gone = b.add_folder(123_456, ME, 0, (0, 0));
-    let theirs = b.add_folder(MINE, Uuid::from_u128(2), 0, (0, 1));
+    let gone = b.add_folder(123_456, 0, (0, 0));
+    let live = b.add_folder(MINE, 0, (0, 1));
     b.frames(3);
-    // neither says a folder's name, neither opens
-    assert!(b.drawn(&b.folder_name(MINE)).is_none(), "another account's folder is not named");
-    for id in [gone, theirs] {
-        assert!(b.painted(b.cell_of(id)) > 100, "shown, greyed");
-        b.time += 2.0;
-        b.double_click(b.cell_of(id).center());
-    }
+    // shown greyed, and it does not open
+    assert!(b.painted(b.cell_of(gone)) > 100, "shown, greyed");
+    b.time += 2.0;
+    b.double_click(b.cell_of(gone).center());
     assert!(b.opened().is_empty());
     // the menu: Open greyed, Remove works
     b.time += 2.0;
@@ -769,13 +837,63 @@ fn a_folder_that_is_gone_or_of_another_account_is_greyed_and_removed_from_its_me
     let remove = b.drawn(aurora_i18n::tr!("fs-desktop-remove")).expect("Remove is in the menu");
     b.click(remove.center());
     assert!(b.desktop.shortcut(gone).is_none());
-    assert!(b.desktop.shortcut(theirs).is_some());
+    assert!(b.desktop.shortcut(live).is_some());
+}
+
+/// Another account of the profile.
+const OTHER: Uuid = Uuid::from_u128(2);
+
+#[test]
+fn each_account_sees_its_own_desktop_and_never_another_s() {
+    let mut b = Bench::new();
+    assert_eq!(b.desktop.account, Some(ME));
+    let people = b.add("people", 0, (0, 0));
+    let mine = b.add_folder(MINE, 0, (0, 1));
+    b.frames(3);
+    let name = b.folder_name(MINE);
+    let (people_at, mine_at) = (b.cell_of(people), b.cell_of(mine));
+    assert!(b.drawn(label_of("people")).is_some() && b.drawn(&name).is_some());
+    b.picture("desktop-account-first");
+    // another account logs in on the same profile: an empty desktop, the
+    // same choices; nothing of the first account shows, not even greyed
+    b.desktop.size = Size::Small;
+    assert!(!b.desktop.sign_in(OTHER));
+    b.frames(3);
+    assert!(b.desktop.shortcuts_on && b.desktop.shortcuts.is_empty());
+    assert!(b.drawn(label_of("people")).is_none() && b.drawn(&name).is_none());
+    assert_eq!(b.painted(people_at) + b.painted(mine_at), 0, "its cells are bare");
+    // and the first account's shortcuts do not open from where they stood
+    b.time += 2.0;
+    b.double_click(people_at.center());
+    b.time += 2.0;
+    b.double_click(mine_at.center());
+    assert!(b.ran().is_empty() && b.opened().is_empty());
+    // its own shortcuts, in the same cells
+    let map = b.add("worldmap", 0, (0, 0));
+    b.frames(3);
+    assert!(b.drawn(label_of("worldmap")).is_some());
+    b.picture("desktop-account-second");
+    // back to the first: its desktop as it was, at the profile's size
+    assert!(!b.desktop.sign_in(ME));
+    b.frames(3);
+    assert_eq!(b.desktop.size, Size::Small);
+    assert_eq!(b.desktop.shortcut(people).map(|s| s.cell()), Some((0, 0)));
+    assert_eq!(b.desktop.shortcut(mine).map(|s| s.cell()), Some((0, 1)));
+    assert_eq!(b.desktop.shortcuts.len(), 2);
+    assert!(b.drawn(label_of("people")).is_some() && b.drawn(&name).is_some());
+    assert!(b.drawn(label_of("worldmap")).is_none());
+    // logged out (the login screen): nothing
+    assert!(!b.desktop.sign_in(Uuid::nil()));
+    b.frames(3);
+    assert!(b.drawn(label_of("people")).is_none() && b.drawn(label_of("worldmap")).is_none());
+    assert!(!b.desktop.sign_in(OTHER));
+    assert!(b.desktop.shortcut(map).is_some());
 }
 
 #[test]
 fn showinv_locks_the_folder_shortcuts_and_hides_their_names() {
     let mut b = Bench::new();
-    let mine = b.add_folder(MINE, ME, 0, (0, 0));
+    let mine = b.add_folder(MINE, 0, (0, 0));
     b.desktop.shortcuts[0].name = Some("My own name for it".into());
     b.frames(3);
     assert!(b.drawn("My own name for it").is_some());
@@ -828,8 +946,7 @@ fn inventory_dropped_on_a_desktop_adds_its_folders_and_leaves_its_items_out() {
     assert_eq!(
         added.target,
         Target::Folder {
-            folder: Uuid::from_u128(MINE),
-            account: ME
+            folder: Uuid::from_u128(MINE)
         }
     );
     assert_eq!((added.slot, added.cell()), (0, (2, 2)));
@@ -866,7 +983,7 @@ fn inventory_dropped_on_a_desktop_adds_its_folders_and_leaves_its_items_out() {
         b.drop_inventory(&cargo, grid.rect((4, 2)).center());
     }
     assert_eq!(b.desktop.shortcuts.len(), 4);
-    assert_eq!(b.notices(), vec![super::targets::Refusal::NoFolder.text(); 3]);
+    assert_eq!(b.notices(), vec![super::targets::Refusal::Nothing.text(); 3]);
     assert!(crate::ui::inventory::drag::carried_ids(&b.ctx).is_none());
     // released over the world: not the desktop's
     b.out.clear();
@@ -882,13 +999,13 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     let rooms = b.rooms();
     let ids: Vec<Uuid> = [MINE, SUB].into_iter().map(Uuid::from_u128).collect();
     // from a menu: the first free cells of the first room, down its column
-    let added = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
+    let added = super::add_folders(&mut b.desktop, &rooms, &ids, None, None);
     assert_eq!((added.added, added.existing, added.no_room), (2, 0, 0));
     let cells: Vec<_> = b.desktop.shortcuts[1..].iter().map(|s| (s.slot, s.cell())).collect();
     assert_eq!(cells, [(0, (0, 1)), (0, (0, 2))]);
     assert_eq!(added.first, Some(b.desktop.shortcuts[1].id));
     // again: there already
-    let again = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
+    let again = super::add_folders(&mut b.desktop, &rooms, &ids, None, None);
     assert_eq!((again.added, again.existing, again.first), (0, 2, added.first));
     assert_eq!(
         super::added_notice(&again, 0, false, true).as_deref(),
@@ -896,7 +1013,7 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     );
     // the world fills the window: kept for when it leaves room, and said
     let mut unseen = Desktop::default();
-    let kept = super::add_folders(&mut unseen, &[], ME, &ids, None, None);
+    let kept = super::add_folders(&mut unseen, &[], &ids, None, None);
     assert_eq!((kept.added, kept.no_room), (2, 0));
     let cells: Vec<_> = unseen.shortcuts.iter().map(|s| (s.slot, s.cell())).collect();
     assert_eq!(cells, [(0, (0, 0)), (0, (0, 1))]);
@@ -908,7 +1025,645 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     for (n, cell) in grid.cells().enumerate() {
         full.add(Target::command(&format!("c{n}")), 0, cell).expect("room");
     }
-    let none = super::add_folders(&mut full, &rooms, ME, &ids, Some(0), Some((1, 1)));
+    let none = super::add_folders(&mut full, &rooms, &ids, Some(0), Some((1, 1)));
     assert_eq!((none.added, none.no_room), (0, 2));
-    assert!(super::added_notice(&none, 0, false, true).is_some());
+    assert_eq!(super::added_notice(&none, 0, false, true), Some(NoRoom::Full.text()));
 }
+
+/// A desktop whose room 0 has a shortcut in every cell.
+fn fill(b: &mut Bench) {
+    let grid = b.room(0).grid;
+    for (n, cell) in grid.cells().enumerate() {
+        b.add(&format!("c{n}"), 0, cell);
+    }
+    b.frames(2);
+}
+
+#[test]
+fn a_full_desktop_says_so_for_every_way_of_adding() {
+    // what it says
+    assert_eq!(NoRoom::Full.text(), aurora_i18n::tr!("fs-desktop-full"));
+    assert!(NoRoom::Limit.text().contains(&MAX_SHORTCUTS.to_string()));
+    // the folders of a selection: all left out, or some
+    let all = surface::Added {
+        no_room: 2,
+        ..Default::default()
+    };
+    assert_eq!(super::added_notice(&all, 0, false, true), Some(NoRoom::Full.text()));
+    let some = surface::Added {
+        added: 1,
+        no_room: 1,
+        ..Default::default()
+    };
+    let said = super::added_notice(&some, 0, false, true).expect("a notice");
+    assert!(said.starts_with(&aurora_i18n::tr!("fs-desktop-add-full", count = 1)) && said.ends_with(&NoRoom::Full.text()));
+    let limit = surface::Added {
+        limit: 1,
+        ..Default::default()
+    };
+    assert_eq!(super::added_notice(&limit, 0, false, true), Some(NoRoom::Limit.text()));
+
+    let mut b = Bench::new();
+    b.frames(2);
+    fill(&mut b);
+    let room = b.room(0);
+    let taken: Vec<_> = room.grid.cells().collect();
+    let count = b.desktop.shortcuts.len();
+    // a command: refused with the reason; one that desktop has is shown
+    assert_eq!(surface::no_room(&b.desktop, &room.grid, &taken), Some(NoRoom::Full));
+    assert_eq!(
+        surface::add_command(&mut b.desktop, &room, &taken, "people", Some((0, 0))),
+        surface::CommandAdded::Refused(NoRoom::Full)
+    );
+    let c0 = b.desktop.shortcuts[0].id;
+    assert_eq!(
+        surface::add_command(&mut b.desktop, &room, &taken, "c0", None),
+        surface::CommandAdded::Existing(c0)
+    );
+    assert_eq!(b.desktop.shortcuts.len(), count);
+    // another monitor's desktop has room
+    let other = b.room(2);
+    assert_eq!(surface::no_room(&b.desktop, &other.grid, &[]), None);
+    assert!(matches!(
+        surface::add_command(&mut b.desktop, &other, &[], "people", None),
+        surface::CommandAdded::New(_)
+    ));
+    // folders (Add to desktop, a drop): none added, one there already found
+    let ids: Vec<Uuid> = [MINE, SUB].into_iter().map(Uuid::from_u128).collect();
+    let rooms = b.rooms();
+    let none = super::add_folders(&mut b.desktop, &rooms, &ids, None, None);
+    assert_eq!((none.added, none.no_room, none.limit), (0, 2, 0));
+    // a drop on that desktop: nothing added, and said
+    b.out.clear();
+    b.drop_inventory(&[MINE], room.grid.rect((1, 1)).center());
+    assert_eq!(b.notices(), vec![NoRoom::Full.text().as_str()]);
+    assert!(!b.out.contains(&Request::Changed));
+    assert!(
+        crate::ui::inventory::drag::carried_ids(&b.ctx).is_none(),
+        "nothing left for the world"
+    );
+    // the desktop's menu (on the room's edge, past its last column: every
+    // cell has a shortcut): Add a command is greyed and opens nothing
+    let edge = pos2(room.rect.right() - 4.0, room.rect.center().y);
+    assert!(room.grid.cell_at(edge).is_none(), "the bench's room has a strip past its cells");
+    b.time += 2.0;
+    b.click_with(edge, egui::PointerButton::Secondary);
+    let add = b
+        .drawn(aurora_i18n::tr!("fs-desktop-add-command"))
+        .expect("Add a command is listed");
+    b.pointer = add.center();
+    b.frames(3);
+    b.click(add.center());
+    b.frames(2);
+    let (_, label, ..) = *super::targets::addable()
+        .iter()
+        .find(|(_, _, _, refused)| refused.is_none())
+        .expect("a command to add");
+    assert!(b.drawn(label).is_none(), "no list of commands: {:?}", b.texts);
+    b.picture("desktop-full-menu");
+    // a cell made free: the same entry lists the commands again
+    b.frame(vec![egui::Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }]);
+    b.desktop.remove(c0).expect("removed");
+    b.frames(2);
+    b.time += 2.0;
+    b.click_with(edge, egui::PointerButton::Secondary);
+    let add = b
+        .drawn(aurora_i18n::tr!("fs-desktop-add-command"))
+        .expect("Add a command is listed");
+    b.click(add.center());
+    b.frames(3);
+    assert!(b.drawn(label).is_some(), "the commands are listed: {:?}", b.texts);
+}
+
+#[test]
+fn the_account_s_limit_is_said_rather_than_a_full_room() {
+    let mut b = Bench::new();
+    b.frames(2);
+    // the shortcuts kept on a monitor not in use
+    for n in 0..MAX_SHORTCUTS {
+        b.add(&format!("c{n}"), 5, ((n / 8) as u16, (n % 8) as u16));
+    }
+    let room = b.room(0);
+    assert_eq!(surface::no_room(&b.desktop, &room.grid, &[]), Some(NoRoom::Limit));
+    assert_eq!(
+        surface::add_command(&mut b.desktop, &room, &[], "people", None),
+        surface::CommandAdded::Refused(NoRoom::Limit)
+    );
+    let added = super::add_folders(&mut b.desktop, &[room], &[Uuid::from_u128(MINE)], None, None);
+    assert_eq!((added.added, added.no_room, added.limit), (0, 0, 1));
+    b.out.clear();
+    b.drop_inventory(&[MINE], room.grid.rect((1, 1)).center());
+    assert_eq!(b.notices(), vec![NoRoom::Limit.text().as_str()]);
+}
+
+// ---- checkpoint 3: editing, the toolbar, the keyboard ----
+
+impl Bench {
+    /// A key pressed then released.
+    fn key(&mut self, key: egui::Key) {
+        for pressed in [true, false] {
+            self.frame(vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]);
+        }
+    }
+
+    fn type_text(&mut self, text: &str) {
+        self.frame(vec![egui::Event::Text(text.to_owned())]);
+    }
+
+    /// Opens the menu under `at` and clicks its entry `label`.
+    fn menu(&mut self, at: Pos2, label: &str) {
+        self.time += 2.0;
+        self.click_with(at, egui::PointerButton::Secondary);
+        let entry = self
+            .drawn(label)
+            .unwrap_or_else(|| panic!("“{label}” is in the menu; drawn: {:?}", self.texts));
+        self.click(entry.center());
+        self.frames(3);
+    }
+
+    /// A toolbar button of `command` held over `at` then released there.
+    fn drop_button(&mut self, command: &str, at: Pos2) {
+        self.ctx.data_mut(|d| d.insert_temp(toolbar_cargo_id(), command.to_owned()));
+        self.pointer = at;
+        self.frames(2);
+        self.frame(vec![self.press(at, egui::PointerButton::Primary, false)]);
+        self.ctx.data_mut(|d| d.remove_temp::<String>(toolbar_cargo_id()));
+        self.frames(2);
+    }
+
+    fn name_of(&self, id: u32) -> Option<String> {
+        self.desktop.shortcut(id).expect("a shortcut").name.clone()
+    }
+
+    fn place_of(&self, id: u32) -> (u8, (u16, u16)) {
+        let shortcut = self.desktop.shortcut(id).expect("a shortcut");
+        (shortcut.slot, shortcut.cell())
+    }
+}
+
+#[test]
+fn a_shortcut_is_renamed_in_place_from_its_menu_and_with_f2() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    b.frames(3);
+    b.menu(b.cell_of(people).center(), aurora_i18n::tr!("fs-desktop-rename"));
+    assert_eq!(surface::state(&b.ctx).rename, Some(people));
+    assert_eq!(
+        surface::rename_text(&b.ctx),
+        label_of("people"),
+        "the field starts from the name shown"
+    );
+    // the name is selected: typing replaces it; Enter keeps
+    b.type_text("My friends");
+    b.picture("desktop-rename");
+    b.key(egui::Key::Enter);
+    b.frames(1);
+    assert_eq!(b.name_of(people).as_deref(), Some("My friends"));
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    assert!(b.out.contains(&Request::Changed));
+    assert!(b.drawn("My friends").is_some(), "its own name is under its icon");
+    // F2 on the focused shortcut; Esc leaves the name as it was
+    b.focus = true;
+    b.frames(2);
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, Some(people));
+    assert_eq!(surface::rename_text(&b.ctx), "My friends");
+    b.type_text("Something else");
+    b.key(egui::Key::Escape);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    assert_eq!(b.name_of(people).as_deref(), Some("My friends"));
+    // its target's own name typed back: it has no name of its own again
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, Some(people), "the keyboard stayed on the shortcut");
+    b.type_text(label_of("people"));
+    b.key(egui::Key::Enter);
+    b.frames(1);
+    assert_eq!(b.name_of(people), None);
+    // a name is never longer than the record keeps
+    b.key(egui::Key::F2);
+    b.frames(1);
+    b.type_text(&"x".repeat(200));
+    b.key(egui::Key::Enter);
+    b.frames(1);
+    assert_eq!(b.name_of(people).map(|n| n.chars().count()), Some(super::store::MAX_NAME));
+}
+
+#[test]
+fn a_folder_shortcut_s_name_is_not_edited_while_rlva_hides_the_inventory() {
+    let mut b = Bench::new();
+    let folder = b.add_folder(8000, 0, (0, 0));
+    b.no_inventory = true;
+    b.frames(3);
+    b.focus = true;
+    b.frames(2);
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    // its menu's entry is greyed: a click on it changes nothing
+    b.menu(b.cell_of(folder).center(), aurora_i18n::tr!("fs-desktop-rename"));
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    assert_eq!(b.name_of(folder), None);
+}
+
+#[test]
+fn the_icon_menu_gives_an_icon_and_the_default_back() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    b.frames(3);
+    let icon = |b: &Bench| b.desktop.shortcut(people).expect("a shortcut").icon.clone();
+    b.menu(b.cell_of(people).center(), aurora_i18n::tr!("fs-desktop-icon"));
+    b.picture("desktop-icon-menu");
+    let star: Rect = b
+        .ctx
+        .data(|d| d.get_temp(surface::icon_cell_id("star-filled")))
+        .expect("the icons are listed");
+    b.click(star.center());
+    b.frames(2);
+    assert_eq!(icon(&b).as_deref(), Some("star-filled"));
+    assert!(b.out.contains(&Request::Changed));
+    // Default: the command's own icon again
+    b.menu(b.cell_of(people).center(), aurora_i18n::tr!("fs-desktop-icon"));
+    let default = b.drawn(aurora_i18n::tr!("fs-desktop-icon-default")).expect("Default is listed");
+    b.click(default.center());
+    b.frames(2);
+    assert_eq!(icon(&b), None);
+}
+
+#[test]
+fn a_desktop_is_arranged_by_name_and_a_shortcut_moved_to_another_monitor() {
+    let mut b = Bench::new();
+    let map = b.add("worldmap", 0, (2, 1));
+    let build = b.add("build", 0, (0, 3));
+    let people = b.add("people", 0, (1, 0));
+    b.desktop.rename(map, "aaa first");
+    b.frames(3);
+    // from the desktop's menu, on a free cell
+    let free = b.room(0).grid.rect((3, 3)).center();
+    b.menu(free, aurora_i18n::tr!("fs-desktop-arrange"));
+    let mut named = [
+        ("aaa first".to_owned(), map),
+        (label_of("build").to_lowercase(), build),
+        (label_of("people").to_lowercase(), people),
+    ];
+    named.sort();
+    for (n, (_, id)) in named.iter().enumerate() {
+        assert_eq!(b.place_of(*id), (0, (0, n as u16)), "down the first column, by name");
+    }
+    assert!(b.out.contains(&Request::Changed));
+    // Move to › the third monitor (the world is on the second: no desktop there)
+    let monitor = surface::monitor_label(2);
+    b.menu(b.cell_of(people).center(), aurora_i18n::tr!("fs-desktop-move-to"));
+    assert!(b.drawn(&surface::monitor_label(1)).is_none(), "only monitors that have a desktop");
+    let entry = b.drawn(&monitor).expect("the third monitor is listed");
+    b.click(entry.center());
+    b.frames(2);
+    assert_eq!(b.place_of(people), (2, (0, 0)), "its first free cell");
+    // that desktop has the same thing already: it stays, and says so
+    let twin = b.add("build", 2, (1, 1));
+    b.out.clear();
+    b.menu(b.cell_of(build).center(), aurora_i18n::tr!("fs-desktop-move-to"));
+    let entry = b.drawn(&monitor).expect("the third monitor is listed");
+    b.click(entry.center());
+    b.frames(2);
+    assert_eq!(b.desktop.shortcut(build).expect("kept").slot, 0);
+    assert_eq!(b.notices(), vec![aurora_i18n::tr!("fs-desktop-add-existing")]);
+    assert_eq!(surface::state(&b.ctx).selected, Some(twin));
+}
+
+#[test]
+fn the_desktop_s_menu_opens_the_toolbar_buttons_window() {
+    let mut b = Bench::new();
+    b.frames(3);
+    let free = b.room(0).grid.rect((1, 1)).center();
+    b.menu(free, aurora_i18n::tr!("toolbar-edit"));
+    assert!(b.out.contains(&Request::ToolbarButtons));
+}
+
+#[test]
+fn a_toolbar_button_dropped_on_a_desktop_adds_its_command() {
+    let mut b = Bench::new();
+    b.frames(3);
+    let grid = b.room(2).grid;
+    b.drop_button("people", grid.rect((1, 2)).center());
+    let added = b.desktop.shortcuts.first().expect("added").clone();
+    assert_eq!(added.target, Target::command("people"));
+    assert_eq!((added.slot, added.cell()), (2, (1, 2)), "in the cell under the pointer");
+    assert!(b.out.contains(&Request::Changed));
+    assert_eq!(surface::state(&b.ctx).selected, Some(added.id));
+    // the same button again: the one that desktop has, not a second
+    b.drop_button("people", grid.rect((3, 0)).center());
+    assert_eq!(b.desktop.shortcuts.len(), 1);
+    // a button that is its own control: refused, and why
+    b.out.clear();
+    b.drop_button("favorites", grid.rect((3, 0)).center());
+    assert_eq!(b.desktop.shortcuts.len(), 1);
+    assert_eq!(b.notices(), vec![super::targets::Greyed::ButtonOnly.text()]);
+    // released over the world: not the desktop's
+    b.drop_button("build", pos2(960.0, 200.0));
+    assert_eq!(b.desktop.shortcuts.len(), 1);
+    assert!(b.world_untouched());
+}
+
+#[test]
+fn a_command_sent_from_its_toolbar_button_goes_to_the_first_free_cell() {
+    use surface::{CommandAdded, add_command_first};
+    let mut b = Bench::new();
+    b.add("people", 0, (0, 0));
+    b.frames(3);
+    let rooms = b.rooms();
+    let CommandAdded::New(build) = add_command_first(&mut b.desktop, &rooms, "build") else {
+        panic!("added");
+    };
+    assert_eq!(b.place_of(build), (0, (0, 1)));
+    assert_eq!(add_command_first(&mut b.desktop, &rooms, "build"), CommandAdded::Existing(build));
+    let never = CommandAdded::Never(super::targets::Greyed::ButtonOnly);
+    assert_eq!(add_command_first(&mut b.desktop, &rooms, "favorites"), never);
+    assert_eq!(add_command_first(&mut b.desktop, &[], "favorites"), never);
+    // without a room (the world fills the window) it is kept for later
+    let CommandAdded::New(map) = add_command_first(&mut b.desktop, &[], "worldmap") else {
+        panic!("kept");
+    };
+    assert_eq!(b.place_of(map), (0, (0, 2)), "a cell no shortcut of that monitor keeps");
+    // what the notice says
+    let on = aurora_i18n::tr!("fs-desktop-added-on");
+    let hidden = aurora_i18n::tr!("fs-desktop-added-hidden");
+    let text = super::command_notice(CommandAdded::New(map), true, false);
+    assert!(text.starts_with(aurora_i18n::tr!("fs-desktop-command-added")) && text.contains(on) && text.contains(hidden));
+    let text = super::command_notice(CommandAdded::New(map), false, true);
+    assert_eq!(text, aurora_i18n::tr!("fs-desktop-command-added"));
+    assert_eq!(
+        super::command_notice(CommandAdded::Existing(map), false, true),
+        aurora_i18n::tr!("fs-desktop-add-existing")
+    );
+    assert_eq!(super::command_notice(never, false, true), super::targets::Greyed::ButtonOnly.text());
+    assert_eq!(
+        super::command_notice(CommandAdded::Refused(NoRoom::Full), false, true),
+        NoRoom::Full.text()
+    );
+}
+
+/// The texts of a frame's shapes, and where.
+fn texts_of(shapes: &[egui::epaint::ClippedShape]) -> Vec<(String, Rect)> {
+    fn collect(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
+            egui::Shape::Text(t) => out.push((t.galley.text().to_owned(), t.galley.rect.translate(t.pos.to_vec2()))),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for clipped in shapes {
+        collect(&clipped.shape, &mut out);
+    }
+    out
+}
+
+/// The hook of `ToolbarUi::context`: a toolbar button's menu has *Add to
+/// desktop*, the toolbar's own has not.
+#[test]
+fn a_toolbar_button_s_menu_asks_to_add_its_command() {
+    let ctx = egui::Context::default();
+    let p = crate::theme::Theme::default().skin_palette();
+    let label = aurora_i18n::tr!("fs-desktop-add");
+    let mut entries: Vec<Rect> = Vec::new();
+    for step in 0..5 {
+        let at = entries.first().map(Rect::center);
+        let events = match (step, at) {
+            (2, Some(at)) => vec![egui::Event::PointerMoved(at)],
+            (3 | 4, Some(pos)) => vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: step == 3,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            _ => Vec::new(),
+        };
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(400.0, 300.0))),
+                time: Some(f64::from(step) / 60.0),
+                events,
+                focused: true,
+                ..Default::default()
+            },
+            |ui| {
+                // a button, the toolbar itself, a button that is its own control
+                super::toolbar_menu(ui, &p, Some("people"));
+                super::toolbar_menu(ui, &p, None);
+                super::toolbar_menu(ui, &p, Some("favorites"));
+            },
+        );
+        entries = texts_of(&output.shapes)
+            .into_iter()
+            .filter(|(text, _)| text == label)
+            .map(|(_, rect)| rect)
+            .collect();
+        assert_eq!(entries.len(), 2, "one entry per button, none for the toolbar");
+        output.textures_delta.clear();
+    }
+    assert_eq!(super::take_asks(&ctx), vec![super::Ask::AddCommand("people".to_owned())]);
+    assert!(super::take_asks(&ctx).is_empty(), "taken once");
+    // the greyed one says why, and is never added
+    assert_eq!(
+        super::targets::refuses_adding("favorites"),
+        Some(super::targets::Greyed::ButtonOnly)
+    );
+    assert_eq!(super::targets::refuses_adding("people"), None);
+    // (what has nothing to do now may still be added)
+    assert_eq!(super::targets::refuses_adding("photo_roll"), None);
+}
+
+#[test]
+fn the_keyboard_goes_to_the_desktop_and_the_arrows_from_shortcut_to_shortcut() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    let build = b.add("build", 0, (0, 1));
+    let map = b.add("worldmap", 0, (2, 0));
+    b.frames(3);
+    let selected = |b: &Bench| surface::state(&b.ctx).selected;
+    let focused = |b: &Bench, id: u32| b.ctx.memory(|m| m.has_focus(surface::shortcut_id(0, id)));
+    // the key action: nothing selected, so the first shortcut
+    b.focus = true;
+    b.frames(2);
+    assert_eq!(selected(&b), Some(people));
+    assert!(focused(&b, people));
+    b.key(egui::Key::ArrowDown);
+    assert_eq!(selected(&b), Some(build));
+    assert!(focused(&b, build));
+    b.key(egui::Key::ArrowUp);
+    assert_eq!(selected(&b), Some(people));
+    b.key(egui::Key::ArrowRight);
+    assert_eq!(selected(&b), Some(map));
+    // at the edge it stays
+    b.key(egui::Key::ArrowRight);
+    assert_eq!(selected(&b), Some(map));
+    assert!(focused(&b, map));
+    // Enter opens the focused one, Delete removes it
+    b.key(egui::Key::Enter);
+    assert_eq!(b.ran(), vec!["worldmap"]);
+    b.key(egui::Key::Delete);
+    b.frames(1);
+    assert!(b.desktop.shortcut(map).is_none());
+    // with a shortcut selected, the keyboard goes to that one
+    b.time += 2.0;
+    b.click(b.cell_of(build).center());
+    b.click(b.world_point());
+    assert!(!focused(&b, build));
+    assert_eq!(selected(&b), Some(build));
+    b.focus = true;
+    b.frames(2);
+    assert!(focused(&b, build));
+    // a key without the keyboard on the desktop does nothing there
+    let mut other = Bench::new();
+    let kept = other.add("people", 0, (0, 0));
+    other.frames(3);
+    other.click(other.cell_of(kept).center());
+    other.click(other.world_point());
+    other.key(egui::Key::Delete);
+    other.key(egui::Key::F2);
+    assert!(other.desktop.shortcut(kept).is_some());
+    assert_eq!(surface::state(&other.ctx).rename, None);
+}
+
+impl Bench {
+    /// A point of the world viewport, where no shortcut stands.
+    fn world_point(&self) -> Pos2 {
+        let [x, y, w, h] = self.world.expect("a world viewport");
+        pos2((x + w / 2) as f32, (y + h / 2) as f32)
+    }
+}
+
+#[test]
+fn a_click_gives_the_keyboard_to_a_shortcut_and_a_click_in_the_world_takes_it_back() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    let build = b.add("build", 0, (0, 1));
+    let map = b.add("worldmap", 0, (2, 0));
+    b.frames(3);
+    let focused = |b: &Bench, id: u32| b.ctx.memory(|m| m.has_focus(surface::shortcut_id(0, id)));
+    // a click, then F2: its name is edited at once
+    b.click(b.cell_of(people).center());
+    assert_eq!(surface::state(&b.ctx).selected, Some(people));
+    assert!(focused(&b, people), "a click takes the keyboard");
+    assert!(b.ctx.egui_wants_keyboard_input());
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, Some(people));
+    b.type_text("Friends");
+    b.key(egui::Key::Enter);
+    b.frames(1);
+    assert_eq!(b.name_of(people).as_deref(), Some("Friends"));
+    // a click in the world gives the keyboard back: the avatar's keys
+    // reach the world, and the desktop's keys do nothing
+    b.time += 2.0;
+    b.click(b.world_point());
+    assert!(!focused(&b, people));
+    assert!(!b.ctx.egui_wants_keyboard_input(), "movement keys belong to the world");
+    b.key(egui::Key::Delete);
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert!(b.desktop.shortcut(people).is_some());
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    // a click, then the arrows and Enter
+    b.time += 2.0;
+    b.click(b.cell_of(people).center());
+    b.key(egui::Key::ArrowDown);
+    assert!(focused(&b, build));
+    assert_eq!(surface::state(&b.ctx).selected, Some(build));
+    b.key(egui::Key::Enter);
+    assert_eq!(b.ran(), vec!["build"]);
+    // a click, then Delete: it goes at once
+    b.time += 2.0;
+    b.click(b.cell_of(map).center());
+    assert!(focused(&b, map));
+    b.key(egui::Key::Delete);
+    b.frames(2);
+    assert!(b.desktop.shortcut(map).is_none());
+    assert!(!b.ctx.egui_wants_keyboard_input(), "nothing keeps the keyboard once it went");
+    // a click on the room's empty cell gives the keyboard back too
+    b.time += 2.0;
+    b.click(b.cell_of(people).center());
+    assert!(focused(&b, people));
+    b.click(b.room(0).grid.rect((3, 1)).center());
+    assert!(!b.ctx.egui_wants_keyboard_input());
+    assert_eq!(surface::state(&b.ctx).selected, None);
+    // a drag still moves a shortcut, and a click still does not open it
+    b.time += 2.0;
+    let to = b.room(0).grid.rect((1, 2)).center();
+    b.drag(b.cell_of(people).center(), to);
+    assert_eq!(b.place_of(people), (0, (1, 2)));
+    assert_eq!(b.ran(), vec!["build"], "a single click or a drag opens nothing");
+}
+
+#[test]
+fn a_clicked_folder_shortcut_is_not_renamed_while_rlva_hides_the_inventory() {
+    let mut b = Bench::new();
+    let folder = b.add_folder(8000, 0, (0, 0));
+    b.no_inventory = true;
+    b.frames(3);
+    b.click(b.cell_of(folder).center());
+    assert!(b.ctx.memory(|m| m.has_focus(surface::shortcut_id(0, folder))));
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    assert_eq!(b.name_of(folder), None);
+}
+
+#[test]
+fn shortcuts_on_a_monitor_not_in_use_are_counted_and_brought_back() {
+    let mut b = Bench::new();
+    let here = b.add("people", 0, (0, 0));
+    // no sixth monitor; the world fills the second
+    let away = b.add("build", 5, (3, 3));
+    let twin = b.add("people", 1, (0, 0));
+    let map = b.add("worldmap", 1, (0, 1));
+    b.frames(3);
+    assert_eq!(super::unused(&b.ctx, &b.desktop), 3);
+    let brought = super::bring_here(&b.ctx, &mut b.desktop);
+    assert_eq!(
+        brought,
+        surface::Brought {
+            moved: 2,
+            merged: 1,
+            left: 0
+        }
+    );
+    assert_eq!(super::unused(&b.ctx, &b.desktop), 0);
+    assert_eq!(b.place_of(here), (0, (0, 0)), "what was there stays");
+    assert_eq!(b.place_of(away), (0, (0, 1)));
+    assert_eq!(b.place_of(map), (0, (0, 2)));
+    assert!(b.desktop.shortcut(twin).is_none(), "the first desktop had that one already");
+    assert_eq!(super::bring_here(&b.ctx, &mut b.desktop), surface::Brought::default());
+    // a first desktop that is full keeps them where they were
+    let mut full = Bench::new();
+    full.frames(3);
+    fill(&mut full);
+    full.add("gestures", 5, (0, 0));
+    full.frames(3);
+    let brought = super::bring_here(&full.ctx, &mut full.desktop);
+    assert_eq!((brought.moved, brought.left), (0, 1));
+    assert_eq!(super::unused(&full.ctx, &full.desktop), 1);
+    // while no desktop shows at all, none is "on a monitor not in use"
+    b.add("gestures", 7, (0, 0));
+    b.world = None;
+    b.frames(2);
+    assert_eq!(super::unused(&b.ctx, &b.desktop), 0);
+    assert_eq!(super::bring_here(&b.ctx, &mut b.desktop), surface::Brought::default());
+}
+
+mod items;

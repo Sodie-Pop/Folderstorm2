@@ -1854,11 +1854,14 @@ fs-switcher-command = Layouts & workspaces
 fs-switcher-toggle-command = Switch layout
 fs-switcher-toggle-to = Switch to the layout “{ $name }”
 fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts & workspaces (a click opens it).
-fs-keys-section = Layouts
+fs-keys-section = Layouts and desktop
 fs-keys-layout-switcher = Layouts & workspaces window
 fs-keys-layout-toggle = Switch between the two layouts
 fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
+fs-keys-desktop-shortcuts = Show or hide the desktop shortcuts
+fs-keys-desktop-focus = Focus the desktop
+fs-keys-desktop-taskbar = Focus the taskbar
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Gesture board
@@ -2150,7 +2153,7 @@ fs-background-shows = Shows
 fs-desktop-group = Desktop in the margins
 fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
-fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop Inventory folders on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it.
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders, landmarks, notecards, outfits and clothing and objects of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
 fs-desktop-size = Icon size
 fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
 fs-desktop-size-small = Small
@@ -2166,27 +2169,78 @@ fs-desktop-greyed-gone = This command no longer exists.
 fs-desktop-greyed-button-only = This one only works from its toolbar button.
 fs-desktop-greyed-rlva = Blocked by RLVa.
 fs-desktop-greyed-folder-gone = This folder is no longer in your inventory.
-fs-desktop-greyed-other-account = This folder is in another account's inventory.
+fs-desktop-item = Inventory item
+fs-desktop-greyed-item-gone = This item is not in your inventory: it was deleted, or its folder is not loaded yet.
+fs-desktop-greyed-item-trash = This item is in the Trash.
+fs-desktop-greyed-item-other = This kind of item cannot be opened from the desktop.
+fs-desktop-outfit = Outfit
+fs-desktop-wear-outfit = Wear this outfit…
+fs-desktop-greyed-outfit-gone = This outfit is no longer in your inventory.
+fs-desktop-greyed-outfit-loading = This outfit is still loading: try again in a moment.
+fs-desktop-greyed-outfit-empty = This outfit has nothing to wear.
+fs-desktop-greyed-busy = An outfit change is under way: try again in a moment.
+fs-desktop-greyed-worn = You are wearing it already.
+fs-desktop-greyed-listing = An item of a Marketplace listing cannot be worn.
 fs-desktop-add = Add to desktop
-fs-desktop-add-refused = Only folders of your own inventory, out of the Trash, can be desktop shortcuts.
+fs-desktop-add-refused = Only folders, landmarks, notecards, outfits and clothing and objects of your inventory, out of the Trash, can be desktop shortcuts.
 fs-desktop-added =
     { $count ->
-        [one] Folder added to the desktop.
-       *[other] { $count } folders added to the desktop.
+        [one] Shortcut added to the desktop.
+       *[other] { $count } shortcuts added to the desktop.
     }
 fs-desktop-add-existing = Already on the desktop.
 fs-desktop-add-full =
     { $count ->
-        [one] The desktop has no room for one folder.
-       *[other] The desktop has no room for { $count } folders.
+        [one] One shortcut did not fit.
+       *[other] { $count } shortcuts did not fit.
     }
+fs-desktop-full = This desktop is full: remove a shortcut or use a smaller icon size.
+fs-desktop-limit = The desktops hold { $count } shortcuts at most: remove one first.
 fs-desktop-left-out =
     { $count ->
-        [one] One entry left out: only folders of your own inventory can be shortcuts.
-       *[other] { $count } entries left out: only folders of your own inventory can be shortcuts.
+        [one] One entry left out: it cannot be a desktop shortcut.
+       *[other] { $count } entries left out: they cannot be desktop shortcuts.
     }
 fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Layout › Bars and windows).
 fs-desktop-added-hidden = They show when the window leaves room around the world.
+fs-desktop-rename = Rename
+fs-desktop-icon = Icon
+fs-desktop-icon-default = Default
+fs-desktop-move-to = Move to
+fs-desktop-monitor = Monitor { $number }
+fs-desktop-arrange = Arrange by name
+fs-desktop-command-added = Shortcut added to the desktop.
+fs-desktop-single-click = Open with a single click
+fs-desktop-single-click-help = A single click opens a shortcut, as a toolbar button does. Off: a click selects it and a double click opens it, so that a stray click never teleports you home or sits you down.
+fs-desktop-unused =
+    { $count ->
+        [one] One shortcut is on a monitor that is not in use
+       *[other] { $count } shortcuts are on a monitor that is not in use
+    }
+fs-desktop-unused-help = A shortcut stays on the monitor it was put on. When the window no longer covers that monitor, or the world fills it, the shortcut is kept but not shown.
+fs-desktop-bring = Bring them here
+fs-desktop-clear = Remove all shortcuts…
+fs-desktop-clear-help = Removes every shortcut of this account's desktops. Only the shortcuts go: the folders, the items and the toolbars stay as they are.
+fs-desktop-clear-button = Remove all…
+fs-desktop-clear-ask =
+    { $count ->
+        [one] Remove this account's shortcut?
+       *[other] Remove this account's { $count } shortcuts?
+    }
+fs-desktop-clear-confirm = Remove all
+fs-taskbar-switch = Taskbar in a margin
+fs-taskbar-switch-help = Collapsed windows become buttons on a bar along the bottom of a margin monitor instead of title bars: click one to bring its window back where it was, right-click for more. Off, or while the window leaves no room around the world, collapsed windows are title bars as before.
+fs-taskbar-monitor = Monitor
+fs-taskbar-monitor-help = The monitor the taskbar stands on. Automatic: the one with the widest free room. When the chosen monitor has no room, there is no taskbar.
+fs-taskbar-monitor-auto = Automatic
+fs-taskbar-all = All open windows
+fs-taskbar-all-help = Lists every open window, not only the collapsed ones: a click brings a window to the front, or collapses the one in front.
+fs-taskbar-restore = Restore
+fs-taskbar-front = Bring to front
+fs-taskbar-empty = No collapsed windows
+fs-taskbar-empty-all = No open windows
+fs-taskbar-spoken-collapsed = { $title }, collapsed
+fs-taskbar-spoken-front = { $title }, in front
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
@@ -2352,6 +2406,7 @@ fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code C
 fs-search-mcp-activity = activity history log receipts operations stop
 fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
 fs-search-desktop = desktop shortcut shortcuts icon icons launcher folder folders margin margins monitor monitors
+fs-search-taskbar = taskbar task bar minimized minimised collapsed windows window tray dock
 fs-search-photo = photo mode snapshot picture camera
 fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
 fs-search-layouts-list = favorite favorites star apply rename delete
