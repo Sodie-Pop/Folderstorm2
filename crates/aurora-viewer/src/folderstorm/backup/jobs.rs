@@ -127,9 +127,7 @@ pub fn export(ctx: &egui::Context, settings: &Settings) {
             return Ok(None);
         };
         backup.read_files(&folders.config);
-        let written = backup
-            .to_zip()
-            .and_then(|bytes| crate::atomic_file::write(&path, &bytes));
+        let written = backup.to_zip().and_then(|bytes| crate::atomic_file::write(&path, &bytes));
         match written {
             Ok(()) => Ok(Some(path)),
             Err(e) => {
@@ -198,7 +196,9 @@ pub fn confirm(ctx: &egui::Context, settings: &Settings) {
     }
     let safety = capture(settings, st.account.clone(), &folders, Kind::BeforeImport);
     let for_thread = plan.clone();
-    let answer = spawn(ctx, "folderstorm-backup-import", move || apply::prepare(safety, &for_thread, &folders.config));
+    let answer = spawn(ctx, "folderstorm-backup-import", move || {
+        apply::prepare(safety, &for_thread, &folders.config)
+    });
     st.job = answer.map(|answer| Job::Prepare {
         answer,
         plan: Box::new(plan),
@@ -217,9 +217,7 @@ pub fn open_folder() {
 /// The backups folder's list, read when it changed.
 pub fn list(ctx: &egui::Context) -> Vec<Listed> {
     with(ctx, |st| {
-        st.list
-            .get_or_insert_with(|| folder::list(&crate::settings::config_dir()))
-            .clone()
+        st.list.get_or_insert_with(|| folder::list(&crate::settings::config_dir())).clone()
     })
     .unwrap_or_default()
 }

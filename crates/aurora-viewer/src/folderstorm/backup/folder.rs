@@ -81,9 +81,10 @@ fn names(config: &Path) -> Vec<String> {
 /// Whether `account` has a daily backup of the day `date` (`YYYY-MM-DD`).
 pub fn has_daily(config: &Path, account: Option<Uuid>, date: &str) -> bool {
     let key = account_key(account);
-    names(config).iter().filter_map(|name| parse_name(name)).any(|(kind, stamp, acct)| {
-        kind == Kind::Daily && acct == key && stamp.get(..10) == Some(date)
-    })
+    names(config)
+        .iter()
+        .filter_map(|name| parse_name(name))
+        .any(|(kind, stamp, acct)| kind == Kind::Daily && acct == key && stamp.get(..10) == Some(date))
 }
 
 /// A backup of the folder, as the list shows it.

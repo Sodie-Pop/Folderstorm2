@@ -2051,7 +2051,7 @@ impl Default for Settings {
             // Folderstorm: gesture boards
             folderstorm_gesture_boards: Default::default(),
             folderstorm_desktop: Default::default(), // Folderstorm: the margins' desktop
-            folderstorm_backup: Default::default(), // Folderstorm: automatic backups
+            folderstorm_backup: Default::default(),  // Folderstorm: automatic backups
             crosshair: Default::default(),
             joystick: Default::default(),
             gamepad: crate::joystick::Settings::gamepad_defaults(),

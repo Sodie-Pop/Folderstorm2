@@ -106,17 +106,25 @@ fn full(config: &Path, account: Uuid) -> Settings {
     let desktop = &mut s.folderstorm_desktop;
     desktop.shortcuts_on = true;
     desktop.add(Opens::command("people"), 0, (0, 0)).expect("shortcut");
-    desktop
-        .add(Opens::Folder { folder: FOLDER, account }, 1, (2, 1))
-        .expect("shortcut");
+    desktop.add(Opens::Folder { folder: FOLDER, account }, 1, (2, 1)).expect("shortcut");
     let tabs = &mut s.inventory.custom_tabs;
     let id = custom_tabs::add(tabs, "Hair", Default::default(), "wig".into()).expect("tab");
     tabs[0].folders.insert(account, vec![FOLDER]);
     tabs[0].items.insert(account, vec![ITEM]);
-    s.inventory.window_modes.set(Key::Tab(id), WindowMode { pinned: true, quiet: false });
-    s.inventory
-        .window_modes
-        .set(Key::Folder(FOLDER), WindowMode { pinned: false, quiet: true });
+    s.inventory.window_modes.set(
+        Key::Tab(id),
+        WindowMode {
+            pinned: true,
+            quiet: false,
+        },
+    );
+    s.inventory.window_modes.set(
+        Key::Folder(FOLDER),
+        WindowMode {
+            pinned: false,
+            quiet: true,
+        },
+    );
     let boards = s.folderstorm_gesture_boards.accounts.entry(account).or_default();
     let board = boards.new_board("Hello").expect("board");
     boards.add_items(board, &[ITEM], None).expect("tile");
@@ -144,7 +152,10 @@ fn through_file(backup: &Backup) -> Backup {
 }
 
 fn import(plan: &Plan, s: &mut Settings, main: &Path) -> apply::Report {
-    let mut target = Target { settings: s, main_config: main };
+    let mut target = Target {
+        settings: s,
+        main_config: main,
+    };
     apply::apply(plan, &mut target)
 }
 
@@ -169,7 +180,10 @@ fn every_section_has_a_plain_unique_id_and_a_label() {
 #[test]
 fn every_section_comes_back_as_it_was_through_a_file() {
     let (config, main, elsewhere) = (Scratch::new(), Scratch::new(), Scratch::new());
-    session_host(&main.0, json!([{ "slot": 0, "profile": "alice", "alias": "Al", "colour": "teal" }, { "slot": 2, "profile": "bob" }]));
+    session_host(
+        &main.0,
+        json!([{ "slot": 0, "profile": "alice", "alias": "Al", "colour": "teal" }, { "slot": 2, "profile": "bob" }]),
+    );
     let original = full(&config.0, ME);
     let backup = through_file(&capture(&original, Some(me()), &main.0, &config.0));
     let ids: Vec<&str> = backup.manifest.sections.iter().map(|e| e.id.as_str()).collect();
@@ -195,11 +209,14 @@ fn every_section_comes_back_as_it_was_through_a_file() {
     assert_eq!(restored.inventory.window_modes, original.inventory.window_modes);
     assert_eq!(restored.folderstorm_gesture_boards, original.folderstorm_gesture_boards);
     assert_eq!(restored.folderstorm_viewport, original.folderstorm_viewport);
-    assert_eq!(restored.media.autoplay_huds, false);
+    assert!(!restored.media.autoplay_huds);
     assert_eq!(restored.media.max_instances, 3);
     let slots = host_slots(&elsewhere.0);
     assert_eq!(slots.len(), 2);
-    assert_eq!((slots[0]["profile"].as_str(), slots[0]["alias"].as_str()), (Some("alice"), Some("Al")));
+    assert_eq!(
+        (slots[0]["profile"].as_str(), slots[0]["alias"].as_str()),
+        (Some("alice"), Some("Al"))
+    );
     // the picture is in the other PC's folder, under its own name
     let name = format!("{:016x}.png", crate::folderstorm::backgrounds::import::hash(b"the wall's picture"));
     assert!(other_config.0.join("folderstorm_backgrounds").join(name).exists());
@@ -209,8 +226,14 @@ fn every_section_comes_back_as_it_was_through_a_file() {
 fn merge_adds_and_replaces_by_name_replace_takes_the_file() {
     let (config, main) = (Scratch::new(), Scratch::new());
     let mut file_side = Settings::default();
-    file_side.folderstorm_workspaces.add(Layout::new("B", None, None, Vec::new())).expect("layout");
-    file_side.folderstorm_workspaces.add(Layout::new("C", None, None, Vec::new())).expect("layout");
+    file_side
+        .folderstorm_workspaces
+        .add(Layout::new("B", None, None, Vec::new()))
+        .expect("layout");
+    file_side
+        .folderstorm_workspaces
+        .add(Layout::new("C", None, None, Vec::new()))
+        .expect("layout");
     file_side.inventory.custom_tabs.push(custom_tabs::CustomTab {
         id: 1,
         name: "Hair".into(),
@@ -224,8 +247,12 @@ fn merge_adds_and_replaces_by_name_replace_takes_the_file() {
 
     let mine = || {
         let mut s = Settings::default();
-        s.folderstorm_workspaces.add(Layout::new("A", None, None, Vec::new())).expect("layout");
-        s.folderstorm_workspaces.add(Layout::new("b", None, None, Vec::new())).expect("layout");
+        s.folderstorm_workspaces
+            .add(Layout::new("A", None, None, Vec::new()))
+            .expect("layout");
+        s.folderstorm_workspaces
+            .add(Layout::new("b", None, None, Vec::new()))
+            .expect("layout");
         s.inventory.custom_tabs.push(custom_tabs::CustomTab {
             id: 7,
             name: "hair".into(),
@@ -247,7 +274,11 @@ fn merge_adds_and_replaces_by_name_replace_takes_the_file() {
     };
 
     let mut merged = mine();
-    import(&with_mode(Plan::new(backup.clone(), Some(me()), false), Mode::Merge), &mut merged, &main.0);
+    import(
+        &with_mode(Plan::new(backup.clone(), Some(me()), false), Mode::Merge),
+        &mut merged,
+        &main.0,
+    );
     // "b" is replaced by the file's "B" in its place; "C" is added
     assert_eq!(names(&merged), ["A", "B", "C"]);
     let tabs = &merged.inventory.custom_tabs;
@@ -263,7 +294,11 @@ fn merge_adds_and_replaces_by_name_replace_takes_the_file() {
     assert_eq!((count, tile_ids.len()), (3, 3), "tile ids stay unique");
 
     let mut replaced = mine();
-    import(&with_mode(Plan::new(backup, Some(me()), false), Mode::Replace), &mut replaced, &main.0);
+    import(
+        &with_mode(Plan::new(backup, Some(me()), false), Mode::Replace),
+        &mut replaced,
+        &main.0,
+    );
     assert_eq!(names(&replaced), ["B", "C"]);
     assert_eq!(replaced.inventory.custom_tabs.len(), 1);
     assert_eq!(replaced.inventory.custom_tabs[0].search, "from the file");
@@ -277,7 +312,10 @@ fn an_import_makes_a_safety_backup_first_that_undoes_it() {
     let before = full(&config.0, ME);
     let mut file_side = Settings::default();
     file_side.folderstorm_viewport.enabled = false;
-    file_side.folderstorm_workspaces.add(Layout::new("Other", None, None, Vec::new())).expect("layout");
+    file_side
+        .folderstorm_workspaces
+        .add(Layout::new("Other", None, None, Vec::new()))
+        .expect("layout");
     let backup = capture(&file_side, Some(me()), &main.0, &config.0);
     let plan = with_mode(Plan::new(backup, Some(me()), false), Mode::Replace);
 
@@ -357,7 +395,13 @@ fn another_account_s_inventory_is_left_out_or_kept_for_that_account() {
     let report = import(&plan, &mut s, &main.0);
     assert!(report.failed.is_empty(), "{:?}", report.failed);
     assert!(!report.notes.is_empty(), "what was left out is said");
-    let ws = s.folderstorm_workspaces.workspaces.iter().filter_map(|r| r.workspace()).next().expect("the workspace");
+    let ws = s
+        .folderstorm_workspaces
+        .workspaces
+        .iter()
+        .filter_map(|r| r.workspace())
+        .next()
+        .expect("the workspace");
     assert!(ws.huds.is_none(), "the other account's HUDs are left out");
     assert_eq!(s.folderstorm_desktop.shortcuts.len(), 1, "the command shortcut only");
     assert!(s.inventory.custom_tabs[0].folders.is_empty() && s.inventory.custom_tabs[0].items.is_empty());
@@ -396,7 +440,10 @@ fn a_newer_file_is_read_for_what_this_version_knows() {
     assert!(read.newer());
     assert_eq!(read.unknown().iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["desk_icons"]);
     let plan = Plan::new(read, Some(me()), false);
-    assert!(plan.choices.iter().all(|c| c.id != "desk_icons"), "an unknown section is not offered");
+    assert!(
+        plan.choices.iter().all(|c| c.id != "desk_icons"),
+        "an unknown section is not offered"
+    );
     let mut s = Settings::default();
     let report = import(&plan, &mut s, &main.0);
     assert!(report.failed.is_empty(), "{:?}", report.failed);
@@ -490,7 +537,11 @@ fn no_secret_ever_goes_into_a_backup() {
         for sentinel in &sentinels {
             assert!(!text.contains(sentinel), "section {} writes {sentinel}", section.id());
         }
-        assert!(!text.contains("controller"), "section {} writes the controller access", section.id());
+        assert!(
+            !text.contains("controller"),
+            "section {} writes the controller access",
+            section.id()
+        );
     }
     // and the whole file
     let mut backup = Backup::capture(&env, Kind::Manual, Some(me()));

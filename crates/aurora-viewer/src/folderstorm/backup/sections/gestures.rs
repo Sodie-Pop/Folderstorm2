@@ -78,12 +78,7 @@ impl Section for Boards {
 /// account's tiles. How many boards were left out.
 pub fn merge(mine: &mut Account, incoming: Account) -> usize {
     let mut next_board = mine.boards.iter().map(|b| b.id).max().unwrap_or(0);
-    let mut next_tile = mine
-        .boards
-        .iter()
-        .flat_map(|b| b.tiles.iter().map(|t| t.id))
-        .max()
-        .unwrap_or(0);
+    let mut next_tile = mine.boards.iter().flat_map(|b| b.tiles.iter().map(|t| t.id)).max().unwrap_or(0);
     let mut left = 0;
     for mut board in incoming.boards {
         let at = mine.boards.iter().position(|b| same_text(&b.name, &board.name));

@@ -27,7 +27,17 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             let ctx = ui.ctx().clone();
             let (busy, status) = jobs::with(&ctx, |st| (st.busy(), st.export_status.clone())).unwrap_or_default();
             ui.vertical(|ui| {
-                if action_button_if(ui, &p, "file-download-filled", tr!("fs-backup-export-button"), ActionKind::Flat, BUTTON, !busy).clicked() {
+                if action_button_if(
+                    ui,
+                    &p,
+                    "file-download-filled",
+                    tr!("fs-backup-export-button"),
+                    ActionKind::Flat,
+                    BUTTON,
+                    !busy,
+                )
+                .clicked()
+                {
                     jobs::export(&ctx, s);
                 }
                 status_line(ui, &p, &status);
@@ -38,7 +48,17 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             let ctx = ui.ctx().clone();
             let (busy, status) = jobs::with(&ctx, |st| (st.busy(), st.import_status.clone())).unwrap_or_default();
             ui.vertical(|ui| {
-                if action_button_if(ui, &p, "file-upload-filled", tr!("fs-backup-import-button"), ActionKind::Flat, BUTTON, !busy).clicked() {
+                if action_button_if(
+                    ui,
+                    &p,
+                    "file-upload-filled",
+                    tr!("fs-backup-import-button"),
+                    ActionKind::Flat,
+                    BUTTON,
+                    !busy,
+                )
+                .clicked()
+                {
                     jobs::import(&ctx);
                 }
                 status_line(ui, &p, &status);
@@ -47,12 +67,25 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             false
         });
         words(cx, &["fs-search-backup"]).row_with(tr!("fs-backup-folder"), tr!("fs-backup-folder-help"), &Nothing, |ui, _, _, _| {
-            if action_button(ui, &p, "folder-open-filled", tr!("fs-backup-folder-button"), ActionKind::Flat, BUTTON).clicked() {
+            if action_button(
+                ui,
+                &p,
+                "folder-open-filled",
+                tr!("fs-backup-folder-button"),
+                ActionKind::Flat,
+                BUTTON,
+            )
+            .clicked()
+            {
                 jobs::open_folder();
             }
             false
         });
-        words(cx, &["fs-search-backup"]).toggle(tr!("fs-backup-daily"), tr!("fs-backup-daily-help"), &field!(folderstorm_backup.daily));
+        words(cx, &["fs-search-backup"]).toggle(
+            tr!("fs-backup-daily"),
+            tr!("fs-backup-daily-help"),
+            &field!(folderstorm_backup.daily),
+        );
         let off = !cx.s.folderstorm_backup.daily;
         cx.subs(off, |cx| {
             cx.slider(
@@ -85,7 +118,17 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                             .size(12.0)
                             .color(p.ink),
                         );
-                        if action_button_if(ui, &p, "restore", tr!("fs-backup-restore-button"), ActionKind::Flat, Vec2::new(0.0, 22.0), !busy).clicked() {
+                        if action_button_if(
+                            ui,
+                            &p,
+                            "restore",
+                            tr!("fs-backup-restore-button"),
+                            ActionKind::Flat,
+                            Vec2::new(0.0, 22.0),
+                            !busy,
+                        )
+                        .clicked()
+                        {
                             jobs::restore(&ctx, entry.path.clone());
                         }
                     });
@@ -128,7 +171,11 @@ fn dialog(ctx: &egui::Context, p: &Palette, s: &Settings) {
 
 /// The dialog's content; (Import, Cancel) clicked.
 fn body(ui: &mut egui::Ui, p: &Palette, plan: &mut Plan) -> (bool, bool) {
-    let title = if plan.restore { tr!("fs-backup-restore-title") } else { tr!("fs-backup-import-title") };
+    let title = if plan.restore {
+        tr!("fs-backup-restore-title")
+    } else {
+        tr!("fs-backup-import-title")
+    };
     ui.label(RichText::new(title).size(15.0).strong().color(p.ink));
     ui.add_space(6.0);
     let backup = plan.backup.clone();
@@ -157,7 +204,10 @@ fn body(ui: &mut egui::Ui, p: &Palette, plan: &mut Plan) -> (bool, bool) {
     }
     if plan.other_account() {
         let target = plan.target.as_ref().map(|a| a.name.clone()).unwrap_or_default();
-        warn(ui, &tr!("fs-backup-other-account", account = who.as_str(), current = target.as_str()));
+        warn(
+            ui,
+            &tr!("fs-backup-other-account", account = who.as_str(), current = target.as_str()),
+        );
     } else if plan.target.is_none() && manifest.account.is_some() {
         warn(ui, tr!("fs-backup-not-logged-in"));
     }
@@ -190,7 +240,11 @@ fn body(ui: &mut egui::Ui, p: &Palette, plan: &mut Plan) -> (bool, bool) {
     let (mut ok, mut cancel) = (false, false);
     ui.horizontal(|ui| {
         ui.add_enabled_ui(plan.any(), |ui| {
-            let label = if plan.restore { tr!("fs-backup-restore-confirm") } else { tr!("fs-backup-import-confirm") };
+            let label = if plan.restore {
+                tr!("fs-backup-restore-confirm")
+            } else {
+                tr!("fs-backup-import-confirm")
+            };
             ok = primary_button_sized(ui, p, label, Vec2::new(110.0, 26.0)).clicked();
         });
         cancel = action_button(ui, p, "x", tr!("common-cancel"), ActionKind::Flat, BUTTON).clicked();

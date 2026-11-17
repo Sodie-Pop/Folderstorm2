@@ -263,7 +263,10 @@ impl Backup {
         };
         // only what the manifest lists, once, under a plain name
         let mut seen = std::collections::BTreeSet::new();
-        backup.manifest.sections.retain(|entry| valid_id(&entry.id) && seen.insert(entry.id.clone()));
+        backup
+            .manifest
+            .sections
+            .retain(|entry| valid_id(&entry.id) && seen.insert(entry.id.clone()));
         let mut total = 0u64;
         for entry in &mut backup.manifest.sections {
             entry.label = entry.label.chars().filter(|c| !c.is_control()).take(80).collect();
@@ -347,10 +350,7 @@ fn read_entry<R: Read + std::io::Seek>(zip: &mut zip::ZipArchive<R>, name: &str,
         return Err(ReadError::TooLarge);
     }
     let mut bytes = Vec::new();
-    entry
-        .take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ReadError::NotZip)?;
+    entry.take(limit + 1).read_to_end(&mut bytes).map_err(|_| ReadError::NotZip)?;
     if bytes.len() as u64 > limit {
         return Err(ReadError::TooLarge);
     }
