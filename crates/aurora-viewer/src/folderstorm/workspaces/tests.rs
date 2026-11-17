@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 
 mod context;
 mod folders;
+mod minimap;
 mod open;
 mod strip;
 mod switcher;
