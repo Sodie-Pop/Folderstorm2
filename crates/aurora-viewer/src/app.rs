@@ -6310,6 +6310,7 @@ impl App {
     }
 
     fn update_sounds(&mut self) {
+        self.folderstorm_background_alerts(); // Folderstorm: a background character's alert sounds, before the events below are played
         self.flush_object_sounds();
         let ui = &self.settings.audio.ui;
         let w = &mut self.world;

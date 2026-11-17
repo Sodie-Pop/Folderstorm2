@@ -1169,7 +1169,11 @@ impl ApplicationHandler for Window_ {
         }
         if std::mem::take(&mut self.host.alert) {
             // a message for a character that is not the active one
-            if self.host.desk.chat_sound() {
+            // (not while the background alert sounds are on: the
+            // character's own viewer plays its alert instead; their file
+            // is only looked at when the host's beep is on)
+            let chat_sound = self.host.desk.chat_sound();
+            if chat_sound && super::beep_wanted(chat_sound, super::alert_sounds_on()) {
                 super::message_sound();
             }
             // (the taskbar's flash, in the chat's window: never the
