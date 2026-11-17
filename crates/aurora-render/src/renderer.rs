@@ -7616,6 +7616,7 @@ impl Backend {
         let mut ui = ui;
         if let Some(ui) = &mut ui {
             crate::ui_world::take_end(&mut ui.primitives);
+            crate::folderstorm_hud_underlay::take_end(&mut ui.primitives, 0); // Folderstorm
             crate::ui_blur::take_boundary(&mut ui.primitives);
             crate::ui_glass::skip(&mut ui.primitives);
             crate::label_depth::skip(&mut ui.primitives);
@@ -8437,6 +8438,10 @@ impl Backend {
         // what the interface painted for the world comes first: it is drawn
         // before the HUD attachments, the rest after them
         let labels_end = ui.as_mut().map_or(0, |ui| crate::ui_world::take_end(&mut ui.primitives));
+        // Folderstorm: then what goes under the HUD attachments (the margins' background)
+        let under_huds_end = ui
+            .as_mut()
+            .map_or(0, |ui| crate::folderstorm_hud_underlay::take_end(&mut ui.primitives, labels_end));
         // Folderstorm: the world's labels (name tags, floating text) stay in
         // its part of the window
         if let (Some(ui), Some([x, y, w, h])) = (ui.as_mut(), self.world_viewport()) {
@@ -12291,6 +12296,15 @@ impl Backend {
         if wanted == Some(Capture::Scene) {
             let source = self.ui_blur.as_ref().map_or(surface_tex.texture(), |blur| &blur.source);
             capture = self.encode_capture(&mut encoder, source, false);
+        }
+        // Folderstorm: the margins' background, over the whole window and under the HUD attachments
+        if under_huds_end > labels_end
+            && let Some(ui) = &mut ui
+        {
+            draw_ui(&mut encoder, &surface_view, &ui.primitives[..under_huds_end]);
+            for primitive in &mut ui.primitives[labels_end..under_huds_end] {
+                primitive.clip_rect = egui::Rect::NOTHING;
+            }
         }
         let draws_hud_selection = hud_select_faces_range.1 > 0 && self.hud_selection.is_some() && self.hud_depth.is_some();
         // HUDs retain their original texture colors and never inherit world

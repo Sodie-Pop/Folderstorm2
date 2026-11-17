@@ -2483,6 +2483,35 @@ As planned above, with these details:
   more monitors decodes it again only if it was reduced. Tile draws one
   mesh of the tiles that meet each margin. No picture chosen, a colour or
   nothing: no texture is kept. No margin: no decoding.
+- **HUDs over the background** (branch `claude/backgrounds-huds-on-top`,
+  2026-11-16). After the fix above the background was drawn over the HUD
+  attachments: the renderer (`aurora-render/src/renderer.rs`) draws the
+  world's labels (cut to the world viewport), then the HUD attachments in
+  a pass of their own over the **whole window** (no viewport, no scissor:
+  a HUD offset out of the HUD area lands in a margin), then the rest of
+  the interface, which held the background. Now, by default, the
+  background's shapes are followed by `aurora_render::end_hud_underlay`
+  (new file `aurora-render/src/folderstorm_hud_underlay.rs`): the renderer
+  draws what precedes it, after the labels, before the HUD pass, over the
+  whole window (not cut). The markers are emptied in place (empty mesh,
+  empty clip), so no index moves and egui-wgpu never sees them. The HUDs'
+  text (`ui::hud::draw_attachments`, after the mark) stays over both;
+  windows and bars stay over everything. Preferences › Layout › Bars and
+  windows › *Background around the world* › *HUDs over the background*
+  (on; greyed with *Nothing*): unticked, no marker is put and the
+  background is drawn with the rest, over the HUDs (the fix's order). The
+  store keeps the opposite, `folderstorm_workspaces.background_over_huds`
+  (absent while false), as `keep_huds` does, so a file without it keeps
+  the HUDs on top. Renderer hooks: one line taking the marker after
+  `ui_world::take_end` in the frame and in `interface_alone`, and the
+  short draw before the HUD pass, after the scene capture (a photo without
+  the interface has no background, as before). Tests: the three parts in
+  `aurora-render` (`folderstorm_hud_underlay`, 3), a frame test drawing a
+  HUD between the parts as the renderer does, for both switch values, the
+  store's field, the search words. Demo: `AURORA_DEMO_BACKGROUND=hud` /
+  `hud-over` (a HUD on the world's left edge, half in the margin); checked
+  with lavapipe under Xvfb: the HUD's left half shows over the picture,
+  and is covered by it with `hud-over`.
 - **Status** for Preferences (`paint::status`): loading, shown, missing,
   unreadable, as far as the painting tried the picture; `paint::forget`
   reads it again after it is chosen again.
@@ -2512,7 +2541,10 @@ migration, no schema change.
 | File | Change |
 |---|---|
 | `crates/aurora-viewer/src/app.rs` (line 12151) | one line before `studio_fade`: `crate::folderstorm::backgrounds::underlay(...)` |
-| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 37 `fs-background-*` keys after the workspace context's |
+| `crates/aurora-viewer/src/app.rs` (after `end_world_labels`) | one line: `crate::folderstorm::backgrounds::mark(&ctx)` (the fix) |
+| `crates/aurora-render/src/lib.rs` | `mod folderstorm_hud_underlay;` and its `pub use` (HUDs over the background) |
+| `crates/aurora-render/src/renderer.rs` | `take_end` of the marker in the frame and in `interface_alone`; the draw before the HUD pass (8 lines) |
+| `crates/aurora-i18n/locales/{en,fr,ja}.ftl` | 37 `fs-background-*` keys after the workspace context's, then `fs-background-huds-over{,-help}` and `fs-search-background-huds` |
 | `docs/TESTING.md` | a paragraph and a table row for `AURORA_DEMO_BACKGROUND` |
 
 **Changed beside them (ours):** `folderstorm/mod.rs` (the `mod` line),
@@ -2575,8 +2607,9 @@ the saved layouts' list. They become `fs-search-*` keys once #69 lands.
   switch"). Missing-monitor recovery is already section 8.5. MCP tools
   `workspace_list` / `workspace_apply` belong with row 4.6.
 - **1.8 Backgrounds.** Built: "1.8 in detail" and "1.8 as built" above. Outline: an image painted in
-  the margins outside the world, before the windows; no renderer change.
-  Optional per layout.
+  the margins outside the world, before the windows and, by default, under
+  the HUD attachments (a small marked hook in `aurora-render`). Optional
+  per layout.
 - **1.9 Search keywords.** Help texts (section 9.2). Built on its own:
   [settings-search.md](settings-search.md).
 - Startup restore of a workspace (opt-in), export / import, toolbar button

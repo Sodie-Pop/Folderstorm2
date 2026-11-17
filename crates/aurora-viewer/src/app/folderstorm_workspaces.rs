@@ -408,6 +408,10 @@ impl App {
         ) {
             log::warn!("AURORA_DEMO_BACKGROUND={mode}: not a mode of the demo");
         }
+        let size = window.inner_size();
+        for event in demo::margin_hud(&mode, self.viewport_hud_area([size.width, size.height])) {
+            self.world.apply(event);
+        }
     }
 
     fn layouts_demo(&mut self, seen: Option<&Seen>) {

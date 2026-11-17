@@ -228,6 +228,13 @@ struct Here;
 /// attachments' labels, the bars, the windows). Without the mark (a screen
 /// with no world labels, so nothing is cut) it goes first. [`underlay_in`]
 /// always takes the mark out again.
+///
+/// The renderer draws the HUD attachments between the world's labels and
+/// the rest of the interface, over the whole window. With *HUDs over the
+/// background*, the background is followed by
+/// `aurora_render::end_hud_underlay`: drawn before the HUD attachments, it
+/// leaves a HUD moved into a margin visible. Otherwise it is drawn with the
+/// rest, over them.
 pub fn mark(ctx: &egui::Context) {
     ctx.layer_painter(egui::LayerId::background()).add(egui::PaintCallback {
         rect: ctx.content_rect(),
@@ -251,8 +258,10 @@ fn take_mark(frame: &mut Vec<ClippedShape>) -> usize {
 
 /// The background in effect painted under the interface this frame: its
 /// shapes go where [`mark`] was in `frame` (the frame's shapes, after the
-/// pass), else first. Nothing while the world fills the window.
-pub fn underlay_in(ctx: &egui::Context, background: &Background, folder: &Path, frame: &mut Vec<ClippedShape>) {
+/// pass), else first; under the HUD attachments too when `huds_over` (the
+/// end of what goes under them put after the shapes, [`mark`]). Nothing
+/// while the world fills the window.
+pub fn underlay_in(ctx: &egui::Context, background: &Background, huds_over: bool, folder: &Path, frame: &mut Vec<ClippedShape>) {
     let at = take_mark(frame);
     let loader = loader(ctx);
     let Ok(mut loader) = loader.lock() else {
@@ -261,7 +270,7 @@ pub fn underlay_in(ctx: &egui::Context, background: &Background, folder: &Path, 
     let Some(picture) = background.shown_picture() else {
         loader.forget();
         if background.paints() {
-            paint(ctx, background, None, frame, at);
+            paint(ctx, background, None, huds_over, frame, at);
         }
         return;
     };
@@ -278,14 +287,16 @@ pub fn underlay_in(ctx: &egui::Context, background: &Background, folder: &Path, 
     let side = side_for(pixels, background.fit, ctx.input(|i| i.max_texture_side));
     let texture = loader.poll(ctx, folder, &picture.file, side);
     drop(loader);
-    paint(ctx, background, texture, frame, at);
+    paint(ctx, background, texture, huds_over, frame, at);
 }
 
-/// The shapes of `background` put at `at` in `frame`.
+/// The shapes of `background` put at `at` in `frame`, followed by the end
+/// of what goes under the HUD attachments when `huds_over`.
 fn paint(
     ctx: &egui::Context,
     background: &Background,
     texture: Option<(egui::TextureId, [u32; 2])>,
+    huds_over: bool,
     frame: &mut Vec<ClippedShape>,
     at: usize,
 ) {
@@ -302,7 +313,10 @@ fn paint(
         Some(layout) => place::areas(window, layout.window, &layout.monitors, background.span, ppp),
         None => vec![window],
     };
-    let mine = shapes(background, &margins, &areas, texture, ppp);
+    let mut mine = shapes(background, &margins, &areas, texture, ppp);
+    if huds_over && !mine.is_empty() {
+        mine.push(ClippedShape::new(window, aurora_render::end_hud_underlay(window)));
+    }
     let at = at.min(frame.len());
     frame.splice(at..at, mine);
 }
