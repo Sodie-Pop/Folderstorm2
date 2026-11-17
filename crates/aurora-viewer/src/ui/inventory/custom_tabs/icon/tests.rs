@@ -21,7 +21,7 @@ fn the_choices_are_embedded_named_once_and_translated() {
         assert!(crate::ui::icons::embedded(icon), "{icon} is not an embedded Tabler icon");
         assert!(seen.insert(*icon), "{icon} twice");
         assert_ne!(*icon, DEFAULT, "the default is offered as Default");
-        assert_ne!(aurora_i18n::text(*key), *key, "{key} has no text");
+        assert_ne!(aurora_i18n::text(key), *key, "{key} has no text");
     }
     assert!(crate::ui::icons::embedded(DEFAULT));
 }

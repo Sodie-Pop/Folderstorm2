@@ -142,7 +142,7 @@ fn grid(ui: &mut egui::Ui, p: &Palette, prefs: &mut InventoryPreferences, id: u6
         .spacing(Vec2::splat(3.0))
         .show(ui, |ui| {
             for (n, (icon, key)) in CHOICES.iter().enumerate() {
-                if widgets::icon_toggle(ui, p, icon, aurora_i18n::text(*key), current == Some(*icon)) {
+                if widgets::icon_toggle(ui, p, icon, aurora_i18n::text(key), current == Some(*icon)) {
                     picked = Some(Some(*icon));
                 }
                 if (n + 1) % COLUMNS == 0 {
