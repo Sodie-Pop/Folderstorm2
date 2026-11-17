@@ -577,6 +577,11 @@ pub struct Store {
     /// unticked. Off (they are taken off) until chosen.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub keep_huds: bool,
+    /// The margins' background is drawn over the HUD attachments: *HUDs
+    /// over the background* unticked (row 1.8). Off (HUDs on top) until
+    /// chosen.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub background_over_huds: bool,
 }
 
 /// The store as the file has it, before each entry is read on its own.
@@ -596,6 +601,7 @@ struct Raw {
     strip: serde_json::Value,
     background: serde_json::Value,
     keep_huds: serde_json::Value,
+    background_over_huds: serde_json::Value,
 }
 
 impl From<Raw> for Store {
@@ -646,6 +652,7 @@ impl From<Raw> for Store {
             strip: raw.strip.as_bool().unwrap_or(false),
             background: crate::folderstorm::backgrounds::Background::read(raw.background),
             keep_huds: raw.keep_huds.as_bool().unwrap_or(false),
+            background_over_huds: raw.background_over_huds.as_bool().unwrap_or(false),
         };
         if store.active_workspace().is_none() {
             store.active_workspace = None;

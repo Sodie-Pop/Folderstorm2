@@ -71,6 +71,7 @@ mod tests {
         "fs-search-characters",
         "fs-search-chat-upload",
         "fs-search-outfit-safety",
+        "fs-search-background-huds",
     ];
 
     /// What a user types, in each language, and the entry it must find.
@@ -120,6 +121,9 @@ mod tests {
         ("en", "outfit safety", "fs-search-outfit-safety"),
         ("fr", "tenue sécurité", "fs-search-outfit-safety"),
         ("ja", "誤クリック", "fs-search-outfit-safety"),
+        ("en", "hud wallpaper", "fs-search-background-huds"),
+        ("fr", "hud fond d'écran", "fs-search-background-huds"),
+        ("ja", "HUD 壁紙", "fs-search-background-huds"),
     ];
 
     #[test]
@@ -184,6 +188,7 @@ mod tests {
             ("favorites", Page::Layout, 3),
             ("quick switch", Page::Layout, 2),
             ("undo", Page::Layout, 1),
+            ("hud wallpaper", Page::Layout, 1),
             // Shortcuts › Other: the layouts' keyboard actions
             ("workspace", Page::Shortcuts, 5),
             ("switcher", Page::Shortcuts, 5),
