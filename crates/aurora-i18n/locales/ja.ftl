@@ -2081,6 +2081,18 @@ fs-nearby-media-stop-all = すべて停止
 fs-nearby-media-start-all = すべて開始
 fs-nearby-media-stop-all-tip = 近くのメディアをすべてオフにします。区画の音楽には専用のボタンがあります。
 fs-nearby-media-start-all-tip = 近くのメディアをすべてオンにします。区画の音楽には専用のボタンがあります。
+fs-nearby-media-show = 表示：
+fs-nearby-media-filter-all = すべて
+fs-nearby-media-filter-within = この区画内
+fs-nearby-media-filter-outside = この区画外
+fs-nearby-media-filter-others = 他のアバター
+fs-nearby-media-empty-filter = この条件に合うメディアはありません。
+fs-nearby-media-others-off = 他のアバターのメディアは初期設定 › メディアでオフになっています。
+fs-nearby-media-zoom = このメディアにズーム
+fs-nearby-media-unzoom = ズームを戻す
+fs-nearby-media-volume = このメディアの音量
+fs-demo-nearby-media-outside-page = data:text/html;charset=utf-8,<html><head><title>隣の看板</title></head><body style='margin:0;height:100vh;background:%230f3d6d;color:white;font:72px sans-serif;text-align:center'><h1 style='padding-top:180px'>隣の看板</h1></body></html>
+fs-demo-nearby-media-worn-page = data:text/html;charset=utf-8,<html><head><title>Wolf のバッジ</title></head><body style='margin:0;height:100vh;background:%234a1f6d;color:white;font:96px sans-serif;text-align:center'><h1 style='padding-top:160px'>Wolf のバッジ</h1></body></html>
 
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP ローカル アシスタント AI エージェント ブリッジ API 自動化 Claude Code Cursor Codex --mcp-api

@@ -2285,6 +2285,18 @@ fs-nearby-media-stop-all = Stop all
 fs-nearby-media-start-all = Start all
 fs-nearby-media-stop-all-tip = Turn all nearby media off. The parcel music keeps its own button.
 fs-nearby-media-start-all-tip = Turn all nearby media on. The parcel music keeps its own button.
+fs-nearby-media-show = Show:
+fs-nearby-media-filter-all = All
+fs-nearby-media-filter-within = In this parcel
+fs-nearby-media-filter-outside = Outside this parcel
+fs-nearby-media-filter-others = On other avatars
+fs-nearby-media-empty-filter = No media here matches this choice.
+fs-nearby-media-others-off = Media on other avatars is turned off in Preferences › Media.
+fs-nearby-media-zoom = Zoom in on this media
+fs-nearby-media-unzoom = Zoom back out
+fs-nearby-media-volume = Volume of this media
+fs-demo-nearby-media-outside-page = data:text/html;charset=utf-8,<html><head><title>Billboard next door</title></head><body style='margin:0;height:100vh;background:%230f3d6d;color:white;font:72px sans-serif;text-align:center'><h1 style='padding-top:180px'>Billboard next door</h1></body></html>
+fs-demo-nearby-media-worn-page = data:text/html;charset=utf-8,<html><head><title>Wolf's badge</title></head><body style='margin:0;height:100vh;background:%234a1f6d;color:white;font:96px sans-serif;text-align:center'><h1 style='padding-top:160px'>Wolf's badge</h1></body></html>
 
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
