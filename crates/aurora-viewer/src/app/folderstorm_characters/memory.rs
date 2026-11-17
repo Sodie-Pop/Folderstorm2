@@ -68,7 +68,9 @@ impl App {
             return;
         }
         if self.folderstorm_in_front() || self.gfx.is_none() {
-            log::info!("session memory: not minimised after all (the window is in front)");
+            if self.gfx.is_some() {
+                log::info!("session memory: not minimised after all (the window is in front)");
+            }
             self.folderstorm_characters.memory.releasing.cancel();
             return;
         }
