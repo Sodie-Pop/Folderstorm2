@@ -301,6 +301,28 @@ window or barely under it says why it cannot; that margins set too large with
 the sliders show a dashed outline and the note that the world fills the
 window; and that with `wayland` the window is drawn alone.
 
+**Login screen on one monitor (Folderstorm2).** With the window over several
+monitors, the login screen is laid out in the world viewport's rectangle when
+one is set, otherwise on the monitor holding the most of the window (on a tie,
+the one at the desktop's origin: Windows' primary monitor). The sky still fills
+the window. No variable of its own: pretend two monitors and any login
+scenario, and add `AURORA_DEMO_VIEWPORT=right-half` to put the world, and so
+the login, on the right one:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_LOGIN=empty AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test login monitor"
+AURORA_DEMO=1 AURORA_DEMO_LOGIN=cards AURORA_DEMO_VIEWPORT=right-half AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test login monitor"
+```
+
+Check that the brand, the login card or the account cards, the version and
+news, the community links and the buttons along the bottom all sit on the
+left (or right) half, centred on it; that `AURORA_DEMO_LOGIN=mfa` and
+`manage` open their dialogs there too; and that without
+`AURORA_DEMO_MONITORS` (or with a single `1920x1080` and a window of that
+size) the login screen fills the window as before.
+
 **Gesture boards (Folderstorm2).** `AURORA_DEMO_GESTURE_BOARDS=1` adds a few
 gestures and sounds to the demo's inventory, seeds two boards in the demo's
 own settings ("Greetings": gestures and sounds, a label, colours, a tile of
