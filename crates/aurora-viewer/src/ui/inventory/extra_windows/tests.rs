@@ -236,10 +236,10 @@ impl Viewer {
             .button(window)
             .unwrap_or_else(|| panic!("classic={classic}: {window} has the button"));
         // in front, so that the click is its own
-        if let Some(slot) = slot_of(window).and_then(floater_of) {
-            widgets::bring_floater_front(&self.frames.ctx, &slot);
-        } else {
+        if window.is_nil() {
             widgets::bring_floater_front(&self.frames.ctx, "inventory");
+        } else {
+            widgets::bring_floater_front(&self.frames.ctx, &floater_id(window));
         }
         self.frame(open, Vec::new());
         self.click_at(open, rect.center(), button);
@@ -302,21 +302,124 @@ fn the_button_in_every_whole_inventory_window_opens_the_next_one() {
     }
 }
 
-/// The folder and tab windows have no such button.
-#[test]
-fn folder_and_tab_windows_have_no_button() {
-    for classic in [true, false] {
-        let mut v = Viewer::new(classic);
-        let tab = custom_tabs::add(&mut v.prefs.custom_tabs, "Wardrobe", view::Filters::default(), String::new()).expect("room");
-        v.st.open_folder_window(id(CLOTHING));
-        let ctx = v.frames.ctx.clone();
-        custom_tabs::window::open(&ctx, &mut v.st, &v.prefs, tab);
-        v.settle(false);
-        assert_eq!(v.st.windows.len(), 2, "classic={classic}");
-        for w in &v.st.windows {
-            assert!(v.button(w.id).is_none(), "classic={classic}: {}", w.id);
+/// A folder window or a tab window, the two kinds that are not slots.
+#[derive(Clone, Copy, Debug)]
+enum Kind {
+    Folder,
+    Tab,
+}
+
+/// A viewer with the main window closed and one window of `kind` open;
+/// returns its id.
+fn with_window(classic: bool, kind: Kind) -> (Viewer, Uuid) {
+    let mut v = Viewer::new(classic);
+    let ctx = v.frames.ctx.clone();
+    match kind {
+        Kind::Folder => v.st.open_folder_window(id(CLOTHING)),
+        Kind::Tab => {
+            let tab = custom_tabs::add(&mut v.prefs.custom_tabs, "Wardrobe", view::Filters::default(), String::new()).expect("room");
+            custom_tabs::window::open(&ctx, &mut v.st, &v.prefs, tab);
         }
-        assert_eq!(v.st.folderstorm_open_slots(), 0, "classic={classic}: not slots");
+    }
+    v.settle(false);
+    assert_eq!(v.st.windows.len(), 1, "classic={classic} {kind:?}");
+    let window = v.st.windows[0].id;
+    assert_eq!(slot_of(window), None, "classic={classic} {kind:?}: not a slot");
+    (v, window)
+}
+
+/// The folder and tab windows have the button too, in both styles: it opens
+/// the lowest free slot, again and again, and stays lit while one is open;
+/// the window itself stays open and is not a slot.
+#[test]
+fn folder_and_tab_windows_have_the_button_and_it_opens_the_next_slot() {
+    for classic in [true, false] {
+        for kind in [Kind::Folder, Kind::Tab] {
+            let (mut v, window) = with_window(classic, kind);
+            assert!(v.button(window).is_some(), "classic={classic} {kind:?}: the button is drawn");
+            assert_eq!(v.st.folderstorm_open_slots(), 0, "classic={classic} {kind:?}: not slots");
+
+            let texts = v.click_button(false, window, egui::PointerButton::Primary);
+            assert_eq!(open_slots(&v.st), [1], "classic={classic} {kind:?}");
+            assert!(has(&texts, &slot_title(1)), "classic={classic} {kind:?}: Inventory 2 shows");
+            v.click_button(false, window, egui::PointerButton::Primary);
+            assert_eq!(open_slots(&v.st), [1, 2], "classic={classic} {kind:?}: the next one");
+            assert!(
+                v.st.windows.iter().any(|w| w.id == window && w.open),
+                "classic={classic} {kind:?}: the window stays open"
+            );
+
+            // a free slot is the next one, from this window too
+            v.st.folderstorm_close_slot(1);
+            v.settle(false);
+            v.click_button(false, window, egui::PointerButton::Primary);
+            assert_eq!(open_slots(&v.st), [1, 2], "classic={classic} {kind:?}: slot 1 again");
+        }
+    }
+}
+
+/// In quiet mode a folder or tab window shows its list alone, without the
+/// button, as the other windows do.
+#[test]
+fn quiet_folder_and_tab_windows_hide_the_button() {
+    use crate::ui::inventory::window_mode::{Key, Mode};
+    for classic in [true, false] {
+        for kind in [Kind::Folder, Kind::Tab] {
+            let (mut v, window) = with_window(classic, kind);
+            let key = Key::of_window(&v.st.windows[0]).expect("a key");
+            v.prefs.window_modes.set(
+                key,
+                Mode {
+                    pinned: false,
+                    quiet: true,
+                },
+            );
+            v.frames.ctx.data_mut(|d| d.remove::<egui::Rect>(button_rect_id(window)));
+            v.settle(false);
+            assert!(v.st.windows[0].state.window_mode.quiet, "classic={classic} {kind:?}: quiet");
+            assert!(v.button(window).is_none(), "classic={classic} {kind:?}: no button in quiet mode");
+        }
+    }
+}
+
+/// At 16 the button of a folder or tab window is greyed and opens nothing;
+/// its right-click menu still closes all the slots, and opens one.
+#[test]
+fn at_16_the_button_of_folder_and_tab_windows_is_greyed_its_menu_works() {
+    for classic in [true, false] {
+        for kind in [Kind::Folder, Kind::Tab] {
+            let (mut v, window) = with_window(classic, kind);
+            let ctx = v.frames.ctx.clone();
+            for _ in 0..MAX_SLOTS {
+                v.st.folderstorm_new_window(&ctx);
+            }
+            v.settle(false);
+            v.click_button(false, window, egui::PointerButton::Primary);
+            assert_eq!(v.st.windows.len(), 17, "classic={classic} {kind:?}: nothing opens");
+            assert!(v.st.notice.is_none(), "classic={classic} {kind:?}: a greyed button is not clicked");
+
+            let texts = v.click_button(false, window, egui::PointerButton::Secondary);
+            let close_all = texts
+                .iter()
+                .find(|t| t.source == aurora_i18n::tr!("inventory-windows-close-all"))
+                .unwrap_or_else(|| panic!("classic={classic} {kind:?}: the menu"))
+                .rect;
+            v.click_at(false, close_all.center(), egui::PointerButton::Primary);
+            v.settle(false);
+            assert_eq!(v.st.folderstorm_open_slots(), 0, "classic={classic} {kind:?}");
+            assert_eq!(v.st.windows.len(), 1, "classic={classic} {kind:?}: this window stays");
+            assert_eq!(v.st.windows[0].id, window);
+
+            let texts = v.click_button(false, window, egui::PointerButton::Secondary);
+            let new = texts
+                .iter()
+                .find(|t| t.source == aurora_i18n::tr!("inventory-windows-new"))
+                .unwrap_or_else(|| panic!("classic={classic} {kind:?}: the menu"))
+                .rect;
+            v.click_at(false, new.center(), egui::PointerButton::Primary);
+            v.settle(false);
+            assert_eq!(open_slots(&v.st), [1], "classic={classic} {kind:?}");
+        }
     }
 }
 
