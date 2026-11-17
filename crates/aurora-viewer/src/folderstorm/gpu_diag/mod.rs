@@ -303,7 +303,7 @@ pub fn reason(context: &Context, recent: &[Sample]) -> Reason {
 /// number format.
 fn gb(mb: u64) -> String {
     let tenths = (mb * 10 + 512) / 1024;
-    if tenths % 10 == 0 {
+    if tenths.is_multiple_of(10) {
         aurora_i18n::integer((tenths / 10) as i64)
     } else {
         aurora_i18n::number(tenths as f64 / 10.0, 1)
