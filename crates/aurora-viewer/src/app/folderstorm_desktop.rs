@@ -136,8 +136,9 @@ impl App {
                 }
                 Request::Settings => {
                     self.panels.settings = true;
-                    self.options_ui.open(ui::options::Page::Layout, 0);
-                    self.options_ui.reveal = Some((ui::options::Page::Layout, 0, aurora_i18n::tr!("fs-desktop-shortcuts")));
+                    let margins = ui::options::workspaces_tab::MARGINS;
+                    self.options_ui.open(ui::options::Page::Workspaces, margins);
+                    self.options_ui.reveal = Some((ui::options::Page::Workspaces, margins, aurora_i18n::tr!("fs-desktop-shortcuts")));
                 }
             }
         }

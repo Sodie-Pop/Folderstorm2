@@ -1216,8 +1216,15 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = Chargement des dossiers…
 inventory-move-loading-failed = Certains dossiers n’ont pas pu être chargés.
 inventory-move-confirm = Déplacer
-# Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs)
+# Folderstorm: Preferences › Local assistant (src/mcp_bridge.rs)
 fs-mcp-group = Assistant local
+fs-mcp-page-about = Permet à un assistant de cet ordinateur, comme Claude Code, Cursor ou Codex, d'utiliser le viewer par l'outil folderstorm-mcp, avec les permissions que vous choisissez.
+fs-mcp-access = Accès
+fs-mcp-access-note = Les autres programmes lancés sous votre compte peuvent aussi utiliser cet accès.
+fs-mcp-setup = Configuration
+fs-mcp-link-help = Ses réglages ont leur propre page, Assistant local, dans la section Système.
+fs-mcp-link-on = Activé
+fs-mcp-link-button = Réglages
 fs-mcp-intro = Permet à un assistant lancé sur cet ordinateur (Claude Code, Cursor, Codex…) de lire et de ranger votre inventaire et vos tenues, de déplacer la caméra et de prendre des photos, et de déplacer votre avatar, par l'intermédiaire de l'outil folderstorm-mcp. Les autres programmes lancés sous votre compte peuvent aussi utiliser cet accès.
 fs-mcp-allow = Autoriser l'accès d'un assistant local
 fs-mcp-allow-hint = Ouvre une connexion sur cet ordinateur uniquement (127.0.0.1), avec une nouvelle clé d'accès à chaque fois. Désactivé par défaut. L'option de ligne de commande --mcp-api l'active pour une session.
@@ -1955,7 +1962,7 @@ folderstorm-viewport-monitor = Écran { $n } ({ $width }×{ $height })
 folderstorm-viewport-no-monitors = Aucun écran trouvé sous la fenêtre.
 folderstorm-viewport-mouselook = Garder la zone en vue subjective
 folderstorm-viewport-mouselook-help = Désactivé, la vue subjective utilise toute la fenêtre.
-folderstorm-viewport-bars = Barres
+folderstorm-viewport-bars = Barres autour du monde
 folderstorm-viewport-bars-help = Où vont les barres du haut, du bas et des côtés. Dans le monde : par-dessus, comme avant. Autour du monde : chaque barre dans la marge à côté du monde quand cette marge a la place, dans le monde sinon. Sur toute la fenêtre : étendues sur la fenêtre, comme sans zone du monde.
 folderstorm-viewport-bars-inside = Dans le monde
 folderstorm-viewport-bars-around = Autour du monde
@@ -1971,7 +1978,7 @@ folderstorm-viewport-not-under = Cet écran n'est pas sous la fenêtre du viewer
 folderstorm-viewport-too-small = Une trop petite partie de cet écran est sous la fenêtre du viewer.
 folderstorm-viewport-set-aside = Ces marges laissent au monde moins d'un quart de la fenêtre : pour l'instant, le monde occupe toute la fenêtre.
 
-# Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
+# Folderstorm: layouts (folderstorm/workspaces, Preferences › Workspaces)
 fs-layouts-tab = Dispositions et espaces de travail
 fs-layouts-group = Dispositions enregistrées
 fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. L'appliquer ouvre les fenêtres qui étaient ouvertes à son enregistrement et n'en ferme aucune (fermer est l'affaire d'un espace de travail), et elle ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
@@ -2093,6 +2100,34 @@ fs-layouts-toggle-first = Première disposition
 fs-layouts-toggle-second = Seconde disposition
 fs-layouts-toggle-help = Les deux dispositions entre lesquelles passent le bouton de barre « Changer de disposition » et son raccourci, par exemple « 2 écrans » et « 1 écran » : la seconde quand la première est en service, la première sinon.
 fs-layouts-toggle-none = Non choisie
+fs-workspaces-page = Espaces de travail
+fs-workspaces-page-about = Enregistrer et changer de configuration : quelles fenêtres sont ouvertes, où elles vont, et la zone du monde.
+fs-workspaces-tab-saved = Enregistrés
+fs-workspaces-tab-margins = Marges
+fs-workspaces-tab-switching = Changement
+fs-saved-group = Configurations enregistrées
+fs-saved-intro = Un espace de travail ouvre les fenêtres d'une activité et ferme les autres ; une disposition met en place la fenêtre du viewer, le monde et les fenêtres, et un espace de travail peut en appliquer une.
+fs-saved-list = Espaces de travail et dispositions
+fs-saved-list-help = Cliquez sur une entrée pour la sélectionner : ses actions et ses réglages s'affichent dessous. Un double clic l'applique aussitôt. Les favoris viennent en premier, comme dans la fenêtre Dispositions et espaces de travail et dans Monde › Dispositions.
+fs-saved-empty = Rien d'enregistré pour l'instant. Ouvrez et placez les fenêtres voulues, puis enregistrez la configuration ci-dessous.
+fs-saved-save-group = Enregistrer la configuration actuelle
+fs-saved-save = Enregistrer la configuration actuelle
+fs-saved-save-help = Enregistre la configuration actuelle sous un nouveau nom : comme espace de travail (les fenêtres ouvertes maintenant) ou comme disposition (où sont les choses maintenant).
+fs-saved-keeps = Il garde :
+fs-workspaces-more-windows = Autres fenêtres ({ $count })
+fs-workspaces-more-inventories = Inventaire 2 à 17 ({ $ticked } sur { $count } ouvertes)
+fs-margins-off = Désactivée : les marges attendent qu'elle laisse de la place autour du monde
+fs-margins-off-help = Les marges n'existent que lorsque la zone du monde laisse de la place autour du monde (onglet Zone du monde). D'ici là, les réglages ci-dessous attendent.
+fs-margins-turn-on = Activer la zone du monde
+fs-switching-favorites-intro = Donnez son étoile à une entrée dans l'onglet Enregistrés : les favoris viennent en premier dans Monde › Dispositions et dans la fenêtre Dispositions et espaces de travail.
+fs-switching-toggle = Bouton de barre « Changer de disposition »
+fs-switching-toggle-intro = Passe d'une disposition à l'autre en un clic, par exemple 2 écrans et 1 écran.
+fs-switching-keys = Touches
+fs-switching-keys-help = Le bouton « Changer de disposition », la fenêtre Dispositions et espaces de travail et les dispositions favorites ont des raccourcis sans touche tant que vous ne leur en donnez pas, dans Raccourcis › Autres › Dispositions.
+fs-switching-keys-button = Choisir dans Raccourcis
+fs-switching-auto = Automatiquement
+fs-switching-back = Revenir en arrière
+fs-switching-back-help = Arrangement précédent annule la dernière disposition appliquée ; Déverrouiller la fenêtre du viewer lui rend sa bordure et son redimensionnement ; Réinitialiser les barres et le monde désactive la zone du monde. Aucune disposition n'est supprimée.
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
 fs-switcher-title = Dispositions et espaces de travail
@@ -2120,12 +2155,12 @@ fs-switcher-note-fitted = { $count ->
 fs-switcher-update = Mettre à jour « { $name } »
 fs-switcher-update-help = Enregistre l'arrangement actuel dans la disposition en service, pour les parties qu'elle contient. Demande d'abord.
 fs-switcher-save-new = Enregistrer une nouvelle…
-fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions et les espaces de travail, modifier la fenêtre du viewer d'une disposition ou les fenêtres d'un espace de travail, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Disposition › Dispositions et espaces de travail.
+fs-switcher-preferences-help = Renommer, supprimer et réordonner les dispositions et les espaces de travail, modifier la fenêtre du viewer d'une disposition ou les fenêtres d'un espace de travail, et choisir les deux dispositions du bouton « Changer de disposition », dans Préférences › Espaces de travail.
 fs-switcher-keys = Haut et Bas choisissent, Entrée applique et ferme, Échap ferme.
 fs-switcher-command = Dispositions et espaces de travail
 fs-switcher-toggle-command = Changer de disposition
 fs-switcher-toggle-to = Passer à la disposition « { $name } »
-fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions et espaces de travail (un clic l'ouvre).
+fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Espaces de travail › Changement (un clic l'ouvre).
 fs-keys-section = Dispositions
 fs-keys-layout-switcher = Fenêtre Dispositions et espaces de travail
 fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
@@ -2383,7 +2418,7 @@ fs-context-huds-stuck = { $count ->
 fs-context-take-off = Enlever les HUD de l'espace de travail précédent
 fs-context-take-off-help = Quand vous passez à un espace de travail qui a des HUD, ceux que l'espace de travail précédent a mis sont enlevés, sauf si le nouveau les porte aussi. Seulement les HUD mis par un espace de travail : un HUD que vous portiez déjà, ou que vous avez mis vous-même, n'est jamais enlevé ; RLVa peut en garder un. Arrangement précédent les remet. Désactivez pour ne faire qu'ajouter des HUD.
 
-# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
+# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Workspaces › Margins)
 fs-background-group = Fond autour du monde
 fs-background-intro = Affiché dans les marges que laisse la zone du monde, par exemple quand la fenêtre s'étend sur plusieurs écrans. Activez une zone du monde personnalisée ci-dessus pour le voir.
 fs-background-kind = Fond
@@ -2417,12 +2452,12 @@ fs-background-colour-help = Affichée seule, ou derrière et autour de l'image :
 fs-background-brightness = Luminosité
 fs-background-brightness-help = Assombrit l'image. La couleur reste telle que choisie.
 fs-background-layout = Fond
-fs-background-layout-help = Ce que montrent les marges tant que cette disposition est utilisée. Le fond par défaut se choisit dans Disposition › Barres et fenêtres.
+fs-background-layout-help = Ce que montrent les marges tant que cette disposition est utilisée. Le fond par défaut se choisit dans Espaces de travail › Marges.
 fs-background-layout-default = Fond par défaut
 fs-background-layout-own = Le sien
 fs-background-shows = Affiche
 
-# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Layout › Bars and windows)
+# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Workspaces › Margins)
 fs-desktop-group = Bureau dans les marges
 fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
@@ -2461,7 +2496,7 @@ fs-desktop-left-out =
         [one] Un élément laissé de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
        *[other] { $count } éléments laissés de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
     }
-fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Disposition › Barres et fenêtres).
+fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Espaces de travail › Marges).
 fs-desktop-added-hidden = Ils s'affichent quand la fenêtre laisse de la place autour du monde.
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
@@ -6514,7 +6549,7 @@ folderstorm-controller-off = Désactivé : rien n'écoute.
 folderstorm-controller-listening = Activé : à l'écoute sur 127.0.0.1:{ $port }, pour cet ordinateur seulement.
 folderstorm-controller-starting = Démarrage…
 folderstorm-controller-failed = Il n'a pas pu démarrer ({ $reason }). Désactivez-le puis réactivez-le pour réessayer.
-folderstorm-controller-separate = L'assistant local de chaque personnage (Préférences › Confidentialité › Assistant local de son viewer) reste tel quel : ceci n'accorde rien dans un viewer, et l'accès d'un viewer n'accorde rien ici. Personne n'est jamais connecté depuis ici.
+folderstorm-controller-separate = L'assistant local de chaque personnage (Préférences › Assistant local de son viewer) reste tel quel : ceci n'accorde rien dans un viewer, et l'accès d'un viewer n'accorde rien ici. Personne n'est jamais connecté depuis ici.
 folderstorm-controller-actions = Ce qu'il peut faire
 folderstorm-controller-actions-intro = Demander : l'hôte vous demande à chaque fois, dans une fenêtre à part. Autoriser : fait sans demander. Jamais : refusé.
 folderstorm-controller-class-activate = Activer des personnages

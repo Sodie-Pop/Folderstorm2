@@ -13,6 +13,7 @@ mod saved_graphics;
 mod scale;
 
 pub use pages::privacy;
+pub use pages::folderstorm_workspaces::tab as workspaces_tab; // Folderstorm
 pub(crate) use pages::sound::{ear_choice, noise_choice};
 pub(crate) use scale::keyboard as scale_keyboard;
 
@@ -60,6 +61,7 @@ pub enum Page {
     Protections,
     Rlva,
     Layout,
+    Workspaces, // Folderstorm: layouts and workspaces
     Appearance,
     Accessibility,
     Confirmations,
@@ -70,11 +72,12 @@ pub enum Page {
     Commands,
     System,
     Network,
+    LocalAssistant, // Folderstorm: local assistant
     Fun,
 }
 
 impl Page {
-    pub const ALL: [Page; 24] = [
+    pub const ALL: [Page; 26] = [ // Folderstorm: 2 pages
         Page::Aurora,
         Page::Graphics,
         Page::Camera,
@@ -88,6 +91,7 @@ impl Page {
         Page::Protections,
         Page::Rlva,
         Page::Layout,
+        Page::Workspaces, // Folderstorm
         Page::Appearance,
         Page::Accessibility,
         Page::Confirmations,
@@ -98,6 +102,7 @@ impl Page {
         Page::Commands,
         Page::System,
         Page::Network,
+        Page::LocalAssistant, // Folderstorm
         Page::Fun,
     ];
 
@@ -117,6 +122,7 @@ impl Page {
             Page::Protections => "protections",
             Page::Rlva => "rlva",
             Page::Layout => "layout",
+            Page::Workspaces => "workspaces", // Folderstorm
             Page::Appearance => "appearance",
             Page::Accessibility => "accessibility",
             Page::Confirmations => "confirmations",
@@ -127,6 +133,7 @@ impl Page {
             Page::Commands => "commands",
             Page::System => "system",
             Page::Network => "network",
+            Page::LocalAssistant => "local-assistant", // Folderstorm
             Page::Fun => "fun",
         }
     }
@@ -146,6 +153,7 @@ impl Page {
             Page::Protections => aurora_i18n::tr!("ui-options-protections"),
             Page::Rlva => aurora_i18n::tr!("ui-options-rlva"),
             Page::Layout => aurora_i18n::tr!("ui-options-layout"),
+            Page::Workspaces => aurora_i18n::tr!("fs-workspaces-page"), // Folderstorm
             Page::Appearance => aurora_i18n::tr!("ui-options-page-appearance"),
             Page::Accessibility => aurora_i18n::tr!("ui-options-accessibility"),
             Page::Confirmations => aurora_i18n::tr!("ui-options-page-confirmations"),
@@ -156,6 +164,7 @@ impl Page {
             Page::Commands => aurora_i18n::tr!("ui-options-commands"),
             Page::System => aurora_i18n::tr!("ui-options-page-system"),
             Page::Network => aurora_i18n::tr!("ui-options-network-and-cache"),
+            Page::LocalAssistant => aurora_i18n::tr!("fs-mcp-group"), // Folderstorm
             Page::Fun => aurora_i18n::tr!("ui-options-fun"),
         }
     }
@@ -176,6 +185,7 @@ impl Page {
             Page::Protections => aurora_i18n::tr!("ui-options-about-protections"),
             Page::Rlva => aurora_i18n::tr!("ui-options-about-rlva"),
             Page::Layout => aurora_i18n::tr!("ui-options-about-layout"),
+            Page::Workspaces => aurora_i18n::tr!("fs-workspaces-page-about"), // Folderstorm
             Page::Appearance => aurora_i18n::tr!("ui-options-about-appearance"),
             Page::Accessibility => aurora_i18n::tr!("ui-options-about-accessibility"),
             Page::Confirmations => aurora_i18n::tr!("ui-options-about-confirmations"),
@@ -186,6 +196,7 @@ impl Page {
             Page::Commands => aurora_i18n::tr!("ui-options-about-commands"),
             Page::System => aurora_i18n::tr!("ui-options-about-system"),
             Page::Network => aurora_i18n::tr!("ui-options-about-network"),
+            Page::LocalAssistant => aurora_i18n::tr!("fs-mcp-page-about"), // Folderstorm
             Page::Fun => aurora_i18n::tr!("ui-options-about-fun"),
         }
     }
@@ -206,6 +217,7 @@ impl Page {
             Page::Protections => "shield-filled",
             Page::Rlva => "lock-square-rounded-filled",
             Page::Layout => "layout-filled",
+            Page::Workspaces => "app-window-filled", // Folderstorm: as in World › Layouts
             Page::Appearance => "palette-filled",
             Page::Accessibility => "accessible-filled",
             Page::Confirmations => "circle-check-filled",
@@ -216,6 +228,7 @@ impl Page {
             Page::Commands => "square-rounded-chevron-right-filled",
             Page::System => "world-filled",
             Page::Network => "cloud-data-connection-filled",
+            Page::LocalAssistant => "plug-connected", // Folderstorm: no filled version
             Page::Fun => "confetti-filled",
         }
     }
@@ -309,7 +322,7 @@ pub fn demo(st: &mut OptionsUi, value: &str) {
         "auto-accept" => row(Page::Inventory, 0, tr!("received-auto-accept")),
         "animations" | "animations-sync" => row(Page::Aurora, 2, tr!("ui-options-aurora-animation-clock")),
         "remove-aurora" => row(Page::System, 0, tr!("ui-options-remove-aurora")),
-        "local-assistant" => row(Page::Privacy, 0, tr!("fs-mcp-allow")), // Folderstorm
+        "local-assistant" => row(Page::LocalAssistant, 0, tr!("fs-mcp-allow")), // Folderstorm
         "alerts" => row(Page::Confirmations, 0, tr!("ui-options-driver-warning")),
         _ => None,
     };

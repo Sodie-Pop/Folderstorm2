@@ -1,33 +1,38 @@
-//! Folderstorm: Preferences › Layout › Layouts & workspaces
-//! (`crate::folderstorm::workspaces`, FEATURES.md row 1.3). Folderstorm (C++)
-//! saved its bar placement as named profiles under Move & View › Layout:
-//! apply, rename, delete, Reset.
+//! Folderstorm: Preferences › Workspaces (`crate::folderstorm::workspaces`,
+//! FEATURES.md rows 1.3, 1.4, 1.8 and 1.10), a page of the Interface
+//! section after Layout. Folderstorm (C++) had its layouts under Move &
+//! View › Layout and its workspaces under Move & View › Workspaces.
 //!
-//! The list of saved layouts, the actions on the selected one (Apply,
-//! Update, Rename, Delete, Move up and down) and its viewer window (mode,
-//! monitors, lock), *Save as a new layout* with its parts, *Previous
-//! arrangement*, *Unlock the viewer window*, *When the monitors change*
-//! and *Reset bars and world*; a layout's star, and the two layouts of the
-//! toolbar's toggle (*Quick switch*). Like the rest of Preferences, everything
-//! applies at once; Update and Delete ask first, in the page. The rows
-//! edit no tracked setting: "Reset this page" never deletes a layout.
-//! The workspaces' groups are in [`workspaces_group`].
+//! Four tabs, in the order of use: *Saved* ([`saved`]: the layouts and the
+//! workspaces in one list, the selected entry's editor, the save form),
+//! *World viewport* and *Margins* (`super::folderstorm_viewport`: the live
+//! arrangement a layout saves, and what the margins show), *Switching*
+//! ([`switching`]: the standing preferences, and the ways back). Like the
+//! rest of Preferences, everything applies at once; Update and Delete ask
+//! first, in the page. The saved entries are not settings of a row:
+//! "Reset Workspaces" never deletes one.
 
-mod workspaces_group;
+mod saved;
+mod switching;
+mod workspace_editor;
 
-use super::super::cx::{Cx, Nothing};
-use super::folderstorm_search::words;
-use crate::folderstorm::workspaces::apply::{self, Live, Parts};
+use super::super::cx::Cx;
 use crate::folderstorm::workspaces::monitors;
-use crate::folderstorm::workspaces::store::{Layout, MAX_NAME, Monitor, MonitorPolicy, Record, Store, StoreError, Unusable, WindowFrame};
-use crate::folderstorm::workspaces::words::{self, refusal, report_text};
-use crate::settings::Settings;
+use crate::folderstorm::workspaces::store::{Layout, Monitor, WindowFrame};
 use crate::theme::Palette;
-use crate::ui::widgets::{self, ActionKind};
+use crate::ui::widgets;
 use aurora_i18n::tr;
 use egui::{Sense, Vec2, pos2, vec2};
 
-/// The embedded Tabler icons this tab uses.
+/// The page's tabs, for the other windows that open it on one.
+pub mod tab {
+    pub const SAVED: usize = 0;
+    pub const VIEWPORT: usize = 1;
+    pub const MARGINS: usize = 2;
+    pub const SWITCHING: usize = 3;
+}
+
+/// The embedded Tabler icons of the page.
 const ICON_CHECK: &str = "check";
 const ICON_SAVE: &str = "device-floppy-filled";
 const ICON_RENAME: &str = "pencil-filled";
@@ -40,220 +45,41 @@ const ICON_DOWN: &str = "arrow-down";
 const ICON_LOCK: &str = "lock-filled";
 const ICON_UNLOCK: &str = "lock-open";
 const ICON_STAR: &str = "star-filled";
+/// A layout's and a workspace's, as World › Layouts and the switcher have them.
+const ICON_LAYOUT: &str = "layout-filled";
+const ICON_WORKSPACE: &str = "app-window-filled";
 
 const ROW_H: f32 = 28.0;
 const BUTTON_H: f32 = 26.0;
-const LIST_W: f32 = 560.0;
+const LIST_W: f32 = 640.0;
 /// The width of a list of layouts to pick from.
 const PICKER_W: f32 = 220.0;
+
+/// The names of the tabs.
+pub(in crate::ui::options) fn tabs() -> Vec<&'static str> {
+    vec![
+        tr!("fs-workspaces-tab-saved"),
+        tr!("folderstorm-viewport"),
+        tr!("fs-workspaces-tab-margins"),
+        tr!("fs-workspaces-tab-switching"),
+    ]
+}
+
+/// The rows of a tab.
+pub(in crate::ui::options) fn page(cx: &mut Cx, tab: usize) {
+    match tab {
+        tab::SAVED => saved::page(cx),
+        tab::VIEWPORT => super::folderstorm_viewport::group(cx),
+        tab::MARGINS => super::folderstorm_viewport::margins(cx),
+        _ => switching::page(cx),
+    }
+}
 
 /// A question asked in the page before a change that loses something.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Ask {
     Update,
     Delete,
-}
-
-/// What was last refused, to say why under the field it came from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Refused {
-    Save(StoreError),
-    Rename(StoreError),
-    Selected(StoreError),
-}
-
-/// The tab's own state, for the session (egui's temporary data).
-#[derive(Clone, Debug, Default)]
-struct Tab {
-    /// The entry selected in the list.
-    selected: Option<usize>,
-    /// The name typed for a new layout, and its parts.
-    new_name: String,
-    parts: Parts,
-    /// The name being typed for the selected layout.
-    rename: Option<String>,
-    ask: Option<Ask>,
-    refused: Option<Refused>,
-    /// *Previous arrangement* was the last thing done here.
-    went_back: bool,
-}
-
-fn tab_id() -> egui::Id {
-    egui::Id::unique("folderstorm_layouts_tab")
-}
-
-fn load(ctx: &egui::Context) -> Tab {
-    ctx.data(|d| d.get_temp::<Tab>(tab_id())).unwrap_or_default()
-}
-
-fn store(ctx: &egui::Context, tab: Tab) {
-    ctx.data_mut(|d| d.insert_temp(tab_id(), tab));
-}
-
-pub(in crate::ui::options) fn page(cx: &mut Cx) {
-    let p = cx.p;
-    cx.group(tr!("fs-layouts-group"), |cx| {
-        cx.note(tr!("fs-layouts-intro"));
-        // (the search words of Folderstorm (C++): "dual monitor", "layout")
-        words(cx, &["fs-search-layouts", "fs-search-layouts-list", "fs-search-layouts-background"])
-            .section_body()
-            .row(tr!("fs-layouts-list"), tr!("fs-layouts-list-help"), &Nothing, |ui, s| {
-                list(ui, &p, s)
-            });
-    });
-    cx.group(tr!("fs-layouts-save-group"), |cx| {
-        words(cx, &["fs-search-layouts", "fs-search-layouts-save"]).section_body().row(
-            tr!("fs-layouts-save-new"),
-            tr!("fs-layouts-save-new-help"),
-            &Nothing,
-            |ui, s| save_new(ui, &p, s),
-        );
-    });
-    cx.group(tr!("fs-layouts-arrangement"), |cx| {
-        words(cx, &["fs-search-layouts", "fs-search-layouts-previous"]).row(
-            tr!("fs-layouts-previous"),
-            tr!("fs-layouts-previous-help"),
-            &Nothing,
-            |ui, s| {
-                let enabled = apply::has_previous(ui.ctx());
-                let clicked = widgets::action_button_if(
-                    ui,
-                    &p,
-                    ICON_BACK,
-                    tr!("fs-layouts-previous-button"),
-                    ActionKind::Flat,
-                    vec2(0.0, BUTTON_H),
-                    enabled,
-                )
-                .clicked();
-                if !clicked || !apply::previous(ui.ctx(), &mut Live::of(s)) {
-                    return false;
-                }
-                let mut tab = load(ui.ctx());
-                tab.went_back = true;
-                tab.selected = active_index(&s.folderstorm_workspaces).or(tab.selected);
-                store(ui.ctx(), tab);
-                true
-            },
-        );
-        words(cx, &["fs-search-layouts", "fs-search-layouts-lock"]).row(
-            tr!("fs-layouts-unlock"),
-            tr!("fs-layouts-unlock-help"),
-            &Nothing,
-            |ui, s| {
-                let held = s.folderstorm_workspaces.window_held;
-                let clicked = widgets::action_button_if(
-                    ui,
-                    &p,
-                    ICON_UNLOCK,
-                    tr!("fs-layouts-unlock-button"),
-                    ActionKind::Flat,
-                    vec2(0.0, BUTTON_H),
-                    held,
-                )
-                .clicked();
-                clicked && apply::unlock(&mut s.folderstorm_workspaces)
-            },
-        );
-        let policies = [
-            (MonitorPolicy::Ask, tr!("fs-layouts-monitors-ask"), false),
-            (MonitorPolicy::Apply, tr!("fs-layouts-monitors-apply"), false),
-            (MonitorPolicy::Nothing, tr!("fs-layouts-monitors-nothing"), false),
-        ];
-        words(cx, &["fs-search-layouts", "fs-search-layouts-monitors"]).wide().row(
-            tr!("fs-layouts-monitors"),
-            tr!("fs-layouts-monitors-help"),
-            &Nothing,
-            |ui, s| super::super::segmented(ui, &p, &mut s.folderstorm_workspaces.on_monitor_change, &policies),
-        );
-        words(cx, &["fs-search-layouts", "fs-search-layouts-reset"]).row(
-            tr!("fs-layouts-reset"),
-            tr!("fs-layouts-reset-help"),
-            &Nothing,
-            |ui, s| {
-                let enabled = s.folderstorm_viewport != Default::default();
-                let clicked = widgets::action_button_if(
-                    ui,
-                    &p,
-                    ICON_RESET,
-                    tr!("fs-layouts-reset-button"),
-                    ActionKind::Flat,
-                    vec2(0.0, BUTTON_H),
-                    enabled,
-                )
-                .clicked();
-                clicked && apply::reset_world(ui.ctx(), &mut Live::of(s))
-            },
-        );
-    });
-    workspaces_group::groups(cx);
-    cx.group(tr!("fs-layouts-quick"), |cx| {
-        cx.note(tr!("fs-layouts-quick-intro"));
-        for (place, label) in [(0, tr!("fs-layouts-toggle-first")), (1, tr!("fs-layouts-toggle-second"))] {
-            words(cx, &["fs-search-layouts", "fs-search-layouts-quick"])
-                .row(label, tr!("fs-layouts-toggle-help"), &Nothing, |ui, s| toggle_picker(ui, s, place));
-        }
-        // (Folderstorm (C++): "Show workspace favorites strip", off until chosen)
-        cx.keywords("layout workspace favorite favorites strip row bar pills landmark star quick switch")
-            .row(tr!("fs-strip-show"), tr!("fs-strip-show-help"), &Nothing, |ui, s| {
-                super::super::toggle(ui, &p, &mut s.folderstorm_workspaces.strip)
-            });
-    });
-}
-
-/// One of the two layouts of the toolbar's toggle: a list of the usable
-/// layouts, and "not chosen". True when the choice changed.
-fn toggle_picker(ui: &mut egui::Ui, s: &mut Settings, place: usize) -> bool {
-    let store = &mut s.folderstorm_workspaces;
-    let mut choices: Vec<(Option<usize>, &str)> = vec![(None, tr!("fs-layouts-toggle-none"))];
-    choices.extend(
-        store
-            .layouts
-            .iter()
-            .enumerate()
-            .filter_map(|(index, record)| Some((Some(index), record.layout()?.name.as_str()))),
-    );
-    let chosen = store.toggle[place]
-        .as_deref()
-        .and_then(|name| store.find(name))
-        .map(|(index, _)| index);
-    let mut pick = chosen;
-    let shown = choices.iter().find(|(value, _)| *value == chosen).map_or("", |(_, label)| *label);
-    // (two lists in one group: each its own id)
-    egui::ComboBox::from_id_salt(("folderstorm-layouts-toggle", place))
-        .width(PICKER_W)
-        .selected_text(shown)
-        .truncate()
-        .show_ui(ui, |ui| {
-            for (value, label) in &choices {
-                ui.selectable_value(&mut pick, *value, *label);
-            }
-        });
-    if pick == chosen {
-        return false;
-    }
-    let name = pick.and_then(|index| store.layout(index)).map(|layout| layout.name.clone());
-    store.set_toggle(place, name.as_deref())
-}
-
-fn rename_id() -> egui::Id {
-    egui::Id::unique("folderstorm_layouts_rename")
-}
-
-/// The rename field takes the keyboard with the whole name selected, so
-/// that typing replaces it.
-fn start_rename(ctx: &egui::Context, name: &str) {
-    use egui::text::{CCursor, CCursorRange};
-    let id = rename_id();
-    let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
-    let all = CCursorRange::two(CCursor::new(0), CCursor::new(name.chars().count()));
-    state.cursor.set_char_range(Some(all));
-    state.store(ctx, id);
-    ctx.memory_mut(|m| m.request_focus(id));
-}
-
-fn active_index(store: &Store) -> Option<usize> {
-    (0..store.layouts.len()).find(|index| store.is_active(*index))
 }
 
 fn muted(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
@@ -264,22 +90,36 @@ fn warning(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
     ui.add(egui::Label::new(egui::RichText::new(text).size(11.5).color(p.danger)).wrap());
 }
 
-/// One line of the list: the mark of the layout in use, the name, a note
-/// at the right ("In use", "Modified", why it cannot be used).
-#[allow(clippy::too_many_arguments)]
-fn entry(
-    ui: &mut egui::Ui,
-    p: &Palette,
-    name: &str,
+/// What a line of the list shows.
+struct Line<'a> {
+    /// The kind's icon.
+    icon: &'static str,
+    name: &'a str,
     selected: bool,
     active: bool,
     usable: bool,
     locked: bool,
     favorite: bool,
-    note: &str,
-) -> egui::Response {
+    /// At the right: "In use", "Modified", why it cannot be used.
+    note: &'a str,
+}
+
+fn paint_icon(ui: &egui::Ui, name: &str, center: egui::Pos2, side: f32, tint: egui::Color32) {
+    if let Some(icon) = crate::ui::icons::global(name) {
+        ui.painter().image(
+            icon.id(),
+            egui::Rect::from_center_size(center, Vec2::splat(side)),
+            egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            tint,
+        );
+    }
+}
+
+/// One line of the list: the kind's icon (teal for the one in use), the
+/// name, its star and lock, a note at the right.
+fn entry(ui: &mut egui::Ui, p: &Palette, line: &Line) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
-    let fill = if selected {
+    let fill = if line.selected {
         p.violet.gamma_multiply(0.35)
     } else if response.hovered() {
         p.raised
@@ -287,345 +127,51 @@ fn entry(
         p.field
     };
     ui.painter().rect_filled(rect, widgets::inner_radius(ui.visuals()), fill);
-    if active && let Some(icon) = crate::ui::icons::global(ICON_CHECK) {
-        ui.painter().image(
-            icon.id(),
-            egui::Rect::from_center_size(pos2(rect.left() + 16.0, rect.center().y), Vec2::splat(14.0)),
-            egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-            p.teal,
-        );
-    }
-    let note_ink = if usable { p.muted } else { p.danger };
+    let icon_ink = if line.active { p.teal } else { p.muted };
+    paint_icon(ui, line.icon, pos2(rect.left() + 16.0, rect.center().y), 14.0, icon_ink);
+    let note_ink = match (line.usable, line.active) {
+        (false, _) => p.danger,
+        (true, true) => p.teal,
+        (true, false) => p.muted,
+    };
     let note_galley = ui
         .painter()
-        .layout_no_wrap(note.to_owned(), egui::FontId::proportional(11.5), note_ink);
-    let mut note_w = if note.is_empty() { 0.0 } else { note_galley.size().x + 12.0 };
+        .layout_no_wrap(line.note.to_owned(), egui::FontId::proportional(11.5), note_ink);
+    let mut note_w = if line.note.is_empty() { 0.0 } else { note_galley.size().x + 12.0 };
     // a layout that locks the viewer window: a lock before its note
-    if locked && let Some(icon) = crate::ui::icons::global(ICON_LOCK) {
+    if line.locked {
         note_w += 20.0;
-        ui.painter().image(
-            icon.id(),
-            egui::Rect::from_center_size(pos2(rect.right() - note_w, rect.center().y), Vec2::splat(13.0)),
-            egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-            p.muted,
-        );
+        paint_icon(ui, ICON_LOCK, pos2(rect.right() - note_w, rect.center().y), 13.0, p.muted);
         note_w += 8.0;
     }
     // a favorite: its star, before the lock and the note
-    if favorite && let Some(icon) = crate::ui::icons::global(ICON_STAR) {
+    if line.favorite {
         note_w += 20.0;
-        ui.painter().image(
-            icon.id(),
-            egui::Rect::from_center_size(pos2(rect.right() - note_w, rect.center().y), Vec2::splat(13.0)),
-            egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-            p.warn,
-        );
+        paint_icon(ui, ICON_STAR, pos2(rect.right() - note_w, rect.center().y), 13.0, p.warn);
         note_w += 8.0;
     }
     let name_left = rect.left() + 30.0;
-    let ink = if usable { p.ink } else { p.muted };
+    let ink = if line.usable { p.ink } else { p.muted };
     widgets::paint_elided(
         ui,
-        name,
+        line.name,
         pos2(name_left, rect.center().y),
         (rect.right() - 10.0 - note_w - name_left).max(1.0),
         egui::FontId::proportional(13.0),
         ink,
     );
-    if !note.is_empty() {
+    if !line.note.is_empty() {
         let at = pos2(
             rect.right() - 10.0 - note_galley.size().x,
             rect.center().y - note_galley.size().y / 2.0,
         );
         ui.painter().galley(at, note_galley, note_ink);
     }
-    let lock = if locked { tr!("fs-layouts-locked") } else { "" };
-    let star = if favorite { tr!("fs-layouts-favorite") } else { "" };
+    let lock = if line.locked { tr!("fs-layouts-locked") } else { "" };
+    let star = if line.favorite { tr!("fs-layouts-favorite") } else { "" };
+    let (name, note, selected) = (line.name, line.note, line.selected);
     response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, format!("{name} {star} {lock} {note}")));
     response
-}
-
-/// The note at the right of a layout's line.
-fn note(store: &Store, world: &crate::folderstorm::viewport::ViewportSettings, index: usize, record: &Record) -> &'static str {
-    match record {
-        Record::Kept(kept) => match kept.why {
-            Unusable::Newer => tr!("fs-layouts-newer"),
-            Unusable::Invalid => tr!("fs-layouts-invalid"),
-        },
-        Record::Layout(_) if !store.is_active(index) => "",
-        Record::Layout(_) if apply::modified(store, world) => tr!("fs-layouts-modified"),
-        Record::Layout(_) => tr!("fs-layouts-active"),
-    }
-}
-
-/// The list and the selected layout's actions. True when the settings
-/// changed.
-fn list(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
-    let ctx = ui.ctx().clone();
-    let mut tab = load(&ctx);
-    let before = tab.clone();
-    let count = s.folderstorm_workspaces.layouts.len();
-    if tab.selected.is_some_and(|index| index >= count) {
-        tab.selected = None;
-    }
-    if tab.selected.is_none() {
-        tab.selected = active_index(&s.folderstorm_workspaces);
-        tab.rename = None;
-        tab.ask = None;
-    }
-    let mut changed = false;
-    ui.vertical(|ui| {
-        ui.set_width(ui.available_width().min(LIST_W));
-        ui.spacing_mut().item_spacing.y = 4.0;
-        if count == 0 {
-            muted(ui, p, tr!("fs-layouts-empty"));
-        }
-        for index in 0..count {
-            let store = &s.folderstorm_workspaces;
-            let record = &store.layouts[index];
-            let name = record.name().unwrap_or(tr!("fs-layouts-unnamed"));
-            let selected = tab.selected == Some(index);
-            let line = entry(
-                ui,
-                p,
-                name,
-                selected,
-                store.is_active(index),
-                record.layout().is_some(),
-                record
-                    .layout()
-                    .and_then(|layout| layout.window.as_ref())
-                    .is_some_and(WindowFrame::locked),
-                record.layout().is_some_and(|layout| store.is_favorite(&layout.name)),
-                note(store, &s.folderstorm_viewport, index, record),
-            );
-            if line.clicked() && !selected {
-                tab.selected = Some(index);
-                tab.rename = None;
-                tab.ask = None;
-                tab.refused = None;
-            }
-            // a double click applies, as Enter will in the switcher
-            if line.double_clicked() && record.layout().is_some() {
-                changed |= do_apply(&ctx, s, &mut tab, index);
-            }
-        }
-        if let Some(index) = tab.selected {
-            ui.add_space(4.0);
-            changed |= selected_actions(ui, p, s, &mut tab, index);
-        }
-        let waiting = s.folderstorm_workspaces.pending.len();
-        if tab.went_back {
-            muted(ui, p, tr!("fs-layouts-previous-done"));
-        } else if let Some(report) = apply::report(&ctx).filter(|report| report.workspace.is_none()) {
-            // (a workspace's is said under the workspaces)
-            muted(ui, p, report_text(&report, waiting));
-        }
-    });
-    if tab_differs(&tab, &before) {
-        store(&ctx, tab);
-    }
-    changed
-}
-
-fn tab_differs(a: &Tab, b: &Tab) -> bool {
-    a.selected != b.selected
-        || a.new_name != b.new_name
-        || a.parts != b.parts
-        || a.rename != b.rename
-        || a.ask != b.ask
-        || a.refused != b.refused
-        || a.went_back != b.went_back
-}
-
-fn do_apply(ctx: &egui::Context, s: &mut Settings, tab: &mut Tab, index: usize) -> bool {
-    tab.ask = None;
-    tab.rename = None;
-    tab.went_back = false;
-    match apply::apply(ctx, &mut Live::of(s), index) {
-        Ok(_) => {
-            tab.refused = None;
-            true
-        }
-        Err(error) => {
-            tab.refused = Some(Refused::Selected(error));
-            false
-        }
-    }
-}
-
-/// Under the list: what the selected entry holds and what can be done with
-/// it. True when the settings changed.
-fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut Tab, index: usize) -> bool {
-    let ctx = ui.ctx().clone();
-    let Some(record) = s.folderstorm_workspaces.layouts.get(index).cloned() else {
-        return false;
-    };
-    let name = record.name().unwrap_or(tr!("fs-layouts-unnamed")).to_owned();
-    let usable = record.layout().is_some();
-    let count = s.folderstorm_workspaces.layouts.len();
-    let mut changed = false;
-    match &record {
-        Record::Layout(layout) => muted(ui, p, words::holds(layout)),
-        Record::Kept(kept) => muted(
-            ui,
-            p,
-            match kept.why {
-                Unusable::Newer => tr!("fs-layouts-newer-help"),
-                Unusable::Invalid => tr!("fs-layouts-invalid-help"),
-            },
-        ),
-    }
-    // a name being typed, a question being asked, or the buttons
-    if let Some(typed) = tab.rename.as_mut() {
-        let mut done = None;
-        ui.horizontal(|ui| {
-            let field = ui.add(
-                egui::TextEdit::singleline(typed)
-                    .id(rename_id())
-                    .desired_width(240.0)
-                    .char_limit(MAX_NAME * 2),
-            );
-            let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if widgets::action_button(
-                ui,
-                p,
-                ICON_CHECK,
-                tr!("fs-layouts-rename"),
-                ActionKind::Primary,
-                vec2(0.0, BUTTON_H),
-            )
-            .clicked()
-                || enter
-            {
-                done = Some(true);
-            }
-            if widgets::action_button(ui, p, ICON_CANCEL, tr!("common-cancel"), ActionKind::Flat, vec2(0.0, BUTTON_H)).clicked() {
-                done = Some(false);
-            }
-        });
-        match done {
-            Some(true) => match s.folderstorm_workspaces.rename(index, typed) {
-                Ok(()) => {
-                    tab.rename = None;
-                    tab.refused = None;
-                    changed = true;
-                }
-                Err(error) => tab.refused = Some(Refused::Rename(error)),
-            },
-            Some(false) => {
-                tab.rename = None;
-                tab.refused = None;
-            }
-            None => {}
-        }
-    } else if let Some(ask) = tab.ask {
-        let (question, icon, label, kind) = match ask {
-            Ask::Update => (
-                tr!("fs-layouts-ask-update", name = name.as_str()),
-                ICON_SAVE,
-                tr!("fs-layouts-update"),
-                ActionKind::Primary,
-            ),
-            Ask::Delete => (
-                tr!("fs-layouts-ask-delete", name = name.as_str()),
-                ICON_DELETE,
-                tr!("common-delete"),
-                ActionKind::Danger,
-            ),
-        };
-        ui.add(egui::Label::new(egui::RichText::new(question).size(12.5).color(p.ink)).wrap());
-        let mut answer = None;
-        ui.horizontal(|ui| {
-            if widgets::action_button(ui, p, icon, label, kind, vec2(0.0, BUTTON_H)).clicked() {
-                answer = Some(true);
-            }
-            if widgets::action_button(ui, p, ICON_CANCEL, tr!("common-cancel"), ActionKind::Flat, vec2(0.0, BUTTON_H)).clicked() {
-                answer = Some(false);
-            }
-        });
-        if let Some(yes) = answer {
-            tab.ask = None;
-            if yes {
-                tab.went_back = false;
-                match ask {
-                    Ask::Update => match apply::update(&ctx, &mut Live::of(s), index) {
-                        Ok(()) => {
-                            tab.refused = None;
-                            changed = true;
-                        }
-                        Err(error) => tab.refused = Some(Refused::Selected(error)),
-                    },
-                    Ask::Delete => {
-                        changed |= s.folderstorm_workspaces.remove(index);
-                        tab.selected = None;
-                        tab.refused = None;
-                    }
-                }
-            }
-        }
-    } else {
-        ui.horizontal_wrapped(|ui| {
-            let size = vec2(0.0, BUTTON_H);
-            if widgets::action_button_if(ui, p, ICON_CHECK, tr!("fs-layouts-apply"), ActionKind::Primary, size, usable).clicked() {
-                changed |= do_apply(&ctx, s, tab, index);
-            }
-            if widgets::action_button_if(ui, p, ICON_SAVE, tr!("fs-layouts-update"), ActionKind::Flat, size, usable).clicked() {
-                tab.ask = Some(Ask::Update);
-            }
-            if widgets::action_button_if(ui, p, ICON_RENAME, tr!("fs-layouts-rename"), ActionKind::Flat, size, usable).clicked() {
-                start_rename(&ctx, &name);
-                tab.rename = Some(name.clone());
-            }
-            if widgets::action_button(ui, p, ICON_DELETE, tr!("common-delete"), ActionKind::FlatDanger, size).clicked() {
-                tab.ask = Some(Ask::Delete);
-            }
-            if widgets::icon_button(ui, p, ICON_UP, tr!("fs-layouts-move-up"), index > 0)
-                && let Some(to) = s.folderstorm_workspaces.shift(index, true)
-            {
-                tab.selected = Some(to);
-                changed = true;
-            }
-            if widgets::icon_button(ui, p, ICON_DOWN, tr!("fs-layouts-move-down"), index + 1 < count)
-                && let Some(to) = s.folderstorm_workspaces.shift(index, false)
-            {
-                tab.selected = Some(to);
-                changed = true;
-            }
-            // a favorite: first in the switcher, in World › Layouts, and in
-            // the keyboard's round
-            let favorite = usable && s.folderstorm_workspaces.is_favorite(&name);
-            let star_tip = match favorite {
-                true => tr!("fs-switcher-unstar"),
-                false => tr!("fs-switcher-star"),
-            };
-            if usable && widgets::icon_toggle(ui, p, ICON_STAR, star_tip, favorite) {
-                changed |= s.folderstorm_workspaces.set_favorite(&name, !favorite);
-            }
-        });
-    }
-    if let Some(Refused::Rename(error) | Refused::Selected(error)) = tab.refused {
-        warning(ui, p, refusal(error));
-    }
-    if tab.rename.is_none()
-        && tab.ask.is_none()
-        && let Some(layout) = record.layout()
-        && let Some(frame) = &layout.window
-        && let Some(edited) = window_editor(ui, p, layout, frame, apply::viewer_window(&ctx))
-    {
-        match apply::set_window(&mut s.folderstorm_workspaces, index, edited) {
-            Ok(()) => {
-                tab.refused = None;
-                changed = true;
-            }
-            Err(error) => tab.refused = Some(Refused::Selected(error)),
-        }
-    }
-    // its own background, or the default (row 1.8)
-    if tab.rename.is_none() && tab.ask.is_none() && usable {
-        changed |= super::folderstorm_viewport::background::layout_part(ui, p, s, index);
-    }
-    changed
 }
 
 /// The three modes of a viewer window.
@@ -792,72 +338,6 @@ fn window_editor(ui: &mut egui::Ui, p: &Palette, layout: &Layout, frame: &Window
         }
     }
     edited
-}
-
-/// *Save as a new layout*: a name, the parts, Save. True when the settings
-/// changed.
-fn save_new(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
-    let ctx = ui.ctx().clone();
-    let mut tab = load(&ctx);
-    let before = tab.clone();
-    let mut changed = false;
-    ui.vertical(|ui| {
-        ui.set_width(ui.available_width().min(LIST_W));
-        muted(ui, p, tr!("fs-layouts-save-new-help"));
-        let mut save = false;
-        ui.horizontal(|ui| {
-            let field = ui.add(
-                egui::TextEdit::singleline(&mut tab.new_name)
-                    .desired_width(240.0)
-                    .char_limit(MAX_NAME * 2)
-                    .hint_text(tr!("fs-layouts-name-hint")),
-            );
-            save |= field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            save |= widgets::action_button(ui, p, ICON_SAVE, tr!("fs-layouts-save"), ActionKind::Primary, vec2(0.0, BUTTON_H)).clicked();
-        });
-        // (no viewer window to read under a forced size or a capture)
-        let readable = apply::has_viewer_window(&ctx);
-        ui.horizontal_wrapped(|ui| {
-            ui.add_enabled_ui(readable, |ui| {
-                let mut window = tab.parts.window && readable;
-                if widgets::checkbox(ui, p, &mut window, tr!("fs-layouts-part-window")).changed() {
-                    tab.parts.window = window;
-                }
-            });
-            widgets::checkbox(ui, p, &mut tab.parts.world, tr!("fs-layouts-part-world"));
-            widgets::checkbox(ui, p, &mut tab.parts.windows, tr!("fs-layouts-part-windows"));
-        });
-        let with_window = tab.parts.window && readable;
-        ui.add_enabled_ui(with_window, |ui| {
-            let mut lock = tab.parts.lock && with_window;
-            if widgets::checkbox(ui, p, &mut lock, tr!("fs-layouts-lock")).changed() {
-                tab.parts.lock = lock;
-            }
-        });
-        if !with_window && !tab.parts.world && !tab.parts.windows {
-            warning(ui, p, tr!("fs-layouts-error-parts"));
-        } else if save {
-            match apply::save_new(&ctx, &mut Live::of(s), &tab.new_name, tab.parts) {
-                Ok(index) => {
-                    tab.new_name.clear();
-                    tab.selected = Some(index);
-                    tab.rename = None;
-                    tab.ask = None;
-                    tab.refused = None;
-                    tab.went_back = false;
-                    changed = true;
-                }
-                Err(error) => tab.refused = Some(Refused::Save(error)),
-            }
-        }
-        if let Some(Refused::Save(error)) = tab.refused {
-            warning(ui, p, refusal(error));
-        }
-    });
-    if tab_differs(&tab, &before) {
-        store(&ctx, tab);
-    }
-    changed
 }
 
 #[cfg(test)]

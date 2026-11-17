@@ -1204,8 +1204,15 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = フォルダを読み込んでいます…
 inventory-move-loading-failed = 一部のフォルダを読み込めませんでした。
 inventory-move-confirm = 移動
-# Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs)
+# Folderstorm: Preferences › Local assistant (src/mcp_bridge.rs)
 fs-mcp-group = ローカルアシスタント
+fs-mcp-page-about = Claude Code、Cursor、Codex など、このコンピュータで動作するアシスタントが folderstorm-mcp ヘルパーを通じて、選んだ権限の範囲でビューアを使えるようにします。
+fs-mcp-access = アクセス
+fs-mcp-access-note = 同じアカウントで動作する他のプログラムもこのアクセスを使用できます。
+fs-mcp-setup = セットアップ
+fs-mcp-link-help = 設定は「システム」セクションの専用ページ「ローカルアシスタント」にあります。
+fs-mcp-link-on = オン
+fs-mcp-link-button = 設定
 fs-mcp-intro = このコンピュータで動作するアシスタント（Claude Code、Cursor、Codex など）が、folderstorm-mcp ヘルパーを通じてインベントリとアウトフィットを読み取り・整理し、カメラを動かして写真を撮り、アバターを移動できるようにします。同じアカウントで動作する他のプログラムもこのアクセスを使用できます。
 fs-mcp-allow = ローカルアシスタントのアクセスを許可
 fs-mcp-allow-hint = このコンピュータ内（127.0.0.1）だけで接続を開き、そのたびに新しいアクセスキーを使用します。初期状態ではオフです。コマンドラインオプション --mcp-api で1回のセッションだけオンにできます。
@@ -1880,7 +1887,7 @@ folderstorm-viewport-monitor = モニタ{ $n }（{ $width }×{ $height }）
 folderstorm-viewport-no-monitors = ウィンドウの下にモニタが見つかりません。
 folderstorm-viewport-mouselook = マウスルックでも表示領域を保つ
 folderstorm-viewport-mouselook-help = オフにすると、マウスルックはウィンドウ全体を使います。
-folderstorm-viewport-bars = バー
+folderstorm-viewport-bars = ワールドの周りのバー
 folderstorm-viewport-bars-help = 上、下、横のバーの位置です。ワールド内：これまでどおりワールドの上に表示します。ワールドの周囲：ワールド横の余白に入る場合は各バーをその余白に、入らない場合はワールド内に表示します。ウィンドウ全体：表示領域がないときと同じく、ウィンドウ全体に広げます。
 folderstorm-viewport-bars-inside = ワールド内
 folderstorm-viewport-bars-around = ワールドの周囲
@@ -1896,7 +1903,7 @@ folderstorm-viewport-not-under = このモニタはビューアのウィンド�
 folderstorm-viewport-too-small = ビューアのウィンドウの下にあるこのモニタの部分が小さすぎます。
 folderstorm-viewport-set-aside = この余白ではワールドがウィンドウの４分の１未満になるため、今はワールドがウィンドウ全体に表示されます。
 
-# Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
+# Folderstorm: layouts (folderstorm/workspaces, Preferences › Workspaces)
 fs-layouts-tab = レイアウトとワークスペース
 fs-layouts-group = 保存したレイアウト
 fs-layouts-intro = レイアウトは配置を記憶します。ビューアのウィンドウ、ワールド表示領域とバーの位置、そして各ウィンドウの位置とサイズです。適用すると、保存時に開いていたウィンドウを開きますが、ウィンドウを閉じることはありません（閉じるのはワークスペースの役目です）。ウィンドウに表示される内容も保存しません。「モニター２台」「モニター１台」のように、モニター構成ごとに１つ保存して、ここか「ワールド › レイアウト」で切り替えます。
@@ -1988,6 +1995,34 @@ fs-layouts-toggle-first = １つ目のレイアウト
 fs-layouts-toggle-second = ２つ目のレイアウト
 fs-layouts-toggle-help = ツールバーの「レイアウトを切り替え」ボタンとそのショートカットが行き来する２つのレイアウトです（例：「モニター２台」と「モニター１台」）。１つ目が使用中なら２つ目へ、それ以外は１つ目へ切り替えます。
 fs-layouts-toggle-none = 未選択
+fs-workspaces-page = ワークスペース
+fs-workspaces-page-about = 構成を保存して切り替えます：開いているウィンドウ、その配置、ワールド表示領域。
+fs-workspaces-tab-saved = 保存済み
+fs-workspaces-tab-margins = 余白
+fs-workspaces-tab-switching = 切り替え
+fs-saved-group = 保存した構成
+fs-saved-intro = ワークスペースは作業に使うウィンドウを開いて他を閉じ、レイアウトはビューアのウィンドウ、ワールド、ウィンドウを配置します。ワークスペースはレイアウトを適用することもできます。
+fs-saved-list = ワークスペースとレイアウト
+fs-saved-list-help = 項目をクリックして選択すると、その下に操作と設定が表示されます。ダブルクリックですぐに適用します。お気に入りは「レイアウトとワークスペース」ウィンドウや ワールド › レイアウト と同じく先頭に並びます。
+fs-saved-empty = まだ何も保存されていません。必要なウィンドウを開いて配置してから、下で構成を保存してください。
+fs-saved-save-group = 現在の構成を保存
+fs-saved-save = 現在の構成を保存
+fs-saved-save-help = 現在の構成を新しい名前で保存します。ワークスペース（今開いているウィンドウ）またはレイアウト（今の配置）として保存できます。
+fs-saved-keeps = 保存する内容：
+fs-workspaces-more-windows = その他のウィンドウ（{ $count }）
+fs-workspaces-more-inventories = インベントリ 2〜17（{ $count } 個中 { $ticked } 個を開く）
+fs-margins-off = オフ：ワールドの周りに余白ができるまで、余白の設定は待機します
+fs-margins-off-help = 余白は、ワールド表示領域がワールドの周りに空きを作っている間だけ存在します（「ワールド表示領域」タブ）。それまで、下の設定は待機します。
+fs-margins-turn-on = ワールド表示領域をオンにする
+fs-switching-favorites-intro = 「保存済み」タブで項目に星を付けると、ワールド › レイアウト と「レイアウトとワークスペース」ウィンドウで先頭に並びます。
+fs-switching-toggle = ツールバーの「レイアウトを切り替え」ボタン
+fs-switching-toggle-intro = ２つのレイアウトを１クリックで切り替えます（例：モニター２台と１台）。
+fs-switching-keys = キー
+fs-switching-keys-help = 「レイアウトを切り替え」ボタン、「レイアウトとワークスペース」ウィンドウ、お気に入りのレイアウトには、キーを割り当てるまでキーのないショートカットがあります（ショートカット › その他 › レイアウト）。
+fs-switching-keys-button = ショートカットで選ぶ
+fs-switching-auto = 自動
+fs-switching-back = 元に戻す
+fs-switching-back-help = 「前の配置」は最後に適用したレイアウトを元に戻します。「ビューアのウィンドウのロックを解除」はウィンドウに枠とサイズ変更を戻します。「バーとワールドをリセット」はワールド表示領域をオフにします。レイアウトは削除されません。
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
 fs-switcher-title = レイアウトとワークスペース
@@ -2009,12 +2044,12 @@ fs-switcher-note-fitted = ウィンドウ { $count } 個は空いている場所
 fs-switcher-update = 「{ $name }」を更新
 fs-switcher-update-help = 現在の配置を、使用中のレイアウトが持つ部分について保存します。先に確認します。
 fs-switcher-save-new = 新規保存…
-fs-switcher-preferences-help = レイアウトとワークスペースの名前変更、削除、並べ替え、レイアウトのビューアのウィンドウやワークスペースのウィンドウの編集、「レイアウトを切り替え」ボタンの２つのレイアウトの選択は、初期設定 › レイアウト › レイアウトとワークスペース で行います。
+fs-switcher-preferences-help = レイアウトとワークスペースの名前変更、削除、並べ替え、レイアウトのビューアのウィンドウやワークスペースのウィンドウの編集、「レイアウトを切り替え」ボタンの２つのレイアウトの選択は、初期設定 › ワークスペース で行います。
 fs-switcher-keys = 上下キーで選択、Enter で適用して閉じる、Esc で閉じる。
 fs-switcher-command = レイアウトとワークスペース
 fs-switcher-toggle-command = レイアウトを切り替え
 fs-switcher-toggle-to = レイアウト「{ $name }」に切り替え
-fs-switcher-toggle-unset = ２つのレイアウトを 初期設定 › レイアウト › レイアウトとワークスペース で選んでください（クリックで開きます）。
+fs-switcher-toggle-unset = ２つのレイアウトを 初期設定 › ワークスペース › 切り替え で選んでください（クリックで開きます）。
 fs-keys-section = レイアウト
 fs-keys-layout-switcher = 「レイアウトとワークスペース」ウィンドウ
 fs-keys-layout-toggle = ２つのレイアウトを切り替え
@@ -2206,7 +2241,7 @@ fs-context-huds-stuck = ワークスペースが装着した HUD { $count } 個�
 fs-context-take-off = 前のワークスペースの HUD を外す
 fs-context-take-off-help = HUD を持つワークスペースに切り替えると、前のワークスペースが装着した HUD を外します（新しいワークスペースも装着する HUD は外しません）。外すのはワークスペースが装着した HUD だけです。もともと装着していた HUD や自分で装着した HUD は外しません。RLVa が外させない場合もあります。「前の配置」で元に戻ります。オフにすると HUD を追加するだけになります。
 
-# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
+# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Workspaces › Margins)
 fs-background-group = ワールドの周りの背景
 fs-background-intro = ワールド表示領域の外側の余白に表示されます（ウィンドウを複数のモニターに広げたときなど）。表示するには、上で「ワールド表示領域をカスタマイズ」をオンにしてください。
 fs-background-kind = 背景
@@ -2240,12 +2275,12 @@ fs-background-colour-help = 単独で、または画像の背後と周りに表�
 fs-background-brightness = 明るさ
 fs-background-brightness-help = 画像を暗くします。色は選んだままです。
 fs-background-layout = 背景
-fs-background-layout-help = このレイアウトを使用している間に余白に表示するもの。既定の背景は「レイアウト › バーとウィンドウ」で選択します。
+fs-background-layout-help = このレイアウトを使用している間に余白に表示するもの。既定の背景は「ワークスペース › 余白」で選択します。
 fs-background-layout-default = 既定を使用
 fs-background-layout-own = 独自
 fs-background-shows = 表示
 
-# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Layout › Bars and windows)
+# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Workspaces › Margins)
 fs-desktop-group = 余白のデスクトップ
 fs-desktop-intro = ウィンドウを複数のモニターに広げたときなど、ワールドの周りに余白があるときに表示されます。上のワールド表示領域をオンにすると表示されます。
 fs-desktop-shortcuts = 余白にショートカットを表示
@@ -2272,7 +2307,7 @@ fs-desktop-added = { $count } 個のフォルダをデスクトップに追加�
 fs-desktop-add-existing = すでにデスクトップにあります。
 fs-desktop-add-full = デスクトップに { $count } 個のフォルダを置く場所がありません。
 fs-desktop-left-out = { $count } 個の項目は追加されませんでした。ショートカットにできるのは自分のインベントリのフォルダだけです。
-fs-desktop-added-on = 余白のショートカットをオンにしました（環境設定 › レイアウト › バーとウィンドウ）。
+fs-desktop-added-on = 余白のショートカットをオンにしました（初期設定 › ワークスペース › 余白）。
 fs-desktop-added-hidden = ウィンドウがワールドの周りに余白を残すと表示されます。
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
@@ -6232,7 +6267,7 @@ folderstorm-controller-off = オフ：何も待ち受けていません。
 folderstorm-controller-listening = オン：このコンピューター専用に 127.0.0.1:{ $port } で待ち受けています。
 folderstorm-controller-starting = 起動中…
 folderstorm-controller-failed = 起動できませんでした（{ $reason }）。オフにしてからオンにすると再試行します。
-folderstorm-controller-separate = 各キャラクター自身のローカルアシスタント（そのビューアーの環境設定 › プライバシー › ローカルアシスタント）はそのままです。ここでの許可はビューアーに何も与えず、ビューアーの許可もここには何も与えません。ここから誰かがログインすることはありません。
+folderstorm-controller-separate = 各キャラクター自身のローカルアシスタント（そのビューアーの初期設定 › ローカルアシスタント）はそのままです。ここでの許可はビューアーに何も与えず、ビューアーの許可もここには何も与えません。ここから誰かがログインすることはありません。
 folderstorm-controller-actions = 許可する操作
 folderstorm-controller-actions-intro = 確認：毎回、専用のウィンドウでホストが確認します。許可：確認せずに実行します。禁止：拒否します。
 folderstorm-controller-class-activate = キャラクターを切り替える

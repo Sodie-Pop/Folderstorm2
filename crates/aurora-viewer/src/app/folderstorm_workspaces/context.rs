@@ -289,6 +289,7 @@ impl App {
         }
         store.active_workspace = Some(name);
         self.panels.settings = true;
-        self.options_ui.open(ui::options::Page::Layout, 3);
+        self.options_ui
+            .open(ui::options::Page::Workspaces, ui::options::workspaces_tab::SAVED);
     }
 }
