@@ -11,7 +11,12 @@
 //! *Open in a new window* does), one window per folder, and never while
 //! RLVa hides the Inventory (`@showinv`). Folders come from the Inventory's
 //! menu (*Add to desktop*, `InvAction::FolderstormDesktopAdd`) or are
-//! dropped on a desktop; only their ids are kept. A toolbar button's menu
+//! dropped on a desktop; only their ids are kept. An item shortcut (the
+//! same menu entry, the same drop; its item id is kept, never its asset's)
+//! opens as the Inventory opens that kind of item: a landmark teleports
+//! through Aurora's own question (`PlacesUi::confirm_landmark`, the Legacy
+//! Viewer's TeleportFromLandmark) and then `request_user_teleport`, where
+//! RLVa is checked as for every teleport. A toolbar button's menu
 //! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
 //! is run here), and three keyboard actions of `crate::folderstorm::keys`
 //! show or hide the shortcuts and give the desktop or the taskbar the
@@ -158,6 +163,16 @@ impl App {
                         ui::widgets::bring_floater_front(ctx, "inventory");
                     }
                 }
+                Request::OpenItem(item) => self.desktop_open_item(item, &facts, no_inventory),
+                Request::ShowItem(item) => {
+                    // (show_item_original refuses under @showinv)
+                    if no_inventory {
+                        self.world.system_notice(aurora_i18n::tr!("rlva-blocked"), Topic::Warning);
+                    } else if let targets::ItemState::Live { original, .. } = targets::item_state(&self.world.inventory, item) {
+                        self.apply_inventory_action(ui::inventory::InvAction::ShowMain(original));
+                        ui::widgets::bring_floater_front(ctx, "inventory");
+                    }
+                }
                 Request::Notice(text) => self.world.system_notice(text, Topic::Items),
                 Request::Changed => {
                     ctx.data_mut(|d| d.insert_temp(dirty_id(), true));
@@ -180,10 +195,24 @@ impl App {
         }
     }
 
+    /// Opens the item of a shortcut as the Inventory opens its kind
+    /// (`targets::item_open`, checked again here: what greys it may have
+    /// changed since the shortcut was drawn). What cannot open says why.
+    fn desktop_open_item(&mut self, item: Uuid, facts: &Facts, no_inventory: bool) {
+        match targets::item_open(&self.world.inventory, item, facts, no_inventory) {
+            // LLLandmarkBridgeAction::doIt: TeleportFromLandmark asks first
+            // (unless its "do not show again" box was ticked); the answer
+            // goes through `request_user_teleport`, RLVa included
+            Ok(targets::ItemOpen::Teleport { asset, name }) => self.places_ui.confirm_landmark(asset, name),
+            Err(why) => self.world.system_notice(why.text(), Topic::Warning),
+        }
+    }
+
     /// *Add to desktop* of the Inventory's menu
-    /// (`InvAction::FolderstormDesktopAdd`): a shortcut to each folder of
-    /// `ids`, in the first free cells of the first desktop. It turns the
-    /// shortcuts on when they are off, and says so.
+    /// (`InvAction::FolderstormDesktopAdd`): a shortcut to each folder and
+    /// each item of `ids` that can be one, in the first free cells of the
+    /// first desktop. It turns the shortcuts on when they are off, and
+    /// says so.
     pub(super) fn folderstorm_desktop_add(&mut self, ids: Vec<Uuid>) {
         let ctx = self.egui_ctx.clone();
         let no_inventory = self.world.rlva.has("showinv");
@@ -197,7 +226,7 @@ impl App {
         self.desktop_sign_in();
         let d = &mut self.settings.folderstorm_desktop;
         let rooms = desktop::rooms(&ctx, d);
-        let added = desktop::add_folders(d, &rooms, &picked.folders, None, None);
+        let added = desktop::add_targets(d, &rooms, &picked.targets, None, None);
         let turned_on = added.added > 0 && !d.shortcuts_on;
         if added.added > 0 {
             d.shortcuts_on = true;
@@ -281,6 +310,9 @@ impl App {
             // (set each frame by `draw_ui`, RlvActions::canStand / canGroundSit)
             sit_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::rlva_sit_locked_id())).unwrap_or(false),
             toggle_unset: !toolbar::look(ctx, toolbar::TOGGLE, false, true, String::new()).1,
+            // (what greys *Teleport* on a landmark of the Inventory:
+            // `ui::inventory::Facts::landmark_blocked`)
+            landmark_blocked: !self.world.rlva_can_teleport_landmark(),
         }
     }
 
@@ -304,6 +336,9 @@ impl App {
         // folders of the demo's inventory
         s.folderstorm_desktop.sign_in(self.world.agent_id);
         desktop::demo::seed_folders(&mut s.folderstorm_desktop);
+        if mode == "items" {
+            desktop::demo::seed_items(&mut s.folderstorm_desktop, &mut self.world.inventory, self.world.agent_id);
+        }
         if mode == "rlva" {
             self.settings.rlva_enabled = true;
             self.world.rlva_configure(true);
@@ -312,7 +347,8 @@ impl App {
     }
 
     /// What the demo asks at this frame, as a shortcut would: `open` opens
-    /// a folder shortcut then a command, `drop` adds a folder where a drop
+    /// a folder shortcut then a command, `items` opens the landmark
+    /// shortcut (the teleport's question), `drop` adds a folder where a drop
     /// from the Inventory would then moves it to the third monitor, `rlva`
     /// tries to open a folder shortcut under `@showinv`, `edit` edits a
     /// name in place then gives a folder shortcut a name and an icon,
@@ -383,6 +419,8 @@ impl App {
                 }]
             }
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
+            // the landmark shortcut opened: Aurora's question before a teleport
+            ("items", true) => vec![Request::OpenItem(demo::landmark())],
             // the name of the People shortcut edited in place, as F2 does
             ("edit", true) => {
                 let people = d

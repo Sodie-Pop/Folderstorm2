@@ -26,6 +26,9 @@
 //!   the Inventory is restored as a click on its button does.
 //! - `overflow`: the taskbar with twenty collapsed windows (opened at
 //!   frame 200): buttons that are their icon alone, and *More*.
+//! - `items`: the same, and a third column of item shortcuts: a landmark
+//!   and one whose item is gone. At frame 200 the landmark is opened:
+//!   Aurora's question before the teleport.
 
 use super::store::{Desktop, Target, Taskbar};
 use crate::folderstorm::viewport::ViewportSettings;
@@ -72,6 +75,44 @@ pub fn dropped() -> Uuid {
     crate::demo::u(DROPPED)
 }
 
+/// The items of `items`, made up for the offline demo (they belong to no
+/// one): a landmark in the Landmarks folder.
+const LANDMARK: u128 = 0xF01D_E500;
+/// An item that does not exist: its shortcut is greyed.
+const ITEM_GONE: u128 = 0xF01D_E5FF;
+/// The cell of the first item shortcut; the others follow down its column.
+pub const ITEMS_AT: (u16, u16) = (2, 0);
+
+/// The landmark of `items`.
+pub fn landmark() -> Uuid {
+    crate::demo::u(LANDMARK)
+}
+
+/// The demo's items, added to the demo's inventory, and their shortcuts
+/// (in the desktop of the demo's account).
+pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inventory, agent: Uuid) {
+    use aurora_net::inventory::InvItem;
+    let item = |id: u128, parent: u128, name: &str, kind: i32| InvItem {
+        id: crate::demo::u(id),
+        parent: crate::demo::u(parent),
+        name: name.to_owned(),
+        asset_type: kind,
+        inv_type: kind,
+        // (the offline demo's own asset: it names nothing on a grid)
+        asset_id: crate::demo::u(id + 0x1000),
+        creator: agent,
+        owner: agent,
+        base_mask: 0x7fff_ffff,
+        owner_mask: 0x7fff_ffff,
+        ..Default::default()
+    };
+    inv.add_items(vec![item(LANDMARK, FOLDERS[1], "Aurora Welcome Area", 3)]);
+    for (n, id) in [LANDMARK, ITEM_GONE].into_iter().enumerate() {
+        let target = Target::Item { item: crate::demo::u(id) };
+        let _ = desktop.add(target, 0, (ITEMS_AT.0, ITEMS_AT.1 + n as u16));
+    }
+}
+
 /// The demo's folder shortcuts (in the desktop of the demo's account).
 pub fn seed_folders(desktop: &mut Desktop) {
     for n in 0..FOLDERS.len() {
@@ -103,7 +144,7 @@ const RIGHT: &[&str] = &["preferences", "build"];
 pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, width: u32) -> bool {
     if !matches!(
         mode,
-        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow"
+        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow" | "items"
     ) {
         return false;
     }

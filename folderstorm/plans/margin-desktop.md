@@ -1033,3 +1033,82 @@ the key action found in three languages), `keys.rs` and
 frame tests fail if the hook is lost at an upstream merge.
 
 **Left for checkpoint 5**: item shortcuts (section 15).
+
+## 24. Checkpoint 5 as built
+
+Item shortcuts, on `claude/margin-desktop-items` (over checkpoint 4 and
+the click that gives a shortcut the keyboard). Asked by the human, in this
+order: landmarks, notecards, outfits, then wearables that are **added**.
+What is built is listed kind by kind; each kind is its own commit.
+
+### What every item shortcut shares
+
+- **The record**: a third target, `{ item: <uuid> }` (`store::Target::Item`):
+  the **inventory item id**, under the account (section 21). Never an asset
+  id, a name or the item's kind: the kind is read from the inventory when
+  the shortcut is drawn (`targets::ItemKind::of`, by asset type). A build
+  that does not know a kind shows the shortcut greyed ("This kind of item
+  cannot be opened from the desktop") and keeps it.
+- **Links are followed when the shortcut is added** (`actions::original`,
+  as LLInvFVBridgeAction::doAction): a link and its item give the same
+  shortcut, which keeps the item's id. A stored link is followed again
+  when it is drawn.
+- **Adding** is checkpoint 2's, extended: *Add to desktop* in the
+  Inventory's menu (the same entry, `desktop-add`, the same
+  `InvAction::FolderstormDesktopAdd`: it now carries items too) and a drop
+  on a desktop. A selection gives its folders and its items that can be
+  shortcuts; the rest is counted in the notice ("N entries left out").
+  The full-desktop and the account-limit notices are checkpoint 2's
+  (`surface::add_targets`, which `add_folders` now calls).
+- **What it shows**: the item's name, read now, under the Inventory's own
+  icon for its type (`ui::inventory::item_icon`, the skin's `Inv_*`); its
+  path in the Inventory as tooltip; *Rename*, *Icon ›*, *Move to ›*,
+  *Remove* as any shortcut. Its menu's first entry says what opening does
+  (*Teleport* for a landmark), then *Show in inventory* (the main
+  Inventory window on the item, `InvAction::ShowMain`).
+- **Greyed, with the reason**: not in the inventory ("deleted, or its
+  folder is not loaded yet": the inventory loads folder by folder, and
+  the two cannot be told apart, as for a gesture board's tile), in the
+  Trash, of a kind a shortcut does not open, the inventory not known yet,
+  refused by RLVa. A greyed item shortcut says nothing of its item (the
+  generic "Inventory item", or the name the user typed).
+- **`@showinv`** (stricter than the Legacy Viewer, as decided for
+  folders): every item shortcut wears the lock and "Inventory item", its
+  name, its path and the name the user typed are hidden, it does not
+  open, it is neither renamed nor shown in the Inventory, and nothing is
+  added.
+- **Creators' permissions**: no new rule. A shortcut opens an item only
+  through the path the Inventory uses for that kind, so the rights are
+  checked where they already are; nothing of an asset is read, copied or
+  shown by the desktop, and no asset id is kept or drawn (tests look for
+  it in what is written and in what is painted).
+- **Upstream hooks**: none added. The menu entry and its action are
+  checkpoint 2's (`ui/inventory.rs:153`, `app/inventory.rs:302`), and the
+  drop reads the Inventory's own payload.
+
+### Landmarks
+
+- **Opening teleports, after Aurora's question.** The glue calls
+  `PlacesUi::confirm_landmark` (the entry Aurora made for "a landmark
+  opened from elsewhere", the Legacy Viewer's TeleportFromLandmark that
+  LLLandmarkBridgeAction::doIt shows): "Do you really want to teleport
+  to…", with its "Do not show again" box (`Settings::confirm_teleports`).
+  Yes goes through `PlacesAction::TeleportLandmark` to
+  `request_user_teleport`, the one path of every teleport the user asks
+  for. **Stricter than Aurora's Inventory**, whose double click teleports
+  at once: on a desktop a stray double click must not.
+- **RLVa**: the shortcut is greyed "Blocked by RLVa" while
+  `World::rlva_can_teleport_landmark` is false (what greys *Teleport* on
+  a landmark of the Inventory: `@tplm`, `@tploc`, `@unsit` while
+  seated…), and `request_user_teleport` checks the command again when
+  the question is answered.
+- **The asset id** of the landmark names it in the teleport request
+  (`NetCommand::TeleportLandmark`, as `InvAction::TeleportLandmark`
+  carries it). It is read from the inventory when the shortcut is opened,
+  handed to that path, and never kept, logged by us or shown.
+- **The Library**: a landmark of the Library can be a shortcut (the
+  Legacy Viewer and Aurora's Inventory teleport to it). **Decision**:
+  what only reads an item may come from the Library; folders of the
+  Library stay refused (checkpoint 2).
+- **No right is asked** for a teleport (the Legacy Viewer asks for none):
+  a no-copy, no-modify, no-transfer landmark teleports as a full one.

@@ -2105,7 +2105,7 @@ fs-background-shows = Affiche
 fs-desktop-group = Bureau dans les marges
 fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
-fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y des dossiers de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer. Chaque compte a ses propres raccourcis ; ce réglage et la taille des icônes sont communs à tous.
+fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y les dossiers et les repères de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer. Chaque compte a ses propres raccourcis ; ce réglage et la taille des icônes sont communs à tous.
 fs-desktop-size = Taille des icônes
 fs-desktop-size-help = La taille des raccourcis et de la grille qui les porte.
 fs-desktop-size-small = Petite
@@ -2121,25 +2121,29 @@ fs-desktop-greyed-gone = Cette commande n'existe plus.
 fs-desktop-greyed-button-only = Celle-ci ne fonctionne que depuis son bouton de la barre d'outils.
 fs-desktop-greyed-rlva = Bloqué par RLVa.
 fs-desktop-greyed-folder-gone = Ce dossier n'est plus dans votre inventaire.
+fs-desktop-item = Objet de l'inventaire
+fs-desktop-greyed-item-gone = Cet objet n'est pas dans votre inventaire : il a été supprimé, ou son dossier n'est pas encore chargé.
+fs-desktop-greyed-item-trash = Cet objet est dans la corbeille.
+fs-desktop-greyed-item-other = Ce type d'objet ne s'ouvre pas depuis le bureau.
 fs-desktop-add = Ajouter au bureau
-fs-desktop-add-refused = Seuls les dossiers de votre propre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
+fs-desktop-add-refused = Seuls les dossiers et les repères de votre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
 fs-desktop-added =
     { $count ->
-        [one] Dossier ajouté au bureau.
-       *[other] { $count } dossiers ajoutés au bureau.
+        [one] Raccourci ajouté au bureau.
+       *[other] { $count } raccourcis ajoutés au bureau.
     }
 fs-desktop-add-existing = Déjà sur le bureau.
 fs-desktop-add-full =
     { $count ->
-        [one] Un dossier n'a pas trouvé de place.
-       *[other] { $count } dossiers n'ont pas trouvé de place.
+        [one] Un raccourci n'a pas trouvé de place.
+       *[other] { $count } raccourcis n'ont pas trouvé de place.
     }
 fs-desktop-full = Ce bureau est plein : retirez un raccourci ou choisissez une taille d'icône plus petite.
 fs-desktop-limit = Les bureaux contiennent au plus { $count } raccourcis : retirez-en un d'abord.
 fs-desktop-left-out =
     { $count ->
-        [one] Un élément laissé de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
-       *[other] { $count } éléments laissés de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
+        [one] Un élément laissé de côté : il ne peut pas être un raccourci du bureau.
+       *[other] { $count } éléments laissés de côté : ils ne peuvent pas être des raccourcis du bureau.
     }
 fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Disposition › Barres et fenêtres).
 fs-desktop-added-hidden = Ils s'affichent quand la fenêtre laisse de la place autour du monde.
@@ -2160,7 +2164,7 @@ fs-desktop-unused =
 fs-desktop-unused-help = Un raccourci reste sur l'écran où il a été posé. Quand la fenêtre ne couvre plus cet écran, ou que le monde le remplit, le raccourci est conservé mais pas affiché.
 fs-desktop-bring = Les amener ici
 fs-desktop-clear = Retirer tous les raccourcis…
-fs-desktop-clear-help = Retire tous les raccourcis des bureaux de ce compte. Seuls les raccourcis disparaissent : les dossiers et les barres d'outils restent tels quels.
+fs-desktop-clear-help = Retire tous les raccourcis des bureaux de ce compte. Seuls les raccourcis disparaissent : les dossiers, les objets de l'inventaire et les barres d'outils restent tels quels.
 fs-desktop-clear-button = Tout retirer…
 fs-desktop-clear-ask =
     { $count ->

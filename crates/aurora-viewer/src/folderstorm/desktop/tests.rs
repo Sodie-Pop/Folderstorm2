@@ -703,6 +703,28 @@ fn the_demo_seeds_its_desktops() {
         desktop.shortcuts.iter().all(|s| s.cell() != demo::DROPPED_AT),
         "the drop's cell is free"
     );
+    // `items`: a third column of item shortcuts, their items made up in
+    // the demo's inventory
+    assert!(demo::seed("items", &mut desktop, &mut view, 5760));
+    let mut inv = crate::world::inventory::Inventory {
+        root: Uuid::from_u128(77),
+        ..Default::default()
+    };
+    desktop.sign_in(ME);
+    demo::seed_folders(&mut desktop);
+    demo::seed_items(&mut desktop, &mut inv, ME);
+    let items: Vec<_> = desktop
+        .shortcuts
+        .iter()
+        .filter(|s| matches!(s.target, Target::Item { .. }))
+        .map(|s| (s.slot, s.cell()))
+        .collect();
+    assert_eq!(items.first(), Some(&(0, demo::ITEMS_AT)));
+    assert!(
+        items.iter().all(|(slot, (col, _))| (*slot, *col) == (0, demo::ITEMS_AT.0)),
+        "down the third column"
+    );
+    assert!(inv.items.get(&demo::landmark()).is_some_and(|it| it.asset_type == 3));
     // the demo's desktop drawn: every size holds its names in its cells
     for size in Size::ALL {
         let mut b = Bench::new();
@@ -932,7 +954,7 @@ fn inventory_dropped_on_a_desktop_adds_its_folders_and_leaves_its_items_out() {
         b.drop_inventory(&cargo, grid.rect((4, 2)).center());
     }
     assert_eq!(b.desktop.shortcuts.len(), 4);
-    assert_eq!(b.notices(), vec![super::targets::Refusal::NoFolder.text(); 3]);
+    assert_eq!(b.notices(), vec![super::targets::Refusal::Nothing.text(); 3]);
     assert!(crate::ui::inventory::drag::carried_ids(&b.ctx).is_none());
     // released over the world: not the desktop's
     b.out.clear();
@@ -1614,3 +1636,5 @@ fn shortcuts_on_a_monitor_not_in_use_are_counted_and_brought_back() {
     assert_eq!(super::unused(&b.ctx, &b.desktop), 0);
     assert_eq!(super::bring_here(&b.ctx, &mut b.desktop), surface::Brought::default());
 }
+
+mod items;

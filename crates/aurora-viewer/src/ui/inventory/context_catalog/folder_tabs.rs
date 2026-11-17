@@ -5,8 +5,9 @@
 //! so both Inventory styles have them.
 //!
 //! And "Add to desktop" (the margins' desktop, FEATURES row 1.10): a
-//! shortcut to each folder of the selection, through
-//! `InvAction::FolderstormDesktopAdd`. Which folders can be shortcuts is in
+//! shortcut to each folder of the selection, and to each item of a kind a
+//! shortcut opens (a landmark), through `InvAction::FolderstormDesktopAdd`.
+//! Which folders and items can be shortcuts is in
 //! `crate::folderstorm::desktop::targets`.
 use super::*;
 use crate::ui::inventory::custom_tabs::folder_ui;
@@ -92,9 +93,10 @@ pub(super) fn entries(c: &mut Catalog, inv: &Inventory, st: &InventoryUi, prefs:
     desktop_entry(c, inv, ids);
 }
 
-/// "Add to desktop": greyed, with the reason, when the selection has no
-/// folder that can be a shortcut (items, the Library, the Trash). Whether
-/// RLVa hides the Inventory is checked by the app when it adds them.
+/// "Add to desktop": greyed, with the reason, when the selection has
+/// nothing that can be a shortcut (other kinds of items, the Trash, folders
+/// of the Library). Whether RLVa hides the Inventory is checked by the app
+/// when it adds them.
 fn desktop_entry(c: &mut Catalog, inv: &Inventory, ids: &[Uuid]) {
     let offer = crate::folderstorm::desktop::targets::offer(inv, ids, false);
     c.add(
@@ -136,6 +138,17 @@ mod tests {
             ..Default::default()
         };
         crate::world::inventory::demo::seed(&mut inv, Uuid::from_u128(42));
+        // a landmark of the inventory: an item a shortcut opens
+        let landmark = Uuid::from_u128(9100);
+        inv.add_items(vec![aurora_net::inventory::InvItem {
+            id: landmark,
+            parent: Uuid::from_u128(8000),
+            name: "Beach".into(),
+            asset_type: 3,
+            inv_type: 3,
+            asset_id: Uuid::from_u128(9900),
+            ..Default::default()
+        }]);
         let entry = |ids: &[Uuid]| {
             let mut c = Catalog::default();
             desktop_entry(&mut c, &inv, ids);
@@ -151,8 +164,11 @@ mod tests {
         // a folder, and a selection with one
         assert_eq!(entry(&[mine]), (true, true, None));
         assert_eq!(entry(&[item, mine]), (true, true, None));
-        // an item, the Library, the Trash: greyed, and why
-        let why = Some(crate::folderstorm::desktop::targets::Refusal::NoFolder.text().to_owned());
+        // an item of a kind a shortcut opens, alone or with others
+        assert_eq!(entry(&[landmark]), (true, true, None));
+        assert_eq!(entry(&[item, landmark]), (true, true, None));
+        // another kind of item, the Library, the Trash: greyed, and why
+        let why = Some(crate::folderstorm::desktop::targets::Refusal::Nothing.text().to_owned());
         let trash = rules::system(&inv, 14).expect("a Trash");
         for refused in [item, inv.lib_root, trash] {
             let (enabled, _, help) = entry(&[refused]);

@@ -14,9 +14,10 @@
 //! choices). Such a file is still read: a folder shortcut goes to the
 //! account it names, the rest waits for the first account that logs in.
 //!
-//! A shortcut keeps a command id or an inventory folder id, never an asset
-//! id, a name read from the inventory or a window title: what it shows is
-//! read when it is drawn. Only a name the user typed is saved.
+//! A shortcut keeps a command id, an inventory folder id or an inventory
+//! item id, never an asset id, a name read from the inventory or a window
+//! title: what it shows, and what kind of item it opens, is read when it
+//! is drawn. Only a name the user typed is saved.
 //!
 //! Reading never fails and never loses what it cannot use: a shortcut that
 //! cannot be read (a newer version's target, a damaged file) is kept as it
@@ -92,6 +93,11 @@ pub enum Target {
     Folder { folder: Uuid },
     /// A command of the toolbar catalogue, by its id.
     Command { command: String },
+    /// An Inventory item of the desktop's account (a landmark): its item
+    /// id there, a link followed when it was added. Never its asset id,
+    /// its name or its kind, which are read from the inventory when it is
+    /// drawn or opened.
+    Item { item: Uuid },
 }
 
 impl Target {
@@ -583,6 +589,35 @@ mod tests {
         assert_eq!(d.unused(&[0, 2]), 0);
         assert_eq!(d.unused(&[0]), 1);
         assert_eq!(d.unused(&[]), 3);
+    }
+
+    #[test]
+    fn an_item_shortcut_keeps_its_item_id_and_is_read_back() {
+        let mut d = Desktop::default();
+        d.sign_in(Uuid::from_u128(1));
+        let item = Target::Item { item: Uuid::from_u128(7) };
+        let id = d.add(item.clone(), 0, (2, 3)).expect("added");
+        // once on a desktop, as a folder or a command
+        assert_eq!(d.add(item.clone(), 0, (0, 0)), Err(Error::Existing(id)));
+        assert!(d.add(item.clone(), 1, (0, 0)).is_ok());
+        // a folder of the same id is another thing
+        assert!(
+            d.add(
+                Target::Folder {
+                    folder: Uuid::from_u128(7)
+                },
+                0,
+                (0, 0)
+            )
+            .is_ok()
+        );
+        let value = written(&d);
+        let kept = &value["accounts"][Uuid::from_u128(1).to_string()]["shortcuts"][0];
+        assert_eq!(kept["target"], json!({ "item": Uuid::from_u128(7) }), "its item id, nothing else");
+        let mut back = Desktop::from_value(value);
+        back.sign_in(Uuid::from_u128(1));
+        assert_eq!(back.shortcuts, d.shortcuts);
+        assert_eq!(back.shortcut(id).map(|s| &s.target), Some(&item));
     }
 
     #[test]
