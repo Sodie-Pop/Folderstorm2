@@ -141,7 +141,7 @@ fn sound_choice(
                 ui.selectable_value(current, None, label);
             }
             ui.selectable_value(current, Some(Sound::Silent), tr!("fs-alerts-silent"));
-            ui.separator();
+            crate::ui::menu::separator(ui, p);
             ui.label(egui::RichText::new(tr!("fs-alerts-built-in")).color(p.muted).small());
             for entry in alerts::built_ins() {
                 let sound = Sound::built_in(entry.name);
@@ -149,7 +149,7 @@ fn sound_choice(
             }
             let names = folder_files();
             if !names.is_empty() {
-                ui.separator();
+                crate::ui::menu::separator(ui, p);
                 ui.label(egui::RichText::new(tr!("fs-alerts-files")).color(p.muted).small());
                 for name in names {
                     let sound = Sound::File { name: name.clone() };
@@ -157,7 +157,7 @@ fn sound_choice(
                 }
             }
             if let Some(list) = inventory {
-                ui.separator();
+                crate::ui::menu::separator(ui, p);
                 ui.label(egui::RichText::new(tr!("fs-alerts-inventory")).color(p.muted).small());
                 let search_id = id.with("search");
                 let mut search = ui.data_mut(|d| d.get_temp::<String>(search_id)).unwrap_or_default();
