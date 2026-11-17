@@ -19,7 +19,7 @@
 //!   first, then each section.
 //! - [`jobs`]: the file dialogs and the disk work, off the frame, and the
 //!   once-a-frame hook ([`frame`]).
-//! - [`demo`]: `AURORA_DEMO_BACKUP`.
+//! - [`demo`]: the demo, `AURORA_DEMO_BACKUP`.
 
 pub mod apply;
 pub mod demo;
