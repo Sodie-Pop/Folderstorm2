@@ -113,6 +113,10 @@ struct Pane {
     viewing: Viewing,
     /// The chat's field had the keyboard in its last drawing.
     typing: bool,
+    /// The chat's field kept the keyboard after a line was sent, and
+    /// nothing was typed since: the next line may be typed without a
+    /// click, but the cycling monitor's turn is not held for it.
+    resting: bool,
     /// Checkpoint 11: the "New IM" or "Friends" sheet in the lines'
     /// place, for that character.
     sheet: Option<(usize, contacts_ui::Sheet)>,
@@ -1093,7 +1097,12 @@ impl Window_ {
         let pane = self.monitors.pane_mut(seat);
         pane.shown[slot] = shown;
         pane.more = more;
-        pane.typing = composed.focused;
+        if composed.sent {
+            pane.resting = true;
+        } else if composed.typed || !composed.focused {
+            pane.resting = false;
+        }
+        pane.typing = composed.focused && !pane.resting;
         pane.sheet = sheet.map(|sheet| (slot, sheet));
         pane.link = link;
         #[cfg(test)]
