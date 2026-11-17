@@ -37,15 +37,15 @@ hooked into an upstream page.
 | Interface › Layout › **Layouts & workspaces** (4th tab) | *Saved layouts*, *Save the current arrangement*, *Arrangement*, *Saved workspaces*, *Quick switch* | `pages/layout.rs:188`, `pages.rs:90` → `pages/folderstorm_workspaces.rs`, `folderstorm_workspaces/workspaces_group.rs` |
 | World › Graphics › **Smoothness** | *Other Folderstorm2 windows* (3D behind another window, its frame rate, shared cache) | `pages/graphics.rs:87` → `pages/folderstorm_characters.rs` |
 | Communication › Chat › **Nearby chat** (end of the tab) | *Image uploads* | `pages/chat.rs:264` → `pages/folderstorm_chat_upload.rs` |
-| Communication › **Privacy** (end of the page) | *Local assistant* (switch, 17 permission rows, status, activity, setup) | `pages/privacy.rs:308` → `pages/local_assistant.rs` |
+| Communication › **Privacy** (end of the page) | *Local assistant* (switch, preset, 17 more rows with *Custom*, status, activity, setup) | `pages/privacy.rs:308` → `pages/local_assistant.rs` |
 | Interface › **Inventory** | *Wear in the context menu* (outfit safety), one row among upstream's | `pages/inventory.rs:56` |
 | Controls › **Shortcuts** › Other | The layouts' and the desktop's keyboard actions | `pages/shortcuts.rs:52` |
 
 **Not in Preferences at all**, on this branch: gesture boards (their own
 *Options* menu in the board window), nearby media (its panel links to the
-upstream Media page), Inventory custom tabs and additional Inventory
-windows (right-click menus of the Inventory), the session host (its own
-app). That is fine, and this review proposes no page for them (§ 4.6).
+upstream Media page, which has no Folderstorm row), Inventory custom tabs
+and additional Inventory windows (right-click menus of the Inventory), the
+session host (its own app). That is fine, and this review proposes no page for them (§ 4.6).
 
 ---
 
@@ -57,9 +57,11 @@ app). That is fine, and this review proposes no page for them (§ 4.6).
 
 *`AURORA_DEMO_LAYOUTS=1`: two layouts, nothing selected yet.*
 
-![A layout selected: actions, viewer window, background](preferences-review/screens/04-layouts-tab-selected.png)
+![A layout selected: actions and its own background](preferences-review/screens/04-layouts-tab-selected.png)
 
-*`AURORA_DEMO_BACKGROUND=layout`: the layout "Wall" in use, selected.*
+*`AURORA_DEMO_BACKGROUND=layout`: the layout "Wall" in use, selected, with
+its own background. It was saved without the viewer window, so the window
+editor (mode, monitors, lock) does not show.*
 
 ![Workspaces with context](preferences-review/screens/05-workspaces-context.png)
 
@@ -81,7 +83,12 @@ camera and HUDs, after it was applied.*
    cannot rename, delete, reorder or edit, `fs-switcher-preferences-help`).
 3. **Fourth tab, after "Startup".** The biggest Folderstorm feature is the
    last tab of an upstream page, behind *Bars and windows*, *World
-   tooltips* and *Startup*. Nothing in the sidebar says it exists.
+   tooltips* and *Startup*. Nothing in the sidebar says it exists. At the
+   window's real size (1120 × 720) the tab shows the layouts, their save
+   box and *Arrangement*; **workspaces are entirely below the fold**
+   (screenshot 10).
+
+![The tab at the window's real size](preferences-review/screens/10-layouts-default-size.png)
 
 **One long tab, two copies of one pattern**
 
@@ -233,7 +240,12 @@ own groups.*
 23. **Ambiguous title.** "Other Folderstorm2 windows" reads like the
     viewer's own windows (Inventory, map…). It means *other copies of the
     viewer* (one per character, `--profile`). The help explains it; the
-    title should.
+    title should. It also sits right under upstream's *Limit when
+    unfocused* (15 fps), with a *Frame rate behind* of its own (5 fps):
+    two frame rates for "not in front", and nothing says which wins when
+    another Folderstorm2 window has the focus. One line of help ("this one
+    applies when the window in front is another Folderstorm2 window; the
+    limit above, otherwise") would settle it.
 24. **Shared cache is not about smoothness.** *Share the main profile's
     cache* (shown only in a named profile, `folderstorm_characters.rs:35`)
     is a disk and download setting: Network and cache.
@@ -241,6 +253,8 @@ own groups.*
 ### 2.4 Chat › Nearby chat › Image uploads
 
 ![Search "upload"](preferences-review/screens/07-search-upload.png)
+
+*The search view shows the group's rows with their place: Chat › Nearby chat.*
 
 25. **Placed at the end of *Nearby chat*,** after link previews and GIFs,
     although it works in every chat field (IMs, groups). Content is clear;
@@ -252,24 +266,39 @@ own groups.*
 ![Privacy, local assistant](preferences-review/screens/08-privacy-local-assistant.png)
 
 26. **A whole feature appended to an upstream page.** The group has a
-    switch, a session-only switch, a preset, 17 permission rows, a status,
-    the recent activity and the setup buttons (`local_assistant.rs:59–380`).
-    It is longer than the rest of the Privacy page, which it ends.
+    switch, a session-only switch, a preset (with *Custom*, 17 permission
+    rows more), a status, the recent activity and the setup buttons
+    (`local_assistant.rs:59–380`). With *Custom* it is longer than the rest
+    of the Privacy page, which it ends.
+27. **Its setup rows break the two-column grid.** In screenshot 08 the
+    warning of *Copy configuration* wraps into a narrow column beside its
+    button and runs into *Check connection*, whose own note ("Turn on
+    access first.") wraps around the next button; *Status* shows "Off"
+    alone in the middle of the line. These rows want `wide()` / `below()`
+    and their notes under the button.
 
 ### 2.6 Search
 
 ![Search "workspace"](preferences-review/screens/09-search-workspace.png)
 
-27. Search works well for the Folderstorm rows (FEATURES 1.9): "workspace"
-    finds the lists and the strip. It also shows that the list rows'
-    labels (*Layouts*, *Workspaces*) are only there for search
-    (`section_body`), which is right.
+28. Search works well for the Folderstorm rows (FEATURES 1.9): "workspace"
+    finds the lists and the strip. But it finds **18 rows, nearly the whole
+    tab**, because every layouts row carries `fs-search-layouts`, whose
+    words include "workspace" and "windows" (`en.ftl:2414`): *Reset bars
+    and world*, *Previous arrangement* and *Save as a new layout* come up
+    for "workspace". Each
+    row's words should name that row's subject; the broad words belong on
+    the lists only. (With A or C, the page name itself carries
+    "workspace".)
 
 ### 2.7 The switcher window, for comparison
 
-![Layouts & workspaces window](preferences-review/screens/10-switcher.png)
+(No capture: in both switcher demos, `AURORA_DEMO_SWITCHER=1` and
+`AURORA_DEMO_WORKSPACES=1`, the world map the demo opens covered the
+switcher at the frames captured. Described from
+`folderstorm/workspaces/switcher.rs`.)
 
-28. The switcher already shows the model this review recommends: one list,
+29. The switcher already shows the model this review recommends: one list,
     favorites first, then workspaces, then layouts, each with its icon, and
     a picture of what a layout gives on the monitors. Preferences shows
     none of that.
@@ -381,8 +410,8 @@ current…*), the selected entry's editor on the right.
 ![Option C, layout selected](preferences-review/mockups/C2-master-detail-layout.png)
 
 - **Pros:** the clearest model: what a workspace does and where its windows
-  go are read in one place; scales to many entries (the store allows
-  dozens); the detail pane has room for the preview picture and the "used
+  go are read in one place; scales to many entries (up to 32 layouts
+  and 32 workspaces, `MAX_LAYOUTS`, `MAX_WORKSPACES`); the detail pane has room for the preview picture and the "used
   by" link; matches the switcher's list.
 - **Cons:** the most work; a custom two-pane widget inside a `Cx` row
   (`section_body`, as the lists already are), so search and *Modified
@@ -450,6 +479,15 @@ current…*), the selected entry's editor on the right.
    windows one entry ("Inventory 2–17", with the count of those ticked)
    instead of 16 boxes; move the apply report under the buttons, one line,
    with the details on hover.
+10. **Search words per row** (finding 28): keep "workspace", "windows",
+    "dual monitor" on the lists and the page; give the other rows words of
+    their own subject (`fs-search-layouts-*` already exist for most).
+11. **Local assistant setup rows** (finding 27): `wide()` rows with the
+    note under the button; *Status* as a coloured pill beside the switch.
+12. **Taskbar monitor** (finding 22): "Monitor 1", "Monitor 3", or a combo.
+13. **Frame rate behind** (finding 23): one line of help on which limit
+    wins, or grey upstream's *Limit when unfocused* row's note when the
+    Folderstorm one applies.
 
 ---
 
@@ -512,7 +550,8 @@ Questions for the human:
 Captures (`preferences-review/screens/`), demo mode under Xvfb with
 lavapipe, one run each, from the test branch built with
 `cargo +1.100.0 build --profile ci -p aurora-viewer`, `AURORA_CAPTURE` at
-frame 90 to 260:
+frames 90 to 260, viewer window 1500 px wide and 2000 to 2600 px tall
+unless said otherwise:
 
 | File | Variables |
 |---|---|
@@ -525,11 +564,11 @@ frame 90 to 260:
 | `07-search-upload.png` | `AURORA_DEMO_OPTIONS=chat:search=upload` |
 | `08-privacy-local-assistant.png` | `AURORA_DEMO_OPTIONS=privacy:local-assistant` |
 | `09-search-workspace.png` | `AURORA_DEMO_OPTIONS=layout:search=workspace` |
-| `10-switcher.png` | `AURORA_DEMO_WORKSPACES=1` (window at its real size) |
+| `10-layouts-default-size.png` | `AURORA_DEMO_LAYOUTS=1`, window 1600 × 1000, Preferences at its real 1120 × 720 |
 
 The Preferences window was made taller for the full-tab captures by a
 local, uncommitted change (its default 1120 × 720 replaced through an
-environment variable); `11-layouts-default-size.png` shows the tab at the
+environment variable); `10-layouts-default-size.png` shows the tab at the
 real size, as the human sees it first. A fake media-plugin folder kept the
 "Download web and media support?" card away.
 
