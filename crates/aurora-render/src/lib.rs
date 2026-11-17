@@ -24,6 +24,8 @@ mod cutout;
 #[cfg_attr(target_os = "macos", path = "dedicated_none.rs")]
 mod dedicated;
 mod device_lost;
+// Folderstorm: loss_verdict, the reset notice's reason (aurora-viewer folderstorm/gpu_diag)
+pub use device_lost::loss_verdict;
 pub use device_lost::{GPU_WORK_NONE, GPU_WORK_VERDICTS, in_guarded_poll, is_loss_panic, loss_details};
 mod dof;
 mod drawn_pick;

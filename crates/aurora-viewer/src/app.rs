@@ -14427,6 +14427,7 @@ impl App {
         self.monitor_frame(&gfx.renderer);
         self.crash_state(&gfx.renderer, &gfx.window);
         self.gpu_stall_frame(&gfx.renderer);
+        self.folderstorm_gpu_diag_frame(&gfx.renderer, &gfx.window); // Folderstorm: the memory picture, written at a loss (app/folderstorm_characters/gpu_diag.rs)
         self.gfx = Some(gfx);
         if let Some(safe) = self.gpu_stall.recover.take() {
             if !self.recover_from_gpu_loss(event_loop, safe) {

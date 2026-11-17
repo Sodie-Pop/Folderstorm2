@@ -2705,6 +2705,18 @@ fs-folder-upload-short = Not enough L$: this upload costs L${ $cost } and the ba
 fs-folder-upload-receipt = Folder upload { $folder }: { $uploaded } uploaded, { $failed } failed, { $cancelled } not sent, L${ $spent } spent.
 fs-folder-upload-receipt-failed = Failed: { $names }.
 
+# Folderstorm: why the graphics card was reset (folderstorm/gpu_diag, the recovery notice and Help › Show the log folder)
+fs-gpu-reason-memory = Video memory was full.
+fs-gpu-reason-memory-used = Video memory was full ({ $used } of { $total } GB in use).
+fs-gpu-reason-memory-characters = Video memory was full ({ $count } characters open, { $used } of { $total } GB in use).
+fs-gpu-reason-memory-viewers = Video memory was full ({ $count } viewer windows open, { $used } of { $total } GB in use).
+fs-gpu-reason-hang = The card took too long to draw a frame.
+fs-gpu-reason-fault = The graphics driver stopped on an error while drawing.
+fs-gpu-reset-then = The viewer reopened its window on the card: you stayed logged in, and the world reloads in a moment.
+fs-gpu-reset-then-safe = It was the second reset within a few minutes, so the viewer reopened its window with the safe graphics (the Potato level): you stayed logged in. Your graphics settings are kept: the login screen offers them back.
+fs-gpu-reset-log = The details are in the log folder (Help › Show the log folder), in the file ending in gpu-losses.txt.
+fs-gpu-show-logs = Show the log folder
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activity history log receipts operations stop

@@ -6997,6 +6997,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_GPU_STALL=<frame>[:<seconds>]` | The render thread holds a frame as a graphics card that stopped answering would |
 | `AURORA_DEMO_GPU_LOST=<frame>` | The GPU device is taken as lost at that frame, as after a driver reset |
 | `AURORA_DEMO_GPU_HANG=<frame>` | A real GPU hang at that frame: the driver resets the GPU (affects other GPU programs) |
+| `AURORA_DEMO_GPU_REASON=memory\|hang\|fault` (Folderstorm2) | With `AURORA_DEMO_GPU_LOST`: the reason the recovery notice gives for the loss; every loss is written to `<log name>.gpu-losses.txt` |
 | `AURORA_GPU_RECOVERY=1` / `=0` | Recover from a GPU device loss on a new window and device, or close, whatever Preferences › Graphics says (on by default) |
 | `AURORA_DEMO_OVERLAY_HOOK=<file>` | An overlay hook DLL counts as loaded in the viewer (Discord, Steam…) |
 | `AURORA_DEMO_SAFE_GRAPHICS=offer\|active` | The safe graphics card on the login screen |
@@ -10111,6 +10112,27 @@ Human grid validation: remember MFA for account A and B, restart the viewer, the
   (a GPU-drawn terminal, a browser, another viewer) may lose their work or
   close. With the recovery off (`AURORA_GPU_RECOVERY=0`, or Preferences ›
   Graphics) the viewer then closes as after any loss. Once a run.
+- **GPU loss diagnostics** (Folderstorm2, `folderstorm/gpu_diag`): every
+  loss, simulated or real, in front or behind, is written at once to the
+  log (`GPU loss: likely reason …; vram …/… MB, textures …, card …,
+  step …, viewers …, front|behind|minimised`) and to
+  `<log name>.gpu-losses.txt` next to the log (Help › Show the log folder):
+  the time, the outcome (`recovered in … ms, settings unchanged` once the
+  recovery made its window, `waiting: …` behind, `not recovered yet` when
+  the viewer closed), the likely reason, the driver's words, hang or fault,
+  the window and its session-host role, the memory picture at the loss and
+  the minute before it in 5 s steps. The file keeps the last 20 losses. The
+  recovery notice starts with the likely reason; with
+  `AURORA_DEMO_GPU_REASON=memory` (`hang`, `fault`) and
+  `AURORA_DEMO_GPU_LOST=600`, the window in front: "Video memory was full
+  (3 viewer windows open, 11.6 of 12 GB in use). The viewer reopened its
+  window on the card…", then "The details are in the log folder…". Without
+  the variable the demo's loss reads as a driver error (the renderer's
+  verdict on the simulated loss); a loss with no known reason keeps
+  Aurora's text. Debug builds (`cargo run`, `--profile ci`) may end at the
+  simulated loss on an egui assertion (`Dropped TexturesDelta with …
+  unapplied deltas`, aurora-render's lost-device path): use a release build
+  to test the recovery.
 - **`AURORA_GPU_RECOVERY=1` / `=0`**: forces the recovery on or off for the
   launch, whatever Preferences › Graphics › "Reopen after a graphics card
   reset" says (`gpu_recovery`, on by default; `=0` also stops egui's CPU
