@@ -735,7 +735,8 @@ pub(super) struct Speaker<'a> {
     /// The shared chat: "Send as … — …" above the field, with the real
     /// name behind an alias. None in a monitor's window, whose header
     /// names the character: the box is one row, its button an icon, and
-    /// the field does not take the keyboard back after a line.
+    /// the field does not take the keyboard back after a click on its
+    /// button (Enter keeps it, as in the shared chat).
     pub said_as: Option<&'a str>,
 }
 
@@ -769,6 +770,8 @@ pub(super) struct Composed {
     pub focused: bool,
     /// The user typed in it.
     pub typed: bool,
+    /// A line was handed to the character's viewer.
+    pub sent: bool,
 }
 
 /// The box: who will say what is typed, and where, above the field. The
@@ -862,7 +865,10 @@ pub(super) fn compose(ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, who: Spea
                 _ => None,
             })
         });
-        let entered = enter.is_some() && (field.lost_focus() || field.has_focus());
+        // (the field had the keyboard when this frame began: Enter typed
+        // elsewhere after a click away is not this box's)
+        let had_it = ui.memory(|m| m.had_focus_last_frame(field.id));
+        let entered = enter.is_some() && (field.has_focus() || (field.lost_focus() && had_it));
         // (checkpoint 11) the nearby chat's volume, as the chat bar's:
         // Ctrl+Enter shouts and Shift+Enter whispers whatever is chosen
         let mut volume = chat.volume(slot);
@@ -886,20 +892,25 @@ pub(super) fn compose(ui: &mut egui::Ui, p: &Palette, chat: &mut Chat, who: Spea
         };
         if (button.clicked() || entered) && can {
             send = Some(volume);
-            if said_as.is_some() {
-                // the next line is typed without another click
-                field.request_focus();
-                done.focused = true;
-            } else {
-                field.surrender_focus();
-                done.focused = false;
-            }
+        }
+        // the next line is typed without another click, as in the
+        // viewer's chat bar: Enter leaves the keyboard in the box, sent or
+        // not (egui's field lets it go on Enter, and a second pass of the
+        // frame sees the draft gone); the shared chat's button gives it
+        // back too
+        if entered || (button.clicked() && can && said_as.is_some()) {
+            field.request_focus();
+            done.focused = true;
+        } else if button.clicked() && can {
+            field.surrender_focus();
+            done.focused = false;
         }
     });
     if let Some(volume) = send
         && chat.submit_at(slot, conversation, now, volume).is_ok()
     {
         done.acted = true;
+        done.sent = true;
     }
     let note = match state {
         Err(Blocked::NotInWorld) => Some(tr!("folderstorm-chat-blocked-not-in-world", name = name.to_owned())),
