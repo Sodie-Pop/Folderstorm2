@@ -2576,29 +2576,6 @@ fs-folder-upload-short = Not enough L$: this upload costs L${ $cost } and the ba
 fs-folder-upload-receipt = Folder upload { $folder }: { $uploaded } uploaded, { $failed } failed, { $cancelled } not sent, L${ $spent } spent.
 fs-folder-upload-receipt-failed = Failed: { $names }.
 
-# Folderstorm: the top bar's media button and its Nearby media panel (folderstorm/nearby_media)
-fs-nearby-media-title = Nearby media
-fs-nearby-media-preferences = Media preferences
-fs-nearby-media-parcel-media = Parcel media
-fs-nearby-media-parcel-music = Parcel music
-fs-nearby-media-unnamed = (no address)
-fs-nearby-media-distance = { $metres } m
-fs-nearby-media-empty = No media nearby.
-fs-nearby-media-disabled = Media is turned off in Preferences › Media.
-fs-nearby-media-no-plugins = The media plugins are not installed yet: web pages and videos cannot play.
-fs-nearby-media-state-stopped = Stopped
-fs-nearby-media-state-waiting = Asking you
-fs-nearby-media-state-starting = Starting…
-fs-nearby-media-state-playing = Playing
-fs-nearby-media-state-paused = Paused
-fs-nearby-media-state-failed = Failed
-fs-nearby-media-start = Start
-fs-nearby-media-stop = Stop
-fs-nearby-media-stop-all = Stop all
-fs-nearby-media-start-all = Start all
-fs-nearby-media-stop-all-tip = Turn all nearby media off. The parcel music keeps its own button.
-fs-nearby-media-start-all-tip = Turn all nearby media on. The parcel music keeps its own button.
-
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activity history log receipts operations stop

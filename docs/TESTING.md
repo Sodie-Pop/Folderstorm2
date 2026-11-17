@@ -359,27 +359,6 @@ it, that dragging a folder (or several entries) from the Inventory adds every
 gesture and sound of it and of its sub-folders, once, with a summary, and
 that Options creates, renames, duplicates, moves and deletes boards.
 
-**Media button and Nearby media (Folderstorm2).** The top bar's media button
-(left of the radio) turns all media off or on, parcel media and media on
-objects, as the Legacy Viewer's media toggle; the parcel music keeps its radio
-button. It shows a pause while any media plays. Hovering it opens Nearby
-media: the parcel media, the parcel music, then the media on objects nearest
-first, each with its state, start / stop and mute, Stop all, Start all and the
-Media preferences. `AURORA_DEMO_NEARBY_MEDIA=open` pins the panel open; with
-the demo's media it lists real rows:
-
-```bash
-AURORA_DEMO=1 AURORA_DEMO_NEARBY_MEDIA=open AURORA_DEMO_MEDIA=1 AURORA_DEMO_PARCEL_MEDIA=1 AURORA_DEMO_MUSIC=1 cargo run -p aurora-viewer -- --title "Test nearby media"
-```
-
-Check that a click on the button stops everything (its face goes back to the
-media glyph, the rows say Stopped) and a second click starts it again, that a
-row's button starts or stops its source alone, that the music row follows the
-radio button, that Stop all leaves the music playing, and that the panel
-closes a moment after the pointer leaves it (without the variable). Without
-the media plugins, the rows stay on *Starting…* and the panel says the plugins
-are not installed.
-
 **Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
 demo's own settings, opens Inventory, the world map and People, and opens
 Preferences › Layout › Layouts. "Wide" has the world on the right half of the
@@ -12930,7 +12909,6 @@ What the inventory must show with these scenarios:
 | `AURORA_DEMO_MEDIA_PACK=consent`, `declined`, `downloading`, `installing` or `failed` | The download's consent card, or a fixed state of the media plugins download |
 | `AURORA_MEDIA_PACK_FEED=http://127.0.0.1:<port>/` | Media plugins pack taken from a local test server |
 | `AURORA_DEMO_MUSIC=<url>`, `1` or `fade` | Music of the demo parcel |
-| `AURORA_DEMO_NEARBY_MEDIA=open` (Folderstorm2) | Nearby media panel of the top bar's media button pinned open |
 | `AURORA_DEMO_STREAM_TITLE=[window\|history\|text][,stop]` | Stream title window with changing titles and their history |
 | `AURORA_DEMO_MEDIA_FILTER=ask`, `first`, `data`, `script`, `music`, `list`, `worn` or `hud` | Media filter question or list; media on our own worn items |
 | `AURORA_DEMO_SOUND=1`, `hud` or `parcel-open\|parcel-local\|parcel-source` | World/HUD chime or parcel sound isolation; interface and media sounds audible |

@@ -70,7 +70,6 @@ mod folders;
 mod folderstorm_desktop; // Folderstorm: the margins' desktop (folderstorm/desktop)
 mod folderstorm_folder_upload; // Folderstorm: folder upload (folderstorm/folder_upload)
 mod folderstorm_gesture_boards; // Folderstorm: gesture boards (folderstorm/gesture_boards)
-mod folderstorm_nearby_media; // Folderstorm: the media button and Nearby media (folderstorm/nearby_media)
 mod folderstorm_viewport;
 mod folderstorm_workspaces; // Folderstorm: layouts (folderstorm/workspaces)
 mod hover_pick;
@@ -16193,7 +16192,6 @@ impl App {
                 self.options_ui.open(ui::options::Page::Sound, 0);
             }
         }
-        self.folderstorm_nearby_media_actions(); // Folderstorm: Nearby media panel
         self.apply_nearby_media(std::mem::take(&mut a.nearby_media));
         self.poll_stream_list();
         for command in self.appearance_ui.json.poll(&self.egui_ctx, &mut self.world) {
@@ -18538,7 +18536,6 @@ impl App {
                             || self.media.any_in_world_media()),
                     media_playing: self.media.any_media_on(),
                 };
-                self.folderstorm_nearby_media_publish(&ctx); // Folderstorm: the Nearby media panel's rows
                 let aurora = self.notifications_aurora();
                 let bell = ui::bars::BellState {
                     unread: if aurora {

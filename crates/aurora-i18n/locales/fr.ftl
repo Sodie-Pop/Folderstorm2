@@ -2588,29 +2588,6 @@ fs-folder-upload-short = Pas assez de L$ : cet import coûte { $cost } L$ et le 
 fs-folder-upload-receipt = Import du dossier { $folder } : { $uploaded } importés, { $failed } en échec, { $cancelled } non envoyés, { $spent } L$ dépensés.
 fs-folder-upload-receipt-failed = En échec : { $names }.
 
-# Folderstorm: the top bar's media button and its Nearby media panel (folderstorm/nearby_media)
-fs-nearby-media-title = Médias à proximité
-fs-nearby-media-preferences = Préférences des médias
-fs-nearby-media-parcel-media = Média de la parcelle
-fs-nearby-media-parcel-music = Musique de la parcelle
-fs-nearby-media-unnamed = (sans adresse)
-fs-nearby-media-distance = { $metres } m
-fs-nearby-media-empty = Aucun média à proximité.
-fs-nearby-media-disabled = Les médias sont désactivés dans Préférences › Médias.
-fs-nearby-media-no-plugins = Les modules des médias ne sont pas encore installés : les pages web et les vidéos ne peuvent pas être lues.
-fs-nearby-media-state-stopped = Arrêté
-fs-nearby-media-state-waiting = Question posée
-fs-nearby-media-state-starting = Démarrage…
-fs-nearby-media-state-playing = En lecture
-fs-nearby-media-state-paused = En pause
-fs-nearby-media-state-failed = Échec
-fs-nearby-media-start = Démarrer
-fs-nearby-media-stop = Arrêter
-fs-nearby-media-stop-all = Tout arrêter
-fs-nearby-media-start-all = Tout démarrer
-fs-nearby-media-stop-all-tip = Arrêter tous les médias à proximité. La musique de la parcelle garde son propre bouton.
-fs-nearby-media-start-all-tip = Démarrer tous les médias à proximité. La musique de la parcelle garde son propre bouton.
-
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter

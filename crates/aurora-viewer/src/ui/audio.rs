@@ -299,27 +299,20 @@ pub fn top_controls(
             }
             // media: all media on / off on click, the nearby media panel on
             // hover (no tooltip, as for the speaker: the panel shows there)
-            // Folderstorm: all media on click, its state on the face, Nearby media on hover (folderstorm/nearby_media)
             let med = slot_button(
                 ui,
                 p,
                 icons,
-                crate::folderstorm::nearby_media::panel::button_icon(media.media_playing),
+                "brand-youtube-filled",
                 media.media_playing,
                 media.media_available,
                 slot,
             );
-            crate::folderstorm::nearby_media::panel::hover(ui, p, icons, &med, sp.contains_pointer());
-            if med.contains_pointer() {
-                *st = AudioUi::default(); // Folderstorm: the volume panel gives way
-            }
             if med.clicked() && media.media_available {
                 action = AudioAction::ToggleMedia;
             }
             st.media_button = Some(med.rect);
-            // Folderstorm: Nearby media is ours (above); Aurora's own panel
-            // (ui/nearby_media.rs) does not open on hover too
-            st.media_button_hovered = false;
+            st.media_button_hovered = med.contains_pointer();
             sp
         })
         .inner;
