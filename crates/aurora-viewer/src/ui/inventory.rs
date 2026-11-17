@@ -44,6 +44,9 @@ mod document;
 pub use embedded::save_focused as document_save_focused;
 pub(crate) mod drag;
 mod embedded;
+// Folderstorm: up to 16 additional Inventory windows
+pub(crate) mod extra_windows;
+pub use extra_windows::demo_frame as extra_windows_demo_frame;
 mod folder_colors;
 mod folderstorm_windows; // Folderstorm: folder windows for workspaces
 pub use folder_colors::{demo as folder_colors_demo, demo_frame as folder_colors_demo_frame};
@@ -741,7 +744,8 @@ impl InventoryUi {
     }
 
     pub(crate) fn additional_open(&self) -> bool {
-        self.windows.iter().any(|w| w.additional && w.open)
+        // Folderstorm: the first of the additional windows (extra_windows.rs)
+        self.windows.iter().any(|w| w.id == ADDITIONAL_WINDOW && w.open)
     }
 
     /// The main window's "Additional inventory window" button: the
@@ -755,7 +759,8 @@ impl InventoryUi {
     pub fn toggle_additional_window(&mut self, ctx: &egui::Context) {
         let id = floater_id(ADDITIONAL_WINDOW);
         // Still kept by a document or a dialog it opened: the same window.
-        if let Some(w) = self.windows.iter_mut().find(|w| w.additional) {
+        // Folderstorm: the first of the additional windows (extra_windows.rs)
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == ADDITIONAL_WINDOW) {
             super::widgets::toggle_floater(ctx, &id, &mut w.open);
             return;
         }
@@ -1538,21 +1543,9 @@ fn status(
 /// the Legacy Viewer's `new_inv_btn`, lit while that window is open; the
 /// other windows have none.
 fn additional_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
-    if !st.is_main() {
-        return;
-    }
-    let button = ui.scope(|ui| {
-        super::widgets::icon_toggle(
-            ui,
-            p,
-            ADDITIONAL_ICON,
-            aurora_i18n::tr!("inventory-additional-window"),
-            st.additional_open(),
-        )
-    });
-    additional_button_drawn(ui, button.response.rect);
-    if button.inner {
-        st.toggle_additional_window(ui.ctx());
+    // Folderstorm: in every additional window too, opens the next one (extra_windows.rs)
+    if let Some(rect) = extra_windows::legacy_button(ui, p, st) {
+        additional_button_drawn(ui, rect);
     }
 }
 
@@ -2257,6 +2250,7 @@ pub fn show(
         }
     }
     custom_tabs::window::open_requested(ctx, st, prefs); // Folderstorm: a custom tab in its own window
+    extra_windows::frame(ctx, st); // Folderstorm: the additional windows' buttons
     let inv = &mut world.inventory;
     context_catalog::process_deferred(inv, st, prefs, &facts, &mut actions);
     bulk_permissions::show(ctx, p, inv, st, world.agent_id, &mut actions);
@@ -2402,8 +2396,8 @@ pub fn show(
             fetch_whole_inventory(&mut world.inventory, &mut w.state);
             super::widgets::Floater::new(
                 &window_id,
-                aurora_i18n::tr!("common-inventory"),
-                additional_window_pos(ctx, screen),
+                extra_windows::title(w.id), // Folderstorm: numbered, each slot first opens a step further
+                extra_windows::first_pos(w.id, additional_window_pos(ctx, screen), screen),
                 DEFAULT_SIZE,
             )
         } else {
@@ -3183,6 +3177,8 @@ mod tests {
     /// whole inventory and stays lit while it shows; that window has neither
     /// the button nor the Received tab; a second click closes it and forgets
     /// its search.
+    /// Folderstorm: the button is in the additional window too, and a second
+    /// click opens another window (extra_windows.rs, whose tests cover more).
     #[test]
     fn the_main_window_toggles_one_additional_inventory_window() {
         use crate::ui::widgets::elide_tests::Frames;
@@ -3270,7 +3266,8 @@ mod tests {
             assert!(texts.iter().any(|t| t.source == all), "classic={classic}: its tabs");
             assert!(!texts.iter().any(|t| t.source == received), "classic={classic}: no Received tab");
             assert!(
-                ctx.data(|d| d.get_temp::<egui::Rect>(button_id)).is_none(),
+                // Folderstorm: the button is there too (extra_windows.rs)
+                ctx.data(|d| d.get_temp::<egui::Rect>(button_id)).is_some(),
                 "classic={classic}: no button"
             );
 
@@ -3282,6 +3279,10 @@ mod tests {
             for events in click(&ctx) {
                 frame(&mut st, true, events);
             }
+            frame(&mut st, true, Vec::new());
+            // Folderstorm: the second click opens another window; closed, both are dropped
+            assert_eq!(st.windows.len(), 2, "classic={classic}: the second click opens another");
+            st.windows.iter_mut().for_each(|w| w.open = false);
             frame(&mut st, true, Vec::new());
             assert!(!st.additional_open(), "classic={classic}: the second click closes it");
             assert!(st.windows.is_empty(), "classic={classic}: dropped once closed");

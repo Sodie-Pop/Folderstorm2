@@ -301,6 +301,28 @@ window or barely under it says why it cannot; that margins set too large with
 the sliders show a dashed outline and the note that the world fills the
 window; and that with `wayland` the window is drawn alone.
 
+**Login screen on one monitor (Folderstorm2).** With the window over several
+monitors, the login screen is laid out in the world viewport's rectangle when
+one is set, otherwise on the monitor holding the most of the window (on a tie,
+the one at the desktop's origin: Windows' primary monitor). The sky still fills
+the window. No variable of its own: pretend two monitors and any login
+scenario, and add `AURORA_DEMO_VIEWPORT=right-half` to put the world, and so
+the login, on the right one:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_LOGIN=empty AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test login monitor"
+AURORA_DEMO=1 AURORA_DEMO_LOGIN=cards AURORA_DEMO_VIEWPORT=right-half AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test login monitor"
+```
+
+Check that the brand, the login card or the account cards, the version and
+news, the community links and the buttons along the bottom all sit on the
+left (or right) half, centred on it; that `AURORA_DEMO_LOGIN=mfa` and
+`manage` open their dialogs there too; and that without
+`AURORA_DEMO_MONITORS` (or with a single `1920x1080` and a window of that
+size) the login screen fills the window as before.
+
 **Gesture boards (Folderstorm2).** `AURORA_DEMO_GESTURE_BOARDS=1` adds a few
 gestures and sounds to the demo's inventory, seeds two boards in the demo's
 own settings ("Greetings": gestures and sounds, a label, colours, a tile of
@@ -481,6 +503,40 @@ AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=layout/3 \
 Check that nothing is ever drawn over the world, that windows, bars, chat
 lines and HUD labels stay over the picture, and that the margins go black
 again when the viewport is turned off.
+
+**The margins' desktop (Folderstorm2).** `AURORA_DEMO_DESKTOP=<mode>` makes,
+once, a desktop of shortcuts in the margins around the world (row 1.10):
+`1` puts eight command shortcuts on the first monitor (Conversations,
+People, Inventory, the world map renamed "Where am I?" with a compass,
+Photo, Home, then two greyed ones: Favorites, which only works from its
+toolbar button, and a command the catalogue no longer has) and two on the
+third monitor (Preferences, Build); `open` does the same and opens the
+People shortcut at frame 200, as a double click does; `single` seeds the
+same shortcuts with the world filling the window, so nothing shows. The
+world viewport is turned on (the world in the middle third) unless
+`AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
+wallpaper under the shortcuts. Without pretend monitors the window is one
+monitor, and only the first one's shortcuts show, in the left margin.
+Preferences › Layout › Bars and windows has the group *Desktop in the
+margins*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=open AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
+  cargo run -p aurora-viewer -- --title "Test desktop open"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=single cargo run -p aurora-viewer -- --title "Test desktop single"
+```
+
+Check that a shortcut is never drawn over the world nor cut at its edge,
+that every window and bar stays over the shortcuts, that a click on a
+shortcut or on an empty part of a desktop never reaches the world (no
+selection, no camera move, the wheel does not zoom), that a double click
+opens what the toolbar button opens, that a drag snaps to the grid, swaps
+with the shortcut it is dropped on and goes to another monitor, and that
+the right-click menus add a command and remove a shortcut. The shortcuts
+go away with the interface (hidden, immersive mode, mouselook).
 
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
@@ -6386,6 +6442,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_DESKTOP=1\|open\|single` (Folderstorm2) | The margins' desktop: command shortcuts on the first and third monitors of the window, two of them greyed (`1`); the People shortcut opened at frame 200 (`open`); the same shortcuts with the world filling the window, nothing shown (`single`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
@@ -11378,6 +11435,25 @@ separate searches enabled and disabled; that preference controls only the text.
   tab, and no such button. Click the lit button: the additional window
   closes; click it again: it reopens at the same place, its folders and
   search forgotten. Drag an item from one window onto a folder of the other.
+- **`extra-windows`, `aurora-extra-windows`, `extra-windows-full`**
+  (Folderstorm2, multiple Inventory windows; in Folderstorm2 the button no
+  longer closes the additional window, it opens the next one): the main
+  window and three additional windows side by side, titled "Inventory 2",
+  "Inventory 3" and "Inventory 4"; "Inventory 3" on the Recent tab with
+  "shirt" typed, "Inventory 4" minimized at about frame 30. Each has the
+  "New Inventory window" button (the second briefcase), lit, its tooltip
+  "New Inventory window (3 of 16 open)". Click it in any window: the next
+  free window opens a step down and right of the first one's place; close
+  one with its cross and click again: that one comes back, afresh, where it
+  was. Right click the button: *New Inventory window*, *Close all additional
+  windows* (closes the numbered windows only, not a folder or tab window).
+  Ctrl+Shift+I does the same as the button. `extra-windows-full`: all 16
+  open in a cascade, the status line says that all 16 are open (again at
+  about frame 400), the button greyed with the same tooltip, and its menu
+  open at about frame 40 with *New Inventory window* greyed. Under RLVa's
+  `@showinv` every one of them closes. Each window keeps its place and size
+  after a restart, but none reopens at login; layouts and workspaces list
+  them as "Inventory 2" … "Inventory 17" and open, place and close each one.
 - `smart`, `aurora-smart`, `aurora-smart-wide`: advanced search. The window
   is in advanced mode on a saved smart search: objects or scripts, or a name
   ending in a number (an Any group), but not the no-copy object (a Not

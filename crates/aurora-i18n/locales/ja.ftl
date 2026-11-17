@@ -1218,6 +1218,12 @@ inventory-quick-unpin = ピン留めを外す: 他のウィンドウで隠れる
 inventory-quick-quiet = シンプル表示: 一覧だけ
 inventory-quick-full = 通常表示: 検索、タブ、ツール
 inventory-quick-demo-name = クイックアクセス
+# Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
+inventory-windows-title = 持ち物 { $number }
+inventory-windows-new = 新しい持ち物ウィンドウ
+inventory-windows-new-tip = 新しい持ち物ウィンドウ（{ $max } 個中 { $open } 個を表示中）
+inventory-windows-close-all = 追加の持ち物ウィンドウをすべて閉じる
+inventory-windows-all-open = 追加の持ち物ウィンドウ { $max } 個がすべて開いています。先にどれかを閉じてください。
 inventory-move-connection-unavailable = 移動できません：リージョンとの接続が利用できません。
 inventory-move-invalid-target = アイテムまたは移動先フォルダが見つかりませんでした。インベントリを再読み込みしてください。
 ao-title = ＡＯ・アバターのアニメーション
@@ -1930,6 +1936,26 @@ fs-background-layout-default = 既定を使用
 fs-background-layout-own = 独自
 fs-background-shows = 表示
 
+# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Layout › Bars and windows)
+fs-desktop-group = 余白のデスクトップ
+fs-desktop-intro = ウィンドウを複数のモニターに広げたときなど、ワールドの周りに余白があるときに表示されます。上のワールド表示領域をオンにすると表示されます。
+fs-desktop-shortcuts = 余白にショートカットを表示
+fs-desktop-shortcuts-help = ワールドが使っていないモニターをパソコンのデスクトップのように使います。ショートカットはグリッドに並び、すべてのウィンドウの下に表示されます。空いている場所を右クリックするとツールバーのコマンドを追加できます。ショートカットはダブルクリックで開き、ドラッグで移動します。
+fs-desktop-size = アイコンのサイズ
+fs-desktop-size-help = ショートカットと、それが並ぶグリッドの大きさです。
+fs-desktop-size-small = 小
+fs-desktop-size-medium = 中
+fs-desktop-size-large = 大
+fs-desktop-open = 開く
+fs-desktop-remove = デスクトップから削除
+fs-desktop-add-command = コマンドを追加
+fs-desktop-settings = デスクトップの設定…
+fs-desktop-command-gone = 不明なコマンド
+fs-desktop-folder = インベントリのフォルダ
+fs-desktop-greyed-gone = このコマンドはもうありません。
+fs-desktop-greyed-button-only = これはツールバーのボタンからのみ使えます。
+fs-desktop-greyed-rlva = RLVa によりブロックされています。
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = 画像をアップロード：リンクがメッセージに入ります
 fs-chat-upload-choose-title = アップロードする画像を選択
@@ -2048,6 +2074,7 @@ fs-nearby-media-start-all-tip = 近くのメディアをすべてオンにしま
 fs-search-mcp = MCP ローカル アシスタント AI エージェント ブリッジ API 自動化 Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = アクティビティ 履歴 ログ 受領 操作 停止
 fs-search-viewport = デュアル モニター デュアルモニター マルチ マルチモニター 複数 画面 ディスプレイ 表示領域 ワールド 余白 マージン ワイド ウルトラワイド
+fs-search-desktop = デスクトップ ショートカット アイコン ランチャー 余白 マージン モニター ディスプレイ
 fs-search-photo = 写真 写真モード フォト スナップショット 撮影 カメラ
 fs-search-layouts = レイアウト ワークスペース 作業 プロファイル 配置 ウィンドウ デュアル モニター マルチモニター 複数 画面
 fs-search-layouts-list = お気に入り スター 適用 名前の変更 削除

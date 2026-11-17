@@ -597,7 +597,8 @@ pub fn sections() -> &'static Vec<(&'static str, Vec<(Action, &'static str)>)> {
                     (Action::Groups, aurora_i18n::tr!("common-groups")),
                     (Action::ContactSets, aurora_i18n::tr!("ui-contacts-contact-sets")),
                     (Action::Inventory, aurora_i18n::tr!("common-inventory")),
-                    (Action::NewInventoryWindow, aurora_i18n::tr!("inventory-additional-window")),
+                    // Folderstorm: it opens the next additional window (ui/inventory/extra_windows.rs)
+                    (Action::NewInventoryWindow, aurora_i18n::tr!("inventory-windows-new")),
                     (Action::Appearance, aurora_i18n::tr!("common-appearance")),
                     (Action::TextureLibrary, aurora_i18n::tr!("texture-library-title")),
                     (Action::IkEdit, aurora_i18n::tr!("ik-edit-title")),

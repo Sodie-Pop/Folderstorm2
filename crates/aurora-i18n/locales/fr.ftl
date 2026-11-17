@@ -1284,6 +1284,15 @@ inventory-quick-unpin = Désépingler : laisser d'autres fenêtres la couvrir
 inventory-quick-quiet = Vue simple : la liste seule
 inventory-quick-full = Vue complète : recherche, onglets et outils
 inventory-quick-demo-name = Accès rapide
+# Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
+inventory-windows-title = Inventaire { $number }
+inventory-windows-new = Nouvelle fenêtre d’inventaire
+inventory-windows-new-tip = Nouvelle fenêtre d’inventaire ({ $open ->
+    [one] { $open } ouverte
+   *[other] { $open } ouvertes
+    } sur { $max })
+inventory-windows-close-all = Fermer toutes les fenêtres d’inventaire supplémentaires
+inventory-windows-all-open = Les { $max } fenêtres d’inventaire supplémentaires sont ouvertes. Fermez-en une d’abord.
 inventory-move-connection-unavailable = Le déplacement est impossible : la connexion à la région est indisponible.
 inventory-move-invalid-target = L’élément ou le dossier de destination est introuvable. Rechargez l’inventaire.
 ao-title = AO · Animations de l’avatar
@@ -2098,6 +2107,26 @@ fs-background-layout-default = Fond par défaut
 fs-background-layout-own = Le sien
 fs-background-shows = Affiche
 
+# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Layout › Bars and windows)
+fs-desktop-group = Bureau dans les marges
+fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
+fs-desktop-shortcuts = Raccourcis dans les marges
+fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer.
+fs-desktop-size = Taille des icônes
+fs-desktop-size-help = La taille des raccourcis et de la grille qui les porte.
+fs-desktop-size-small = Petite
+fs-desktop-size-medium = Moyenne
+fs-desktop-size-large = Grande
+fs-desktop-open = Ouvrir
+fs-desktop-remove = Retirer du bureau
+fs-desktop-add-command = Ajouter une commande
+fs-desktop-settings = Réglages du bureau…
+fs-desktop-command-gone = Commande inconnue
+fs-desktop-folder = Dossier de l'inventaire
+fs-desktop-greyed-gone = Cette commande n'existe plus.
+fs-desktop-greyed-button-only = Celle-ci ne fonctionne que depuis son bouton de la barre d'outils.
+fs-desktop-greyed-rlva = Bloqué par RLVa.
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
 fs-chat-upload-choose-title = Choisir une image à envoyer
@@ -2249,6 +2278,7 @@ fs-nearby-media-start-all-tip = Démarrer tous les médias à proximité. La mus
 fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter
 fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
+fs-search-desktop = bureau raccourci raccourcis icône icônes lanceur marge marges écran écrans moniteur
 fs-search-photo = mode photo capture image appareil
 fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
 fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer

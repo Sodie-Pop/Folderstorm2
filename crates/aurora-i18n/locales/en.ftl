@@ -1281,6 +1281,12 @@ inventory-quick-unpin = Unpin: let other windows cover it
 inventory-quick-quiet = Simple view: only the list
 inventory-quick-full = Full view: search, tabs and tools
 inventory-quick-demo-name = Quick access
+# Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
+inventory-windows-title = Inventory { $number }
+inventory-windows-new = New Inventory window
+inventory-windows-new-tip = New Inventory window ({ $open } of { $max } open)
+inventory-windows-close-all = Close all additional windows
+inventory-windows-all-open = All { $max } additional Inventory windows are open. Close one first.
 inventory-move-connection-unavailable = Cannot move: the region connection is unavailable.
 inventory-move-invalid-target = The item or destination folder could not be found. Reload the inventory.
 ao-title = AO · Avatar animations
@@ -2089,6 +2095,26 @@ fs-background-layout-default = Use the default
 fs-background-layout-own = Its own
 fs-background-shows = Shows
 
+# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Layout › Bars and windows)
+fs-desktop-group = Desktop in the margins
+fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
+fs-desktop-shortcuts = Shortcuts in the margins
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; double-click a shortcut to open it, drag it to move it.
+fs-desktop-size = Icon size
+fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
+fs-desktop-size-small = Small
+fs-desktop-size-medium = Medium
+fs-desktop-size-large = Large
+fs-desktop-open = Open
+fs-desktop-remove = Remove from desktop
+fs-desktop-add-command = Add a command
+fs-desktop-settings = Desktop settings…
+fs-desktop-command-gone = Unknown command
+fs-desktop-folder = Inventory folder
+fs-desktop-greyed-gone = This command no longer exists.
+fs-desktop-greyed-button-only = This one only works from its toolbar button.
+fs-desktop-greyed-rlva = Blocked by RLVa.
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
 fs-chat-upload-choose-title = Choose an image to upload
@@ -2240,6 +2266,7 @@ fs-nearby-media-start-all-tip = Turn all nearby media on. The parcel music keeps
 fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activity history log receipts operations stop
 fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
+fs-search-desktop = desktop shortcut shortcuts icon icons launcher margin margins monitor monitors
 fs-search-photo = photo mode snapshot picture camera
 fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
 fs-search-layouts-list = favorite favorites star apply rename delete
