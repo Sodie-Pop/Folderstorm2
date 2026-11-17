@@ -165,7 +165,7 @@ Each line gives the default the build starts from.
 | Move | Drag a shortcut: a ghost follows the pointer, the target cell is outlined, release drops it. Onto a taken cell: the two swap. Onto another slot's room: it moves there |
 | Select | A click selects one shortcut. Several at once (Ctrl, a rubber band): later |
 | Rename | Right click › *Rename*, or F2: the name is edited in place; Enter keeps, Esc cancels. An empty name gives the folder's or the command's own name back. A custom name never renames the folder |
-| Icon | Right click › *Icon ›*: a short list of Tabler icons (about 40, chosen for folders: clothes, body, hair, home, tools, heart, star…), and *Default*. A folder's colour comes from its Aurora folder colour; a colour of its own: later |
+| Icon | Right click › *Icon ›*: a short list of Tabler icons (about 40, chosen for folders: clothes, body, hair, home, tools, heart, star…), and *Default*. A folder's colour comes from its Aurora folder colour; a colour of its own, or a picture (a file, an Inventory texture): section 26 |
 | Remove | Right click › *Remove from desktop*, or Delete on the selected one. No question: only the shortcut goes |
 | Arrange | *Arrange by name* fills the room again from its first cell |
 | Folder shortcut, more | *Show in Inventory* (the main window on that folder), *Open in a new window* (the default action) |
@@ -1339,3 +1339,93 @@ not worn, on a body part, under `@remoutfit` for clothing, under
 `@showinv`; the menus; Shift+Delete and Delete).
 
 **Demo**: `items` shows it on the demo's worn jacket.
+
+## 26. Icon colour and picture
+
+Asked by the human: customise a shortcut's icon with a colour, or a
+picture instead of it, from a file or an Inventory texture. Built on
+`claude/margin-desktop-icon-style`, on top of section 25.
+
+- **Where**: right click › *Icon ›* now has, under *Default*, *Colour…*,
+  *Picture from a file…*, *Inventory texture…* and *Reset icon*, then the
+  grid of stock icons as before. *Colour…* and *Inventory texture…* open
+  the window *Shortcut icon* (`style_ui::window`, a `Floater`): twelve
+  colours (the Inventory's folder colours), *Another colour* (the shared
+  `widgets::color_button`), *Default colour*; the picture shown, *Picture
+  from a file…*, *Remove the picture*; a searchable list of the textures
+  one may use; *Reset icon*. *Picture from a file…* opens the system's
+  file dialog directly. A window rather than a picker inside the menu: a
+  colour pop-up inside a context menu closes it at the first click.
+- **What is kept** (`style::Style`, field `style` of each shortcut in
+  `folderstorm_desktop.accounts`, left out while default): `colour`
+  (`[r, g, b]`) and `picture`, either `{ "file": <copy>, "name":
+  <original file name> }` or `{ "texture": <item id> }`. Read
+  leniently (`style::lenient`): an older desktop has none and loads as
+  it was; a damaged style loses only what cannot be read (never the
+  shortcut); a newer version's kind of picture is kept and written back
+  (`Picture::Kept`), drawn as the stock icon.
+- **The colour** replaces the theme's, and the folder's Inventory colour,
+  on the stock icon; a greyed shortcut stays greyed. A picture is drawn in
+  its own colours (dimmed when greyed); the colour is kept for when the
+  picture goes. Choosing a stock icon or *Default* removes the picture;
+  *Reset icon* removes everything.
+- **A file** is checked as a background picture is (the same
+  `backgrounds::import::checked`: at most 32 MB and 8192 pixels a side,
+  a format the viewer decodes), reduced to 256 px a side, written as PNG
+  into `accounts/<account id>/folderstorm_desktop_icons/` of the
+  settings folder (`settings::account_dir`, so per account and per
+  profile) under the backgrounds' name rule (16 hex digits of its hash,
+  `backgrounds::import::store`): the original may move or go, the same
+  picture twice is one file, and only such a name is ever opened. A copy
+  no shortcut of the account refers to any more (picture removed, icon
+  reset, shortcut removed) is deleted (`backgrounds::import::prune`),
+  never while a dialog is writing one. Decoding is off the event thread,
+  by the backgrounds' own loader (`backgrounds::paint::Loader`, made
+  `pub(crate)`), one per picture shown.
+- **An Inventory texture: creators' permissions.** Only a texture
+  (`AT_TEXTURE`, snapshots included) of the account's own Inventory, out
+  of the Trash, not a link, whose asset UUID the Legacy Viewer would show
+  the user is offered or drawn: `actions::held(inv, item) & actions::FULL
+  == FULL` (LLViewerInventoryItem::getProtectedAssetUUID, the UUID field
+  of LLFloaterTexturePicker), checked item by item (`style::texture_asset`)
+  when listing, when chosen and at every frame it is drawn, so a texture
+  whose rights change goes back to the stock icon. Stricter than the
+  Legacy Viewer: a god sees no more, the Library is not offered. The
+  shortcut keeps the **item id**; the asset id is read when drawn, only to
+  fetch the texture (`Request::Fetch`, which the glue puts in the
+  Inventory's `wanted_images`, drained by the app into `ui_images`), and
+  is never shown, written or logged. Under `@showinv` no texture is
+  listed (the entry is greyed with RLVa's reason) or drawn, and a
+  shortcut whose face RLVa hides shows no style of its own (the lock in
+  the theme's colour); its window closes.
+
+**Upstream hooks**: none new. Touched upstream files: the three
+catalogues (21 new `fs-desktop-*` keys each; the refusals reuse the
+backgrounds' `fs-background-error-*` and `fs-background-file-type`) and
+`docs/TESTING.md`. Our own: `backgrounds/import.rs` (`checked` split
+out of `store`, its test helpers `pub(crate)`), `backgrounds/paint.rs`
+(`Loader` and `poll` `pub(crate)`), the glue (`Env::images`,
+`Request::Fetch`, the demo's texture).
+
+**Tests**: `style.rs` (lenient reading, a path or nil texture refused, a
+newer picture kept; a file copied reduced, refused, pruned; the permission
+gate item by item against `actions::held`/`FULL`, each right missing,
+Trash, link, someone else's, no asset, the search), `store.rs` (round
+trip per account, no asset id written, old file without style, a damaged
+style), `tests/style.rs` (frames: *Icon ›*'s entries, a colour from the
+window drawn on the icon, *Default colour*, *Reset icon*; a file answer
+drawn in its colours, refused, cancelled, for another account, its copy
+kept while another shortcut wears it and deleted with the last; the
+textures listed only with full permissions, chosen, fetched, drawn, not
+drawn once a right goes or under `@showinv`, the entry greyed; a hidden
+face shows no colour).
+
+**Demo**: `items`, `outfit` and `icons` (Conversations green, Photo a
+copied picture, Home the demo's texture); `icons` opens the window on
+Home at frame 200.
+
+**Left**: no thumbnails in the texture list (names only: fetching every
+texture to list it would cost much); a texture dropped from the Inventory
+onto a shortcut is not taken as its picture (a drop adds a shortcut);
+*Remove all shortcuts…* of Preferences leaves the copies until the next
+change of a picture.

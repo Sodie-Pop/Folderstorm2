@@ -448,8 +448,12 @@ impl App {
         // folders of the demo's inventory
         s.folderstorm_desktop.sign_in(self.world.agent_id);
         desktop::demo::seed_folders(&mut s.folderstorm_desktop);
-        if matches!(mode.as_str(), "items" | "outfit") {
+        if matches!(mode.as_str(), "items" | "outfit" | "icons") {
             desktop::demo::seed_items(&mut s.folderstorm_desktop, &mut self.world.inventory, self.world.agent_id);
+            desktop::demo::seed_styles(&mut s.folderstorm_desktop, &mut self.world.inventory, self.world.agent_id);
+            // the demo's texture, as its fetch would leave it
+            let texture = ctx.load_texture("demo-desktop-texture", desktop::demo::texture_image(), egui::TextureOptions::LINEAR);
+            self.ui_images.insert(desktop::demo::texture_asset(), texture);
         }
         if mode == "rlva" {
             self.settings.rlva_enabled = true;
@@ -534,6 +538,11 @@ impl App {
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
             // the landmark shortcut opened: Aurora's question before a teleport
             ("items", true) => vec![Request::OpenItem(demo::landmark())],
+            // the window *Shortcut icon* on the shortcut wearing a texture
+            ("icons", true) => {
+                demo::open_icon_window(ctx, d);
+                Vec::new()
+            }
             // then the notecard: Aurora's notecard window
             ("items", false) => vec![Request::OpenItem(demo::notecard())],
             // the outfit shortcut opened: the question of outfit safety
