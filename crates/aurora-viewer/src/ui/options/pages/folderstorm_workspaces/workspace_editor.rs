@@ -41,7 +41,7 @@ pub(super) fn layout_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -
         .map(|(at, _)| at);
     let mut pick = chosen;
     let shown = choices.iter().find(|(value, _)| *value == chosen).map_or("", |(_, label)| *label);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(tr!("fs-workspaces-layout"));
         egui::ComboBox::from_id_salt("folderstorm-workspace-layout")
             .width(PICKER_W)
