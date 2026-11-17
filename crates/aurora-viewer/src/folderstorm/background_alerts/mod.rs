@@ -127,10 +127,6 @@ impl AlertEvent {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Sound {
-    /// Nothing (also what a kind written by a later version reads as).
-    #[default]
-    #[serde(other)]
-    Silent,
     /// One of the viewer's interface sounds, by its Firestorm name
     /// (`UISnd<name>`), with its default asset (Linden Lab's library sounds
     /// every viewer plays).
@@ -141,6 +137,10 @@ pub enum Sound {
     /// asset id, which is read from the inventory when it plays and never
     /// shown.
     Inventory { item: Uuid },
+    /// Nothing (also what a kind written by a later version reads as).
+    #[default]
+    #[serde(other)]
+    Silent,
 }
 
 impl Sound {
@@ -345,15 +345,15 @@ pub fn inventory_sounds(inv: &crate::world::inventory::Inventory) -> Vec<(Uuid, 
 // ---- between Preferences and the app (egui's frame data)
 
 fn tests_id() -> egui::Id {
-    egui::Id::new("fs-alerts-tests")
+    egui::Id::unique("fs-alerts-tests")
 }
 
 fn inventory_id() -> egui::Id {
-    egui::Id::new("fs-alerts-inventory")
+    egui::Id::unique("fs-alerts-inventory")
 }
 
 fn inventory_wanted_id() -> egui::Id {
-    egui::Id::new("fs-alerts-inventory-wanted")
+    egui::Id::unique("fs-alerts-inventory-wanted")
 }
 
 /// Preferences' Test button: `sound` played now for `event`, wherever the

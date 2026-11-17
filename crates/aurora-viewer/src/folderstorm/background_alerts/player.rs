@@ -155,11 +155,6 @@ impl Player {
         self.prefetched = clips;
     }
 
-    /// Sounds are waiting.
-    pub fn busy(&self) -> bool {
-        !self.pending.is_empty()
-    }
-
     fn load_file(&mut self, folder: &Path, name: &str) {
         if self.files.contains_key(name) {
             return;

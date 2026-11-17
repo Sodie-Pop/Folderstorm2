@@ -6472,6 +6472,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
+| `AURORA_DEMO_BACKGROUND_ALERTS=1` (Folderstorm2) | The alert sounds of a background character on for the run (nothing saved), with made-up interface sounds (a short tick, its pitch by sound); outside the session host the window counts as a background character until a click in it and gets a made-up event every 5 s (new conversation, two instant messages of one conversation, two group lines of one group, a conference line, a mention, an inventory offer, a teleport offer), the second line of a conversation held by the quiet time; with `AURORA_DEMO_SESSION_HOST`, the demo viewers inherit it and their background characters sound for the shared chat's demo instant message and teleport offer |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
 | `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
@@ -7778,6 +7779,30 @@ failure. Grid validation and any paid upload are performed by the human.
   Render when the card is overloaded" off, nothing pauses. A capture run
   pauses too (a real one never does): `AURORA_FPS_LIMIT=60`,
   `AURORA_DEMO_BUSY_PAUSE=900` and `AURORA_CAPTURE_FRAMES=1000`.
+- **`AURORA_DEMO_BACKGROUND_ALERTS=1`** (Folderstorm2, alert sounds of
+  background characters, FEATURES.md 5.2): the alerts are on for the run
+  whatever Preferences › Sound › Interface sounds › "Alerts for characters
+  in the background" says (nothing saved), and the interface sounds are
+  made up (a short tick whose pitch depends on the sound).
+  `AURORA_DEMO=1 AURORA_DEMO_BACKGROUND_ALERTS=1 cargo run -p aurora-viewer -- --title "Test alerts"`.
+  What to look at:
+  - outside the session host, the window counts as a background character
+    whose sound the host cut, until a click in it. Every 5 s the log says
+    `background alerts demo: a made-up …` (new conversation, instant
+    message twice, group chat twice, conference, mention, inventory offer,
+    teleport offer) followed by `background alert: …` and a tick, except
+    for the second instant message and the second group line, held by the
+    quiet time (10 s by default; `RUST_LOG=info,fs_alerts=debug` shows
+    `Cooling`). After a click in the window nothing plays (`Front`).
+  - the Test button of each sound in Preferences plays it now, at the
+    alerts' volume, wherever the window is; "Choose a file…" copies a WAV
+    or OGG file (at most 4 MB and 10 s) into
+    `config\demo\background-alert-sounds` and selects it; a larger,
+    longer or broken file is refused with its reason.
+  - with `AURORA_DEMO_SESSION_HOST=3` too, the demo viewers inherit the
+    switch: a background character ticks for the shared chat's demo
+    instant message and teleport offer, the active one does not, nor one
+    whose "Heard in the background" is on.
 - **`AURORA_DEMO_SESSION_BEHIND=1|off|limited|normal`** (Folderstorm2,
   session host checkpoint 1): the window counts as behind another
   Folderstorm2 window (the instances registry is off in demo mode) until a

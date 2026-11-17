@@ -44,6 +44,11 @@
 //! - [`splash`]: a character's splash names it, in its language, and the
 //!   host's characters' splashes do not stack.
 //!
+//! Alert sounds of background characters (FEATURES.md 5.2): the choices
+//! and rules are in `crate::folderstorm::background_alerts`; this module
+//! keeps a character's own choices ([`Settings::background_alerts`]) and
+//! its player ([`State::alerts`]).
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod bar;

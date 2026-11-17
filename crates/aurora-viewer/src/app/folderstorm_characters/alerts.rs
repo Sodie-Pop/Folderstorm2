@@ -212,13 +212,14 @@ impl App {
             }
         }
         let managed = self.folderstorm_characters.managed.linked();
+        let in_world = self.in_world();
         let state = &mut self.folderstorm_characters.alerts_demo;
         if !managed && !state.0 && self.egui_ctx.input(|i| i.pointer.any_pressed()) {
             log::info!("background alerts demo: clicked, this window is in front now");
             state.0 = true;
         }
         let (due, count) = state.1.unwrap_or((now + DEMO_EVERY / 2, 0));
-        if now < due || managed || !self.in_world() {
+        if now < due || managed || !in_world {
             state.1 = Some((due, count));
             return;
         }
