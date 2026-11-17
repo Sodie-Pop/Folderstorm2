@@ -189,7 +189,7 @@ bars over the whole window; `mouselook-full` lets mouselook fill the window.
 Check that the world, its HUDs and its name tags stay in the rectangle, the
 margins are dark, the bars sit inside it (except with `bars-window`), a click
 in a margin selects nothing, windows can be dragged into the margins, and the
-settings are under Preferences › Layout › Bars and windows › World viewport.
+settings are under Preferences › Workspaces › World viewport.
 `inventory` keeps the right 40 % for the world and opens Inventory in the left
 margin, half the window wide: wider than the world, it keeps its size (it is
 no longer shrunk to the world's width). Make the viewer window narrower and
@@ -275,9 +275,10 @@ changed meanwhile. With no variable, check the menu entry itself on an
 inventory folder's **+** menu (greyed in the Trash, the Library and Current
 Outfit), Cancel in the folder dialog, and Cancel in the confirmation.
 
-**Viewport diagram (Folderstorm2).** Preferences › Layout › Bars and windows ›
-World viewport, behind the cog of "Use a custom world viewport", starts with a
-diagram of the viewer window, the world and the monitors.
+**Viewport diagram (Folderstorm2).** Preferences › Workspaces › World
+viewport shows, as soon as "Use a custom world viewport" is on, a diagram of
+the viewer window, the world and the monitors; the margins as numbers and the
+monitors' buttons are behind its cog.
 `AURORA_DEMO_MONITORS` pretends a monitor layout: monitors separated by commas
 or semicolons, each `WxH[+X+Y][@scale]` (X11 geometry: `-1920+0` puts one left
 of the main monitor; `@1.5` or `@150%` gives its scale). A monitor without a
@@ -286,10 +287,10 @@ position goes right of the previous one, tops aligned. An optional
 top-left corner of all the monitors); `wayland` pretends the window's position
 is unknown. The window keeps its real size: choose it with
 `AURORA_WINDOW_SIZE`. Add `AURORA_DEMO_VIEWPORT=1` to turn the viewport on and
-`AURORA_DEMO_OPTIONS=layout/0:cogs` to open the group:
+`AURORA_DEMO_OPTIONS=workspaces/1:cogs` to open the tab with its cog open:
 
 ```bash
-AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_OPTIONS=layout/0:cogs \
+AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_OPTIONS=workspaces/1:cogs \
   AURORA_WINDOW_SIZE=3840,1080 AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
   cargo run -p aurora-viewer -- --title "Test viewport diagram"
 ```
@@ -382,7 +383,7 @@ are not installed.
 
 **Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
 demo's own settings, opens Inventory, the world map and People, and opens
-Preferences › Layout › Layouts. "Wide" has the world on the right half of the
+Preferences › Workspaces › Saved. "Wide" has the world on the right half of the
 window with the bars around it and the three windows in the left margin;
 "Single" has no viewport and the windows over the world. `apply-wide` applies
 "Wide" by itself at frame 180; `apply-single` applies "Wide" then, at frame
@@ -402,13 +403,13 @@ world, the bars and the three windows, and says how many windows it placed;
 that the layout in use shows "In use", then "In use · modified" within a
 second of moving one of its windows or changing the viewport, until Update
 (which asks first) or another Apply; that "Previous arrangement" goes back and
-forth; that "Save as a new layout" refuses an empty or taken name and saves
-only the ticked parts; that Rename, Delete (asks first) and the arrows work;
+forth (Workspaces › Switching); that "Save the current setup" on *Layout*
+refuses an empty or taken name and saves only the ticked parts; that Rename, Delete (asks first) and the arrows work;
 that a window closed when a layout is applied is opened at its place if the
 layout was saved with it open, and otherwise takes its place when opened; and
-that "Reset bars and world" turns the viewport off without moving a window.
-Preferences itself is never moved. The bars' three places are under
-Preferences › Layout › Bars and windows › World viewport › Bars;
+that "Reset bars and world" (Switching) turns the viewport off without moving
+a window. Preferences itself is never moved. The bars' three places are under
+Preferences › Workspaces › World viewport › Bars around the world;
 `AURORA_DEMO_VIEWPORT=bars-around` shows "Around the world" alone: the world
 on the right two thirds with an eighth of the height free above and below, the
 top bars above the world, the bottom bar below it, both as wide as the world,
@@ -495,15 +496,15 @@ colour alone, `missing` points at a picture that is not there (its colour is
 shown and Preferences says so), `layout` adds a layout "Wall" with its own
 tiled background, in use. The world viewport is turned on (the world in the
 middle third) unless `AURORA_DEMO_VIEWPORT` sets it. Pretend monitors show
-the per-monitor fit; Preferences › Layout › Bars and windows has the group
-*Background around the world*:
+the per-monitor fit; Preferences › Workspaces › Margins has the group
+*Background around the world* (`AURORA_DEMO_OPTIONS=workspaces/2`):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
   AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test backgrounds"
-AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=tile AURORA_DEMO_VIEWPORT=right-half AURORA_DEMO_OPTIONS=layout/0 \
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=tile AURORA_DEMO_VIEWPORT=right-half AURORA_DEMO_OPTIONS=workspaces/2 \
   cargo run -p aurora-viewer -- --title "Test backgrounds tile"
-AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=layout/3 \
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=workspaces/0 \
   cargo run -p aurora-viewer -- --title "Test backgrounds layout"
 ```
 
@@ -532,8 +533,8 @@ world viewport is turned on (the world in the middle third) unless
 `AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
 wallpaper under the shortcuts. Without pretend monitors the window is one
 monitor, and only the first one's shortcuts show, in the left margin.
-Preferences › Layout › Bars and windows has the group *Desktop in the
-margins*:
+Preferences › Workspaces › Margins has the group *Desktop in the
+margins* (its icon size behind the switch's cog):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
@@ -596,9 +597,36 @@ refuses a taken name; and that the arrows walk nobody while the field has the
 keyboard. In the Toolbar buttons window, add *Layouts* and *Switch layout* to a
 bar: the first is lit while the switcher is open, the second names the layout
 it goes to (dimmed, and opening Preferences, until its two layouts are chosen
-under Preferences › Layout › Layouts › Quick switch). In Preferences ›
+under Preferences › Workspaces › Switching). In Preferences ›
 Shortcuts › Other, give the five *Layouts* actions a key each: none has one by
 default.
+
+**Preferences › Workspaces (Folderstorm2).** The layouts, the workspaces,
+the world viewport and the margins have their own page under Interface, after
+Layout, with four tabs: `AURORA_DEMO_OPTIONS=workspaces/<tab>` opens one, 0
+*Saved*, 1 *World viewport*, 2 *Margins*, 3 *Switching*. Seed entries with
+`AURORA_DEMO_LAYOUTS=1` or `AURORA_DEMO_WORKSPACES=1`:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=1 AURORA_DEMO_OPTIONS=workspaces/0 \
+  cargo run -p aurora-viewer -- --title "Test workspaces page"
+AURORA_DEMO=1 AURORA_DEMO_OPTIONS=workspaces/2 cargo run -p aurora-viewer -- --title "Test margins tab"
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=1 AURORA_DEMO_OPTIONS=workspaces/3 \
+  cargo run -p aurora-viewer -- --title "Test switching tab"
+```
+
+Check that *Saved* lists the favorites, then the workspaces, then the layouts,
+each line with its kind's icon; that the selected entry's buttons and editor
+show under its line (a workspace's ticked windows first, the others under
+*More windows*, Inventory 2 to 17 as one entry); that the last apply is one
+line under the buttons with the rest on hover; and that *Save the current
+setup* saves a workspace or a layout. *Margins* shows one notice with *Turn
+the world viewport on* while the viewport is off, the rows greyed; the
+background shows only the rows of its kind. *Switching* holds the favorites
+strip, the two layouts of *Switch layout*, *When the monitors change* and the
+HUD rule, each with its modified dot (listed under *Modified settings*, put
+back by *Reset Workspaces…*, which never deletes a saved entry), and the three
+ways back in one row. Layout › Bars and windows has upstream's groups only.
 
 **Settings search keywords (Folderstorm2).** The Preferences search finds the
 Folderstorm rows by words that are not in their labels
@@ -606,12 +634,13 @@ Folderstorm rows by words that are not in their labels
 window with a search typed.
 
 ```bash
-AURORA_DEMO=1 AURORA_DEMO_OPTIONS="layout:search=dual monitor" cargo run -p aurora-viewer -- --title "Test search keywords"
+AURORA_DEMO=1 AURORA_DEMO_OPTIONS="workspaces:search=dual monitor" cargo run -p aurora-viewer -- --title "Test search keywords"
 ```
 
-Check that "dual monitor" lists the world viewport's and the layouts' rows;
-that "MCP" lists the local assistant's rows, "workspace" the layouts and the
-five *Layouts* shortcuts, "undo" *Previous arrangement*, "photo mode" *Photo
+Check that "dual monitor" lists the world viewport's rows and the saved list;
+that "MCP" lists the local assistant's rows, "workspace" the saved list, the
+HUD rule and the five *Layouts* shortcuts (not *Reset bars and world* nor
+*Previous arrangement*), "undo" *Previous arrangement*, "photo mode" *Photo
 mode uses the whole window*, "alts" the *Other Folderstorm2 windows* rows,
 "screenshot" the image uploads and "outfit safety" the *Wear* switch of
 Inventory. In French and Japanese the same English words still find them, and
@@ -6391,7 +6420,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing\|building\|gestures` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (asked: Allow once, Allow for this object this session, Refuse), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). `building`: Ask before changes, the cut box read, moved up 0.5 m (asked), a cube rezzed 2 m east of the avatar (asked: the answer gives a candidate, never a confirmed id), then the demo notecard's permissions read and its next owner set to copy and modify (asked: "Set what next owners may do" is on Ask). `gestures` (with `AURORA_DEMO_GESTURES=mcp`, which seeds the demo gesture): Ask before changes, the demo gesture inspected then played (always asked: it says two lines, listed in the dialog), then a pose session of the avatar started (asked), its head turned (asked), the presets listed, the "Pointing" hand preset loaded (asked), the pose saved as a new file (always asked), and `pose_status` in the log. |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing\|building\|gestures` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (asked: Allow once, Allow for this object this session, Refuse), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). `building`: Ask before changes, the cut box read, moved up 0.5 m (asked), a cube rezzed 2 m east of the avatar (asked: the answer gives a candidate, never a confirmed id), then the demo notecard's permissions read and its next owner set to copy and modify (asked: "Set what next owners may do" is on Ask). `gestures` (with `AURORA_DEMO_GESTURES=mcp`, which seeds the demo gesture): Ask before changes, the demo gesture inspected then played (always asked: it says two lines, listed in the dialog), then a pose session of the avatar started (asked), its head turned (asked), the presets listed, the "Pointing" hand preset loaded (asked), the pose saved as a new file (always asked), and `pose_status` in the log. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -6409,9 +6438,9 @@ frame 700 in English, French and Japanese.
 `AURORA_DEMO_MCP=1` (Folderstorm2, `src/mcp_bridge.rs`): the bridge starts
 as `--mcp-api` would, for this session only, and writes
 `folderstorm2-mcp-<pid>.json` into the demo's settings folder.
-`AURORA_DEMO_OPTIONS=privacy:local-assistant` scrolls to the group: the
-switches, the presets, "Ready on 127.0.0.1, port …", recent activity and the
-Setup rows. With both, `folderstorm-mcp --diagnose --discovery <demo settings
+`AURORA_DEMO_OPTIONS=local-assistant` opens its page (System section): the
+switches with the status pill, the presets, recent activity and the Setup
+rows, each note under its button; Privacy keeps one row that leads there. With both, `folderstorm-mcp --diagnose --discovery <demo settings
 folder>` (or "Check connection", once `cargo build --workspace` has put the
 sidecar beside the viewer) reaches the demo inventory and reports
 `"session":"demo"`. Check that the access key appears nowhere on the page nor
@@ -6427,7 +6456,7 @@ program's name, the change in plain words, the countdown, Allow and Refuse.
 Allow creates the folder (open the inventory: it is at the root, not
 selected nor being renamed); Refuse, Escape, a click outside or 60 s
 without an answer leave the inventory as it was. Enter alone does nothing.
-With `AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the Edit,
+With `AURORA_DEMO_OPTIONS=local-assistant`, Custom shows the Edit,
 Move, Wear and Trash rows with Allow / Ask / Never, and Recent activity
 lists the call. A real client (`folderstorm-mcp` set up with the copied
 configuration and `--discovery <demo settings folder>`) can then move,
@@ -6445,7 +6474,7 @@ once the camera has stopped, an `assistant-<date>-<time>.jpg` of 512 × 512
 appears in the Photo window's folder, without the interface or the HUDs, and
 the log reads `local assistant demo: camera_snapshot answered {…"saved_to"…}`
 (never the picture's bytes). Refuse either: nothing moves, nothing is saved.
-With `AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the "Camera
+With `AURORA_DEMO_OPTIONS=local-assistant`, Custom shows the "Camera
 and pictures" row, and Recent activity lists one entry per line across the
 page. A real client can then call `camera_preset` (portrait, full body,
 front, back, left, right), `camera_shot`, `camera_reset`, `camera_snapshot`
@@ -6466,7 +6495,7 @@ The log reads `local assistant demo: plan previewed: …` with the rows.
 Allow: the three entries move in one change (the inventory window shows them
 in the subfolder), and the log reads `inventory_execute_plan answered {…
 "state":"done"…}`. Refuse: nothing moves (`… "permission_denied" …
-(operation_id op-…)`). With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+(operation_id op-…)`). With `AURORA_DEMO_OPTIONS=local-assistant`,
 Recent activity shows the plan's line as its sentence and its state ("…
 · done", "… · refused"), the program's name in the line's tooltip, and a
 Stop button on a line still waiting (in the dialog or for its turn): Stop
@@ -6496,7 +6525,7 @@ to …"); the dialog shows even though the demo asked on its own (a teleport
 always asks). Allow: the avatar teleports locally and the log reads
 `navigation_teleport answered {"arrived":true,"at_target":true,…}`, then
 `navigation_status answered {…,"last":{"reason":"arrived",…}}`. Refuse:
-`… permission_denied …`. With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+`… permission_denied …`. With `AURORA_DEMO_OPTIONS=local-assistant`,
 the Custom levels show the new row "Move my avatar", and Recent activity
 shows the walk and the teleport with their sentences. Capture the dialogs
 and the row in English, French and Japanese.
@@ -6520,7 +6549,7 @@ added line. Allow the script: `inventory_save_compile_script answered {…
 "source_saved":true,"compiled":false,"errors":[{"line":6,"column":10,…
 "Syntax error"…}]…}`; the script editor opened on it shows the saved source.
 Refuse: nothing is saved (`permission_denied`). With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the row "Edit
+`AURORA_DEMO_OPTIONS=local-assistant`, Custom shows the row "Edit
 notecards and scripts" (Allow / Ask / Never), and Recent activity the two
 saves' sentences. A real client can then read the other items: "Notes (no
 copy)" and "Greeter script (no modify)" are refused (`not_allowed`), "Notes
@@ -6545,7 +6574,7 @@ running". Allow: the box's Contents tab (Build › Edit, Contents) lists the
 copy, not running, and the log reads `object_contents_put answered {…
 "done":true … "asset_identity_verified":true …}`; the script stays in the
 inventory. Refuse: nothing is added. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the
 two new rows, "My objects' contents" and "Take my objects". A real client
 can then call `object_contents_rename`, `object_contents_remove` (it asks
 even on Allow), `object_take_copy` and `object_take` (it asks even on
@@ -6569,7 +6598,7 @@ again, then the demo asks to reset the script ("Reset the script “…” in th
 object “…” (it starts over from the beginning)"); Allow: `step 4 answered
 {… "reset_confirmed":false …}`. Opening the script from the box's Contents
 tab shows the added line. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 row "Run my objects' scripts". A real client can then call
 `object_script_status`, `object_script_set_running` and `script_debug_poll`
 (`start=now`, then its cursor). Capture the dialogs and the row in English,
@@ -6593,7 +6622,7 @@ the door script, check that it runs); with `AURORA_DEMO_POS=150,124` (within
 20 m of the box) it has 7, with a line said on channel 7, whose sentence says
 every listener hears it. Allow once: the steps run with no other dialog (a
 second "Door menu" opens), and the log reads `script testing step 6 answered
-{… "state":"passed" …}`. With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+{… "state":"passed" …}`. With `AURORA_DEMO_OPTIONS=local-assistant`,
 the Custom levels show the new row "Touch and talk to my objects". Capture the
 dialogs and the row in English, French and Japanese.
 
@@ -6610,7 +6639,7 @@ new object is a candidate, never a guessed id. Last, the demo reads the demo
 notecard's permissions and asks (its own row, "Set what next owners may do",
 is on Ask; on Allow it would not ask) to "Change what the next owner of “…”
 may do: copy ✓, modify ✓, transfer ✗". With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 rows "Build with my objects" and "Set what next owners may do". Capture the dialogs and the row in English,
 French and Japanese.
 
@@ -6632,7 +6661,7 @@ pose as a new pose file “Demo-assistant-…”" (the file appears in the poser
 Library), and logs `pose_status`. Open the poser (the toolbar's Poser): the
 assistant's session ends (`superseded_by_viewer_poser` in the next
 `pose_status`) and the poser's own pose shows. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 rows "Play gestures on my avatar" and "Pose my avatar". Capture the dialogs and
 the rows in English, French and Japanese.
 
@@ -6652,7 +6681,7 @@ items, the demo balance drops by L$30, and the log reads
 `uploads step 2 answered {… "done":true,"spent":30 …}`, then the status
 (`uploads step 3`). Refuse instead: nothing is created or spent.
 `AURORA_DEMO_MCP=camera-get` only logs `camera_get`. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 row "Upload local files". Capture the dialog and the row in English, French
 and Japanese.
 

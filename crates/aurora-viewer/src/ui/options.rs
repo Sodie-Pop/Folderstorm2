@@ -12,8 +12,8 @@ pub(crate) use pages::aurora::aurora_word;
 mod saved_graphics;
 mod scale;
 
-pub use pages::privacy;
 pub use pages::folderstorm_workspaces::tab as workspaces_tab; // Folderstorm
+pub use pages::privacy;
 pub(crate) use pages::sound::{ear_choice, noise_choice};
 pub(crate) use scale::keyboard as scale_keyboard;
 
@@ -77,7 +77,8 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 26] = [ // Folderstorm: 2 pages
+    // Folderstorm: 26, with Workspaces and LocalAssistant
+    pub const ALL: [Page; 26] = [
         Page::Aurora,
         Page::Graphics,
         Page::Camera,

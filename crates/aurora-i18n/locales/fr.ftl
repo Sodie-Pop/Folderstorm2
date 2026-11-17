@@ -1225,7 +1225,6 @@ fs-mcp-setup = Configuration
 fs-mcp-link-help = Ses réglages ont leur propre page, Assistant local, dans la section Système.
 fs-mcp-link-on = Activé
 fs-mcp-link-button = Réglages
-fs-mcp-intro = Permet à un assistant lancé sur cet ordinateur (Claude Code, Cursor, Codex…) de lire et de ranger votre inventaire et vos tenues, de déplacer la caméra et de prendre des photos, et de déplacer votre avatar, par l'intermédiaire de l'outil folderstorm-mcp. Les autres programmes lancés sous votre compte peuvent aussi utiliser cet accès.
 fs-mcp-allow = Autoriser l'accès d'un assistant local
 fs-mcp-allow-hint = Ouvre une connexion sur cet ordinateur uniquement (127.0.0.1), avec une nouvelle clé d'accès à chaque fois. Désactivé par défaut. L'option de ligne de commande --mcp-api l'active pour une session.
 fs-mcp-session-only = Utiliser ces réglages pour cette session uniquement
@@ -1979,12 +1978,7 @@ folderstorm-viewport-too-small = Une trop petite partie de cet écran est sous l
 folderstorm-viewport-set-aside = Ces marges laissent au monde moins d'un quart de la fenêtre : pour l'instant, le monde occupe toute la fenêtre.
 
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Workspaces)
-fs-layouts-tab = Dispositions et espaces de travail
-fs-layouts-group = Dispositions enregistrées
-fs-layouts-intro = Une disposition retient où vont les choses : la fenêtre du viewer, la zone du monde avec les barres, et la position et la taille de vos fenêtres. L'appliquer ouvre les fenêtres qui étaient ouvertes à son enregistrement et n'en ferme aucune (fermer est l'affaire d'un espace de travail), et elle ne contient jamais ce qu'une fenêtre affiche. Gardez-en une par configuration d'écrans, par exemple « 2 écrans » et « 1 écran », et passez de l'une à l'autre ici ou dans Monde › Dispositions.
 fs-layouts-list = Dispositions
-fs-layouts-list-help = Cliquez sur une disposition pour la sélectionner, puis sur Appliquer ; un double clic l'applique tout de suite. Appliquer remet la fenêtre du viewer, le monde, les barres et les fenêtres là où la disposition les a. Ce que vous déplacez ensuite n'est enregistré que si vous choisissez Mettre à jour.
-fs-layouts-empty = Aucune disposition enregistrée. Placez le monde et vos fenêtres comme vous les aimez, puis enregistrez l'arrangement ci-dessous.
 fs-layouts-unnamed = (sans nom)
 fs-layouts-active = En service
 fs-layouts-modified = En service · modifiée
@@ -2035,8 +2029,6 @@ fs-layouts-waiting = { $count ->
    *[other] { $count } fenêtres fermées prendront leur place quand vous les ouvrirez.
     }
 fs-layouts-previous-done = Retour à l'arrangement d'avant.
-fs-layouts-save-group = Enregistrer l'arrangement actuel
-fs-layouts-save-new = Enregistrer comme nouvelle disposition
 fs-layouts-save-new-help = Enregistre sous un nouveau nom où se trouvent les choses maintenant. Décochez une partie pour la laisser de côté : une disposition sans la fenêtre du viewer la laisse où elle est, une disposition sans positions de fenêtres ne change que le reste. Verrouiller la taille de la fenêtre empêche de redimensionner la fenêtre du viewer à la main tant que la disposition est utilisée.
 fs-layouts-name-hint = Nom, par exemple 2 écrans
 fs-layouts-save = Enregistrer
@@ -2047,13 +2039,11 @@ fs-layouts-error-taken = Une autre disposition porte déjà ce nom.
 fs-layouts-error-full = Il y a déjà { $count } dispositions : supprimez-en une d'abord.
 fs-layouts-error-parts = Choisissez au moins une partie à enregistrer.
 fs-layouts-error-invalid = L'arrangement actuel n'a pas pu être lu. Réessayez dans un instant.
-fs-layouts-arrangement = Arrangement
 fs-layouts-previous = Arrangement précédent
 fs-layouts-previous-help = Revient à la fenêtre du viewer, au monde, aux barres et aux positions des fenêtres en place avant la dernière disposition appliquée, ou avant Réinitialiser les barres et le monde. Un second appui y retourne. Mémorisé jusqu'à la fermeture du viewer.
 fs-layouts-previous-button = Revenir
 fs-layouts-reset = Réinitialiser les barres et le monde
 fs-layouts-reset-help = Désactive la zone du monde et remet les barres dans le monde, comme au premier démarrage. Les fenêtres restent où elles sont, et aucune disposition n'est modifiée ni supprimée.
-fs-layouts-reset-button = Réinitialiser
 fs-layouts-menu = Dispositions
 fs-layouts-menu-open = Dispositions et espaces de travail…
 fs-layouts-part-window = Fenêtre du viewer
@@ -2094,8 +2084,6 @@ fs-layouts-monitors-applied = Vos écrans ont changé : la disposition « { $nam
 fs-layouts-monitors-unlocked = Vos écrans ont changé : la fenêtre du viewer a été déverrouillée.
 fs-layouts-monitors-later = Pas maintenant
 fs-layouts-favorite = Favorite
-fs-layouts-quick = Changement rapide
-fs-layouts-quick-intro = Trois façons de changer de disposition sans ouvrir les Préférences. La fenêtre Dispositions et espaces de travail (Monde › Dispositions › Dispositions et espaces de travail…) : tapez une partie d'un nom et appuyez sur Entrée. Deux boutons de barre, à trouver dans Boutons de la barre… : « Dispositions et espaces de travail » ouvre cette fenêtre, « Changer de disposition » passe en un clic de l'une des deux dispositions choisies ci-dessous à l'autre. Et cinq raccourcis sans touche tant que vous ne leur en donnez pas, dans Préférences › Raccourcis › Autres › Dispositions. Les favoris viennent en premier dans la fenêtre et dans Monde › Dispositions ; les dispositions favorites sont celles que parcourent les raccourcis Disposition favorite suivante et précédente.
 fs-layouts-toggle-first = Première disposition
 fs-layouts-toggle-second = Seconde disposition
 fs-layouts-toggle-help = Les deux dispositions entre lesquelles passent le bouton de barre « Changer de disposition » et son raccourci, par exemple « 2 écrans » et « 1 écran » : la seconde quand la première est en service, la première sinon.
@@ -2288,8 +2276,6 @@ fs-workspaces-name-hint = Nom, par exemple Tri
 fs-workspaces-with-layout = Toujours utiliser la disposition « { $name } » avec lui
 fs-workspaces-with-no-layout = Toujours utiliser la disposition en service avec lui (aucune n'est en service)
 fs-workspaces-save-help = Enregistre sous un nouveau nom quelles fenêtres sont ouvertes maintenant. Appliquer l'espace de travail les ouvre et ferme les autres, là où la disposition en service les place ; cochez la case pour qu'il applique aussi la disposition en service maintenant. Il ne contient jamais ce qu'une fenêtre affiche.
-fs-workspaces-save-new = Enregistrer comme nouvel espace de travail
-fs-workspaces-save = Enregistrer l'espace
 fs-workspaces-ask-update = Remplacer les fenêtres de l'espace de travail « { $name } » par celles ouvertes maintenant ?
 fs-workspaces-ask-delete = Supprimer l'espace de travail « { $name } » ?
 fs-workspaces-update-help = Enregistre dans l'espace de travail les fenêtres ouvertes maintenant. Son choix de disposition est gardé. Demande d'abord.
@@ -2315,11 +2301,7 @@ fs-workspaces-applied-blocked = { $count ->
     [one] { $count } fenêtre ne peut pas être ouverte pour l'instant et est restée fermée.
    *[other] { $count } fenêtres ne peuvent pas être ouvertes pour l'instant et sont restées fermées.
     }
-fs-workspaces-group = Espaces de travail enregistrés
-fs-workspaces-intro = Un espace de travail retient quelles fenêtres sont ouvertes, pour une activité : « Tri » avec les deux fenêtres d'inventaire, « Exploration » avec les cartes. L'appliquer ouvre ces fenêtres et ferme les autres ; où elles vont est l'affaire de la disposition, donc un espace de travail fonctionne sur n'importe quelle disposition. Il peut aussi nommer une disposition à appliquer avec lui. Conversations n'est jamais ouverte ni fermée, et rien de ce qu'une fenêtre affiche n'est enregistré.
 fs-workspaces-list = Espaces de travail
-fs-workspaces-list-help = Cliquez sur un espace de travail pour le sélectionner, puis Appliquer ; un double clic l'applique tout de suite. L'appliquer ouvre les fenêtres cochées ci-dessous et ferme les autres, après sa disposition s'il en a une. Mettre à jour y enregistre les fenêtres ouvertes maintenant.
-fs-workspaces-empty = Aucun espace de travail enregistré. Ouvrez les fenêtres voulues pour une activité, puis enregistrez-les ci-dessous.
 fs-workspaces-newer-help = Cet espace de travail a été créé par une version plus récente du viewer. Il est gardé tel quel et ne peut être ni appliqué ni modifié ici ; il peut seulement être supprimé.
 fs-workspaces-invalid-help = Cette entrée du fichier de réglages n'est pas un espace de travail que cette version sait lire. Elle est gardée telle quelle et ne peut être ni appliquée ni modifiée ici ; elle peut seulement être supprimée.
 fs-workspaces-layout = Disposition appliquée avec lui
@@ -2420,7 +2402,6 @@ fs-context-take-off-help = Quand vous passez à un espace de travail qui a des H
 
 # Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Workspaces › Margins)
 fs-background-group = Fond autour du monde
-fs-background-intro = Affiché dans les marges que laisse la zone du monde, par exemple quand la fenêtre s'étend sur plusieurs écrans. Activez une zone du monde personnalisée ci-dessus pour le voir.
 fs-background-kind = Fond
 fs-background-kind-help = Ce que montrent les marges autour du monde au lieu du noir. Les fenêtres, les barres et les HUD restent par-dessus, et le monde n'est jamais recouvert.
 fs-background-kind-none = Rien
@@ -2459,7 +2440,6 @@ fs-background-shows = Affiche
 
 # Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Workspaces › Margins)
 fs-desktop-group = Bureau dans les marges
-fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
 fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y des dossiers de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer.
 fs-desktop-size = Taille des icônes

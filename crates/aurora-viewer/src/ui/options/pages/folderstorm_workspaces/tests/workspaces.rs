@@ -316,7 +316,15 @@ mod context {
             )],
             names: [(radar().item, "Radar".to_owned())].into_iter().collect(),
         };
-        let texts = drawn_scrolled("preferences-workspace-context", tab::SAVED, s, false, "exploring", Some(huds), 420.0);
+        let texts = drawn_scrolled(
+            "preferences-workspace-context",
+            tab::SAVED,
+            s,
+            false,
+            "exploring",
+            Some(huds),
+            420.0,
+        );
         for expected in [
             tr!("fs-context-section-set").to_owned(),
             tr!("fs-context-graphics").to_owned(),

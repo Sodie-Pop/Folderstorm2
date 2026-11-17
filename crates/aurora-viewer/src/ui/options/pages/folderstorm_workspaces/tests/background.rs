@@ -54,7 +54,10 @@ fn the_background_group_is_drawn() {
     let texts = drawn("preferences-background-none", tab::MARGINS, s.clone(), false);
     assert!(texts.iter().any(|t| t == tr!("fs-background-kind")));
     assert!(!texts.iter().any(|t| t == tr!("fs-margins-off")));
-    assert!(!texts.iter().any(|t| t == tr!("fs-background-fit")), "the picture's rows wait for a picture");
+    assert!(
+        !texts.iter().any(|t| t == tr!("fs-background-fit")),
+        "the picture's rows wait for a picture"
+    );
     // the search still finds them
     let texts = drawn_found("preferences-background-found", tab::MARGINS, s, false, "wallpaper");
     assert!(texts.iter().any(|t| t == tr!("fs-background-picture")));

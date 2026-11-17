@@ -128,7 +128,9 @@ pub(super) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-saved-save-group"), |cx| {
         words(cx, &["fs-search-layouts-save", "fs-search-workspaces-save"])
             .section_body()
-            .row(tr!("fs-saved-save"), tr!("fs-saved-save-help"), &Nothing, |ui, s| save_form(ui, &p, s));
+            .row(tr!("fs-saved-save"), tr!("fs-saved-save-help"), &Nothing, |ui, s| {
+                save_form(ui, &p, s)
+            });
     });
 }
 
@@ -149,12 +151,7 @@ fn in_use(s: &Settings) -> Option<Pick> {
             kind: Kind::Workspace,
             index,
         })
-        .or_else(|| {
-            active_layout(s).map(|index| Pick {
-                kind: Kind::Layout,
-                index,
-            })
-        })
+        .or_else(|| active_layout(s).map(|index| Pick { kind: Kind::Layout, index }))
 }
 
 fn count(s: &Settings, kind: Kind) -> usize {
@@ -207,10 +204,7 @@ fn note(ctx: &egui::Context, s: &Settings, pick: Pick) -> &'static str {
         None => {}
     }
     let (active, modified) = match pick.kind {
-        Kind::Layout => (
-            store.is_active(pick.index),
-            apply::modified(store, &s.folderstorm_viewport),
-        ),
+        Kind::Layout => (store.is_active(pick.index), apply::modified(store, &s.folderstorm_viewport)),
         Kind::Workspace => (
             store.is_active_workspace(pick.index),
             apply::workspace_modified(store, &apply::open_now(ctx)),
@@ -237,10 +231,10 @@ fn ordered(s: &Settings) -> Vec<(Option<&'static str>, Pick)> {
                 index,
             })
         } else {
-            favorite.layout().and_then(|name| store.find(name)).map(|(index, _)| Pick {
-                kind: Kind::Layout,
-                index,
-            })
+            favorite
+                .layout()
+                .and_then(|name| store.find(name))
+                .map(|(index, _)| Pick { kind: Kind::Layout, index })
         };
         if let Some(pick) = pick.filter(|pick| !favorites.contains(pick)) {
             favorites.push(pick);
@@ -259,10 +253,7 @@ fn ordered(s: &Settings) -> Vec<(Option<&'static str>, Pick)> {
         .filter(|pick| !favorites.contains(pick))
         .collect();
     let layouts = (0..store.layouts.len())
-        .map(|index| Pick {
-            kind: Kind::Layout,
-            index,
-        })
+        .map(|index| Pick { kind: Kind::Layout, index })
         .filter(|pick| !favorites.contains(pick))
         .collect();
     section(&mut out, tr!("fs-switcher-favorites"), favorites);
@@ -599,7 +590,11 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pic
         }
         // a favorite: first here, in the switcher, in World › Layouts, in
         // the strip and in the keyboard's round
-        let tip = if favorite { tr!("fs-switcher-unstar") } else { tr!("fs-switcher-star") };
+        let tip = if favorite {
+            tr!("fs-switcher-unstar")
+        } else {
+            tr!("fs-switcher-star")
+        };
         if usable && widgets::icon_toggle(ui, p, ICON_STAR, tip, favorite) {
             let store = &mut s.folderstorm_workspaces;
             changed |= match pick.kind {

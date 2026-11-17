@@ -21,11 +21,13 @@ pub(super) fn page(cx: &mut Cx) {
     cx.group(tr!("fs-switcher-favorites"), |cx| {
         cx.note(tr!("fs-switching-favorites-intro"));
         // (Folderstorm (C++): "Show workspace favorites strip", off until chosen)
-        words(cx, &["fs-search-layouts-quick"]).keywords("strip row bar pills landmark star").toggle(
-            tr!("fs-strip-show"),
-            tr!("fs-strip-show-help"),
-            &field!(folderstorm_workspaces.strip),
-        );
+        words(cx, &["fs-search-layouts-quick"])
+            .keywords("strip row bar pills landmark star")
+            .toggle(
+                tr!("fs-strip-show"),
+                tr!("fs-strip-show-help"),
+                &field!(folderstorm_workspaces.strip),
+            );
     });
     cx.group(tr!("fs-switching-toggle"), |cx| {
         cx.note(tr!("fs-switching-toggle-intro"));
@@ -33,7 +35,9 @@ pub(super) fn page(cx: &mut Cx) {
             // each of the two its own modified dot; reset to "not chosen"
             let track = Custom {
                 path: "folderstorm_workspaces.toggle",
-                modified: move |s: &Settings, d: &Settings| s.folderstorm_workspaces.toggle[place] != d.folderstorm_workspaces.toggle[place],
+                modified: move |s: &Settings, d: &Settings| {
+                    s.folderstorm_workspaces.toggle[place] != d.folderstorm_workspaces.toggle[place]
+                },
                 reset: move |s: &mut Settings, d: &Settings| {
                     s.folderstorm_workspaces.toggle[place] = d.folderstorm_workspaces.toggle[place].clone();
                 },
@@ -82,7 +86,9 @@ pub(super) fn page(cx: &mut Cx) {
             &["fs-search-layouts-previous", "fs-search-layouts-lock", "fs-search-layouts-reset"],
         )
         .section_body()
-        .row(tr!("fs-switching-back"), tr!("fs-switching-back-help"), &Nothing, |ui, s| get_back(ui, &p, s));
+        .row(tr!("fs-switching-back"), tr!("fs-switching-back-help"), &Nothing, |ui, s| {
+            get_back(ui, &p, s)
+        });
     });
 }
 
@@ -133,9 +139,17 @@ fn get_back(ui: &mut egui::Ui, p: &Palette, s: &mut Settings) -> bool {
     ui.vertical(|ui| {
         ui.horizontal_wrapped(|ui| {
             let help = tr!("fs-layouts-previous-help");
-            let previous = widgets::action_button_if(ui, p, ICON_BACK, tr!("fs-layouts-previous"), ActionKind::Flat, size, apply::has_previous(&ctx))
-                .on_hover_text(help)
-                .on_disabled_hover_text(help);
+            let previous = widgets::action_button_if(
+                ui,
+                p,
+                ICON_BACK,
+                tr!("fs-layouts-previous"),
+                ActionKind::Flat,
+                size,
+                apply::has_previous(&ctx),
+            )
+            .on_hover_text(help)
+            .on_disabled_hover_text(help);
             if previous.clicked() && apply::previous(&ctx, &mut Live::of(s)) {
                 went_back = Some(true);
                 changed = true;

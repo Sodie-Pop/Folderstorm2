@@ -130,11 +130,9 @@ pub(super) fn margins(cx: &mut Cx) {
     if off {
         let p = cx.p;
         cx.group(tr!("folderstorm-viewport"), |cx| {
-            words(cx, &["fs-search-viewport"]).wide().row(
-                tr!("fs-margins-off"),
-                tr!("fs-margins-off-help"),
-                &Nothing,
-                |ui, s| {
+            words(cx, &["fs-search-viewport"])
+                .wide()
+                .row(tr!("fs-margins-off"), tr!("fs-margins-off-help"), &Nothing, |ui, s| {
                     let clicked = widgets::action_button(
                         ui,
                         &p,
@@ -148,8 +146,7 @@ pub(super) fn margins(cx: &mut Cx) {
                         s.folderstorm_viewport.enabled = true;
                     }
                     clicked
-                },
-            );
+                });
         });
     }
     background::group(cx, off);

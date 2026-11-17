@@ -345,9 +345,9 @@ mod tests {
     use super::*;
     use crate::folderstorm::workspaces::apply::{self, Live, Report};
     use crate::folderstorm::workspaces::store::{MonitorPolicy, Store};
+    use crate::folderstorm::workspaces::window::{Command, Pretend};
     use crate::folderstorm::workspaces::words::report_text;
     use crate::settings::Settings;
-    use crate::folderstorm::workspaces::window::{Command, Pretend};
     use crate::ui::options::{OptionsUi, Page, show};
     use crate::ui::widgets::Floater;
     use crate::ui::widgets::elide_tests::{Frames, Text};
@@ -1527,7 +1527,13 @@ mod tests {
         }))
         .expect("read");
         let texts = w.settle();
-        let top = |name: &str| texts.iter().find(|t| t.source == name).map(|t| t.rect.top()).unwrap_or_else(|| panic!("{name}"));
+        let top = |name: &str| {
+            texts
+                .iter()
+                .find(|t| t.source == name)
+                .map(|t| t.rect.top())
+                .unwrap_or_else(|| panic!("{name}"))
+        };
         let favorites = top(&tr!("fs-switcher-favorites").to_uppercase());
         let workspaces = top(&tr!("fs-workspaces-list").to_uppercase());
         let layouts = top(&tr!("fs-layouts-list").to_uppercase());

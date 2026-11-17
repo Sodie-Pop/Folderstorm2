@@ -1207,7 +1207,7 @@ exe before publishing; the local build also writes it to `version.txt`.
   the terminal waits for its text. With `AURORA_DEMO=1` it is a dry run that
   removes nothing.
 - `--mcp-api`: as "Allow local assistant access" with "Use these settings
-  for this session only" in Preferences › Privacy › Local assistant: the
+  for this session only" in Preferences › Local assistant: the
   bridge listens on 127.0.0.1 and writes `folderstorm2-mcp-<pid>.json` in
   the settings folder for the `folderstorm-mcp` sidecar, until the viewer
   quits; the saved setting is unchanged. See

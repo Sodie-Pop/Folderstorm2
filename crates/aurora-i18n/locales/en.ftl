@@ -1222,7 +1222,6 @@ fs-mcp-setup = Setup
 fs-mcp-link-help = Its settings have their own page, Local assistant, in the System section.
 fs-mcp-link-on = On
 fs-mcp-link-button = Settings
-fs-mcp-intro = Lets an assistant running on this computer (Claude Code, Cursor, Codex…) read and organise your inventory and outfits, move the camera and take pictures, and move your avatar, through the folderstorm-mcp helper. Other programs running under your account can use this access too.
 fs-mcp-allow = Allow local assistant access
 fs-mcp-allow-hint = Opens a connection on this computer only (127.0.0.1), with a new access key each time. Off by default. The --mcp-api command-line option turns it on for one session.
 fs-mcp-session-only = Use these settings for this session only
@@ -1973,12 +1972,7 @@ folderstorm-viewport-too-small = Too little of this monitor is under the viewer 
 folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
 
 # Folderstorm: layouts (folderstorm/workspaces, Preferences › Workspaces)
-fs-layouts-tab = Layouts & workspaces
-fs-layouts-group = Saved layouts
-fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. Applying it opens the windows it was saved with open and closes none (closing is what a workspace does), and it never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
 fs-layouts-list = Layouts
-fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the viewer window, the world, the bars and the windows where the layout has them. What you move afterwards is only saved when you choose Update.
-fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
 fs-layouts-unnamed = (no name)
 fs-layouts-active = In use
 fs-layouts-modified = In use · modified
@@ -2029,8 +2023,6 @@ fs-layouts-waiting = { $count ->
    *[other] { $count } closed windows will take their places when you open them.
     }
 fs-layouts-previous-done = Back to the arrangement before.
-fs-layouts-save-group = Save the current arrangement
-fs-layouts-save-new = Save as a new layout
 fs-layouts-save-new-help = Saves where things are now under a new name. Untick a part to leave it out: a layout without the viewer window leaves it where it is, one without window positions only changes the rest. Lock the window size keeps the viewer window from being resized by hand while the layout is in use.
 fs-layouts-name-hint = Name, for example 2 monitors
 fs-layouts-save = Save
@@ -2041,13 +2033,11 @@ fs-layouts-error-taken = Another layout already has this name.
 fs-layouts-error-full = There are already { $count } layouts: delete one first.
 fs-layouts-error-parts = Choose at least one part to save.
 fs-layouts-error-invalid = The current arrangement could not be read. Try again in a moment.
-fs-layouts-arrangement = Arrangement
 fs-layouts-previous = Previous arrangement
 fs-layouts-previous-help = Goes back to the viewer window, the world, the bars and the window positions in place before the last layout was applied, or before Reset bars and world. Pressing it again comes back. Remembered until the viewer closes.
 fs-layouts-previous-button = Go back
 fs-layouts-reset = Reset bars and world
 fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
-fs-layouts-reset-button = Reset
 fs-layouts-menu = Layouts
 fs-layouts-menu-open = Layouts & workspaces…
 fs-layouts-part-window = Viewer window
@@ -2088,8 +2078,6 @@ fs-layouts-monitors-applied = Your monitors changed: the layout “{ $name }” 
 fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlocked.
 fs-layouts-monitors-later = Not now
 fs-layouts-favorite = Favorite
-fs-layouts-quick = Quick switch
-fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts & workspaces window (World › Layouts › Layouts & workspaces…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts & workspaces” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts; the favorite layouts are the ones the shortcuts Next and Previous favorite layout go round.
 fs-layouts-toggle-first = First layout
 fs-layouts-toggle-second = Second layout
 fs-layouts-toggle-help = The two layouts the “Switch layout” toolbar button and its shortcut switch between, for example “2 monitors” and “1 monitor”: the second when the first is in use, the first otherwise.
@@ -2276,8 +2264,6 @@ fs-workspaces-name-hint = Name, for example Sorting
 fs-workspaces-with-layout = Always use the layout “{ $name }” with it
 fs-workspaces-with-no-layout = Always use the layout in use with it (none is in use)
 fs-workspaces-save-help = Saves which windows are open now under a new name. Applying the workspace opens them and closes the others, wherever the layout in use puts them; tick the box to make it also apply the layout in use now. It never holds what a window shows.
-fs-workspaces-save-new = Save as a new workspace
-fs-workspaces-save = Save workspace
 fs-workspaces-ask-update = Replace the windows of the workspace “{ $name }” with the ones open now?
 fs-workspaces-ask-delete = Delete the workspace “{ $name }”?
 fs-workspaces-update-help = Saves the windows open now in the workspace. Its layout choice is kept. Asks first.
@@ -2303,11 +2289,7 @@ fs-workspaces-applied-blocked = { $count ->
     [one] { $count } window cannot be opened right now and was left closed.
    *[other] { $count } windows cannot be opened right now and were left closed.
     }
-fs-workspaces-group = Saved workspaces
-fs-workspaces-intro = A workspace remembers which windows are open, for an activity: “Sorting” with both Inventory windows, “Exploring” with the maps. Applying it opens those windows and closes the others; where they go is the layout's business, so a workspace works on any layout. It can also name a layout to apply with it. Conversations is never opened or closed, and nothing a window shows is saved.
 fs-workspaces-list = Workspaces
-fs-workspaces-list-help = Click a workspace to select it, then Apply; a double click applies it at once. Applying opens the windows ticked below and closes the others, after its layout if it has one. Update saves the windows open now in it.
-fs-workspaces-empty = No workspace saved yet. Open the windows you want for an activity, then save them below.
 fs-workspaces-newer-help = This workspace was made by a newer version of the viewer. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
 fs-workspaces-invalid-help = This entry of the settings file is not a workspace this version can read. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
 fs-workspaces-layout = Layout applied with it
@@ -2408,7 +2390,6 @@ fs-context-take-off-help = When you switch to a workspace that has HUDs, the HUD
 
 # Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Workspaces › Margins)
 fs-background-group = Background around the world
-fs-background-intro = Shown in the margins the world viewport leaves, as when the window is stretched over several monitors. Turn the world viewport on above to see it.
 fs-background-kind = Background
 fs-background-kind-help = What the margins around the world show instead of black. Windows, bars and HUDs stay on top of it, and the world is never covered.
 fs-background-kind-none = Nothing
@@ -2447,7 +2428,6 @@ fs-background-shows = Shows
 
 # Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Workspaces › Margins)
 fs-desktop-group = Desktop in the margins
-fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
 fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop Inventory folders on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it.
 fs-desktop-size = Icon size
