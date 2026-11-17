@@ -3,6 +3,7 @@
 //! reach them through one-line hooks marked `// Folderstorm:`.
 
 pub mod backgrounds;
+pub mod backup;
 pub mod bulk_plan;
 pub mod chat_upload;
 pub mod desktop;

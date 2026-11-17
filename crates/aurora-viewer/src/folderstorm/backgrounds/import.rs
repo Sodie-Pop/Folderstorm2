@@ -51,8 +51,9 @@ pub struct Decoded {
 }
 
 /// A stable 64-bit hash of a file's bytes (FNV-1a): the copy's name, so
-/// that the same picture chosen twice is one file.
-fn hash(bytes: &[u8]) -> u64 {
+/// that the same picture chosen twice is one file (and how a backup checks
+/// a copy it carries, `crate::folderstorm::backup::file`).
+pub(crate) fn hash(bytes: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in bytes {
         h ^= u64::from(*b);

@@ -16095,6 +16095,7 @@ impl App {
         self.options_ui.chat_log_custom = !self.settings.chat_log_location.is_empty();
         self.poll_folder_pick();
         self.poll_settings_backup();
+        self.folders.settings_changed |= crate::folderstorm::backup::frame(ctx, &mut self.settings, self.world.login.as_deref()); // Folderstorm: account backup
         if let Some(done) = self.world.chat_log.take_relocated() {
             self.options_ui.chat_log_status = match done {
                 Ok(count) => aurora_i18n::tr!("ui-options-chat-logs-moved", count = count),

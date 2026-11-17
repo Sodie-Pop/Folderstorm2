@@ -2137,6 +2137,112 @@ fs-desktop-left-out =
 fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Layout › Bars and windows).
 fs-desktop-added-hidden = They show when the window leaves room around the world.
 
+# Folderstorm: the account's setup backup (folderstorm/backup, Preferences › Language and updates)
+fs-backup-group = Folderstorm setup backup
+fs-backup-intro = One file with this account's Folderstorm setup: layouts and workspaces, backgrounds, the desktop, Inventory tabs and windows, gesture boards, the world viewport, media choices and the session host's characters. Never passwords, logins, chat or e-mail addresses.
+fs-backup-export = Export
+fs-backup-export-help = Writes the setup of this profile and of the account logged in to a file you choose, to keep or to carry to another PC.
+fs-backup-export-button = Export…
+fs-backup-import = Import
+fs-backup-import-help = Reads a backup file and shows what it holds; you choose the parts and how each one is put back.
+fs-backup-import-button = Import…
+fs-backup-folder = Backups folder
+fs-backup-folder-help = Where the automatic backups are kept: a safety backup before each import, and the daily ones.
+fs-backup-folder-button = Open backups folder
+fs-backup-daily = Daily automatic backup
+fs-backup-daily-help = Once a day, while logged in, a backup of the account's setup in the backups folder.
+fs-backup-keep = Daily backups kept
+fs-backup-keep-help = The older ones are removed, for each account.
+fs-backup-list = Automatic backups
+fs-backup-list-help = Restore puts a backup back as it was: use the one made before an import to undo it.
+fs-backup-list-empty = None yet.
+fs-backup-list-entry = { $date } · { $kind } · { $account } · { $count ->
+        [one] 1 part
+       *[other] { $count } parts
+    }
+fs-backup-no-account-name = no account
+fs-backup-restore-button = Restore…
+fs-backup-kind-manual = exported
+fs-backup-kind-before-import = before an import
+fs-backup-kind-daily = daily
+fs-backup-file-type = Folderstorm setup backup
+fs-backup-exported = Exported to { $path }
+fs-backup-write-failed = The file could not be written.
+fs-backup-read-failed = The file could not be read.
+fs-backup-not-a-backup = This file is not a Folderstorm setup backup.
+fs-backup-too-large = This file is too large to be a setup backup.
+fs-backup-import-title = Import a Folderstorm setup
+fs-backup-restore-title = Restore an automatic backup
+fs-backup-from = Backup of { $account }, { $date }, version { $version }.
+fs-backup-newer = Made by a newer version: only the parts this version knows can be imported.
+fs-backup-unknown = Left alone (this version does not know them): { $sections }
+fs-backup-other-account = This backup is of { $account }, not of { $current }. Its gesture boards stay with { $account } and show when that account logs in here; Inventory folders and items only exist in that account's Inventory.
+fs-backup-not-logged-in = Not logged in: what points to an Inventory is kept for the account the backup is of.
+fs-backup-skip-inventory = { $count ->
+        [one] Leave out the shortcut or tab entry that points to that account's Inventory
+       *[other] Leave out the { $count } shortcuts and tab entries that point to that account's Inventory
+    }
+fs-backup-nothing = Nothing in this file can be imported by this version.
+fs-backup-merge = Merge
+fs-backup-replace = Replace
+fs-backup-merge-help = Merge adds the file's entries; one with the same name as one of yours takes its place. Replace makes the part exactly as in the file.
+fs-backup-safety-note = A backup of your setup as it is now is made first: restore it from Automatic backups to undo the import.
+fs-backup-import-confirm = Import
+fs-backup-restore-confirm = Restore
+fs-backup-safety-failed = The safety backup could not be written: nothing was imported.
+fs-backup-imported = { $count ->
+        [one] 1 part imported.
+       *[other] { $count } parts imported.
+    }
+fs-backup-section-failed = { $section } not imported: { $reason }
+fs-backup-undo-hint = To undo, restore the backup made before the import, under Automatic backups.
+fs-backup-unreadable = its content cannot be read
+fs-backup-no-account = the backup does not say which account made it
+fs-backup-host-running = close the session host first
+fs-backup-section-layouts = Layouts and workspaces
+fs-backup-section-background = Background around the world
+fs-backup-section-desktop = Desktop in the margins
+fs-backup-section-inventory-tabs = Custom Inventory tabs
+fs-backup-section-inventory-windows = Inventory windows (pin and quiet mode)
+fs-backup-section-gesture-boards = Gesture boards
+fs-backup-section-viewport = World viewport
+fs-backup-section-media = Media choices
+fs-backup-section-session-host = Session host characters
+fs-backup-note-limit = { $count ->
+        [one] 1 entry left out: the list is full.
+       *[other] { $count } entries left out: the list is full.
+    }
+fs-backup-note-kept = { $count ->
+        [one] 1 entry is kept but cannot be used by this version.
+       *[other] { $count } entries are kept but cannot be used by this version.
+    }
+fs-backup-note-unread = { $count ->
+        [one] 1 entry could not be read and was left out.
+       *[other] { $count } entries could not be read and were left out.
+    }
+fs-backup-note-workspace-inventory = { $count ->
+        [one] 1 Inventory folder or HUD of another account left out of the workspaces.
+       *[other] { $count } Inventory folders and HUDs of another account left out of the workspaces.
+    }
+fs-backup-note-desktop-inventory = { $count ->
+        [one] 1 folder shortcut of another account left out.
+       *[other] { $count } folder shortcuts of another account left out.
+    }
+fs-backup-note-desktop-there = { $count ->
+        [one] 1 shortcut was already on your desktop.
+       *[other] { $count } shortcuts were already on your desktop.
+    }
+fs-backup-note-tabs-inventory = { $count ->
+        [one] 1 folder or item of another account left out of the tabs.
+       *[other] { $count } folders and items of another account left out of the tabs.
+    }
+fs-backup-note-windows-inventory = { $count ->
+        [one] 1 folder window's mode left out.
+       *[other] { $count } folder windows' modes left out.
+    }
+fs-backup-note-boards-inventory = Gesture boards left out: their buttons are items of another account's Inventory.
+fs-search-backup = backup back up export import restore save copy transfer migrate setup profile undo
+
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
 fs-chat-upload-choose-title = Choose an image to upload

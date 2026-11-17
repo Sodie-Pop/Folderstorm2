@@ -524,6 +524,8 @@ pub struct Settings {
     pub folderstorm_gesture_boards: crate::folderstorm::gesture_boards::store::Store,
     // Folderstorm: the margins' desktop (folderstorm/desktop)
     pub folderstorm_desktop: crate::folderstorm::desktop::Desktop,
+    // Folderstorm: automatic backups of the account's setup (folderstorm/backup)
+    pub folderstorm_backup: crate::folderstorm::backup::Settings,
     /// The crosshair in mouselook (ShowCrosshairs; #1166).
     pub crosshair: crate::ui::crosshair::Settings,
     /// LLViewerJoystick: device, axis mapping and separate avatar/flycam tuning.
@@ -2049,6 +2051,7 @@ impl Default for Settings {
             // Folderstorm: gesture boards
             folderstorm_gesture_boards: Default::default(),
             folderstorm_desktop: Default::default(), // Folderstorm: the margins' desktop
+            folderstorm_backup: Default::default(), // Folderstorm: automatic backups
             crosshair: Default::default(),
             joystick: Default::default(),
             gamepad: crate::joystick::Settings::gamepad_defaults(),
