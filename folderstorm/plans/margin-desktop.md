@@ -1226,13 +1226,7 @@ Built: Aurora's *Add* made it straightforward.
 - **Not tested here**: the greyed state under an RLVa wear lock (as for
   the outfits), and the app's arms themselves (a teleport question set,
   an action applied): they need an `App`. The rules they call are tested.
-- **A place for later** (asked for after this checkpoint: an "X" on a
-  worn object's shortcut that detaches it): the face of a worn wearable
-  is already known (`Greyed::Worn`, with its item), so the "X" is a small
-  hit area on that face in `surface.rs`, a `Request::Detach(item)`, and
-  the glue's `Action::Remove(item)` through `apply_appearance_action`
-  (RLVa's `@remattach` / `@detach` are checked there, and `WearLocks`
-  says beforehand whether to show it).
+- **Taken off by an "X"** since: see "Detach from a shortcut" below.
 
 ### Decided in the build, beyond the plan
 
@@ -1283,9 +1277,65 @@ account), `tests.rs` (the demo's seeds), `outfit_safety.rs` (the desktop's
 question is *Replace Current Outfit*'s),
 `context_catalog/folder_tabs.rs` (the menu entry on an item).
 
-**Left**: the "X" that detaches a worn object from its shortcut (asked
-after this checkpoint; see "Wearables"); gestures, sounds, textures and
+**Left**: gestures, sounds, textures and
 other kinds as shortcuts (the gesture boards already play gestures and
 sounds); an item's own colour (the Inventory tints its icons by family,
 the desktop uses the theme's); a notecard's window placed beside its
 shortcut; lit while worn rather than greyed.
+
+## 25. Detach from a shortcut
+
+Asked by the human after checkpoint 5: "after we add the ability to make
+shortcuts to objects, can we add an X to the icon to detach the object?"
+Built on `claude/margin-desktop-detach`, on top of checkpoint 5.
+
+- **An "X" at the top right corner of the icon** of a shortcut whose item
+  is **worn clothing or a worn object** (attachment, HUD, accessory): the
+  cross of the shared pills (Tabler `x`) on a round of the panel's colour,
+  red under the pointer, tooltip *Take off* (clothing) or *Detach*
+  (object). A click takes that one item off; the shortcut is neither
+  opened nor selected, and nothing else is taken off. The worn item stays
+  greyed for opening ("You are wearing it already"), as before.
+- **The path is the Inventory's**: `Request::TakeOff(item)`, then the glue
+  (`desktop_take_off`) checks again (`targets::item_take_off`) and hands
+  `Action::RemoveItems(vec![item])` to `apply_inventory_action`, exactly
+  what the Inventory's *Remove* / *Detach from yourself* hands over
+  (`item_attachments` of `ui/inventory/context_catalog.rs`); from there
+  `apply_appearance_action` runs the outfit plan and RLVa's checks.
+- **RLVa: hidden, not greyed.** The "X" (and the menu entry) is only
+  there when `WearLocks::can_remove(item)` allows it: the same answer that
+  greys the Inventory's entry (RlvAttachmentLocks::canDetach /
+  RlvWearableLocks::canRemove: a locked point, `@detach`, `@remattach`,
+  `@remoutfit`, a folder locked against taking off). Chosen over a greyed
+  "X" because the shortcut is greyed already (worn) and a second greyed
+  mark on the same face read as noise; the reason stays in the
+  Inventory, and if a lock appears between the frame and the click, the
+  glue says "Blocked by RLVa". Under `@showinv` no item shortcut shows
+  anything of its item, so no "X".
+- **Never on a body part** (it can only be replaced; it is not a shortcut
+  anyway, but one in an old file stays without an "X"), never on other
+  kinds.
+- **Its menu** gets *Take off* / *Detach* (the Inventory's
+  `circle-x-filled`) under the greyed *Add*, on the same terms.
+- **Keyboard**: Shift+Delete on the focused shortcut takes its worn item
+  off and keeps the shortcut; on one that is not worn it does nothing.
+  Delete alone still removes the shortcut, never the item.
+- **An outfit change under way** does not hide the "X"; the click says
+  "An outfit change is under way" (as *Add* does).
+- **Not tested here**: `@remattach` / `@detach` on a real attachment (the
+  worn attachment points come from the scene); the rule is the one
+  `WearLocks` tests already, and `@remoutfit` on the jacket is tested.
+  The glue's arm needs an `App`.
+
+**Upstream hooks**: none. Touched upstream files: the three catalogues
+(3 new `fs-desktop-*` keys each) and `docs/TESTING.md` (the `items` mode
+says the jacket's "X").
+
+**Tests**: `targets.rs` (what can be taken off: worn clothing and
+objects, a link followed, not a body part, not what is not worn, busy,
+`@showinv`; the faces' "X"), `tests/items.rs` (frames: the "X" clicked
+asks for exactly that item and neither opens nor selects; none on what is
+not worn, on a body part, under `@remoutfit` for clothing, under
+`@showinv`; the menus; Shift+Delete and Delete).
+
+**Demo**: `items` shows it on the demo's worn jacket.

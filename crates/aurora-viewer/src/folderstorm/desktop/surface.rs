@@ -2,7 +2,8 @@
 //! margins' background and the windows, its shortcuts on the grid, their
 //! hover, selection, drag between cells and menus, the Inventory folders
 //! and items and the toolbar buttons dropped on it, the name edited in place and
-//! the keyboard on a focused (clicked) shortcut (F2, Delete, the arrows)
+//! the keyboard on a focused (clicked) shortcut (F2, Delete, the arrows,
+//! Shift+Delete to take a worn item off), the "X" of a worn item
 //! (folderstorm/plans/margin-desktop.md, "Drawing order and input",
 //! "Arranging and editing", "Accessibility and keyboard").
 
@@ -99,6 +100,8 @@ enum Op {
     ShowFolder(Uuid),
     /// Show this item in the main Inventory window.
     ShowItem(Uuid),
+    /// Take off (detach) this worn item: its "X", its menu, Shift+Delete.
+    TakeOff(Uuid),
     /// Inventory dropped on a room: the folders and items it gives, or why
     /// none.
     DropFolders {
@@ -155,10 +158,16 @@ const ICON_DEFAULT: &str = "restore";
 const ICON_MOVE: &str = "arrows-move";
 const ICON_ARRANGE: &str = "sort-ascending-letters";
 const ICON_TOOLBAR: &str = "layout-bottombar-filled";
+/// *Take off* / *Detach* in a worn item's menu (the Inventory's own).
+const ICON_TAKE_OFF: &str = "circle-x-filled";
+/// The "X" on a worn item's face (the cross of the shared pills).
+const ICON_X: &str = "x";
 
 /// The icons this module names, for the test that they are embedded.
 #[cfg(test)]
 pub(super) const ICONS: &[&str] = &[
+    ICON_TAKE_OFF,
+    ICON_X,
     ICON_OPEN,
     ICON_REMOVE,
     ICON_ADD,
@@ -574,8 +583,27 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     if opened && face.greyed.is_none() {
                         ops.push(open());
                     }
-                    if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
-                        ops.push(Op::Remove(id));
+                    if response.has_focus() {
+                        // Delete removes the shortcut; Shift+Delete takes
+                        // its worn item off (nothing else: the shortcut
+                        // stays, and nothing happens on one that is not
+                        // worn). The key's own modifiers: Some(shift held).
+                        let delete = ui.input(|i| {
+                            i.events.iter().find_map(|event| match event {
+                                egui::Event::Key {
+                                    key: egui::Key::Delete,
+                                    pressed: true,
+                                    modifiers,
+                                    ..
+                                } => Some(modifiers.shift),
+                                _ => None,
+                            })
+                        });
+                        match delete {
+                            Some(true) => ops.extend(face.take_off.map(|off| Op::TakeOff(off.item))),
+                            Some(false) => ops.push(Op::Remove(id)),
+                            None => {}
+                        }
                     }
                     if response.drag_started_by(egui::PointerButton::Primary) {
                         state.drag = Some(id);
@@ -598,6 +626,22 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         dim: dragging,
                     };
                     paint_face(ui.painter(), ui.style(), env.p, env.icons, rect, &face, desktop.size, look);
+                    // a worn item: the "X" that takes it off, at its icon's
+                    // corner. Registered after the shortcut, so it takes
+                    // the click there: the shortcut is neither opened nor
+                    // selected by it. Not while a shortcut is dragged.
+                    if let Some(off) = face.take_off.filter(|_| state.drag.is_none()) {
+                        let at = take_off_rect(rect, desktop.size);
+                        let x = ui.interact(at, shortcut_id(room.slot, id).with("take_off"), Sense::click());
+                        x.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, off.label()));
+                        paint_take_off(ui.painter(), env.p, at, x.hovered());
+                        if x.clicked() {
+                            ops.push(Op::TakeOff(off.item));
+                        }
+                        if cargo.is_none() && button.is_none() {
+                            x.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(off.label());
+                        }
+                    }
                     let of = MenuOf {
                         id,
                         face: &face,
@@ -769,6 +813,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
             Op::OpenFolder { folder, cell, room } => out.push(Request::OpenFolder { folder, cell, room }),
             Op::ShowFolder(folder) => out.push(Request::ShowFolder(folder)),
             Op::ShowItem(item) => out.push(Request::ShowItem(item)),
+            Op::TakeOff(item) => out.push(Request::TakeOff(item)),
             Op::DropFolders { slot, cell, offer } => match offer {
                 Ok(picked) => {
                     let added = add_targets(desktop, rooms, &picked.targets, Some(slot), cell);
@@ -912,6 +957,13 @@ fn shortcut_menu(response: &egui::Response, p: &Palette, of: &MenuOf, open: impl
         let why = face.greyed.map_or("", |why| why.text());
         if menu::item_tip(ui, p, ICON_OPEN, face.verb, face.greyed.is_none(), why) {
             ops.push(open());
+        }
+        // a worn item: *Take off* / *Detach*, as its "X" (absent when RLVa
+        // keeps it on, as the "X" is)
+        if let Some(off) = face.take_off
+            && menu::item(ui, p, ICON_TAKE_OFF, off.label())
+        {
+            ops.push(Op::TakeOff(off.item));
         }
         // an outfit is a folder too: its own window, as a folder shortcut
         // opens (not while RLVa hides the Inventory, nor once it is gone)
@@ -1131,6 +1183,28 @@ fn paint_face(painter: &egui::Painter, style: &egui::Style, p: &Palette, icons: 
     let text = galley.rect.translate(at.to_vec2()).expand2(vec2(3.0, 1.0)).intersect(rect);
     painter.rect_filled(text, radius, p.panel.gamma_multiply(0.85));
     painter.galley(at, galley, ink);
+}
+
+/// Where the "X" of a worn item stands in its cell: on the top right
+/// corner of its icon (in every size, inside the cell).
+pub(super) fn take_off_rect(cell: Rect, size: Size) -> Rect {
+    let side = size.icon();
+    let icon = Rect::from_min_size(egui::pos2(cell.center().x - side / 2.0, cell.top() + 8.0), vec2(side, side));
+    Rect::from_center_size(egui::pos2(icon.right() + 2.0, icon.top() + 2.0), vec2(18.0, 18.0))
+}
+
+/// The "X" of a worn item in `at`: the cross of the shared pills
+/// (`ui::widgets::pills::dot_pill`) on a round of the panel's colour, so
+/// that it reads over any icon and wallpaper; red under the pointer.
+fn paint_take_off(painter: &egui::Painter, p: &Palette, at: Rect, hovered: bool) {
+    let radius = at.width() / 2.0 - 1.0;
+    let (fill, ink) = if hovered { (p.danger, p.on_accent) } else { (p.panel, p.ink) };
+    painter.circle_filled(at.center(), radius, fill);
+    painter.circle_stroke(at.center(), radius, Stroke::new(1.0, p.muted_dim));
+    if let Some(texture) = crate::ui::icons::global(ICON_X) {
+        let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        painter.image(texture.id(), Rect::from_center_size(at.center(), vec2(11.0, 11.0)), uv, ink);
+    }
 }
 
 /// The cell [`show`] draws the shortcut `id` in, for the tests.

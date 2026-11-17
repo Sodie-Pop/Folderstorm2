@@ -497,7 +497,9 @@ shortcuts on the first monitor, their items made up in the demo's
 inventory (a landmark, "Aurora Welcome Area", a notecard, "Shopping
 list", an outfit of the demo's My Outfits under a hanger, a spare shirt
 that is not worn (a double click adds it to what is worn), the jacket the
-demo's outfit wears (greyed: "You are wearing it already") and a greyed
+demo's outfit wears (greyed: "You are wearing it already", with an "X" at
+its icon's corner, *Take off* in its menu and Shift+Delete, that take it
+off) and a greyed
 one whose item is gone), opens the landmark at frame
 200 as a double click does (Aurora's question before a teleport, "Do you
 really want to teleport to…", nothing being sent before the answer) and

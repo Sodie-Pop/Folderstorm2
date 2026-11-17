@@ -14,7 +14,9 @@
 //! window); it keeps the item's id, never its asset's. A shortcut to an
 //! outfit wears it, as *Replace Current Outfit* does, after the question
 //! of outfit safety; one to clothing or an object adds it to what is
-//! worn, as the Inventory's *Add* does, never replacing anything.
+//! worn, as the Inventory's *Add* does, never replacing anything; while it
+//! is worn, an "X" on its face (and *Take off* / *Detach* in its menu)
+//! takes that one item off, unless RLVa keeps it on.
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
@@ -94,6 +96,10 @@ pub enum Request {
     /// landmark: teleport there, after Aurora's question; a notecard: its
     /// window; clothing or an object: added to what is worn).
     OpenItem(Uuid),
+    /// Take off this worn clothing, or detach this worn object (the item,
+    /// a link followed), as the Inventory's *Remove* / *Detach from
+    /// yourself* does: nothing else is taken off.
+    TakeOff(Uuid),
     /// Show this item in the main Inventory window.
     ShowItem(Uuid),
     /// Wear this outfit (its folder of My Outfits), after the question of
