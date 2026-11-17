@@ -246,9 +246,13 @@ impl App {
         // (not in mouselook or with the interface put away, where a key may
         // have asked: no window shows)
         if outcome.preferences && !self.camera.mouselook() && !ui::widgets::interface_hidden(&self.egui_ctx) {
-            // as the Me menu's Preferences does, on our tab
+            // as the Me menu's Preferences does, on our page
             ui::widgets::open_floater(&self.egui_ctx, "options", &mut self.panels.settings);
-            self.options_ui.open(ui::options::Page::Layout, 3);
+            let tab = match outcome.switching {
+                true => ui::options::workspaces_tab::SWITCHING,
+                false => ui::options::workspaces_tab::SAVED,
+            };
+            self.options_ui.open(ui::options::Page::Workspaces, tab);
         }
         if outcome.save {
             self.settings.save();
@@ -577,7 +581,8 @@ impl App {
                 }
             } else {
                 self.panels.settings = true;
-                self.options_ui.open(ui::options::Page::Layout, 3);
+                self.options_ui
+                    .open(ui::options::Page::Workspaces, ui::options::workspaces_tab::SAVED);
             }
             if mode == "switcher-workspaces-context" {
                 self.workspace_context_demo_seed();

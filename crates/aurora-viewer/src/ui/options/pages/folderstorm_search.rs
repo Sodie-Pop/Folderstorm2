@@ -205,29 +205,31 @@ mod tests {
     #[test]
     fn the_search_finds_the_folderstorm_rows_on_their_pages() {
         let cases: &[(&str, Page, usize)] = &[
-            // Privacy › Local assistant: access, session only, permissions,
-            // status, activity, setup (client, copy, check)
-            ("MCP", Page::Privacy, 8),
-            ("agent", Page::Privacy, 8),
-            // Layout: the world viewport's rows, the layouts' rows
-            ("dual monitor", Page::Layout, 12),
-            ("multi-monitor", Page::Layout, 12),
-            ("viewport margins", Page::Layout, 5),
-            // Layout: the margins' desktop (the switch, the icon size, the
-            // single click, Remove all shortcuts)
-            ("desktop shortcut", Page::Layout, 4),
-            ("launcher", Page::Layout, 4),
-            ("icon size", Page::Layout, 1),
+            // Local assistant: access, session only, permissions, status,
+            // activity, setup (client, copy, check); Privacy keeps its link
+            ("MCP", Page::LocalAssistant, 8),
+            ("agent", Page::LocalAssistant, 8),
+            ("MCP", Page::Privacy, 1),
+            // Workspaces: the world viewport's rows, the saved list, the
+            // margins' notice
+            ("dual monitor", Page::Workspaces, 10),
+            ("multi-monitor", Page::Workspaces, 10),
+            ("viewport margins", Page::Workspaces, 5),
+            // Workspaces › Margins: the desktop (the switch, the icon size,
+            // the single click, Remove all shortcuts)
+            ("desktop shortcut", Page::Workspaces, 4),
+            ("launcher", Page::Workspaces, 4),
+            ("icon size", Page::Workspaces, 1),
             // the taskbar: the switch, its monitor, All open windows
-            ("taskbar", Page::Layout, 3),
-            ("minimized windows", Page::Layout, 3),
+            ("taskbar", Page::Workspaces, 3),
+            ("minimized windows", Page::Workspaces, 3),
             ("taskbar", Page::Shortcuts, 1),
-            ("photo mode", Page::Layout, 1),
-            ("workspace", Page::Layout, 8),
-            ("favorites", Page::Layout, 3),
-            ("quick switch", Page::Layout, 2),
-            ("undo", Page::Layout, 1),
-            ("hud wallpaper", Page::Layout, 1),
+            ("photo mode", Page::Workspaces, 1),
+            ("workspace", Page::Workspaces, 2),
+            ("favorites", Page::Workspaces, 2),
+            ("quick switch", Page::Workspaces, 2),
+            ("undo", Page::Workspaces, 1),
+            ("hud wallpaper", Page::Workspaces, 1),
             // Shortcuts › Other: the layouts' keyboard actions
             ("workspace", Page::Shortcuts, 5),
             ("switcher", Page::Shortcuts, 5),
