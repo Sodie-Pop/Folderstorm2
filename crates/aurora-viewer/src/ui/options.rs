@@ -229,7 +229,7 @@ impl Page {
             Page::Commands => "square-rounded-chevron-right-filled",
             Page::System => "world-filled",
             Page::Network => "cloud-data-connection-filled",
-            Page::LocalAssistant => "plug-connected", // Folderstorm: no filled version
+            Page::LocalAssistant => "message-chatbot", // Folderstorm: embedded, outline only
             Page::Fun => "confetti-filled",
         }
     }

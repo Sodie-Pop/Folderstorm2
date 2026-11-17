@@ -160,7 +160,8 @@ fn monitor_buttons(ui: &mut egui::Ui, p: &crate::theme::Palette, s: &mut viewpor
         return false;
     };
     let mut changed = false;
-    ui.horizontal_wrapped(|ui| {
+    // (one line: a wrapped one ran into the next row)
+    ui.horizontal(|ui| {
         let mut any = false;
         for (n, monitor) in layout.monitors.iter().enumerate() {
             let Some((left, right, top, bottom)) = viewport::margins_for_monitor(layout.window, *monitor) else {
