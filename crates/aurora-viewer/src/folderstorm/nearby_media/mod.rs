@@ -1,13 +1,15 @@
 //! Folderstorm: the top bar's media button as the Legacy Viewer's
-//! `media_toggle_btn` (LLStatusBar): a click turns all media off or back on
-//! (LLViewerMedia::setAllMediaEnabled), its face says whether any media
+//! `media_toggle_btn` (LLStatusBar): its face says whether any media
 //! plays, and hovering it opens "Nearby media" (LLPanelNearByMedia,
 //! panel_nearby_media.xml): each source with its own start / stop and mute,
-//! Stop all, Start all and a way to the Media preferences.
+//! Stop all, Start all and a way to the Media preferences. Its click, all
+//! media off or back on, is Aurora's own (`App::toggle_all_media`), as is
+//! the nearby media panel of `ui/nearby_media.rs`, which this one replaces
+//! on hover (the hook in `ui/audio.rs`).
 //!
 //! As in the Legacy Viewer, which separates the parcel stream from the media
 //! (FS:Zi "Media/Stream separation"), the parcel music keeps its own radio
-//! button and is left alone by the media button, Stop all and Start all; it
+//! button and is left alone by Stop all and Start all; it
 //! still has its row in the panel, to start or stop it from there too.
 //!
 //! The app hands a [`Snapshot`] to the panel through egui's memory
@@ -20,7 +22,7 @@ pub mod panel;
 #[cfg(test)]
 mod tests;
 
-use crate::media::{MediaImpl, MediaKey, MediaManager, MediaSettings};
+use crate::media::{MediaImpl, MediaKey, MediaSettings};
 use crate::ui::audio::MusicStatus;
 use aurora_media::MediaStatus;
 use std::sync::Arc;
@@ -109,7 +111,7 @@ impl Snapshot {
     }
 }
 
-/// What the panel or the button asks for.
+/// What the panel asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     /// The row's start / stop button (onClickSelectedMediaPlay / Stop).
@@ -118,9 +120,6 @@ pub enum Action {
     Mute(Source),
     StopAll,
     StartAll,
-    /// The top bar button (onClickMediaToggle): Stop all when any media is
-    /// on, else Start all.
-    ToggleAll,
     OpenPreferences,
 }
 
@@ -175,22 +174,8 @@ pub fn plan(action: Action, rows: &[Row]) -> Vec<Op> {
             .collect(),
         Action::StopAll => set_all(false),
         Action::StartAll => set_all(true),
-        Action::ToggleAll => set_all(!rows.iter().any(|r| r.source.is_media() && r.on)),
         Action::OpenPreferences => vec![Op::OpenPreferences],
     }
-}
-
-/// The top bar button can act: media is enabled and there is parcel media
-/// or media on an object (LLStatusBar::refresh's `button_enabled`).
-pub fn available(media: &MediaManager, parcel_url: Option<&str>, settings: &MediaSettings) -> bool {
-    settings.enabled
-        && (parcel_url.is_some_and(|u| !u.trim().is_empty()) || media.impls.iter().any(|m| matches!(m.key, MediaKey::Prim { .. })))
-}
-
-/// Some media is started: the button's face shows it and its click stops
-/// it all (isAnyMediaPlaying || isParcelMediaPlaying).
-pub fn playing(media: &MediaManager, settings: &MediaSettings) -> bool {
-    settings.enabled && media.impls.iter().any(|m| m.wanted && !m.paused)
 }
 
 /// What the panel reads of one media source (an Aurora `MediaImpl`).

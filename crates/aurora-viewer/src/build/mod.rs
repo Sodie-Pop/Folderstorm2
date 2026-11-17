@@ -22,10 +22,10 @@ pub mod demo_sim;
 pub mod draw;
 mod edge_pan;
 pub mod edits;
+pub mod export;
 #[cfg(test)]
 #[path = "../folderstorm/viewport/build_tools_tests.rs"]
 mod folderstorm_viewport_tests; // Folderstorm: world viewport
-pub mod export;
 pub mod geom;
 pub mod grab;
 pub mod hud_drag;

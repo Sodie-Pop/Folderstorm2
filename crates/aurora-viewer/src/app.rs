@@ -16185,8 +16185,7 @@ impl App {
                 self.parcel_music.toggle();
                 self.remember_music_choice();
             }
-            // Folderstorm: all media, as the Legacy Viewer's media toggle (folderstorm/nearby_media)
-            ui::audio::AudioAction::ToggleMedia => self.folderstorm_media_action(crate::folderstorm::nearby_media::Action::ToggleAll),
+            ui::audio::AudioAction::ToggleMedia => self.toggle_all_media(),
             // applied to the audio engine each frame; saved with the settings on exit
             ui::audio::AudioAction::Changed => {}
             ui::audio::AudioAction::OpenPreferences => {
@@ -18534,13 +18533,10 @@ impl App {
                     music_available: !self.parcel_music.station().is_empty() || self.parcel_music.requested(),
                     music_playing: self.parcel_music.requested(),
                     music_status: self.music_status,
-                    // Folderstorm: parcel media and media on objects, as the Legacy Viewer's media toggle
-                    media_available: crate::folderstorm::nearby_media::available(
-                        &self.media,
-                        self.world.parcel.as_deref().map(|pc| pc.media_url.as_str()),
-                        &self.settings.media,
-                    ),
-                    media_playing: crate::folderstorm::nearby_media::playing(&self.media, &self.settings.media), // Folderstorm
+                    media_available: self.settings.media.enabled
+                        && (self.world.parcel.as_ref().is_some_and(|pc| !pc.media_url.trim().is_empty())
+                            || self.media.any_in_world_media()),
+                    media_playing: self.media.any_media_on(),
                 };
                 self.folderstorm_nearby_media_publish(&ctx); // Folderstorm: the Nearby media panel's rows
                 let aurora = self.notifications_aurora();

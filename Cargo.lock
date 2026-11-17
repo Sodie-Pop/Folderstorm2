@@ -567,6 +567,7 @@ version = "0.1.0"
 dependencies = [
  "fluent-bundle",
  "fluent-syntax",
+ "folderstorm-brand",
  "log",
  "sys-locale",
 ]
@@ -616,6 +617,7 @@ dependencies = [
  "aurora-version",
  "base64 0.23.1",
  "crossbeam-channel",
+ "folderstorm-brand",
  "glam 0.34.3",
  "log",
  "md5",
@@ -677,6 +679,7 @@ dependencies = [
  "anyhow",
  "aurora-version",
  "directories",
+ "folderstorm-brand",
  "log",
  "reqwest",
  "semver",
@@ -693,6 +696,7 @@ dependencies = [
 name = "aurora-version"
 version = "0.1.0"
 dependencies = [
+ "folderstorm-brand",
  "semver",
 ]
 
@@ -726,6 +730,10 @@ dependencies = [
  "env_logger",
  "fancy-regex",
  "flate2",
+ "folderstorm-brand",
+ "folderstorm-mcp",
+ "folderstorm-mcp-bridge",
+ "folderstorm-session",
  "foldhash 0.2.0",
  "fontconfig-parser",
  "gilrs-core",
@@ -761,6 +769,7 @@ dependencies = [
  "softbuffer",
  "spellbook",
  "sysinfo",
+ "tempfile",
  "tokio",
  "trash",
  "ttf-parser",
@@ -2197,6 +2206,46 @@ checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
 dependencies = [
  "memchr",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "folderstorm-brand"
+version = "0.1.0"
+dependencies = [
+ "directories",
+]
+
+[[package]]
+name = "folderstorm-mcp"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "folderstorm-mcp-bridge",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "folderstorm-mcp-bridge"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "getrandom 0.4.3",
+ "log",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tempfile",
+]
+
+[[package]]
+name = "folderstorm-session"
+version = "0.1.0"
+dependencies = [
+ "folderstorm-brand",
+ "folderstorm-mcp-bridge",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

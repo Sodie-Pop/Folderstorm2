@@ -89,25 +89,6 @@ fn stop_all_and_start_all_change_the_media_and_leave_the_music() {
 }
 
 #[test]
-fn the_bar_button_stops_everything_while_anything_plays_and_starts_it_all_otherwise() {
-    let rows = rows();
-    assert_eq!(plan(Action::ToggleAll, &rows), plan(Action::StopAll, &rows));
-    // only the music on: the media are off, the button starts them
-    let quiet: Vec<_> = rows
-        .iter()
-        .cloned()
-        .map(|mut r| {
-            r.on = r.source == Source::ParcelMusic;
-            r
-        })
-        .collect();
-    assert_eq!(
-        plan(Action::ToggleAll, &quiet),
-        [Op::TentativeAutoplay(true), Op::PlayParcel, Op::Play(key(1)), Op::Play(key(2))]
-    );
-}
-
-#[test]
 fn stop_all_and_start_all_are_offered_when_they_would_change_something() {
     let mut s = Snapshot {
         rows: rows(),
@@ -285,38 +266,9 @@ fn a_name_is_the_title_then_the_first_address_then_a_placeholder() {
 }
 
 #[test]
-fn the_button_shows_whether_media_plays_and_acts_on_all_media() {
-    use std::sync::Arc as StdArc;
-    let mut world = crate::world::World::new(StdArc::new(crate::scene::avatar::AvatarLibrary::load()));
-    let settings = MediaSettings::default();
-    let mut media = MediaManager::default();
-    assert!(!available(&media, None, &settings));
-    assert!(!playing(&media, &settings));
-    let parcel = aurora_net::ParcelInfo {
-        media_url: "https://parcel.example/".into(),
-        media: aurora_net::ParcelMedia {
-            mime: "text/html".into(),
-            media_id: id(77),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let url = parcel.media_url.clone();
-    world.parcel = Some(StdArc::new(parcel));
-    assert!(available(&media, Some(&url), &settings));
-    // what the bar's Start all does to the parcel media
-    media.play_parcel(&world, &settings);
-    assert!(playing(&media, &settings));
+fn the_button_face_shows_whether_media_plays() {
     assert_eq!(panel::button_icon(true), "player-pause-filled");
-    media.stop_parcel();
-    assert!(!playing(&media, &settings));
     assert_eq!(panel::button_icon(false), "brand-youtube-filled");
-    // media turned off in the preferences: nothing to toggle
-    let off = MediaSettings {
-        enabled: false,
-        ..Default::default()
-    };
-    assert!(!available(&media, Some(&url), &off));
 }
 
 #[test]
