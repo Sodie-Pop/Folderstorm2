@@ -2126,11 +2126,14 @@ fs-switcher-command = Dispositions et espaces de travail
 fs-switcher-toggle-command = Changer de disposition
 fs-switcher-toggle-to = Passer à la disposition « { $name } »
 fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions et espaces de travail (un clic l'ouvre).
-fs-keys-section = Dispositions
+fs-keys-section = Dispositions et bureau
 fs-keys-layout-switcher = Fenêtre Dispositions et espaces de travail
 fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
 fs-keys-next-favorite = Disposition favorite suivante
 fs-keys-previous-favorite = Disposition favorite précédente
+fs-keys-desktop-shortcuts = Afficher ou masquer les raccourcis du bureau
+fs-keys-desktop-focus = Donner le clavier au bureau
+fs-keys-desktop-taskbar = Donner le clavier à la barre des tâches
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Tableau de gestes
@@ -2426,7 +2429,7 @@ fs-background-shows = Affiche
 fs-desktop-group = Bureau dans les marges
 fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
-fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y des dossiers de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer.
+fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y les dossiers, les repères, les notes, les tenues et les vêtements et les objets de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer. Chaque compte a ses propres raccourcis ; ce réglage et la taille des icônes sont communs à tous.
 fs-desktop-size = Taille des icônes
 fs-desktop-size-help = La taille des raccourcis et de la grille qui les porte.
 fs-desktop-size-small = Petite
@@ -2442,27 +2445,102 @@ fs-desktop-greyed-gone = Cette commande n'existe plus.
 fs-desktop-greyed-button-only = Celle-ci ne fonctionne que depuis son bouton de la barre d'outils.
 fs-desktop-greyed-rlva = Bloqué par RLVa.
 fs-desktop-greyed-folder-gone = Ce dossier n'est plus dans votre inventaire.
-fs-desktop-greyed-other-account = Ce dossier est dans l'inventaire d'un autre compte.
+fs-desktop-item = Objet de l'inventaire
+fs-desktop-greyed-item-gone = Cet objet n'est pas dans votre inventaire : il a été supprimé, ou son dossier n'est pas encore chargé.
+fs-desktop-greyed-item-trash = Cet objet est dans la corbeille.
+fs-desktop-greyed-item-other = Ce type d'objet ne s'ouvre pas depuis le bureau.
+fs-desktop-outfit = Tenue
+fs-desktop-wear-outfit = Porter cette tenue…
+fs-desktop-greyed-outfit-gone = Cette tenue n'est plus dans votre inventaire.
+fs-desktop-greyed-outfit-loading = Cette tenue est encore en cours de chargement : réessayez dans un instant.
+fs-desktop-greyed-outfit-empty = Cette tenue n'a rien à porter.
+fs-desktop-greyed-busy = Un changement de tenue est en cours : réessayez dans un instant.
+fs-desktop-greyed-worn = Vous le portez déjà.
+fs-desktop-greyed-listing = Un objet d'une annonce de la Place du marché ne peut pas être porté.
+fs-desktop-greyed-not-worn = Vous ne le portez pas.
+fs-desktop-take-off = Enlever
+fs-desktop-detach = Détacher
 fs-desktop-add = Ajouter au bureau
-fs-desktop-add-refused = Seuls les dossiers de votre propre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
+fs-desktop-add-refused = Seuls les dossiers, les repères, les notes, les tenues et les vêtements et les objets de votre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
 fs-desktop-added =
     { $count ->
-        [one] Dossier ajouté au bureau.
-       *[other] { $count } dossiers ajoutés au bureau.
+        [one] Raccourci ajouté au bureau.
+       *[other] { $count } raccourcis ajoutés au bureau.
     }
 fs-desktop-add-existing = Déjà sur le bureau.
 fs-desktop-add-full =
     { $count ->
-        [one] Le bureau n'a plus de place pour un dossier.
-       *[other] Le bureau n'a plus de place pour { $count } dossiers.
+        [one] Un raccourci n'a pas trouvé de place.
+       *[other] { $count } raccourcis n'ont pas trouvé de place.
     }
+fs-desktop-full = Ce bureau est plein : retirez un raccourci ou choisissez une taille d'icône plus petite.
+fs-desktop-limit = Les bureaux contiennent au plus { $count } raccourcis : retirez-en un d'abord.
 fs-desktop-left-out =
     { $count ->
-        [one] Un élément laissé de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
-       *[other] { $count } éléments laissés de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
+        [one] Un élément laissé de côté : il ne peut pas être un raccourci du bureau.
+       *[other] { $count } éléments laissés de côté : ils ne peuvent pas être des raccourcis du bureau.
     }
 fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Disposition › Barres et fenêtres).
 fs-desktop-added-hidden = Ils s'affichent quand la fenêtre laisse de la place autour du monde.
+fs-desktop-rename = Renommer
+fs-desktop-icon = Icône
+fs-desktop-icon-default = Par défaut
+fs-desktop-icon-colour = Couleur…
+fs-desktop-icon-file = Image depuis un fichier…
+fs-desktop-icon-texture = Texture de l'inventaire…
+fs-desktop-icon-reset = Réinitialiser l'icône
+fs-desktop-icon-file-title = Choisir une image pour le raccourci
+fs-desktop-style-title = Icône du raccourci
+fs-desktop-style-colour = Couleur
+fs-desktop-style-custom = Autre couleur
+fs-desktop-style-colour-default = Couleur par défaut
+fs-desktop-style-colour-picture = Une image garde ses propres couleurs : cette couleur revient quand l'image est retirée.
+fs-desktop-style-picture = Image
+fs-desktop-style-picture-none = Aucune : l'icône est affichée.
+fs-desktop-style-picture-other = Une image que cette version ne sait pas afficher : l'icône est affichée.
+fs-desktop-style-picture-remove = Retirer l'image
+fs-desktop-style-file-note = Une copie de l'image, de 256 pixels de côté au plus, est gardée avec les réglages de ce compte : l'original peut être déplacé ou supprimé.
+fs-desktop-style-texture = Texture de l'inventaire
+fs-desktop-style-texture-gone = Une texture qui ne peut plus être utilisée : l'icône est affichée.
+fs-desktop-style-search = Chercher une texture
+fs-desktop-style-texture-none = Aucune texture trouvée. Seules les textures que vous pouvez copier, modifier et transférer peuvent servir.
+fs-desktop-style-texture-more = Seules les { $count } premières sont listées : affinez la recherche.
+fs-desktop-style-texture-note = Seules les textures que vous pouvez copier, modifier et transférer sont listées, comme pour afficher l'UUID d'une texture.
+fs-desktop-move-to = Déplacer vers
+fs-desktop-monitor = Écran { $number }
+fs-desktop-arrange = Ranger par nom
+fs-desktop-command-added = Raccourci ajouté au bureau.
+fs-desktop-single-click = Ouvrir d'un simple clic
+fs-desktop-single-click-help = Un simple clic ouvre un raccourci, comme pour un bouton de la barre d'outils. Désactivé : un clic le sélectionne et un double clic l'ouvre, pour qu'un clic égaré ne vous téléporte jamais chez vous ni ne vous fasse asseoir.
+fs-desktop-unused =
+    { $count ->
+        [one] Un raccourci est sur un écran qui n'est pas utilisé
+       *[other] { $count } raccourcis sont sur un écran qui n'est pas utilisé
+    }
+fs-desktop-unused-help = Un raccourci reste sur l'écran où il a été posé. Quand la fenêtre ne couvre plus cet écran, ou que le monde le remplit, le raccourci est conservé mais pas affiché.
+fs-desktop-bring = Les amener ici
+fs-desktop-clear = Retirer tous les raccourcis…
+fs-desktop-clear-help = Retire tous les raccourcis des bureaux de ce compte. Seuls les raccourcis disparaissent : les dossiers, les objets de l'inventaire et les barres d'outils restent tels quels.
+fs-desktop-clear-button = Tout retirer…
+fs-desktop-clear-ask =
+    { $count ->
+        [one] Retirer le raccourci de ce compte ?
+       *[other] Retirer les { $count } raccourcis de ce compte ?
+    }
+fs-desktop-clear-confirm = Tout retirer
+fs-taskbar-switch = Barre des tâches dans une marge
+fs-taskbar-switch-help = Les fenêtres réduites deviennent des boutons sur une barre en bas d’un écran de marge, au lieu de barres de titre : un clic ramène la fenêtre où elle était, un clic droit en propose plus. Désactivée, ou tant que la fenêtre ne laisse pas de place autour du monde, les fenêtres réduites sont des barres de titre comme avant.
+fs-taskbar-monitor = Écran
+fs-taskbar-monitor-help = L’écran où se tient la barre des tâches. Automatique : celui qui a la place libre la plus large. Quand l’écran choisi n’a pas de place, il n’y a pas de barre des tâches.
+fs-taskbar-monitor-auto = Automatique
+fs-taskbar-all = Toutes les fenêtres ouvertes
+fs-taskbar-all-help = Liste toutes les fenêtres ouvertes, pas seulement celles qui sont réduites : un clic met une fenêtre au premier plan, ou réduit celle qui y est déjà.
+fs-taskbar-restore = Restaurer
+fs-taskbar-front = Mettre au premier plan
+fs-taskbar-empty = Aucune fenêtre réduite
+fs-taskbar-empty-all = Aucune fenêtre ouverte
+fs-taskbar-spoken-collapsed = { $title }, réduite
+fs-taskbar-spoken-front = { $title }, au premier plan
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
@@ -2593,6 +2671,7 @@ fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter
 fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
 fs-search-desktop = bureau raccourci raccourcis icône icônes lanceur dossier dossiers marge marges écran écrans moniteur
+fs-search-taskbar = barre des tâches tâche fenêtre fenêtres réduite réduites minimisée minimisées dock
 fs-search-photo = mode photo capture image appareil
 fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
 fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer

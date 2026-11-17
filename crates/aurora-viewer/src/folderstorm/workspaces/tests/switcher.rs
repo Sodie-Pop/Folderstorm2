@@ -385,7 +385,14 @@ fn each_key_asks_what_its_button_would() {
     // in mouselook the switcher's window could not be used; the rest applies
     assert_eq!(menu::key_request(Key::LayoutSwitcher, true), None);
     for key in crate::folderstorm::keys::KEYS {
-        assert_eq!(menu::key_request(key, true).is_some(), key != Key::LayoutSwitcher, "{key:?}");
+        // (the margins' desktop runs its own three)
+        let desktop = matches!(key, Key::DesktopShortcuts | Key::DesktopFocus | Key::DesktopTaskbar);
+        assert_eq!(
+            menu::key_request(key, true).is_some(),
+            key != Key::LayoutSwitcher && !desktop,
+            "{key:?}"
+        );
+        assert!(!desktop || menu::key_request(key, false).is_none(), "{key:?}");
     }
 }
 

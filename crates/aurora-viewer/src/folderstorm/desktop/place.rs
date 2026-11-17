@@ -66,6 +66,37 @@ pub fn room(slot: Rect, world: Rect, bars: Bars, cell: Vec2) -> Option<Rect> {
     best
 }
 
+/// The height of the taskbar: an island of Aurora's bars.
+pub const TASKBAR_H: f32 = crate::ui::bars::islands::HEIGHT;
+
+/// The slot the taskbar stands in, among the rooms `(slot, rect)` of the
+/// frame: the `wanted` one when it has a room (else none: a chosen monitor
+/// is not replaced by another), or the widest room, the first of two as
+/// wide.
+pub fn taskbar_slot(rooms: &[(u8, Rect)], wanted: Option<u8>) -> Option<u8> {
+    match wanted {
+        Some(slot) => rooms.iter().any(|(s, _)| *s == slot).then_some(slot),
+        None => {
+            let mut best: Option<(u8, f32)> = None;
+            for (slot, rect) in rooms {
+                if best.is_none_or(|(_, width)| rect.width() > width + 0.5) {
+                    best = Some((*slot, rect.width()));
+                }
+            }
+            best.map(|(slot, _)| slot)
+        }
+    }
+}
+
+/// The taskbar's strip along the bottom of `room`, and what it leaves the
+/// desktop above it ([`PAD`] between the two; it may hold no cell).
+pub fn taskbar_strip(room: Rect) -> (Rect, Rect) {
+    let top = (room.bottom() - TASKBAR_H).max(room.top());
+    let strip = Rect::from_min_max(egui::pos2(room.left(), top), room.max);
+    let rest = Rect::from_min_max(room.min, egui::pos2(room.right(), (top - PAD).max(room.top())));
+    (strip, rest)
+}
+
 /// The cells of a room: all of one size, from its top-left corner.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Grid {
@@ -182,10 +213,48 @@ pub fn shown(stored: &[(u32, (u16, u16))], grid: &Grid) -> Vec<(u32, (u16, u16))
     out
 }
 
+/// The shortcut an arrow key goes to from the cell `from`, among `cells`
+/// (each shortcut's id and the cell it is shown in): the nearest one on
+/// that side (`dx`, `dy`: one of them is -1 or 1, the other 0), a shortcut
+/// of the same row or column being preferred to a nearer one aside. None
+/// at the edge.
+pub fn neighbour(cells: &[(u32, (u16, u16))], from: (u16, u16), (dx, dy): (i8, i8)) -> Option<u32> {
+    let (dx, dy) = (i64::from(dx), i64::from(dy));
+    cells
+        .iter()
+        .filter_map(|(id, (col, row))| {
+            let (x, y) = (i64::from(*col) - i64::from(from.0), i64::from(*row) - i64::from(from.1));
+            // how far on that side, and how far aside
+            let (along, aside) = (x * dx + y * dy, (x * dy).abs() + (y * dx).abs());
+            (along > 0).then_some((along * along + 4 * aside * aside, *id))
+        })
+        .min()
+        .map(|(_, id)| id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use egui::pos2;
+
+    #[test]
+    fn an_arrow_goes_to_the_nearest_shortcut_on_its_side() {
+        // 1 . 3
+        // 2 . .
+        // . 4 5
+        let cells = [(1, (0, 0)), (2, (0, 1)), (3, (2, 0)), (4, (1, 2)), (5, (2, 2))];
+        assert_eq!(neighbour(&cells, (0, 0), (0, 1)), Some(2));
+        assert_eq!(neighbour(&cells, (0, 0), (1, 0)), Some(3), "the same row before a nearer one aside");
+        assert_eq!(neighbour(&cells, (0, 1), (1, 0)), Some(4));
+        assert_eq!(neighbour(&cells, (0, 1), (0, 1)), Some(4));
+        assert_eq!(neighbour(&cells, (2, 2), (-1, 0)), Some(4));
+        assert_eq!(neighbour(&cells, (2, 2), (0, -1)), Some(3));
+        // at the edge: nowhere
+        assert_eq!(neighbour(&cells, (0, 0), (-1, 0)), None);
+        assert_eq!(neighbour(&cells, (0, 0), (0, -1)), None);
+        assert_eq!(neighbour(&cells, (2, 2), (1, 0)), None);
+        assert_eq!(neighbour(&[], (0, 0), (1, 0)), None);
+    }
 
     fn px(x: f32, y: f32, w: f32, h: f32) -> Rect {
         Rect::from_min_size(pos2(x, y), vec2(w, h))
@@ -382,5 +451,39 @@ mod tests {
         cells.sort();
         cells.dedup();
         assert_eq!(cells.len(), 6, "one shortcut a cell");
+    }
+
+    #[test]
+    fn the_taskbar_stands_in_the_widest_room_or_the_chosen_one() {
+        let room = |left: f32, width: f32| Rect::from_min_size(egui::pos2(left, 8.0), vec2(width, 384.0));
+        let rooms = [(0, room(8.0, 624.0)), (2, room(1288.0, 624.0)), (3, room(2000.0, 900.0))];
+        assert_eq!(taskbar_slot(&rooms, None), Some(3), "the widest");
+        assert_eq!(taskbar_slot(&rooms[..2], None), Some(0), "the first of two as wide");
+        assert_eq!(taskbar_slot(&rooms, Some(2)), Some(2));
+        // a chosen monitor without a room: no taskbar, not another monitor's
+        assert_eq!(taskbar_slot(&rooms, Some(1)), None);
+        assert_eq!(taskbar_slot(&[], None), None);
+    }
+
+    #[test]
+    fn the_taskbar_s_strip_leaves_the_room() {
+        let room = Rect::from_min_size(egui::pos2(8.0, 8.0), vec2(624.0, 384.0));
+        let (strip, rest) = taskbar_strip(room);
+        assert_eq!(strip, Rect::from_min_max(egui::pos2(8.0, 392.0 - TASKBAR_H), room.max));
+        assert_eq!(rest.bottom(), strip.top() - PAD);
+        assert_eq!((rest.min, rest.right()), (room.min, room.right()));
+        assert!(!rest.intersects(strip));
+        // the same columns above it, and the rows that still fit
+        let cell = vec2(92.0, 84.0);
+        let (before, after) = (Grid::new(room, cell).expect("cells"), Grid::new(rest, cell).expect("cells"));
+        assert_eq!(after.cols, before.cols);
+        assert_eq!((before.rows, after.rows), (4, 4));
+        let small = Rect::from_min_size(egui::pos2(8.0, 8.0), vec2(624.0, 100.0));
+        assert!(Grid::new(taskbar_strip(small).1, cell).is_none(), "the strip alone");
+        // a room lower than the strip: nothing above it, never a negative rectangle
+        let low = Rect::from_min_size(egui::pos2(8.0, 8.0), vec2(624.0, 20.0));
+        let (strip, rest) = taskbar_strip(low);
+        assert_eq!(strip, low);
+        assert_eq!(rest.height(), 0.0);
     }
 }
