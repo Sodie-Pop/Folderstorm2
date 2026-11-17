@@ -383,9 +383,8 @@ fn detail(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pick
     let mut changed = false;
     ui.add_space(2.0);
     // the editor sits a little inside the list, under its line
-    ui.horizontal(|ui| {
-        ui.add_space(12.0);
-        ui.vertical(|ui| {
+    ui.indent("folderstorm-saved-editor", |ui| {
+        {
             holds(ui, p, s, pick);
             changed |= actions(ui, p, s, st, pick, &name, usable);
             if let Some(Refused::Selected(kind, error)) = st.refused
@@ -405,7 +404,7 @@ fn detail(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pick
             if st.rename.is_none() && st.ask.is_none() && usable {
                 changed |= editor(ui, p, s, st, pick, &name);
             }
-        });
+        }
     });
     ui.add_space(6.0);
     changed
@@ -432,7 +431,9 @@ fn holds(ui: &mut egui::Ui, p: &Palette, s: &Settings, pick: Pick) {
             None => return,
         },
     };
-    muted(ui, p, text);
+    if !text.is_empty() {
+        muted(ui, p, text);
+    }
 }
 
 /// The rename field takes the keyboard with the whole name selected, so

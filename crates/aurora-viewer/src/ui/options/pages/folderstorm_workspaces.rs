@@ -1557,4 +1557,12 @@ mod tests {
         assert_eq!(first, tr!("fs-layouts-applied-windows", name = "Wide", count = 2));
         assert_ne!(first, text, "the rest is on hover");
     }
+
+    /// The two Folderstorm pages' sidebar icons are embedded ones.
+    #[test]
+    fn the_two_pages_have_embedded_icons() {
+        for page in [Page::Workspaces, Page::LocalAssistant] {
+            assert!(crate::ui::icons::embedded(page.icon()), "{page:?}");
+        }
+    }
 }
