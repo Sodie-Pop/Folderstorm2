@@ -15,7 +15,6 @@
 //! built-in tabs are.
 
 use super::*;
-use serde::Deserialize as _;
 
 /// The icon of a custom tab nobody chose one for.
 pub const DEFAULT: &str = "bookmark-filled";
