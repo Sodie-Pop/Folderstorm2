@@ -4916,7 +4916,8 @@ impl App {
             Action::Groups => self.people_tab_shortcut(ui::people::TAB_GROUPS),
             Action::ContactSets => self.people_tab_shortcut(ui::people::TAB_SETS),
             Action::Inventory => ui::widgets::toggle_floater(&self.egui_ctx, "inventory", &mut self.panels.inventory),
-            Action::NewInventoryWindow => self.inventory_ui.open_additional_window(&self.egui_ctx),
+            // Folderstorm: the next of the additional windows (ui/inventory/extra_windows.rs)
+            Action::NewInventoryWindow => _ = self.inventory_ui.folderstorm_new_window(&self.egui_ctx),
             Action::Appearance => ui::widgets::toggle_floater(&self.egui_ctx, "appearance", &mut self.panels.appearance),
             Action::Quit => self.request_exit(),
             Action::TextureLibrary => ui::widgets::toggle_floater(
@@ -11792,6 +11793,7 @@ impl App {
                 .extend(ui::inventory::delete_demo_events(&ctx, self.frame_count, &self.inventory_ui));
             ui::inventory::aurora_demo(&ctx, self.frame_count);
             ui::inventory::folder_colors_demo_frame(&ctx, &mut self.inventory_ui, &self.settings.inventory, self.frame_count);
+            ui::inventory::extra_windows_demo_frame(&ctx, &mut self.inventory_ui, &self.settings.inventory, self.frame_count); // Folderstorm
             ui::inventory::bulk_permissions_demo(self.frame_count, &mut self.inventory_ui);
             if std::env::var("AURORA_DEMO_INVENTORY").is_ok_and(|mode| matches!(mode.as_str(), "show-original" | "aurora-show-original")) {
                 match self.frame_count {
@@ -21235,6 +21237,10 @@ impl ApplicationHandler for App {
                         // Folderstorm: Inventory quick access
                         | "quick-access"
                         | "aurora-quick-access"
+                        // Folderstorm: multiple Inventory windows
+                        | "extra-windows"
+                        | "aurora-extra-windows"
+                        | "extra-windows-full"
                 );
                 if configured_view {
                     crate::world::inventory::demo::seed_view(
