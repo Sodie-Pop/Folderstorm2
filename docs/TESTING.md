@@ -464,6 +464,120 @@ Check that nothing is ever drawn over the world, that windows, bars, chat
 lines and HUD labels stay over the picture, and that the margins go black
 again when the viewport is turned off.
 
+**The margins' desktop (Folderstorm2).** `AURORA_DEMO_DESKTOP=<mode>` makes,
+once, a desktop of shortcuts in the margins around the world (row 1.10):
+`1` puts eight command shortcuts on the first monitor (Conversations,
+People, Inventory, the world map renamed "Where am I?" with a compass,
+Photo, Home, then two greyed ones: Favorites, which only works from its
+toolbar button, and a command the catalogue no longer has), four folder
+shortcuts in its second column (Clothes, Landmarks and the Photo Album of
+the demo inventory, and one whose folder is gone, greyed) and two commands on the third monitor
+(Preferences, Build); `open` does the same, opens the first folder
+shortcut at frame 200 as a double click does (its window beside it) and
+the People shortcut at frame 300 (a toggle, as its toolbar button: People
+closes when the demo had it open, which uncovers the first desktop); `drop` adds a folder at frame 200 where
+a drop from the Inventory would put it (third column) and moves it to the
+third monitor at frame 300; `rlva` puts `@showinv` in force: the folder
+shortcuts are locked and unnamed, and the one opened at frame 200 is
+refused with RLVa's notice; `single` seeds the same shortcuts with the
+world filling the window, so nothing shows; `edit` opens the name field of
+the People shortcut at frame 200, as *Rename* or F2 does (type, Enter keeps,
+Esc cancels), and gives the first folder shortcut a name and an icon of its
+own at frame 300 ("Everyday outfits", a hanger); `unused` adds two
+shortcuts on a monitor the window does not have and opens Preferences on
+the desktop's group at frame 200, with its note "2 shortcuts are on a
+monitor that is not in use" and *Bring them here*; `taskbar` turns on the
+taskbar of the margins on the third monitor (an island along its bottom,
+"No collapsed windows" at first), opens and collapses the Inventory and a
+folder's window at frame 200 (no title bar: each is a button of the
+taskbar) and opens People (open, so not listed), then restores the
+Inventory at frame 300 as a click on its button does (where it was);
+`overflow` collapses twenty folder windows at frame 200: more than the
+taskbar has room for, so the buttons are their icon alone and, on a
+monitor too narrow for twenty of them (the second command below), the
+rest are in *More* at its right end. The taskbar needs the third
+monitor: without pretend monitors there is none, and collapsed windows
+are title bars. The
+world viewport is turned on (the world in the middle third) unless
+`AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
+wallpaper under the shortcuts. Without pretend monitors the window is one
+monitor, and only the first one's shortcuts show, in the left margin.
+Each account has its own desktop: the demo's is made for the demo's
+account. Preferences › Layout › Bars and windows has the group *Desktop in the
+margins*:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=open AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
+  cargo run -p aurora-viewer -- --title "Test desktop open"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=drop AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop drop"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=rlva AURORA_WINDOW_SIZE=3840,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
+  cargo run -p aurora-viewer -- --title "Test desktop rlva"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=single cargo run -p aurora-viewer -- --title "Test desktop single"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=edit AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop edit"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=unused AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop unused"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=taskbar AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop taskbar"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=overflow AURORA_WINDOW_SIZE=1920,720 \
+  AURORA_DEMO_MONITORS=640x720,640x720,640x720 cargo run -p aurora-viewer -- --title "Test desktop overflow"
+```
+
+Check that a shortcut is never drawn over the world nor cut at its edge,
+that every window and bar stays over the shortcuts, that a click on a
+shortcut or on an empty part of a desktop never reaches the world (no
+selection, no camera move, the wheel does not zoom), that a double click
+opens what the toolbar button opens, that a drag snaps to the grid, swaps
+with the shortcut it is dropped on and goes to another monitor, and that
+the right-click menus add a command and remove a shortcut. The shortcuts
+go away with the interface (hidden, immersive mode, mouselook).
+
+For the folder shortcuts, by hand (the demo's `drop` only places one):
+open the Inventory, right-click a folder › *Add to desktop* (greyed, with
+the reason, on an item, the Trash and the Library; in both Inventory
+styles), and drag folders from the Inventory onto a desktop (the desktop
+is outlined, the cursor says copy, the shortcut lands in the cell under
+the pointer; an item alone is refused, the items of a mixed selection are
+counted in a notice, nothing is rezzed or moved). A double click on a
+folder shortcut opens that folder's own window beside it; a second one
+brings the same window to the front. Its menu has *Show in inventory*.
+Delete the folder: its shortcut turns grey and can only be removed.
+
+For editing and the toolbar, by hand (the pointer and the keyboard cannot
+be played): right-click a shortcut › *Rename* (the name is edited under the
+icon; Enter or a click elsewhere keeps it, Esc cancels, an empty name or
+the target's own gives its own name back; the folder itself is never
+renamed), › *Icon* (a grid of 40 icons, *Default* gives the target's own
+back), › *Move to* › a monitor (only monitors that show a desktop; refused
+with a notice when that desktop has the same shortcut or is full).
+Right-click a free cell › *Arrange by name* (the desktop is filled again
+from its first cell, down then right) and › *Toolbar buttons…* (Aurora's
+window opens). With the toolbars unlocked, drag a button from a toolbar or
+from that window onto a desktop: the desktop is outlined, the cursor says
+copy, the shortcut lands in the cell under the pointer and the button stays
+on its toolbar; Favorites, VR view and Speak are refused (red outline, a
+notice). Right-click a toolbar button › *Add to desktop* (greyed, with the
+reason, for those three and for a command Aurora does not run yet): the
+shortcut goes to the first free cell of the first desktop, the shortcuts
+are turned on when they were off, and a notice says so. In Preferences ›
+Layout › Bars and windows › *Desktop in the margins*, behind the cog of
+*Shortcuts in the margins*: *Open with a single click* (a click then
+opens, as a toolbar button) and *Remove all shortcuts…* (asks first; only
+this account's go); under the icon size, with `unused`, the note and
+*Bring them here* (the two shortcuts go to the first desktop). Keyboard:
+give *Focus the desktop* a key in Preferences › Shortcuts (it has none by
+default, as *Show or hide the desktop shortcuts*), press it: the selected
+shortcut, else the first, takes the keyboard (outlined); the arrows go to
+the neighbour shortcut, Enter or Space opens, F2 renames, Delete removes. A
+click on a shortcut selects it and gives it the keyboard too, so F2 and
+Delete work at once; a click in the world gives the keyboard back to the
+avatar's keys.
+
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
 closed: the four favorites stand in a small bar under the top bar, each one
@@ -6368,6 +6482,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout\|hud\|hud-over` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`), with a HUD in the left margin over it (`hud`) or under it (`hud-over`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single\|edit\|unused\|taskbar\|overflow` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); a name edited in place at frame 200, a folder shortcut given a name and an icon at 300 (`edit`); two shortcuts on a monitor not in use and Preferences on the desktop's group at frame 200 (`unused`); the taskbar on the third monitor, the Inventory and a folder's window collapsed into it at frame 200, the Inventory restored at 300 (`taskbar`); twenty windows collapsed into it at frame 200, icon buttons and *More* (`overflow`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |

@@ -152,6 +152,8 @@ pub enum InvAction {
     DefaultPermissions,
     /// Folderstorm: upload a disk folder into this one (folderstorm/folder_upload)
     FolderstormUploadFolder(Uuid),
+    /// Folderstorm: shortcuts to these folders on the margins' desktop (folderstorm/desktop)
+    FolderstormDesktopAdd(Vec<Uuid>),
     ExportMenuNotecard {
         name: String,
         text: String,
