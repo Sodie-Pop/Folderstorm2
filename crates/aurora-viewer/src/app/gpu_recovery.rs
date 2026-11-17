@@ -257,15 +257,20 @@ impl App {
             started.elapsed().as_millis(),
             if safe { ", with the safe graphics level" } else { "" }
         );
-        self.world.notifications.push(
-            crate::world::notifications::Kind::Alert,
-            aurora_i18n::tr!("app-gpu-recovered-title"),
+        // Folderstorm: the likely reason in its place, the loss written down (app/folderstorm_characters/gpu_diag.rs)
+        let body = self.folderstorm_gpu_recovered(
+            started.elapsed().as_millis(),
+            safe,
             if safe {
                 aurora_i18n::tr!("app-gpu-recovered-safe")
             } else {
                 aurora_i18n::tr!("app-gpu-recovered")
-            }
-            .to_owned(),
+            },
+        );
+        self.world.notifications.push(
+            crate::world::notifications::Kind::Alert,
+            aurora_i18n::tr!("app-gpu-recovered-title"),
+            body, // Folderstorm: was Aurora's text alone
             crate::world::notifications::Data::None,
         );
         true

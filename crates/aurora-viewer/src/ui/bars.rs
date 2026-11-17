@@ -1502,6 +1502,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         if menu::item(ui, p, "bug-filled", aurora_i18n::tr!("bug-title")) {
             *action = BarAction::ReportBug;
         }
+        crate::folderstorm::gpu_diag::help_menu_item(ui, p); // Folderstorm: Help › Show the log folder
         if menu::item(ui, p, "flag-filled", aurora_i18n::tr!("report-abuse-title")) {
             *action = BarAction::ReportAbuse;
         }

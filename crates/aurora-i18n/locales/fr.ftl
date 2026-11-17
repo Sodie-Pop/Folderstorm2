@@ -2296,6 +2296,18 @@ fs-nearby-media-start-all = Tout démarrer
 fs-nearby-media-stop-all-tip = Arrêter tous les médias à proximité. La musique de la parcelle garde son propre bouton.
 fs-nearby-media-start-all-tip = Démarrer tous les médias à proximité. La musique de la parcelle garde son propre bouton.
 
+# Folderstorm: why the graphics card was reset (folderstorm/gpu_diag, the recovery notice and Help › Show the log folder)
+fs-gpu-reason-memory = La mémoire vidéo était pleine.
+fs-gpu-reason-memory-used = La mémoire vidéo était pleine ({ $used } Go utilisés sur { $total }).
+fs-gpu-reason-memory-characters = La mémoire vidéo était pleine ({ $count } personnages ouverts, { $used } Go utilisés sur { $total }).
+fs-gpu-reason-memory-viewers = La mémoire vidéo était pleine ({ $count } fenêtres du viewer ouvertes, { $used } Go utilisés sur { $total }).
+fs-gpu-reason-hang = La carte a mis trop longtemps à dessiner une image.
+fs-gpu-reason-fault = Le pilote graphique s'est arrêté sur une erreur pendant le dessin.
+fs-gpu-reset-then = Le viewer a rouvert sa fenêtre sur la carte : vous êtes resté connecté, et le monde se recharge dans un instant.
+fs-gpu-reset-then-safe = C'était la deuxième réinitialisation en quelques minutes : le viewer a donc rouvert sa fenêtre avec les graphismes de secours (le niveau Potato). Vous êtes resté connecté. Vos réglages graphiques sont gardés : l'écran de connexion vous les propose à nouveau.
+fs-gpu-reset-log = Les détails sont dans le dossier des journaux (Aide › Afficher le dossier des journaux), dans le fichier qui finit par gpu-losses.txt.
+fs-gpu-show-logs = Afficher le dossier des journaux
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter

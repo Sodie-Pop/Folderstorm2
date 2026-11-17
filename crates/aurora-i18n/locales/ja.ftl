@@ -2080,6 +2080,18 @@ fs-nearby-media-start-all = すべて開始
 fs-nearby-media-stop-all-tip = 近くのメディアをすべてオフにします。区画の音楽には専用のボタンがあります。
 fs-nearby-media-start-all-tip = 近くのメディアをすべてオンにします。区画の音楽には専用のボタンがあります。
 
+# Folderstorm: why the graphics card was reset (folderstorm/gpu_diag, the recovery notice and Help › Show the log folder)
+fs-gpu-reason-memory = ビデオメモリがいっぱいでした。
+fs-gpu-reason-memory-used = ビデオメモリがいっぱいでした（{ $total } GB 中 { $used } GB を使用）。
+fs-gpu-reason-memory-characters = ビデオメモリがいっぱいでした（キャラクター { $count } 人を起動中、{ $total } GB 中 { $used } GB を使用）。
+fs-gpu-reason-memory-viewers = ビデオメモリがいっぱいでした（ビューアのウィンドウ { $count } 個を起動中、{ $total } GB 中 { $used } GB を使用）。
+fs-gpu-reason-hang = グラフィックカードがフレームの描画に時間をかけすぎました。
+fs-gpu-reason-fault = 描画中のエラーでグラフィックドライバーが停止しました。
+fs-gpu-reset-then = ビューアはグラフィックカードでウィンドウを開き直しました。ログインしたままで、ワールドはまもなく再読み込みされます。
+fs-gpu-reset-then-safe = 数分のうちに2回目のリセットだったため、ビューアは安全なグラフィック設定（Potatoレベル）でウィンドウを開き直しました。ログインしたままです。グラフィック設定は保存されており、ログイン画面で元に戻すことができます。
+fs-gpu-reset-log = 詳細はログフォルダー（ヘルプ › ログフォルダーを表示）の、gpu-losses.txt で終わるファイルにあります。
+fs-gpu-show-logs = ログフォルダーを表示
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP ローカル アシスタント AI エージェント ブリッジ API 自動化 Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = アクティビティ 履歴 ログ 受領 操作 停止

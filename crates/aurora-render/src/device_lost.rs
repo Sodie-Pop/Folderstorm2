@@ -117,10 +117,14 @@ static FIRST_SEEN: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::ne
 static REASON: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 static CAUSE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 const CAUSES: [&str; 4] = ["device-lost", "out-of-memory", "timeout", "other"];
+// Folderstorm: the verdict of the first loss line ([`GPU_WORK_VERDICTS`]
+// index + 1, 0 none), for the reset notice's reason (aurora-viewer folderstorm/gpu_diag)
+static VERDICT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// A new renderer begins with no loss on record.
 pub(crate) fn forget_details() {
-    for a in [&FIRST_SEEN, &REASON, &CAUSE] {
+    // Folderstorm: VERDICT too
+    for a in [&FIRST_SEEN, &REASON, &CAUSE, &VERDICT] {
         a.store(0, Ordering::Relaxed);
     }
 }
@@ -211,12 +215,28 @@ impl DeviceLost {
             (Some((s, _)), Some((f, _))) => f.token >= s.token,
             _ => false,
         };
-        hang_or_fault(
+        let line = hang_or_fault(
             w.submitted.map(|(s, at)| (s.frame, age(at))),
             w.finished.map(|(f, at)| (f.frame, age(at))),
             done,
-        )
+        );
+        note_verdict(&line); // Folderstorm: kept for loss_verdict
+        line
     }
+}
+
+/// Folderstorm: the first loss line's verdict, kept for [`loss_verdict`].
+fn note_verdict(line: &str) {
+    if let Some(i) = GPU_WORK_VERDICTS.iter().position(|v| line.ends_with(v)) {
+        let _ = VERDICT.compare_exchange(0, i as u8 + 1, Ordering::Relaxed, Ordering::Relaxed);
+    }
+}
+
+/// Folderstorm: the verdict of this renderer's first loss line (one of
+/// [`GPU_WORK_VERDICTS`]), None before it or when nothing was submitted.
+pub fn loss_verdict() -> Option<&'static str> {
+    let i = usize::from(VERDICT.load(Ordering::Relaxed)).checked_sub(1)?;
+    GPU_WORK_VERDICTS.get(i).copied()
 }
 
 /// `queue.submit` noted for the line of a device loss: the submission is
