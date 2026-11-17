@@ -168,7 +168,10 @@ fn sound_choice(
                 );
                 let needle = search.trim().to_lowercase();
                 let mut shown = 0;
-                for (item, name) in list.iter().filter(|(_, name)| needle.is_empty() || name.to_lowercase().contains(&needle)) {
+                for (item, name) in list
+                    .iter()
+                    .filter(|(_, name)| needle.is_empty() || name.to_lowercase().contains(&needle))
+                {
                     if shown == INVENTORY_SHOWN {
                         ui.label(egui::RichText::new(tr!("fs-alerts-inventory-more")).color(p.muted).small());
                         break;
@@ -203,7 +206,16 @@ fn buttons(ui: &mut egui::Ui, p: &crate::theme::Palette, target: Target, event: 
         choose(ui.ctx(), target);
     }
     let playable = test.as_ref().is_some_and(|s| *s != Sound::Silent);
-    if widgets::action_button_if(ui, p, "player-play-filled", tr!("fs-alerts-test"), widgets::ActionKind::Flat, size, playable).clicked()
+    if widgets::action_button_if(
+        ui,
+        p,
+        "player-play-filled",
+        tr!("fs-alerts-test"),
+        widgets::ActionKind::Flat,
+        size,
+        playable,
+    )
+    .clicked()
         && let Some(sound) = test
     {
         alerts::request_test(ui.ctx(), event, sound);
@@ -265,19 +277,14 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 tr!("fs-alerts-cooldown-help"),
                 &Nothing,
                 |ui, _| {
-                    ui.add(
-                        egui::Slider::new(&mut shared.cooldown_secs, 0..=COOLDOWN_MAX)
-                            .suffix(format!(" {}", tr!("fs-alerts-seconds"))),
-                    );
+                    ui.add(egui::Slider::new(&mut shared.cooldown_secs, 0..=COOLDOWN_MAX).suffix(format!(" {}", tr!("fs-alerts-seconds"))));
                     false
                 },
             );
             for event in AlertEvent::ALL {
-                words(cx, &["fs-search-background-alerts"]).wide().row(
-                    event.label(),
-                    tr!("fs-alerts-event-help"),
-                    &Nothing,
-                    |ui, _| {
+                words(cx, &["fs-search-background-alerts"])
+                    .wide()
+                    .row(event.label(), tr!("fs-alerts-event-help"), &Nothing, |ui, _| {
                         let choice = shared.events.get_mut(event);
                         widgets::switch(ui, &p, &mut choice.on);
                         let mut sound = Some(choice.sound.clone());
@@ -286,8 +293,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                         }
                         buttons(ui, &p, Target::Shared(event), event, Some(choice.sound.clone()));
                         false
-                    },
-                );
+                    });
             }
             cx.row(tr!("fs-alerts-reset"), tr!("fs-alerts-reset-help"), &Nothing, |ui, _| {
                 if widgets::flat_button(ui, &p, tr!("common-default")).clicked() {
@@ -317,13 +323,15 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             let shared_sound = shared.events.get(event).sound.clone();
             let inherit = tr!("fs-alerts-own-inherit", sound = describe(&shared_sound, None));
             let list = inventory.clone();
-            words(cx, &["fs-search-background-alerts"]).wide().row(event.label(), tr!("fs-alerts-own-help"), &f, |ui, s| {
-                let own = get(s);
-                let changed = sound_choice(ui, &p, own, Some(&inherit), Some(list.as_deref().map_or(&[][..], |l| &l[..])));
-                let test = own.clone().unwrap_or(shared_sound);
-                buttons(ui, &p, Target::Own(event), event, Some(test));
-                changed
-            });
+            words(cx, &["fs-search-background-alerts"])
+                .wide()
+                .row(event.label(), tr!("fs-alerts-own-help"), &f, |ui, s| {
+                    let own = get(s);
+                    let changed = sound_choice(ui, &p, own, Some(&inherit), Some(list.as_deref().map_or(&[][..], |l| &l[..])));
+                    let test = own.clone().unwrap_or(shared_sound);
+                    buttons(ui, &p, Target::Own(event), event, Some(test));
+                    changed
+                });
         }
         cx.greyed(false);
     });

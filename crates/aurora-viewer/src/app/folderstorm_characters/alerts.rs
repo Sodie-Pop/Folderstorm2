@@ -186,9 +186,12 @@ impl App {
             let Some(sound) = alerts::resolve(&shared, own, event) else {
                 continue;
             };
-            for clip in [self.folderstorm_alerts_clip(&sound), Some(player::Clip::Asset(event.fallback_asset()))]
-                .into_iter()
-                .flatten()
+            for clip in [
+                self.folderstorm_alerts_clip(&sound),
+                Some(player::Clip::Asset(event.fallback_asset())),
+            ]
+            .into_iter()
+            .flatten()
             {
                 if !clips.contains(&clip) {
                     clips.push(clip);

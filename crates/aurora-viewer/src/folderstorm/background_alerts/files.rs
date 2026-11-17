@@ -83,7 +83,13 @@ pub fn copy_name(original: &Path, taken: impl Fn(&str) -> bool) -> Option<String
     let stem = stem.trim_matches('_');
     let stem = if stem.is_empty() { "sound" } else { stem };
     (1..1000)
-        .map(|n| if n == 1 { format!("{stem}.{ext}") } else { format!("{stem}-{n}.{ext}") })
+        .map(|n| {
+            if n == 1 {
+                format!("{stem}.{ext}")
+            } else {
+                format!("{stem}-{n}.{ext}")
+            }
+        })
         .find(|name| !taken(name))
 }
 

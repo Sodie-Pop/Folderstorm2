@@ -161,11 +161,9 @@ impl Player {
         }
         let (tx, rx) = std::sync::mpsc::channel();
         let (folder, owned) = (folder.to_path_buf(), name.to_owned());
-        let spawned = std::thread::Builder::new()
-            .name("fs-alerts-file".into())
-            .spawn(move || {
-                let _ = tx.send(files::load(&folder, &owned));
-            });
+        let spawned = std::thread::Builder::new().name("fs-alerts-file".into()).spawn(move || {
+            let _ = tx.send(files::load(&folder, &owned));
+        });
         let entry = match spawned {
             Ok(_) => FileClip::Loading(rx),
             Err(_) => FileClip::Failed(FileError::Unreadable, Instant::now()),
@@ -294,11 +292,9 @@ impl Player {
     fn spawn(&mut self, device: &str) {
         let (tx, rx) = std::sync::mpsc::channel();
         let device = (!device.is_empty()).then(|| device.to_owned());
-        let spawned = std::thread::Builder::new()
-            .name("fs-alerts-output".into())
-            .spawn(move || {
-                let _ = tx.send(AudioEngine::new_with_device(device).map_err(|e| e.to_string()));
-            });
+        let spawned = std::thread::Builder::new().name("fs-alerts-output".into()).spawn(move || {
+            let _ = tx.send(AudioEngine::new_with_device(device).map_err(|e| e.to_string()));
+        });
         self.engine = match spawned {
             Ok(_) => Engine::Opening(rx),
             Err(_) => Engine::Failed(Instant::now()),

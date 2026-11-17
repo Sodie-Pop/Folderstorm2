@@ -91,8 +91,7 @@ impl Cooldown {
             return false;
         }
         // (bounded: what is past its quiet time is forgotten)
-        self.last
-            .retain(|_, at| now.saturating_duration_since(*at) < cooldown.max(MIN_GAP));
+        self.last.retain(|_, at| now.saturating_duration_since(*at) < cooldown.max(MIN_GAP));
         self.last.insert(key, now);
         self.any = Some(now);
         true
@@ -167,9 +166,9 @@ pub fn collect(
             sender_blocked: from.is_some_and(|id| blocked(&id)),
         });
     }
-    let mention = attention.iter().any(|a| {
-        matches!(a.cause, Cause::Mention | Cause::Keyword) && a.notice.as_ref().is_some_and(|n| n.open == Open::NearbyChat)
-    });
+    let mention = attention
+        .iter()
+        .any(|a| matches!(a.cause, Cause::Mention | Cause::Keyword) && a.notice.as_ref().is_some_and(|n| n.open == Open::NearbyChat));
     if mention {
         out.push(Incoming {
             event: AlertEvent::Mention,

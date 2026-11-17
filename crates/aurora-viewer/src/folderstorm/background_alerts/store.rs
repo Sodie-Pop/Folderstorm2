@@ -88,12 +88,10 @@ impl Store {
         };
         self.writing.store(true, Ordering::Release);
         let writing = self.writing.clone();
-        let spawned = std::thread::Builder::new()
-            .name("fs-alerts-save".into())
-            .spawn(move || {
-                write(&path, &bytes);
-                writing.store(false, Ordering::Release);
-            });
+        let spawned = std::thread::Builder::new().name("fs-alerts-save".into()).spawn(move || {
+            write(&path, &bytes);
+            writing.store(false, Ordering::Release);
+        });
         if spawned.is_err() {
             self.writing.store(false, Ordering::Release);
             log::warn!("background alerts: the shared choices were not saved (no thread)");
@@ -122,12 +120,10 @@ fn modified(path: &Path) -> Option<SystemTime> {
 fn read(path: &Path) -> (Shared, Option<SystemTime>) {
     let stamp = modified(path);
     let value = match std::fs::read(path) {
-        Ok(bytes) => serde_json::from_slice::<Shared>(&bytes)
-            .map(Shared::cleaned)
-            .unwrap_or_else(|e| {
-                log::warn!("background alerts: {} does not read ({e}): the defaults apply", path.display());
-                Shared::default()
-            }),
+        Ok(bytes) => serde_json::from_slice::<Shared>(&bytes).map(Shared::cleaned).unwrap_or_else(|e| {
+            log::warn!("background alerts: {} does not read ({e}): the defaults apply", path.display());
+            Shared::default()
+        }),
         Err(_) => Shared::default(),
     };
     (value, stamp)

@@ -323,7 +323,9 @@ pub fn inventory_asset(inv: &crate::world::inventory::Inventory, item: Uuid) -> 
     use crate::folderstorm::gesture_boards::{Item, Kind, resolve};
     match resolve(inv, item) {
         Item::Ready {
-            original, kind: Kind::Sound, ..
+            original,
+            kind: Kind::Sound,
+            ..
         } => inv.items.get(&original).map(|it| it.asset_id).filter(|id| !id.is_nil()),
         _ => None,
     }
@@ -359,7 +361,10 @@ fn inventory_wanted_id() -> egui::Id {
 /// Preferences' Test button: `sound` played now for `event`, wherever the
 /// character is, at the alerts' volume.
 pub fn request_test(ctx: &egui::Context, event: AlertEvent, sound: Sound) {
-    ctx.data_mut(|d| d.get_temp_mut_or_default::<Vec<(AlertEvent, Sound)>>(tests_id()).push((event, sound)));
+    ctx.data_mut(|d| {
+        d.get_temp_mut_or_default::<Vec<(AlertEvent, Sound)>>(tests_id())
+            .push((event, sound))
+    });
 }
 
 pub fn take_tests(ctx: &egui::Context) -> Vec<(AlertEvent, Sound)> {

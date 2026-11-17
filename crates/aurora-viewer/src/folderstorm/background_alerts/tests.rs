@@ -61,8 +61,14 @@ fn alerts_are_off_until_turned_on_and_follow_each_kind_s_switch() {
     let own = Override::default();
     assert_eq!(resolve(&Shared::default(), &own, AlertEvent::Im), None, "off by default");
     let mut shared = on();
-    assert_eq!(resolve(&shared, &own, AlertEvent::Im), Some(Sound::built_in("NewIncomingIMSession")));
-    assert_eq!(resolve(&shared, &own, AlertEvent::TeleportOffer), Some(Sound::built_in("TeleportOut")));
+    assert_eq!(
+        resolve(&shared, &own, AlertEvent::Im),
+        Some(Sound::built_in("NewIncomingIMSession"))
+    );
+    assert_eq!(
+        resolve(&shared, &own, AlertEvent::TeleportOffer),
+        Some(Sound::built_in("TeleportOut"))
+    );
     shared.events.group.on = false;
     assert_eq!(resolve(&shared, &own, AlertEvent::Group), None);
     shared.events.mention.sound = Sound::Silent;
@@ -110,12 +116,30 @@ fn only_a_background_character_whose_sound_is_cut_plays_alerts() {
         ..BACKGROUND
     };
     assert!(!front.plays(), "the active character keeps its own sounds");
-    assert!(!Place { focused: true, ..BACKGROUND }.plays(), "the user went to its window");
     assert!(
-        !Place { sound_cut: false, ..BACKGROUND }.plays(),
+        !Place {
+            focused: true,
+            ..BACKGROUND
+        }
+        .plays(),
+        "the user went to its window"
+    );
+    assert!(
+        !Place {
+            sound_cut: false,
+            ..BACKGROUND
+        }
+        .plays(),
         "heard in the background: its own sounds play"
     );
-    assert!(!Place { managed: false, ..BACKGROUND }.plays(), "no session host");
+    assert!(
+        !Place {
+            managed: false,
+            ..BACKGROUND
+        }
+        .plays(),
+        "no session host"
+    );
     assert!(!Place::default().plays());
 }
 
@@ -137,7 +161,10 @@ fn the_front_character_do_not_disturb_a_mute_and_the_blocked_play_nothing() {
         sender_blocked: true,
         ..im
     };
-    assert_eq!(decide(&shared, &own, BACKGROUND, Quiet::default(), blocked, &mut cd, now), Verdict::Blocked);
+    assert_eq!(
+        decide(&shared, &own, BACKGROUND, Quiet::default(), blocked, &mut cd, now),
+        Verdict::Blocked
+    );
     assert_eq!(
         decide(&Shared::default(), &own, BACKGROUND, Quiet::default(), im, &mut cd, now),
         Verdict::Off
@@ -161,8 +188,14 @@ fn a_busy_conversation_rings_once_per_quiet_time() {
     assert_eq!(play(&mut cd, group, t0 + s(3)), Verdict::Cooling, "within the quiet time");
     assert_eq!(play(&mut cd, group, t0 + s(9)), Verdict::Cooling);
     // another conversation, or another kind, is not held by it
-    assert!(matches!(play(&mut cd, incoming(AlertEvent::Group, Some(6)), t0 + s(4)), Verdict::Play(_)));
-    assert!(matches!(play(&mut cd, incoming(AlertEvent::InventoryOffer, None), t0 + s(6)), Verdict::Play(_)));
+    assert!(matches!(
+        play(&mut cd, incoming(AlertEvent::Group, Some(6)), t0 + s(4)),
+        Verdict::Play(_)
+    ));
+    assert!(matches!(
+        play(&mut cd, incoming(AlertEvent::InventoryOffer, None), t0 + s(6)),
+        Verdict::Play(_)
+    ));
     assert!(
         matches!(play(&mut cd, group, t0 + s(10)), Verdict::Play(_)),
         "its quiet time is over"
@@ -181,7 +214,10 @@ fn two_alerts_of_one_character_are_a_second_apart_whatever_the_quiet_time() {
     // a message and its mention, in the same frame
     assert_eq!(play(incoming(AlertEvent::Mention, None), t0), Verdict::Cooling);
     assert_eq!(play(incoming(AlertEvent::Im, Some(2)), t0 + MIN_GAP / 2), Verdict::Cooling);
-    assert!(matches!(play(incoming(AlertEvent::Im, Some(1)), t0 + MIN_GAP), Verdict::Play(_)), "no quiet time");
+    assert!(
+        matches!(play(incoming(AlertEvent::Im, Some(1)), t0 + MIN_GAP), Verdict::Play(_)),
+        "no quiet time"
+    );
 }
 
 #[test]
@@ -278,7 +314,11 @@ fn the_shared_choices_round_trip_and_read_older_or_partial_files() {
     let partial: Shared = serde_json::from_str(r#"{"enabled": true, "events": {"im": {"on": false}}}"#).expect("reads");
     assert!(partial.enabled && !partial.events.im.on);
     assert_eq!(partial.events.im.sound, Sound::Silent, "a choice without its sound");
-    assert_eq!(partial.events.group, Shared::default().events.group, "the kinds not written keep their defaults");
+    assert_eq!(
+        partial.events.group,
+        Shared::default().events.group,
+        "the kinds not written keep their defaults"
+    );
     // a kind of sound from a later version reads as silent, and its
     // unknown fields are left
     let later: Shared =
@@ -312,8 +352,7 @@ fn a_character_s_own_choices_round_trip_in_its_settings_and_older_settings_read(
     let old: Settings = serde_json::from_str(r#"{"behind_3d": "Off", "behind_fps": 5}"#).expect("reads");
     assert!(old.background_alerts.is_default());
     // and the whole settings file of an older version
-    let all: crate::settings::Settings =
-        serde_json::from_str(r#"{"folderstorm_characters": {"behind_3d": "Normal"}}"#).expect("reads");
+    let all: crate::settings::Settings = serde_json::from_str(r#"{"folderstorm_characters": {"behind_3d": "Normal"}}"#).expect("reads");
     assert!(all.folderstorm_characters.background_alerts.is_default());
     // a profile copy leaves the group out, own sounds with it (an inventory
     // sound is one account's)
@@ -394,7 +433,10 @@ fn a_file_s_name_is_one_plain_name_of_a_kind_taken() {
         files::copy_name(std::path::Path::new("ベル.ogg"), |_| false).as_deref(),
         Some("ベル.ogg")
     );
-    assert_eq!(files::copy_name(std::path::Path::new("!!!.ogg"), |_| false).as_deref(), Some("sound.ogg"));
+    assert_eq!(
+        files::copy_name(std::path::Path::new("!!!.ogg"), |_| false).as_deref(),
+        Some("sound.ogg")
+    );
     assert_eq!(files::copy_name(std::path::Path::new("x.mp3"), |_| false), None);
     let long = format!("{}.wav", "a".repeat(200));
     let name = files::copy_name(std::path::Path::new(&long), |_| false).expect("a name");
