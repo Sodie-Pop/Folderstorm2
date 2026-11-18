@@ -38,6 +38,9 @@ struct Bench {
     inv: crate::world::inventory::Inventory,
     /// RLVa hides the Inventory (`@showinv`).
     no_inventory: bool,
+    /// What is worn and what RLVa locks; None: as a desktop without item
+    /// shortcuts (nothing greyed for it).
+    wear: Option<super::targets::Wearing>,
     hidden: bool,
     /// The key action *Focus the desktop* was pressed: for the next frame.
     focus: bool,
@@ -134,6 +137,7 @@ impl Bench {
                 inv
             },
             no_inventory: false,
+            wear: None,
             hidden: false,
             focus: false,
             window: None,
@@ -211,7 +215,7 @@ impl Bench {
             inv: &self.inv,
             no_inventory: self.no_inventory,
             colors: None,
-            wear: None,
+            wear: self.wear.as_ref(),
         };
         let mut out = Vec::new();
         let mut output = self.ctx.run_ui(
@@ -1167,13 +1171,18 @@ fn the_account_s_limit_is_said_rather_than_a_full_room() {
 impl Bench {
     /// A key pressed then released.
     fn key(&mut self, key: egui::Key) {
+        self.key_with(key, egui::Modifiers::NONE);
+    }
+
+    /// `key` pressed and released with `modifiers` held.
+    fn key_with(&mut self, key: egui::Key, modifiers: egui::Modifiers) {
         for pressed in [true, false] {
             self.frame(vec![egui::Event::Key {
                 key,
                 physical_key: None,
                 pressed,
                 repeat: false,
-                modifiers: egui::Modifiers::NONE,
+                modifiers,
             }]);
         }
     }

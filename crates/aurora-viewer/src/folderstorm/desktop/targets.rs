@@ -220,6 +220,9 @@ pub enum Greyed {
     Worn,
     /// An item of a Marketplace listing is not worn.
     Listing,
+    /// The clothing or the object is not worn (any more): nothing to take
+    /// off.
+    NotWorn,
 }
 
 impl Greyed {
@@ -243,6 +246,7 @@ impl Greyed {
             Greyed::Busy => tr!("fs-desktop-greyed-busy"),
             Greyed::Worn => tr!("fs-desktop-greyed-worn"),
             Greyed::Listing => tr!("fs-desktop-greyed-listing"),
+            Greyed::NotWorn => tr!("fs-desktop-greyed-not-worn"),
         }
     }
 
@@ -489,6 +493,79 @@ pub fn item_open_worn(inv: &Inventory, id: Uuid, facts: &Facts, wear: Option<&We
     })
 }
 
+/// Taking a worn item off from its shortcut (its "X", the *Take off* or
+/// *Detach* of its menu): what the Inventory's *Remove* / *Detach from
+/// yourself* does on that item (`Action::RemoveItems`), nothing else.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TakeOff {
+    /// The worn item (the original, a link followed).
+    pub item: Uuid,
+    /// An object (an attachment, a HUD, an accessory): it is detached;
+    /// otherwise clothing, taken off.
+    pub object: bool,
+}
+
+impl TakeOff {
+    /// What it is called: its "X"'s tooltip and its menu's entry.
+    pub fn label(self) -> &'static str {
+        if self.object {
+            tr!("fs-desktop-detach")
+        } else {
+            tr!("fs-desktop-take-off")
+        }
+    }
+}
+
+/// Whether the live `original` can be taken off now: worn clothing or a
+/// worn object that no RLVa lock keeps on. `WearLocks::can_remove` is what
+/// greys the Inventory's own entry (`item_attachments` of
+/// `ui/inventory/context_catalog.rs`; RlvAttachmentLocks::canDetach and
+/// RlvWearableLocks::canRemove: a locked point, `@detach`, `@remattach`,
+/// `@remoutfit`, a folder locked against taking off). A body part is
+/// never taken off from here (it can only be replaced).
+fn take_off_gate(inv: &Inventory, original: Uuid, kind: ItemKind, wear: Option<&Wearing>) -> Result<TakeOff, Greyed> {
+    let Some(item) = inv.items.get(&original) else {
+        return Err(Greyed::ItemGone);
+    };
+    if kind != ItemKind::Wearable || !matches!(item.asset_type, 5 | 6) {
+        return Err(Greyed::ItemOther);
+    }
+    let Some(wear) = wear.filter(|wear| wear.worn.contains(&original)) else {
+        return Err(Greyed::NotWorn);
+    };
+    if !wear.locks.can_remove(original) {
+        return Err(Greyed::Rlva);
+    }
+    Ok(TakeOff {
+        item: original,
+        object: item.asset_type == 6,
+    })
+}
+
+/// What taking off the item of the shortcut to `id` does now, or why it
+/// cannot. `wear`: what is worn and what RLVa locks (None: nothing is
+/// worn); `no_inventory`: RLVa hides the Inventory (`@showinv`), and an
+/// item shortcut does nothing then.
+pub fn item_take_off(inv: &Inventory, id: Uuid, wear: Option<&Wearing>, no_inventory: bool) -> Result<TakeOff, Greyed> {
+    if no_inventory {
+        return Err(Greyed::Rlva);
+    }
+    let (original, kind) = match item_state(inv, id) {
+        ItemState::Live { original, kind } => (original, kind),
+        ItemState::Gone => return Err(Greyed::ItemGone),
+        ItemState::Trash => return Err(Greyed::ItemTrash),
+        ItemState::Refused => return Err(Greyed::ItemOther),
+        ItemState::Unknown => return Err(Greyed::NotYet),
+    };
+    let off = take_off_gate(inv, original, kind, wear)?;
+    // (as the Inventory greys its entry while an outfit change is under
+    // way; said when it is asked, not drawn: it lasts a moment)
+    if wear.is_some_and(|wear| wear.busy) {
+        return Err(Greyed::Busy);
+    }
+    Ok(off)
+}
+
 /// Why nothing of a selection can be a shortcut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
@@ -719,6 +796,10 @@ pub struct Face {
     pub hidden: bool,
     /// The colour its icon takes (a folder the user coloured).
     pub tint: Option<[u8; 3]>,
+    /// The worn item it can take off now (its "X"): None when it is not
+    /// worn clothing or a worn object, or when RLVa keeps it on or hides
+    /// the Inventory.
+    pub take_off: Option<TakeOff>,
 }
 
 impl Face {
@@ -773,6 +854,7 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
                 verb: tr!("fs-desktop-open"),
                 hidden: false,
                 tint: None,
+                take_off: None,
             };
         }
         Target::Item { item } => return item_face(shortcut, *item, facts, folders),
@@ -792,6 +874,7 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
             verb: tr!("fs-desktop-open"),
             hidden: !own_name,
             tint: None,
+            take_off: None,
         }
     };
     // (nor the name the user gave the shortcut: it is often the folder's)
@@ -814,6 +897,7 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
                 verb: tr!("fs-desktop-open"),
                 hidden: false,
                 tint: folders.colors.and_then(|colors| colors.get(&folder)).copied(),
+                take_off: None,
             }
         }
     }
@@ -841,6 +925,7 @@ fn outfit_face(shortcut: &Shortcut, id: Uuid, folders: &Folders) -> Face {
             verb: tr!("fs-desktop-wear-outfit"),
             hidden: !own_name,
             tint: None,
+            take_off: None,
         }
     };
     // (@showinv: as a folder shortcut, nothing of it is said)
@@ -863,6 +948,7 @@ fn outfit_face(shortcut: &Shortcut, id: Uuid, folders: &Folders) -> Face {
                 verb: tr!("fs-desktop-wear-outfit"),
                 hidden: false,
                 tint: None,
+                take_off: None,
             }
         }
     }
@@ -885,6 +971,7 @@ fn item_face(shortcut: &Shortcut, id: Uuid, facts: &Facts, folders: &Folders) ->
             verb: tr!("fs-desktop-open"),
             hidden: !own_name,
             tint: None,
+            take_off: None,
         }
     };
     // (RlvBehaviourToggleHandler<RLV_BHVR_SHOWINV>: as a folder shortcut,
@@ -914,6 +1001,7 @@ fn item_face(shortcut: &Shortcut, id: Uuid, facts: &Facts, folders: &Folders) ->
         verb: kind.verb(),
         hidden: false,
         tint: None,
+        take_off: take_off_gate(inv, original, kind, folders.wear).ok(),
     }
 }
 
@@ -1329,6 +1417,88 @@ mod tests {
             ..Default::default()
         }]);
         assert_eq!(item_open(&inv, id(9131), &free, false), Err(Greyed::Listing));
+    }
+
+    #[test]
+    fn only_worn_clothing_and_objects_can_be_taken_off_and_never_a_body_part() {
+        let inv = inventory();
+        let free = Facts::default();
+        let wearing = Wearing {
+            worn: [id(JACKET), id(ATTACHMENT), id(SHAPE)].into(),
+            ..Default::default()
+        };
+        let off = |n: u128, wear: Option<&Wearing>| item_take_off(&inv, id(n), wear, false);
+        // worn clothing: taken off; a worn object: detached
+        let jacket = off(JACKET, Some(&wearing)).expect("the worn jacket comes off");
+        assert_eq!(
+            jacket,
+            TakeOff {
+                item: id(JACKET),
+                object: false
+            }
+        );
+        assert_eq!(jacket.label(), tr!("fs-desktop-take-off"));
+        let attachment = off(ATTACHMENT, Some(&wearing)).expect("the worn attachment comes off");
+        assert_eq!(
+            attachment,
+            TakeOff {
+                item: id(ATTACHMENT),
+                object: true
+            }
+        );
+        assert_eq!(attachment.label(), tr!("fs-desktop-detach"));
+        // through a link: the item it points to, nothing else
+        let link = inv
+            .items
+            .values()
+            .find(|it| it.asset_type == 24 && it.asset_id == id(JACKET))
+            .map(|it| it.id)
+            .expect("an outfit links the jacket");
+        assert_eq!(item_take_off(&inv, link, Some(&wearing), false), Ok(jacket));
+        // not worn, or nothing known of what is worn
+        assert_eq!(off(SHIRT, Some(&wearing)), Err(Greyed::NotWorn));
+        assert_eq!(off(JACKET, None), Err(Greyed::NotWorn));
+        // a body part, worn, is never taken off from here
+        assert_eq!(off(SHAPE, Some(&wearing)), Err(Greyed::ItemOther));
+        // other kinds: a notecard
+        assert_eq!(off(9110, Some(&wearing)), Err(Greyed::ItemOther));
+        // an outfit change under way: said when asked
+        let busy = Wearing {
+            busy: true,
+            ..wearing.clone()
+        };
+        assert_eq!(off(JACKET, Some(&busy)), Err(Greyed::Busy));
+        // @showinv
+        assert_eq!(item_take_off(&inv, id(JACKET), Some(&wearing), true), Err(Greyed::Rlva));
+        // the faces: an "X" on the worn wearables only (busy or not)
+        let folders = Folders {
+            inv: &inv,
+            no_inventory: false,
+            colors: None,
+            wear: Some(&wearing),
+        };
+        let x = |n: u128, folders: &Folders| face(&item_shortcut(n), &free, folders).take_off;
+        assert_eq!(x(JACKET, &folders), Some(jacket));
+        assert_eq!(x(ATTACHMENT, &folders), Some(attachment));
+        assert_eq!(x(SHIRT, &folders), None);
+        assert_eq!(x(SHAPE, &folders), None);
+        assert_eq!(x(9110, &folders), None);
+        let drawn_busy = Folders {
+            wear: Some(&busy),
+            ..folders
+        };
+        assert_eq!(x(JACKET, &drawn_busy), Some(jacket));
+        // nothing known of what is worn, or the Inventory hidden: no "X"
+        let unknown = Folders { wear: None, ..folders };
+        assert_eq!(x(JACKET, &unknown), None);
+        let hidden = Folders {
+            no_inventory: true,
+            ..folders
+        };
+        assert_eq!(x(JACKET, &hidden), None);
+        // a worn item is still greyed for opening ("worn already"): the
+        // "X" is its only action besides the menu
+        assert_eq!(face(&item_shortcut(JACKET), &free, &folders).greyed, Some(Greyed::Worn));
     }
 
     /// Outfits of the demo inventory (`world::appearance::seed_demo`): one

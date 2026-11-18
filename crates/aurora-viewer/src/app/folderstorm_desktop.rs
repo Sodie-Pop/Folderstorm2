@@ -23,7 +23,9 @@
 //! after the question of outfit safety (FEATURES row 2.7), the wearing
 //! itself going through `apply_appearance_action`, RLVa included; clothing
 //! and an object are added to what is worn through the Inventory's *Add*
-//! (`Action::WearItems { replace: false }`), never replacing anything. A toolbar button's menu
+//! (`Action::WearItems { replace: false }`), never replacing anything, and
+//! a worn one is taken off by its "X" through the Inventory's *Remove* /
+//! *Detach from yourself* (`Action::RemoveItems`). A toolbar button's menu
 //! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
 //! is run here), and three keyboard actions of `crate::folderstorm::keys`
 //! show or hide the shortcuts and give the desktop or the taskbar the
@@ -173,6 +175,7 @@ impl App {
                     }
                 }
                 Request::OpenItem(item) => self.desktop_open_item(item, &facts, no_inventory),
+                Request::TakeOff(item) => self.desktop_take_off(item, no_inventory),
                 Request::WearOutfit(outfit) => self.desktop_wear_outfit(outfit, no_inventory),
                 Request::ShowItem(item) => {
                     // (show_item_original refuses under @showinv)
@@ -236,6 +239,26 @@ impl App {
                     Ok(_) => self.apply_inventory_action(ui::inventory::InvAction::Appearance(action)),
                     Err(reason) => self.world.system_notice(reason, Topic::Warning),
                 }
+            }
+            Err(why) => self.world.system_notice(why.text(), Topic::Warning),
+        }
+    }
+
+    /// Takes off the worn item of a shortcut (its "X", its menu's *Take
+    /// off* / *Detach*, Shift+Delete), checked again here
+    /// (`targets::item_take_off`: what is worn and what RLVa locks may have
+    /// changed since it was drawn). The Inventory's own *Remove* / *Detach
+    /// from yourself* (`Action::RemoveItems` of that one item, as
+    /// `item_attachments` of `ui/inventory/context_catalog.rs` hands it
+    /// over), through `apply_appearance_action`, where RLVa's
+    /// `@remattach`, `@detach`, `@remoutfit` and locked folders are
+    /// checked once more. Nothing else is taken off. What cannot says why.
+    fn desktop_take_off(&mut self, item: Uuid, no_inventory: bool) {
+        let wearing = self.desktop_wearing_now(true);
+        match targets::item_take_off(&self.world.inventory, item, Some(&wearing), no_inventory) {
+            Ok(off) => {
+                let action = crate::world::appearance::Action::RemoveItems(vec![off.item]);
+                self.apply_inventory_action(ui::inventory::InvAction::Appearance(action));
             }
             Err(why) => self.world.system_notice(why.text(), Topic::Warning),
         }
