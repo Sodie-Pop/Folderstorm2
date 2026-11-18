@@ -202,7 +202,7 @@ pub fn unsavable(inv: &Inventory, item: &InvItem, kind: Kind) -> Option<&'static
     {
         return Some("the Marketplace Listings folder is not changed by an assistant");
     }
-    if kind == Kind::Script && aurora_net::scripts::lua_source(item.flags) {
+    if kind == Kind::Script && aurora_net::scripts::is_slua_item(item.flags) {
         return Some("an SLua script: the assistant saves LSL scripts only");
     }
     None

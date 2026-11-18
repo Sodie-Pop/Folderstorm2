@@ -11,7 +11,6 @@ pub mod folder_upload;
 pub mod gesture_boards;
 pub mod keys;
 pub mod login_screen;
-pub mod nearby_media;
 pub mod photo_viewport;
 pub mod rez_overrides;
 pub mod viewport;
