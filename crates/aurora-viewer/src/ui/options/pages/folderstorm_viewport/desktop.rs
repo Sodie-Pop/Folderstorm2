@@ -1,6 +1,6 @@
 //! Folderstorm: the margins' desktop in Preferences
 //! (`crate::folderstorm::desktop`, FEATURES.md row 1.10): a group of
-//! Layout › Bars and windows, after *Background around the world*.
+//! Workspaces › Margins, after *Background around the world*.
 
 use super::super::super::cx::{Cx, Nothing, field};
 use super::super::folderstorm_search::words;
@@ -19,23 +19,29 @@ fn asking_id() -> egui::Id {
     egui::Id::unique("folderstorm_desktop_clear_asking")
 }
 
-/// *Desktop in the margins*: the shortcuts' switch (behind its cog: how
-/// they open, and removing them all), their size, and the note about the
-/// shortcuts of a monitor not in use. The shortcuts themselves are the
-/// account's, not settings: the rows about them have nothing to reset.
-pub(in crate::ui::options) fn group(cx: &mut Cx) {
+/// *Desktop in the margins*: the shortcuts' switch (behind its cog: their
+/// size, how they open, and removing them all), the note about the
+/// shortcuts of a monitor not in use, and the taskbar; greyed while the
+/// viewport is `off`. The shortcuts themselves are the account's, not
+/// settings: the rows about them have nothing to reset.
+pub(in crate::ui::options) fn group(cx: &mut Cx, off: bool) {
     let p = cx.p;
     cx.group(tr!("fs-desktop-group"), |cx| {
-        if !cx.s.folderstorm_viewport.enabled {
-            cx.note(tr!("fs-desktop-intro"));
-        }
+        cx.greyed(off);
         words(cx, &["fs-search-desktop"]).toggle(
             tr!("fs-desktop-shortcuts"),
             tr!("fs-desktop-shortcuts-help"),
             &field!(folderstorm_desktop.shortcuts_on),
         );
-        let off = !cx.s.folderstorm_desktop.shortcuts_on;
-        cx.subs(off, |cx| {
+        let shortcuts_off = !cx.s.folderstorm_desktop.shortcuts_on;
+        cx.subs(shortcuts_off, |cx| {
+            let sizes = Size::ALL.map(|size| (size, size_label(size), false));
+            words(cx, &["fs-search-desktop"]).choice(
+                tr!("fs-desktop-size"),
+                tr!("fs-desktop-size-help"),
+                &field!(folderstorm_desktop.size),
+                &sizes,
+            );
             words(cx, &["fs-search-desktop"]).toggle(
                 tr!("fs-desktop-single-click"),
                 tr!("fs-desktop-single-click-help"),
@@ -43,15 +49,6 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             );
             clear_row(cx);
         });
-        cx.greyed(off);
-        let sizes = Size::ALL.map(|size| (size, size_label(size), false));
-        words(cx, &["fs-search-desktop"]).choice(
-            tr!("fs-desktop-size"),
-            tr!("fs-desktop-size-help"),
-            &field!(folderstorm_desktop.size),
-            &sizes,
-        );
-        cx.greyed(false);
         // shortcuts kept on a monitor that has no desktop now (the row
         // exists only then: it is a state, not a setting to search for)
         let ctx = cx.ui.ctx().clone();

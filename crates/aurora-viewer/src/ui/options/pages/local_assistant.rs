@@ -1,8 +1,9 @@
-//! Folderstorm: Preferences › Privacy › Local assistant (FEATURES.md 4.1,
-//! 4.4 and 4.5; Folderstorm (C++)'s panel_preferences_local_assistant.xml and
-//! doc/plans/assistant-*.md). Access, "this session only", the permission
-//! presets, the bridge's state and recent activity, and the Setup rows.
-//! The token is never shown nor copied.
+//! Folderstorm: Preferences › Local assistant, a page of the System section
+//! (FEATURES.md 4.1, 4.4 and 4.5; Folderstorm (C++)'s
+//! panel_preferences_local_assistant.xml and doc/plans/assistant-*.md).
+//! Access with the bridge's state, "this session only", the permission
+//! presets; the recent activity; the Setup rows. Privacy keeps one row
+//! that leads here ([`link`]). The token is never shown nor copied.
 
 use super::super::cx::{Cx, Nothing, field};
 use super::super::{segmented, toggle};
@@ -54,14 +55,35 @@ fn store(s: &mut crate::settings::Settings, session: Option<LocalAssistant>, new
     }
 }
 
-pub(in crate::ui::options) fn group(cx: &mut Cx) {
+/// The row Privacy keeps: whether access is on, and the way to this page.
+pub(in crate::ui::options) fn link(cx: &mut Cx) {
     use aurora_i18n::tr;
+    let p = cx.p;
+    let on = mcp_bridge::session().unwrap_or(cx.s.local_assistant).enabled;
+    // its own group, so that the search names its place (Privacy ›)
     cx.group(tr!("fs-mcp-group"), |cx| {
-        cx.note(tr!("fs-mcp-intro"));
-        let p = cx.p;
-        let session = mcp_bridge::session();
-        let current = session.unwrap_or(cx.s.local_assistant);
+        words(cx, &["fs-search-mcp"]).row_with(tr!("fs-mcp-group"), tr!("fs-mcp-link-help"), &Nothing, |ui, _, st, _| {
+            let state = if on { tr!("fs-mcp-link-on") } else { tr!("fs-mcp-status-off") };
+            ui.label(egui::RichText::new(state).size(12.5).color(p.muted));
+            let button = tr!("fs-mcp-link-button");
+            if widgets::action_button(ui, &p, "arrow-right", button, widgets::ActionKind::Flat, egui::vec2(0.0, 26.0)).clicked() {
+                st.go_to = Some((super::super::Page::LocalAssistant, 0, None));
+            }
+            false
+        });
+    });
+}
 
+/// The page: access, the recent activity, the setup.
+pub(in crate::ui::options) fn page(cx: &mut Cx) {
+    use aurora_i18n::tr;
+    let p = cx.p;
+    let session = mcp_bridge::session();
+    let current = session.unwrap_or(cx.s.local_assistant);
+    // the bridge's state, read once for the three groups
+    let status = mcp_bridge::status();
+    cx.group(tr!("fs-mcp-access"), |cx| {
+        cx.note(tr!("fs-mcp-access-note"));
         // access, saved or for this session only
         if session.is_none() {
             words(cx, &["fs-search-mcp"]).toggle(tr!("fs-mcp-allow"), tr!("fs-mcp-allow-hint"), &field!(local_assistant.enabled));
@@ -74,6 +96,16 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 false
             });
         }
+        // what the bridge does now, beside the switch: a coloured pill
+        words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-status"), tr!("fs-mcp-status-hint"), &Nothing, |ui, _| {
+            let (text, color) = match (status.port, &status.failure) {
+                (Some(port), _) => (tr!("fs-mcp-status-ready", port = port.to_string()), p.success),
+                (None, Some(reason)) if current.enabled => (tr!("fs-mcp-status-failed", reason = reason.clone()), p.danger),
+                _ => (tr!("fs-mcp-status-off").to_owned(), p.muted),
+            };
+            status_pill(ui, &text, color);
+            false
+        });
         words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-session-only"), tr!("fs-mcp-session-only-hint"), &Nothing, |ui, s| {
             let mut only = session.is_some();
             if toggle(ui, &p, &mut only) {
@@ -247,21 +279,11 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             }
         });
         cx.note(tr!("fs-mcp-changes-note"));
-
-        // what the bridge does now
-        let status = mcp_bridge::status();
-        words(cx, &["fs-search-mcp"]).row(tr!("fs-mcp-status"), tr!("fs-mcp-status-hint"), &Nothing, |ui, _| {
-            let (text, color) = match (status.port, &status.failure) {
-                (Some(port), _) => (tr!("fs-mcp-status-ready", port = port.to_string()), p.success),
-                (None, Some(reason)) if current.enabled => (tr!("fs-mcp-status-failed", reason = reason.clone()), p.danger),
-                _ => (tr!("fs-mcp-status-off").to_owned(), p.muted),
-            };
-            ui.label(egui::RichText::new(text).size(12.5).color(color));
-            false
-        });
-        // the label above, one entry per line across the whole row (in the
-        // control column each entry wrapped over several lines)
-        words(cx, &["fs-search-mcp", "fs-search-mcp-activity"]).below().row(
+    });
+    cx.group(tr!("fs-mcp-activity"), |cx| {
+        // one entry per line across the whole row (in the control column
+        // each entry wrapped over several lines); the group names it
+        words(cx, &["fs-search-mcp", "fs-search-mcp-activity"]).section_body().row(
             tr!("fs-mcp-activity"),
             tr!("fs-mcp-activity-hint"),
             &Nothing,
@@ -335,8 +357,10 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 false
             },
         );
-
-        // Setup: the entry for an assistant's MCP settings, and a check
+    });
+    // Setup: the entry for an assistant's MCP settings, and a check; each
+    // note under its button, across the row
+    cx.group(tr!("fs-mcp-setup"), |cx| {
         let clients = [
             (setup::Client::ClaudeCode, "Claude Code", false),
             (setup::Client::Cursor, "Cursor", false),
@@ -355,7 +379,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
         words(cx, &["fs-search-mcp"])
             .wide()
             .row(tr!("fs-mcp-setup-copy"), tr!("fs-mcp-setup-copy-hint"), &Nothing, |ui, _| {
-                ui.horizontal_wrapped(|ui| {
+                ui.vertical(|ui| {
                     let copy = widgets::action_button_if(
                         ui,
                         &p,
@@ -380,7 +404,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                         None
                     };
                     if let Some((text, color)) = note {
-                        ui.label(egui::RichText::new(text).size(12.0).color(color));
+                        ui.add(egui::Label::new(egui::RichText::new(text).size(12.0).color(color)).wrap());
                     }
                 });
                 false
@@ -389,7 +413,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
         words(cx, &["fs-search-mcp"])
             .wide()
             .row(tr!("fs-mcp-check"), tr!("fs-mcp-check-hint"), &Nothing, |ui, _| {
-                ui.horizontal_wrapped(|ui| {
+                ui.vertical(|ui| {
                     let check = setup::check();
                     let busy = check == setup::Check::Running;
                     let clicked = widgets::action_button_if(
@@ -417,7 +441,7 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                         setup::Check::Failed(setup::Failure::Stage(stage)) => (tr!("fs-mcp-check-failed", stage = stage.clone()), p.danger),
                     };
                     if !text.is_empty() {
-                        ui.label(egui::RichText::new(text).size(12.0).color(color));
+                        ui.add(egui::Label::new(egui::RichText::new(text).size(12.0).color(color)).wrap());
                     }
                     if busy {
                         ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
@@ -429,6 +453,14 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             setup::forget_check();
         }
     });
+}
+
+/// The bridge's state as a pill of its colour.
+fn status_pill(ui: &mut egui::Ui, text: &str, color: egui::Color32) {
+    let (galley, width) = widgets::tag_pill_layout(ui, text, color);
+    let height = galley.size().y + 6.0;
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+    widgets::paint_tag_pill(ui, galley, rect, color, color.gamma_multiply(0.16));
 }
 
 /// Folderstorm: a change's Recent activity line from its receipt: what the
