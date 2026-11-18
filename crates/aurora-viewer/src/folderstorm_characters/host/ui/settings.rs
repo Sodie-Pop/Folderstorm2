@@ -562,7 +562,9 @@ impl Window_ {
                 acts.push(HostAct::Settings(Act::Alerts(slot, Alerts::default())));
             }
         });
-        if !self.host.desk.chat_sound() {
+        if super::super::alert_sounds_on() {
+            note(ui, p, tr!("folderstorm-settings-alert-replaced"));
+        } else if !self.host.desk.chat_sound() {
             note(ui, p, tr!("folderstorm-settings-alerts-off"));
         }
     }
@@ -686,19 +688,27 @@ impl Window_ {
                 }
                 ui.add_space(6.0);
                 heading(ui, p, tr!("folderstorm-settings-alert"));
-                let mut sound = desk.chat_sound();
-                if widgets::checkbox(ui, p, &mut sound, tr!("folderstorm-chat-sound"))
-                    .on_hover_text(tr!("folderstorm-chat-sound-help"))
-                    .changed()
-                {
-                    acts.push(HostAct::ChatSound(sound));
-                }
-                let preview = tr!("folderstorm-settings-preview");
-                if widgets::action_button(ui, p, "player-play-filled", preview, ActionKind::Flat, BUTTON)
-                    .on_hover_text(tr!("folderstorm-settings-preview-help"))
-                    .clicked()
-                {
-                    acts.push(HostAct::Settings(Act::Preview));
+                // (greyed while the background alert sounds are on: the
+                // host's beep does not play then, and the setting is kept)
+                let replaced = super::super::alert_sounds_on();
+                ui.add_enabled_ui(!replaced, |ui| {
+                    let mut sound = desk.chat_sound();
+                    if widgets::checkbox(ui, p, &mut sound, tr!("folderstorm-chat-sound"))
+                        .on_hover_text(tr!("folderstorm-chat-sound-help"))
+                        .changed()
+                    {
+                        acts.push(HostAct::ChatSound(sound));
+                    }
+                    let preview = tr!("folderstorm-settings-preview");
+                    if widgets::action_button(ui, p, "player-play-filled", preview, ActionKind::Flat, BUTTON)
+                        .on_hover_text(tr!("folderstorm-settings-preview-help"))
+                        .clicked()
+                    {
+                        acts.push(HostAct::Settings(Act::Preview));
+                    }
+                });
+                if replaced {
+                    note(ui, p, tr!("folderstorm-settings-alert-replaced"));
                 }
                 note(ui, p, tr!("folderstorm-settings-alert-note"));
             },
