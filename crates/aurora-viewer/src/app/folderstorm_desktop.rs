@@ -218,7 +218,7 @@ impl App {
             // the Inventory's own *Open* of a notecard: that arm checks
             // @viewnote and the right to read it (LLPreviewNotecard::loadAsset)
             // before it asks for the content, and opens Aurora's window
-            Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item)),
+            Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item, None)),
             // the Inventory's *Add*: added to what is worn, nothing
             // replaced. What the outfit's plan would refuse (the limit of
             // attachments, an outfit not loaded yet) is said here: on its

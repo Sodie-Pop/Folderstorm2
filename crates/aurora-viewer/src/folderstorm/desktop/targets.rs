@@ -566,7 +566,7 @@ pub fn outfit_state(inv: &Inventory, id: Uuid) -> FolderState {
 pub struct Wearing {
     /// What RLVa's locks leave of wearing (`World::rlva_wear_locks`, what
     /// greys the Inventory's own entries).
-    pub locks: WearLocks,
+    pub locks: std::sync::Arc<WearLocks>,
     /// The items worn now (`ui::appearance::items::worn_items`: what the
     /// Inventory marks "worn").
     pub worn: std::collections::HashSet<Uuid>,
