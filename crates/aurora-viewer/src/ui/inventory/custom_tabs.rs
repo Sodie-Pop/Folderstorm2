@@ -24,7 +24,7 @@
 //! holds the rules, `folder_ui.rs` the menus, the dialog part and the note.
 //! It may pin single items, open in a window of its own and list its items
 //! flat (feature 2.13, "Inventory quick access"): `items.rs`, `window.rs`,
-//! `flat.rs`.
+//! `flat.rs`. It may carry an icon of the user's choice (`icon.rs`).
 
 use super::view::{Age, Filters, InventoryPreferences};
 use super::*;
@@ -63,6 +63,10 @@ pub struct CustomTab {
     /// Its items in one flat list, without folders (`flat.rs`).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub flat: bool,
+    /// Its icon, a Tabler name from `icon::CHOICES` (`icon.rs`); none: the
+    /// bookmark. Read leniently: a value that is not a text is no icon.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "icon::lenient")]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,6 +182,7 @@ pub fn normalize(tabs: &mut [CustomTab]) -> bool {
         }
         changed |= folders::normalize(&mut tab.folders);
         changed |= folders::normalize_within(&mut tab.items, items::MAX_ITEMS);
+        changed |= icon::normalize(tab);
     }
     changed
 }
@@ -554,6 +559,7 @@ pub(super) fn tab_menu(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, pre
             .unwrap_or_default();
         st.custom_tabs.rename = Some(Rename { id, text, focus: true });
     }
+    icon::menu_entry(ui, p, prefs, id);
     if menu::item_tip(
         ui,
         p,
@@ -603,14 +609,22 @@ pub(super) fn legacy_strip(
         return;
     }
     let custom = entries(prefs);
+    // a chosen icon is drawn before the name, in room the label leaves (icon.rs)
+    let names: Vec<String> = prefs.custom_tabs.iter().map(|t| icon::legacy_label(ui, t)).collect();
     let mut slots = tab_ids.to_vec();
     let mut all = labels.to_vec();
-    for (slot, name) in &custom {
+    for ((slot, _), name) in custom.iter().zip(&names) {
         slots.push(*slot);
         all.push((name.as_str(), true));
     }
     let mut visible = slots.iter().position(|slot| selected(st, prefs, *slot)).unwrap_or(0);
     let (_, responses) = widgets::tabs_with_responses(ui, p, &mut visible, &all);
+    for (n, (tab, name)) in prefs.custom_tabs.iter().zip(&names).enumerate() {
+        let at = tab_ids.len() + n;
+        if let Some(response) = responses.get(at) {
+            icon::paint_legacy(ui, p, tab, name, response.rect, visible == at);
+        }
+    }
     // the tab clicked (or the one kept) first: a menu choice below may select another
     select(st, prefs, slots[visible]);
     for (slot, response) in slots.iter().zip(&responses) {
@@ -804,8 +818,8 @@ fn delete_and_leave(st: &mut InventoryUi, prefs: &mut InventoryPreferences, id: 
 // ---- Demo ----
 
 /// `AURORA_DEMO_INVENTORY=custom-tabs|aurora-custom-tabs`: two sample custom
-/// tabs, the first one shown: the demo's textures and sounds, and what has
-/// "demo" in its name.
+/// tabs, the first one shown: the demo's textures and sounds (with the
+/// picture icon), and what has "demo" in its name.
 pub fn demo(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
     prefs.custom_tabs.clear();
     let media = Filters {
@@ -825,6 +839,10 @@ pub fn demo(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
         "demo".into(),
     );
     if let Some(id) = first {
+        // an icon of its own (icon.rs); the other keeps the bookmark
+        if let Some(tab) = prefs.custom_tabs.iter_mut().find(|t| t.id == id) {
+            icon::set(tab, Some("photo-filled"));
+        }
         select_custom(st, prefs, id);
     }
 }
@@ -832,6 +850,7 @@ pub fn demo(st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
 pub(super) mod flat;
 pub(super) mod folder_ui;
 pub(super) mod folders;
+pub(super) mod icon;
 pub(super) mod items;
 pub(super) mod window;
 pub use folder_ui::demo as folder_demo;

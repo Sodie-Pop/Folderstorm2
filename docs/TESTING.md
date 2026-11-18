@@ -7993,7 +7993,12 @@ failure. Grid validation and any paid upload are performed by the human.
   names are refused), Clone (the copy is shown), Delete… (asks first, Cancel
   focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
   a custom tab with that tab's finder and search. The `aurora-` mode starts with
-  the narrow window; widen it to see the shortcuts column.
+  the narrow window; widen it to see the shortcuts column. Tab icons:
+  "Textures and sounds" shows the picture icon (Aurora's tab icons and
+  shortcuts column; before the name in the Legacy strip), "Demo items" the
+  bookmark (Legacy: text only). Right-click a custom tab › "Icon ›": "Default"
+  and a grid of 40 icons; "Customize tab…" has the same grid in its "Icon"
+  row. The choice survives a restart and Clone copies it.
 - **`AURORA_DEMO_INVENTORY=folder-tabs|aurora-folder-tabs`** (Folderstorm2):
   a custom tab "Clothing and body" scoped to the demo's Clothing and Body
   folders and to a deleted one, shown with its "Customize tab…" dialog open.
