@@ -199,6 +199,7 @@ fn viewfinder_layout(area: Option<Rect>, pointer: Pos2) -> (Vec<(&'static str, R
             },
             back_key: None,
             quality_reduced: false,
+            pano: None,
         };
         let mut output = ctx.run_ui(
             egui::RawInput {
