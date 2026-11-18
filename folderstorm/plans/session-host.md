@@ -2239,9 +2239,12 @@ May be two small PRs: 1a profiles, 1b behind policy.
       shrinks the window by its height (190 points) and keeps the width
       the user gave; choosing a size gives the window the size that shows
       it 1:1. Too low a window for both keeps the picture.
-    - *In a monitor the box does not take the keyboard back after a
-      line* (the shared chat's does): the cycling monitor's hold ends
-      when the line is sent, and a monitor is first of all a picture.
+    - *After Enter every host box keeps the keyboard*, as the viewer's
+      chat bar does, so several lines are typed without a click (the
+      human's test asked for it; at first a monitor's box let it go). In
+      a monitor it does not count for the cycling monitor's hold until
+      something is typed again: the hold still ends when the line is
+      sent. A click on a monitor's send button leaves the keyboard there.
     - *The cycling monitor's hold*: its box has the keyboard in a window
       that has it, or a text was typed there for the character shown and
       is still that character's draft. A draft typed elsewhere (the

@@ -11,11 +11,13 @@ pub mod chat;
 pub mod commands;
 pub mod confirmations;
 pub mod controls;
+pub mod folderstorm_alerts; // Folderstorm: background characters' alert sounds
+pub mod folderstorm_backup; // Folderstorm: the account's setup backup
 pub mod folderstorm_characters; // Folderstorm: other Folderstorm2 windows
 pub mod folderstorm_chat_upload; // Folderstorm: chat image upload
 pub mod folderstorm_search; // Folderstorm: settings search keywords
 pub mod folderstorm_viewport; // Folderstorm: world viewport
-pub mod folderstorm_workspaces; // Folderstorm: layouts
+pub mod folderstorm_workspaces; // Folderstorm: layouts and workspaces
 pub mod fun;
 pub mod graphics;
 pub mod inventory;
@@ -87,8 +89,8 @@ pub fn tabs(page: Page) -> Vec<&'static str> {
             aurora_i18n::tr!("ui-options-tab-bars-and-windows"),
             aurora_i18n::tr!("ui-options-hover-tips"),
             aurora_i18n::tr!("ui-options-tab-startup"),
-            aurora_i18n::tr!("fs-layouts-tab"), // Folderstorm: layouts
         ],
+        Page::Workspaces => folderstorm_workspaces::tabs(), // Folderstorm
         Page::Appearance => vec![
             aurora_i18n::tr!("ui-options-font"),
             aurora_i18n::tr!("ui-options-colors"),
@@ -115,6 +117,7 @@ pub fn draw(cx: &mut Cx, page: Page, tab: usize) {
         Page::Protections => protections::page(cx),
         Page::Rlva => rlva::page(cx),
         Page::Layout => layout::page(cx, tab),
+        Page::Workspaces => folderstorm_workspaces::page(cx, tab), // Folderstorm
         Page::Appearance => appearance::page(cx, tab),
         Page::Accessibility => accessibility::page(cx),
         Page::Confirmations => confirmations::page(cx),
@@ -131,6 +134,7 @@ pub fn draw(cx: &mut Cx, page: Page, tab: usize) {
         Page::Commands => commands::page(cx),
         Page::System => system::page(cx),
         Page::Network => network::page(cx),
+        Page::LocalAssistant => local_assistant::page(cx), // Folderstorm
         Page::Fun => fun::page(cx),
     }
 }

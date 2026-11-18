@@ -5,10 +5,13 @@
 //! behind from showing a box over the active character, lowering its
 //! graphics or closing (R4, R5). The decisions themselves are the
 //! `folderstorm-session` crate's pure functions. The shared chat's side of
-//! a managed viewer is in `folderstorm_characters/chat.rs`.
+//! a managed viewer is in `folderstorm_characters/chat.rs`, a background
+//! character's alert sounds in `folderstorm_characters/alerts.rs`.
 
+mod alerts;
 mod bar;
 mod chat;
+mod gpu_diag;
 mod memory;
 mod monitor;
 
@@ -60,6 +63,8 @@ impl App {
     /// rules, and the cap with the policy's rate. `timed`: a capture or a
     /// profile run, `vr`: a headset in use, `minimized`: the window is.
     pub(super) fn folderstorm_characters_frame(&mut self, cap: f32, timed: bool, vr: bool, minimized: bool) -> f32 {
+        // the background characters' alert sounds (folderstorm_characters/alerts.rs)
+        self.folderstorm_alerts_tick();
         if self.folderstorm_demo_behind() && self.egui_ctx.input(|i| i.pointer.any_pressed()) {
             log::info!("session demo: clicked, no other window in front any more");
             self.folderstorm_characters.demo_released = true;

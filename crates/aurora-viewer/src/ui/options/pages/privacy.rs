@@ -305,7 +305,7 @@ pub(super) fn page(cx: &mut Cx) {
             },
         );
     });
-    super::local_assistant::group(cx); // Folderstorm: local assistant
+    super::local_assistant::link(cx); // Folderstorm: local assistant
 }
 
 #[cfg(test)]

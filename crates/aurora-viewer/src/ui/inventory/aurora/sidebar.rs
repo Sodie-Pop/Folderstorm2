@@ -387,7 +387,7 @@ pub(super) fn show(
         let response = entry(
             ui,
             p,
-            "bookmark-filled",
+            custom_tabs::icon::of_slot(prefs, slot), // Folderstorm: its own icon
             &name,
             None,
             0,
