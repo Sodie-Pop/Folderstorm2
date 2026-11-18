@@ -27,8 +27,12 @@
 //!   ([`Role::Monitor`]), within the budget all monitors share; closed,
 //!   scrolled away, or with the host's window hidden or minimised, it is a
 //!   plain background character again, its 3D off. The active character
-//!   has no monitor: it is in front. A character whose monitor is open is
-//!   not minimised behind (a minimised window has no picture).
+//!   has no monitor: it is in front. A character watched by a monitor on
+//!   screen (its own, or the cycling monitor) is not minimised behind (a
+//!   minimised window has no picture); a monitor that is open but not on
+//!   screen keeps nobody behind: Economy minimises as it would without it,
+//!   and the viewer comes back behind, without the keyboard, once a
+//!   monitor shows it again.
 //! - **The bar (checkpoint 8).** What the bar shows of the desk
 //!   ([`Desk::bar_state`]) and what its clicks do ([`Desk::bar_request`]):
 //!   nothing the host's own window could not do. "Mute background sound"
@@ -406,12 +410,6 @@ impl Slot {
     /// The number of its launch: what the host tags its threads with.
     pub fn launch(&self) -> u32 {
         self.launch
-    }
-
-    /// How it waits behind: as chosen, but never minimised while its
-    /// monitor is open (a minimised window has no picture to show).
-    pub fn waits(&self) -> Standby {
-        if self.monitor.is_some() { Standby::Warm } else { self.standby }
     }
 
     /// The viewer holds the latest assignment sent to it.
@@ -1264,7 +1262,11 @@ impl Desk {
     /// character's monitor. Closing it returns its viewer to a plain
     /// background character: 3D off.
     pub fn set_monitor(&mut self, slot: usize, monitor: Option<monitor::Spec>) {
-        let Some(s) = self.slot_mut(slot).filter(|s| s.monitor != monitor) else {
+        if self.slot(slot).is_none_or(|s| s.monitor == monitor) {
+            return;
+        }
+        let before = self.minimised_behind();
+        let Some(s) = self.slot_mut(slot) else {
             return;
         };
         s.monitor = monitor;
@@ -1273,6 +1275,7 @@ impl Desk {
         }
         self.effects.push(Effect::Save);
         self.sync(None);
+        self.minimise_unwatched(before);
     }
 
     /// Opens a character's monitor with the size and rate a new monitor
@@ -1299,12 +1302,14 @@ impl Desk {
         if edited == self.monitors {
             return false;
         }
+        let before = self.minimised_behind();
         self.monitors = edited;
         if !edited.cycling.open {
             self.cycling_seen = None;
         }
         self.effects.push(Effect::Save);
         self.sync(None);
+        self.minimise_unwatched(before);
         true
     }
 
@@ -1348,7 +1353,7 @@ impl Desk {
         let Some((to, from)) = monitor_windows::follow(open, from, to) else {
             return;
         };
-        let Some((spec, window)) = self.slot_mut(to).map(|s| (s.monitor.take(), s.monitor_window)) else {
+        let Some((spec, window, seen)) = self.slot_mut(to).map(|s| (s.monitor.take(), s.monitor_window, s.seen)) else {
             return;
         };
         if let Some(s) = self.slot_mut(to) {
@@ -1359,8 +1364,9 @@ impl Desk {
         };
         s.monitor = spec;
         let left = std::mem::replace(&mut s.monitor_window, window);
-        // (seen until the window says otherwise: it is the same window)
-        s.seen = true;
+        // (on screen as it was until the window says otherwise: it is the
+        // same window)
+        s.seen = seen;
         if let Some(s) = self.slot_mut(to) {
             s.monitor_window = left;
         }
@@ -1373,8 +1379,11 @@ impl Desk {
     /// Only that character is asked for the cycling monitor's pictures.
     pub fn cycling_seen(&mut self, slot: Option<usize>, now: Instant) {
         let slot = slot.filter(|slot| self.monitors.cycling.open && self.slot(*slot).is_some());
-        if std::mem::replace(&mut self.cycling_seen, slot) != slot {
+        if self.cycling_seen != slot {
+            let before = self.minimised_behind();
+            self.cycling_seen = slot;
             self.sync(Some(now));
+            self.minimise_unwatched(before);
         }
     }
 
@@ -1415,6 +1424,7 @@ impl Desk {
     /// (`panels::seen`): none of a window that is minimised or hidden. A monitor nobody can see
     /// asks nothing of its viewer.
     pub fn monitors_seen(&mut self, seen: [bool; MAX_SLOTS], now: Instant) {
+        let before = self.minimised_behind();
         let mut changed = false;
         for (slot, seen) in seen.into_iter().enumerate() {
             if let Some(s) = self.slot_mut(slot) {
@@ -1424,6 +1434,7 @@ impl Desk {
         }
         if changed {
             self.sync(Some(now));
+            self.minimise_unwatched(before);
         }
     }
 
@@ -1550,7 +1561,7 @@ impl Desk {
             self.activate(slot, true, now);
         } else {
             self.sync(Some(now));
-            if self.slot(slot).is_some_and(|s| self.waits(s) == Standby::Economy) {
+            if self.waits(slot) == Standby::Economy {
                 self.send(slot, ToViewer::Minimise);
             }
         }
@@ -1854,8 +1865,8 @@ impl Desk {
     }
 
     /// What the shares are made from: each running character's role, its
-    /// standby as chosen and whether a monitor keeps its window behind,
-    /// and what its viewer says it holds.
+    /// standby as chosen and whether a monitor on screen keeps its window
+    /// behind, and what its viewer says it holds.
     fn memory_characters(&self) -> [Option<memory::Character>; MAX_SLOTS] {
         std::array::from_fn(|slot| {
             let s = self.slot(slot).filter(|s| s.phase == Phase::Running)?;
@@ -1864,17 +1875,62 @@ impl Desk {
                 active: self.active == Some(slot),
                 economy,
                 // (its window stays behind instead of minimised)
-                watched: economy && self.waits(s) == Standby::Warm,
+                watched: economy && self.watching(slot),
                 held_mb: s.status.as_ref().map_or(0, |status| status.vram_mb),
             })
         })
     }
 
-    /// How a character waits behind: as [`Slot::waits`], and never
-    /// minimised while the cycling monitor is open (it shows every
-    /// background character in turn).
-    fn waits(&self, s: &Slot) -> Standby {
-        if self.monitors.cycling.open { Standby::Warm } else { s.waits() }
+    /// A monitor on screen shows that character, or will in its turn: its
+    /// own monitor's window is on screen ([`Desk::monitors_seen`]), or the
+    /// cycling monitor's window is on screen ([`Desk::cycling_seen`]) and
+    /// goes round the characters behind, this one among them. A monitor
+    /// that is open but minimised, covered, or in a hidden window watches
+    /// nobody: it does not keep an Economy character's window and memory.
+    fn watching(&self, slot: usize) -> bool {
+        let Some(s) = self.slot(slot) else {
+            return false;
+        };
+        let own = s.monitor.is_some() && s.seen;
+        let behind = self.active != Some(slot) && s.phase == Phase::Running && !s.closing;
+        let cycled = self.monitors.cycling.open && self.cycling_seen.is_some() && behind;
+        own || cycled
+    }
+
+    /// How a character waits behind: as chosen, but never minimised while
+    /// a monitor on screen watches it ([`Desk::watching`]: a minimised
+    /// window has no picture to show).
+    fn waits(&self, slot: usize) -> Standby {
+        match self.slot(slot) {
+            Some(s) if !self.watching(slot) => s.standby,
+            _ => Standby::Warm,
+        }
+    }
+
+    /// The characters that wait minimised behind now: running, behind the
+    /// active one, not closing, in Economy and watched by no monitor on
+    /// screen.
+    fn minimised_behind(&self) -> [bool; MAX_SLOTS] {
+        std::array::from_fn(|slot| {
+            self.active != Some(slot)
+                && self.slot(slot).is_some_and(|s| s.phase == Phase::Running && !s.closing)
+                && self.waits(slot) == Standby::Economy
+        })
+    }
+
+    /// After a monitor went off screen, closed or moved: each character
+    /// that a monitor kept behind and none keeps any more is minimised now
+    /// (Economy's release first, in the viewer), as it would have been when
+    /// it left the front. `before`: [`Desk::minimised_behind`] before the
+    /// change. A standby chosen while behind still waits for the next
+    /// switch ([`Desk::set_standby`]): this is about monitors only.
+    fn minimise_unwatched(&mut self, before: [bool; MAX_SLOTS]) {
+        let after = self.minimised_behind();
+        for slot in 0..MAX_SLOTS {
+            if after[slot] && !before[slot] {
+                self.send(slot, ToViewer::Minimise);
+            }
+        }
     }
 
     fn send(&mut self, slot: usize, message: ToViewer) {
@@ -1902,9 +1958,8 @@ impl Desk {
             }
         }
         if let Some(before) = before.filter(|b| *b != slot)
-            && self
-                .slot(before)
-                .is_some_and(|s| s.phase == Phase::Running && self.waits(s) == Standby::Economy)
+            && self.slot(before).is_some_and(|s| s.phase == Phase::Running)
+            && self.waits(before) == Standby::Economy
         {
             self.send(before, ToViewer::Minimise);
         }
@@ -1918,7 +1973,7 @@ impl Desk {
         let holder = self.voice_holder();
         self.voice_home = holder.filter(|_| !self.voice_follows);
         let mute_background = self.mute_background;
-        let cycling_open = self.monitors.cycling.open;
+        let waits: [Standby; MAX_SLOTS] = std::array::from_fn(|slot| self.waits(slot));
         // one taskbar button: only behind a character that is in front
         let someone_in_front = active.is_some_and(|a| self.slot(a).is_some_and(|s| s.phase == Phase::Running));
         let one_button = self.bar.one_taskbar_button && self.bar.placement == bar::Placement::Docked && someone_in_front;
@@ -1938,7 +1993,7 @@ impl Desk {
                     None => Role::Background,
                 },
                 behind: Behind3d::Off,
-                standby: if cycling_open { Standby::Warm } else { s.waits() },
+                standby: waits[slot],
                 // (a character that holds the voice behind is heard: a
                 // viewer that is cut neither plays nor transmits it)
                 sound_muted: !is_active && (mute_background || (s.sound == BackgroundSound::Muted && !holds_voice)),
@@ -2251,6 +2306,95 @@ mod tests {
         d.take_effects();
         start(&mut d, 1, false, now);
         assert!(sends(&d.take_effects(), 1).contains(&&ToViewer::Minimise));
+    }
+
+    /// Three characters in Economy, the first one active.
+    fn economy_desk() -> (Desk, Instant) {
+        let (mut d, now) = desk(3);
+        for slot in 0..3 {
+            d.set_standby(slot, Standby::Economy);
+            start(&mut d, slot, slot == 0, now);
+        }
+        d.take_effects();
+        (d, now)
+    }
+
+    #[test]
+    fn economy_minimises_when_no_monitor_is_on_screen() {
+        // nothing open
+        let (mut d, now) = economy_desk();
+        d.switch(1, now);
+        assert!(sends(&d.take_effects(), 0).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Full);
+        // a monitor open for the character that leaves, its window
+        // minimised or covered (never on screen): minimised all the same
+        let (mut d, now) = economy_desk();
+        d.set_monitor(0, Some(monitor::Spec::default()));
+        d.monitors_seen([false; MAX_SLOTS], now);
+        d.take_effects();
+        d.switch(1, now);
+        assert!(sends(&d.take_effects(), 0).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 0).standby, Standby::Economy);
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Full);
+        // shown again later: kept behind for its pictures (the viewer comes
+        // back behind by itself), nothing minimised
+        d.monitors_seen([true; MAX_SLOTS], now);
+        assert!(!sends(&d.take_effects(), 0).contains(&&ToViewer::Minimise));
+        assert!(matches!(assigned(&d, 0).role, Role::Monitor(_)));
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Lowered);
+        // off screen again: minimised again
+        d.monitors_seen([false; MAX_SLOTS], now);
+        assert!(sends(&d.take_effects(), 0).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Full);
+    }
+
+    #[test]
+    fn a_monitor_on_screen_keeps_its_economy_character_behind() {
+        let (mut d, now) = economy_desk();
+        d.set_monitor(0, Some(monitor::Spec::default()));
+        d.monitors_seen([true; MAX_SLOTS], now);
+        d.take_effects();
+        d.switch(1, now);
+        assert!(!sends(&d.take_effects(), 0).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 0).standby, Standby::Warm, "behind, for its pictures");
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Lowered);
+        // the monitor of the character that comes forward moves to the one
+        // that leaves, on screen as it was: not minimised either
+        d.set_monitor(2, Some(monitor::Spec::default()));
+        d.monitors_seen([true; MAX_SLOTS], now);
+        d.take_effects();
+        d.switch(2, now);
+        let effects = d.take_effects();
+        assert!(d.slot(1).expect("slot").monitor.is_some());
+        assert!(!sends(&effects, 1).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 1).memory.release, crate::ipc::Release::Lowered);
+        // closed: minimised now
+        d.set_monitor(1, None);
+        assert!(sends(&d.take_effects(), 1).contains(&&ToViewer::Minimise));
+    }
+
+    #[test]
+    fn a_cycling_monitor_that_is_open_but_not_on_screen_keeps_nobody_behind() {
+        let (mut d, now) = economy_desk();
+        d.set_cycling(true);
+        // its window minimised, covered or hidden: it shows nobody
+        d.cycling_seen(None, now);
+        d.take_effects();
+        d.switch(1, now);
+        assert!(sends(&d.take_effects(), 0).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Full);
+        // on screen: everyone behind is kept for it, nothing minimised
+        d.cycling_seen(Some(2), now);
+        let effects = d.take_effects();
+        assert!(!sends(&effects, 0).contains(&&ToViewer::Minimise));
+        assert_eq!(assigned(&d, 0).memory.release, crate::ipc::Release::Lowered);
+        assert_eq!(assigned(&d, 2).memory.release, crate::ipc::Release::Lowered);
+        // its window goes off screen: both behind are minimised
+        d.cycling_seen(None, now);
+        let effects = d.take_effects();
+        assert!(sends(&effects, 0).contains(&&ToViewer::Minimise));
+        assert!(sends(&effects, 2).contains(&&ToViewer::Minimise));
+        assert!(!sends(&effects, 1).contains(&&ToViewer::Minimise), "never the active one");
     }
 
     #[test]

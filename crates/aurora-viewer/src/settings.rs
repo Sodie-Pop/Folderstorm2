@@ -3864,7 +3864,8 @@ impl Settings {
         use aurora_render::{AntiAliasing, AoMethod, FsrQuality, Tonemapper};
         let mut water_effects = self.water_effects.render();
         water_effects.particle_budget = self.max_particles;
-        aurora_render::RenderSettings {
+        // Folderstorm: lighter while the session host's Economy has given the memory back (nothing saved)
+        crate::folderstorm_characters::economy_render::apply(aurora_render::RenderSettings {
             vr_gamma: self.camera.vr.gamma,
             vr_vibrancy: self.camera.vr.vibrancy,
             vr_resolution: self.camera.vr.resolution,
@@ -3917,7 +3918,7 @@ impl Settings {
             occlusion: self.occlusion_culling,
             // the stochastic choice of the order of the blended faces
             oit: self.blend_order == crate::graphics_presets::BLEND_ORDER_STOCHASTIC,
-        }
+        }) // Folderstorm: economy_render::apply
     }
 
     /// Fraction of the screen resolution for a reflection quality step.
