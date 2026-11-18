@@ -81,15 +81,12 @@ pub(crate) fn inspect(rig: &Rig, bytes: &[u8]) -> Result<(String, usize, Option<
 }
 
 /// The pose session made of `base` (captured) and `pose` (now), as the
-/// poser keeps it.
+/// poser keeps it (its rest from `base`, as `Session::new` makes it).
 fn session(base: &Arc<SubjectPose>, pose: &Arc<SubjectPose>) -> Session {
-    Session {
-        base: base.clone(),
-        pose: pose.clone(),
-        enabled: true,
-        undo: Vec::new(),
-        redo: Vec::new(),
-    }
+    let mut session = Session::new((**base).clone());
+    session.base = base.clone();
+    session.pose = pose.clone();
+    session
 }
 
 /// A rotations-only pose file applied to `pose`, as the poser's Load does
