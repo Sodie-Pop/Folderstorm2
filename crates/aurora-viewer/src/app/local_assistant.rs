@@ -367,8 +367,7 @@ impl App {
                 target,
                 handle: send.handle,
                 options: aurora_net::scripts::ScriptOptions {
-                    mono: true,
-                    luau: aurora_net::scripts::Luau::Off,
+                    compile: aurora_net::scripts::CompileTarget::Mono,
                     running: false,
                     experience: Uuid::nil(),
                 },
@@ -405,8 +404,7 @@ impl App {
                     target,
                     handle: send.handle,
                     options: aurora_net::scripts::ScriptOptions {
-                        mono: true,
-                        luau: aurora_net::scripts::Luau::Off,
+                        compile: aurora_net::scripts::CompileTarget::Mono,
                         running,
                         experience,
                     },
@@ -795,8 +793,7 @@ impl App {
                     },
                     handle: self.world.main_region.unwrap_or_default(),
                     options: aurora_net::scripts::ScriptOptions {
-                        mono: true,
-                        luau: aurora_net::scripts::Luau::Off,
+                        compile: aurora_net::scripts::CompileTarget::Mono,
                         running: false,
                         experience: Uuid::nil(),
                     },
