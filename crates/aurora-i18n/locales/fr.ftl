@@ -6322,6 +6322,7 @@ folderstorm-host-unread = { $count ->
        *[other] { $count } conversations non lues
     }
 folderstorm-host-minimised = réduite
+folderstorm-host-hibernating = En hibernation
 folderstorm-host-closing = Fermeture…
 folderstorm-host-ended = Arrêté (Arrêter le processus)
 folderstorm-host-closed = Fermé

@@ -412,6 +412,22 @@ fn the_characters_section_offers_three_ways_to_wait_and_the_grace() {
     let (drawn, _) = draw(&mut app, 1120, 760);
     assert!(shows(&drawn, tr!("folderstorm-host-waiting")), "{drawn:?}");
     assert!(shows(&drawn, tr!("folderstorm-settings-hibernation")), "{drawn:?}");
+    // a viewer that says it hibernates: its card says so, not "minimised"
+    let status = Status {
+        screen: Screen::World,
+        name: "Sam Resident".to_owned(),
+        hibernating: true,
+        window: ::folderstorm_session::ipc::WindowState {
+            minimised: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    app.host.desk.status(1, 1, status, now);
+    draw(&mut app, 1120, 760);
+    let (drawn, _) = draw(&mut app, 1120, 760);
+    assert!(shows(&drawn, tr!("folderstorm-host-hibernating")), "{drawn:?}");
+    assert!(!shows(&drawn, &format!("· {}", tr!("folderstorm-host-minimised"))), "{drawn:?}");
 }
 
 #[test]

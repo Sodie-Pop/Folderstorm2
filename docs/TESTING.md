@@ -9266,11 +9266,29 @@ failure. Grid validation and any paid upload are performed by the human.
     the background" on a Hibernation character: the section says
     "Economy for now: this character is heard in the background". On a
     switch the viewer that leaves logs `session memory: Hibernation asked:
-    Economy until the renderer can sleep`, then Economy's release as above
-    (P1: the renderer is not let go yet). GPU diagnostics name the standby
-    `hibernation`; the host's MCP controller's `host_background_mode`
-    takes `"mode": "hibernation"` (its Ask window: "Let … hibernate while
-    it waits (Hibernation)").
+    Economy's release first, the renderer goes once minimised for the
+    grace`, then Economy's release as above. GPU diagnostics name the
+    standby `hibernation`; the host's MCP controller's
+    `host_background_mode` takes `"mode": "hibernation"` (its Ask window:
+    "Let … hibernate while it waits (Hibernation)").
+  - **Hibernation's sleep and wake** (P2): once minimised for the grace,
+    and at least 30 s in the world, the background viewer logs `session
+    memory: hibernating after N s minimised, renderer dropped in X ms (was
+    A MB taken from the driver)` and its card says "Hibernating"
+    (`session memory: Hibernation waits, Economy for now: <why>` while
+    something keeps it in Economy: just arrived, the voice, heard in the
+    background, VR, `AURORA_GPU_RECOVERY=0`, a photo). While asleep its
+    chat and IMs still reach the host's shared chat. Switch to it (host,
+    bar or hotkey), restore it from the taskbar, Alt-Tab to it, show its
+    monitor, or close it from the taskbar (it wakes to ask): it logs
+    `session memory: waking from Hibernation: <why>`, then `session
+    memory: awake after N s hibernating: renderer X ms`; the interface is
+    back at once, the world loads again as after a short teleport, with
+    no "GPU recovered" notice. Headless on Linux (no GPU): run it under
+    `xvfb-run` with an EWMH window manager (openbox) so that windows
+    really minimise, `VK_ICD_FILENAMES=…/lvp_icd.json`,
+    `AURORA_DEMO_SESSION_HOST=2` and `AURORA_GRAPHICS_PRESET=potato`;
+    software Vulkan takes tens of seconds to make or drop a renderer.
   - **On Windows, with the grid** (the human): Task Manager › Details, add
     the column "Dedicated GPU memory"; log in two or three characters in a
     busy place. Note each viewer's figure with every character in Warm,

@@ -933,7 +933,11 @@ fn status_line(slot: &Slot) -> String {
                         line.push_str(" · ");
                         line.push_str(&tr!("folderstorm-host-unread", count = status.unread));
                     }
-                    if status.window.minimised {
+                    if status.hibernating {
+                        // (Hibernation: its renderer let go, minimised)
+                        line.push_str(" · ");
+                        line.push_str(tr!("folderstorm-host-hibernating"));
+                    } else if status.window.minimised {
                         line.push_str(" · ");
                         line.push_str(tr!("folderstorm-host-minimised"));
                     }

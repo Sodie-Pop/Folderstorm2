@@ -137,6 +137,9 @@ pub struct State {
     /// The session host's share of the video memory and Economy's release
     /// (`app/folderstorm_characters/memory.rs`).
     pub memory: MemoryState,
+    /// Hibernation: the renderer let go while minimised
+    /// (`app/folderstorm_characters/sleep.rs`).
+    pub sleep: SleepState,
     /// The bar the session host asks this viewer to draw (checkpoint 8):
     /// kept here only, for the bar's drawing only, and dropped with the
     /// link. Nothing of it (an alias, a colour, another character's name)
@@ -212,6 +215,37 @@ pub struct MemoryState {
     /// When Economy's release minimised the window, until the pages are
     /// logged again (`memory::PAGES_AFTER_MINIMISE` later).
     pub minimised_at: Option<std::time::Instant>,
+}
+
+/// What a managed viewer keeps of Hibernation
+/// (`folderstorm_session::sleep`, `app/folderstorm_characters/sleep.rs`).
+#[derive(Debug, Default)]
+pub struct SleepState {
+    /// The grace before hibernating.
+    pub grace: ::folderstorm_session::sleep::Grace,
+    /// Why it last stayed in Economy past the grace (logged once).
+    pub stayed: Option<::folderstorm_session::sleep::Stay>,
+    /// Asleep: the window, kept without a renderer.
+    pub asleep: Option<Asleep>,
+    /// A wake under way: why, and when it began (the renderer is made
+    /// once the window has a size).
+    pub waking: Option<(::folderstorm_session::sleep::Wake, std::time::Instant)>,
+    pub rebuild: ::folderstorm_session::sleep::Rebuild,
+    /// The first half of the frame while asleep.
+    pub pacer: ::folderstorm_session::sleep::Pacer,
+    /// The window was asked to close while asleep (`window_event`): it
+    /// wakes at the next turn.
+    pub closing: bool,
+    /// When the world was entered (for `sleep::MIN_IN_WORLD`).
+    pub in_world_since: Option<std::time::Instant>,
+}
+
+/// A hibernating viewer's window: what the renderer is made for again.
+#[derive(Debug)]
+pub struct Asleep {
+    pub window: std::sync::Arc<winit::window::Window>,
+    pub maximized: bool,
+    pub since: std::time::Instant,
 }
 
 /// The video memory when Economy's release began, or when it ended.
