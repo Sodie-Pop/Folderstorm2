@@ -116,6 +116,26 @@ pub const DEMO_SETTINGS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_SETTINGS";
 /// tell their own friends and groups (the demo's buddy list and groups).
 pub const DEMO_CONTACTS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_CONTACTS";
 
+/// `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<megabytes>` (either or
+/// both), demo only, with [`DEMO_VARIABLE`] (the video memory plan,
+/// `folderstorm_session::memory`): every demo character waits in Economy,
+/// and the background characters' share is that many megabytes.
+pub const DEMO_MEMORY_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_MEMORY";
+
+/// What [`DEMO_MEMORY_VARIABLE`] asks for: Economy for everyone, and the
+/// share.
+fn demo_memory(list: &str) -> (bool, Option<u32>) {
+    let mut economy = false;
+    let mut share = None;
+    for word in list.split(',').map(|word| word.trim().to_ascii_lowercase()) {
+        match word.as_str() {
+            "economy" | "eco" | "1" => economy = true,
+            other => share = other.trim_end_matches("mb").parse::<u32>().ok().or(share),
+        }
+    }
+    (economy, share)
+}
+
 fn demo_contacts(value: &str) -> Option<::folderstorm_session::contacts::Which> {
     use ::folderstorm_session::contacts::Which;
     match value.trim().to_ascii_lowercase().as_str() {
@@ -356,6 +376,16 @@ impl Host {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
             for slot in slots {
                 host.desk.launch(slot, slot == 0);
+            }
+            let (economy, share) = demo_memory(&std::env::var(DEMO_MEMORY_VARIABLE).unwrap_or_default());
+            if economy {
+                let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
+                for slot in slots {
+                    host.desk.set_standby(slot, ::folderstorm_session::ipc::Standby::Economy);
+                }
+            }
+            if let Some(mb) = share {
+                host.desk.set_background_memory_mb(mb);
             }
             host.demo_monitors(demo_monitors(&std::env::var(DEMO_MONITORS_VARIABLE).unwrap_or_default()));
             let out = std::env::var(DEMO_PANELS_VARIABLE).unwrap_or_default();
@@ -712,6 +742,28 @@ fn message_sound() {
 #[cfg(not(windows))]
 fn message_sound() {}
 
+/// Whether the host's own beep ([`message_sound`]) plays for a message to
+/// a background character: the host's setting ([`Desk::chat_sound`]),
+/// unless the background alert sounds are on. Each background viewer then
+/// plays its own alert (`crate::folderstorm::background_alerts`), and the
+/// two are never heard together; turning the alerts off brings the beep
+/// back as it was set.
+fn beep_wanted(chat_sound: bool, alert_sounds_on: bool) -> bool {
+    chat_sound && !alert_sounds_on
+}
+
+/// The background alert sounds' master switch (Preferences › Sound ›
+/// Interface sounds), from the shared choices' file of the main profile
+/// (`background-alerts.json`), read again when a viewer changes it.
+fn alert_sounds_on() -> bool {
+    use crate::folderstorm::background_alerts as alerts;
+    alerts::demo() || alert_sounds_on_in(&mut alerts::store::shared(), Instant::now())
+}
+
+fn alert_sounds_on_in(store: &mut crate::folderstorm::background_alerts::store::Store, now: Instant) -> bool {
+    store.get(now).enabled
+}
+
 /// The host's whole run: its window until it closes.
 pub fn run() -> anyhow::Result<()> {
     log::info!("session host: starting ({})", super::managed::build_id());
@@ -730,6 +782,45 @@ mod tests {
         for bad in ["0", "6", "-1", "", "three", "3.5"] {
             assert_eq!(demo_count(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn the_demo_s_memory_is_economy_and_a_share() {
+        assert_eq!(demo_memory(""), (false, None));
+        assert_eq!(demo_memory("economy"), (true, None));
+        assert_eq!(demo_memory(" Economy , 512 "), (true, Some(512)));
+        assert_eq!(demo_memory("768mb"), (false, Some(768)));
+        assert_eq!(demo_memory("warm,lots"), (false, None));
+    }
+
+    #[test]
+    fn the_alert_sounds_replace_the_host_beep() {
+        use crate::folderstorm::background_alerts::{Shared, store};
+        // alerts on: no host beep, whatever the host's setting
+        assert!(!beep_wanted(true, true));
+        assert!(!beep_wanted(false, true));
+        // alerts off: the host's beep as set
+        assert!(beep_wanted(true, false));
+        assert!(!beep_wanted(false, false));
+
+        // the master switch, as the shared choices' file says
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join(store::FILE);
+        let now = Instant::now();
+        assert!(!alert_sounds_on_in(&mut store::Store::at(path.clone()), now), "no file: off");
+        let write = |enabled: bool| {
+            let shared = Shared {
+                enabled,
+                ..Shared::default()
+            };
+            std::fs::write(&path, serde_json::to_vec(&shared).expect("json")).expect("write");
+        };
+        write(true);
+        let on = alert_sounds_on_in(&mut store::Store::at(path.clone()), now);
+        assert!(on && !beep_wanted(true, on), "alerts on: no host beep");
+        write(false);
+        let on = alert_sounds_on_in(&mut store::Store::at(path.clone()), now);
+        assert!(!on && beep_wanted(true, on), "alerts off: the host beep is back");
     }
 
     #[test]

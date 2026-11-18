@@ -51,8 +51,9 @@ pub struct Decoded {
 }
 
 /// A stable 64-bit hash of a file's bytes (FNV-1a): the copy's name, so
-/// that the same picture chosen twice is one file.
-fn hash(bytes: &[u8]) -> u64 {
+/// that the same picture chosen twice is one file (and how a backup checks
+/// a copy it carries, `crate::folderstorm::backup::file`).
+pub(crate) fn hash(bytes: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in bytes {
         h ^= u64::from(*b);
@@ -100,6 +101,31 @@ pub fn import(source: &Path, folder: &Path) -> Result<Picture, ImportError> {
 
 /// [`import`] of bytes already read (`name`: the original file's name).
 pub fn store(bytes: &[u8], name: &str, folder: &Path) -> Result<Picture, ImportError> {
+    let (_, extension) = checked(bytes)?;
+    let file = format!("{:016x}.{extension}", hash(bytes));
+    debug_assert!(managed_name(&file));
+    let path = folder.join(&file);
+    if !path.is_file() {
+        std::fs::create_dir_all(folder).map_err(|_| ImportError::Disk)?;
+        // written aside, then renamed: never half a picture under its name
+        let part = folder.join(format!("{file}.part"));
+        std::fs::write(&part, bytes).map_err(|_| ImportError::Disk)?;
+        if std::fs::rename(&part, &path).is_err() {
+            let _ = std::fs::remove_file(&part);
+            return Err(ImportError::Disk);
+        }
+    }
+    Ok(Picture {
+        file,
+        name: tidy_name(name),
+    })
+}
+
+/// The checks of [`store`] on a picture's bytes (their size, the format,
+/// the size in pixels), then the picture decoded within the limits, with
+/// the extension its copy takes. Also what a desktop shortcut's picture
+/// is read with (`desktop::style::import`) before it is reduced.
+pub fn checked(bytes: &[u8]) -> Result<(image::DynamicImage, &'static str), ImportError> {
     if bytes.len() as u64 > MAX_BYTES {
         return Err(ImportError::TooLarge);
     }
@@ -119,27 +145,11 @@ pub fn store(bytes: &[u8], name: &str, folder: &Path) -> Result<Picture, ImportE
         .with_guessed_format()
         .map_err(|_| ImportError::Unreadable)?;
     reader.limits(limits());
-    reader.decode().map_err(|e| match e {
+    let picture = reader.decode().map_err(|e| match e {
         image::ImageError::Limits(_) => ImportError::TooLarge,
         _ => ImportError::Unreadable,
     })?;
-    let file = format!("{:016x}.{extension}", hash(bytes));
-    debug_assert!(managed_name(&file));
-    let path = folder.join(&file);
-    if !path.is_file() {
-        std::fs::create_dir_all(folder).map_err(|_| ImportError::Disk)?;
-        // written aside, then renamed: never half a picture under its name
-        let part = folder.join(format!("{file}.part"));
-        std::fs::write(&part, bytes).map_err(|_| ImportError::Disk)?;
-        if std::fs::rename(&part, &path).is_err() {
-            let _ = std::fs::remove_file(&part);
-            return Err(ImportError::Disk);
-        }
-    }
-    Ok(Picture {
-        file,
-        name: tidy_name(name),
-    })
+    Ok((picture, extension))
 }
 
 /// Decodes the copy `file` of `folder` for the texture, reduced to at most
@@ -193,7 +203,7 @@ pub fn prune(folder: &Path, kept: &std::collections::BTreeSet<String>) {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// A fresh, empty folder for one test.

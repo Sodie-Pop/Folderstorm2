@@ -25,9 +25,10 @@ pub enum Status {
 /// A decode under way: the thread leaves its result here.
 type Pending = Arc<Mutex<Option<Result<Decoded, LoadError>>>>;
 
-/// The picture's texture, and its decoding.
+/// The picture's texture, and its decoding. Also the loader of each
+/// picture a desktop shortcut wears (`desktop::style_ui`).
 #[derive(Default)]
-struct Loader {
+pub(crate) struct Loader {
     /// The copy decoded or being decoded, and the side it was asked at.
     file: Option<String>,
     side: u32,
@@ -88,7 +89,7 @@ fn side_for(window: [u32; 2], fit: Fit, gpu: usize) -> u32 {
 impl Loader {
     /// The texture of `file` to draw this frame, with the picture's own
     /// size; starts or finishes its decoding.
-    fn poll(&mut self, ctx: &egui::Context, folder: &Path, file: &str, side: u32) -> Option<(egui::TextureId, [u32; 2])> {
+    pub(crate) fn poll(&mut self, ctx: &egui::Context, folder: &Path, file: &str, side: u32) -> Option<(egui::TextureId, [u32; 2])> {
         let now = ctx.cumulative_frame_nr();
         let same = self.file.as_deref() == Some(file);
         // a larger side is worth decoding again only when the picture was
