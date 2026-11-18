@@ -182,10 +182,48 @@ pub fn shown(stored: &[(u32, (u16, u16))], grid: &Grid) -> Vec<(u32, (u16, u16))
     out
 }
 
+/// The shortcut an arrow key goes to from the cell `from`, among `cells`
+/// (each shortcut's id and the cell it is shown in): the nearest one on
+/// that side (`dx`, `dy`: one of them is -1 or 1, the other 0), a shortcut
+/// of the same row or column being preferred to a nearer one aside. None
+/// at the edge.
+pub fn neighbour(cells: &[(u32, (u16, u16))], from: (u16, u16), (dx, dy): (i8, i8)) -> Option<u32> {
+    let (dx, dy) = (i64::from(dx), i64::from(dy));
+    cells
+        .iter()
+        .filter_map(|(id, (col, row))| {
+            let (x, y) = (i64::from(*col) - i64::from(from.0), i64::from(*row) - i64::from(from.1));
+            // how far on that side, and how far aside
+            let (along, aside) = (x * dx + y * dy, (x * dy).abs() + (y * dx).abs());
+            (along > 0).then_some((along * along + 4 * aside * aside, *id))
+        })
+        .min()
+        .map(|(_, id)| id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use egui::pos2;
+
+    #[test]
+    fn an_arrow_goes_to_the_nearest_shortcut_on_its_side() {
+        // 1 . 3
+        // 2 . .
+        // . 4 5
+        let cells = [(1, (0, 0)), (2, (0, 1)), (3, (2, 0)), (4, (1, 2)), (5, (2, 2))];
+        assert_eq!(neighbour(&cells, (0, 0), (0, 1)), Some(2));
+        assert_eq!(neighbour(&cells, (0, 0), (1, 0)), Some(3), "the same row before a nearer one aside");
+        assert_eq!(neighbour(&cells, (0, 1), (1, 0)), Some(4));
+        assert_eq!(neighbour(&cells, (0, 1), (0, 1)), Some(4));
+        assert_eq!(neighbour(&cells, (2, 2), (-1, 0)), Some(4));
+        assert_eq!(neighbour(&cells, (2, 2), (0, -1)), Some(3));
+        // at the edge: nowhere
+        assert_eq!(neighbour(&cells, (0, 0), (-1, 0)), None);
+        assert_eq!(neighbour(&cells, (0, 0), (0, -1)), None);
+        assert_eq!(neighbour(&cells, (2, 2), (1, 0)), None);
+        assert_eq!(neighbour(&[], (0, 0), (1, 0)), None);
+    }
 
     fn px(x: f32, y: f32, w: f32, h: f32) -> Rect {
         Rect::from_min_size(pos2(x, y), vec2(w, h))

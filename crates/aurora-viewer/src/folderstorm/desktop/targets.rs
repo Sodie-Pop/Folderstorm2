@@ -433,16 +433,17 @@ pub fn face(shortcut: &Shortcut, facts: &Facts, folders: &Folders) -> Face {
     }
 }
 
+/// Why a shortcut to the command `id` is never added (its button is its
+/// control, Aurora cannot run it yet, the catalogue does not have it);
+/// None when it may be, even if it has nothing to do now.
+pub fn refuses_adding(id: &str) -> Option<Greyed> {
+    command_gate(id, &Facts::default()).err().filter(|why| why.refuses_adding())
+}
+
 /// The commands a desktop's *Add a command* lists: (id, label, icon, why
 /// it cannot be added), sorted by their label in the interface's language.
 pub fn addable() -> Vec<(&'static str, &'static str, &'static str, Option<Greyed>)> {
-    let mut out: Vec<_> = COMMANDS
-        .iter()
-        .map(|c| {
-            let refused = command_gate(c.id, &Facts::default()).err().filter(|why| why.refuses_adding());
-            (c.id, c.label(), c.icon, refused)
-        })
-        .collect();
+    let mut out: Vec<_> = COMMANDS.iter().map(|c| (c.id, c.label(), c.icon, refuses_adding(c.id))).collect();
     out.sort_by_key(|(_, label, _, _)| label.to_lowercase());
     out
 }

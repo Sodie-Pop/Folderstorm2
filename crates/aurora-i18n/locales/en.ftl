@@ -2120,11 +2120,13 @@ fs-switcher-command = Layouts & workspaces
 fs-switcher-toggle-command = Switch layout
 fs-switcher-toggle-to = Switch to the layout “{ $name }”
 fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts & workspaces (a click opens it).
-fs-keys-section = Layouts
+fs-keys-section = Layouts and desktop
 fs-keys-layout-switcher = Layouts & workspaces window
 fs-keys-layout-toggle = Switch between the two layouts
 fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
+fs-keys-desktop-shortcuts = Show or hide the desktop shortcuts
+fs-keys-desktop-focus = Focus the desktop
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Gesture board
@@ -2452,6 +2454,31 @@ fs-desktop-left-out =
     }
 fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Layout › Bars and windows).
 fs-desktop-added-hidden = They show when the window leaves room around the world.
+fs-desktop-rename = Rename
+fs-desktop-icon = Icon
+fs-desktop-icon-default = Default
+fs-desktop-move-to = Move to
+fs-desktop-monitor = Monitor { $number }
+fs-desktop-arrange = Arrange by name
+fs-desktop-command-added = Shortcut added to the desktop.
+fs-desktop-single-click = Open with a single click
+fs-desktop-single-click-help = A single click opens a shortcut, as a toolbar button does. Off: a click selects it and a double click opens it, so that a stray click never teleports you home or sits you down.
+fs-desktop-unused =
+    { $count ->
+        [one] One shortcut is on a monitor that is not in use
+       *[other] { $count } shortcuts are on a monitor that is not in use
+    }
+fs-desktop-unused-help = A shortcut stays on the monitor it was put on. When the window no longer covers that monitor, or the world fills it, the shortcut is kept but not shown.
+fs-desktop-bring = Bring them here
+fs-desktop-clear = Remove all shortcuts…
+fs-desktop-clear-help = Removes every shortcut of this account's desktops. Only the shortcuts go: the folders and the toolbars stay as they are.
+fs-desktop-clear-button = Remove all…
+fs-desktop-clear-ask =
+    { $count ->
+        [one] Remove this account's shortcut?
+       *[other] Remove this account's { $count } shortcuts?
+    }
+fs-desktop-clear-confirm = Remove all
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
