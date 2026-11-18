@@ -149,7 +149,7 @@ fn thumbnail_schema() -> Value {
         "type": "object",
         "properties": {
             "id": {"type": "string", "description": "The item's or folder's UUID whose picture changes."},
-            "texture_id": {"type": "string", "description": "The texture to show: an inventory texture's item UUID that allows copying and transfer (or a Library texture)."},
+            "texture_id": {"type": "string", "description": "The texture to show: an inventory texture's item UUID that allows copying and transfer (a Library texture too)."},
             "clear": {"type": "boolean", "default": false, "description": "Remove the picture instead."}
         },
         "required": ["id"],

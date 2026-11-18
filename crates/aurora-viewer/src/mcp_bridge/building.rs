@@ -1096,6 +1096,7 @@ impl Building {
                     remove: false,
                     source_folder: item.parent,
                     from_task: Uuid::nil(),
+                    notecard: None,
                 })),
                 expect: Expect::Rez { position },
             },

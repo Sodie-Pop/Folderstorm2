@@ -511,6 +511,7 @@ mod tests {
             owner_id: source,
             source_type: ChatSourceType::Agent,
             chat_type: ChatType::Normal,
+            region: None,
             position: glam::Vec3::ZERO,
             message: text.into(),
         }));
@@ -539,6 +540,7 @@ mod tests {
             owner_id: ME,
             source_type: ChatSourceType::Object,
             chat_type: ChatType::OwnerSay,
+            region: None,
             position: glam::Vec3::ZERO,
             message: commands.into(),
         }));
@@ -622,6 +624,8 @@ mod tests {
             kind: ChatKind::Local(ChatType::Normal),
             source: Uuid::nil(),
             origin: Origin::Log,
+            blocked: false,
+            beyond_range: false,
         });
         w.chat_clock.pushed_back();
         say(&mut w, JANE, "Jane Doe", "two");

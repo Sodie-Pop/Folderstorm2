@@ -373,6 +373,7 @@ impl Viewer {
                         default,
                         Vec2::splat(64.0),
                         false,
+                        true, // kept in mouselook, as the mini-map
                         |ui| {
                             ui.label("…");
                         },
