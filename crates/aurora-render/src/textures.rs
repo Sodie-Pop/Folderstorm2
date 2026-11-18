@@ -1680,6 +1680,13 @@ impl TextureTable {
         !self.shrinks.is_empty() || self.compacting
     }
 
+    /// Folderstorm: nothing more to give back: not settling, and every
+    /// emptied page out of the bind group and handed to the page thread
+    /// (the session host's Economy release waits for it).
+    pub fn folderstorm_settled(&self) -> bool {
+        !self.settling() && !self.dirty && self.store.retired.is_empty() && self.doomed.is_empty()
+    }
+
     /// Once a frame, when it is handed to the render thread: reduce the
     /// textures asked to, compact (throttled), record the upload of the
     /// changed locations, and rebuild the bind group when pages changed (at

@@ -1104,6 +1104,11 @@ May be two small PRs: 1a profiles, 1b behind policy.
     background" (`Slot::waits`: Warm while its monitor is open); the
     choice itself is kept. Restoring a minimised window without giving it
     the keyboard is not done (winit's restore activates the window).
+    *Since 2026-11-18 ([gpu-memory.md](gpu-memory.md), "Economy, second
+    pass"): only a monitor **on screen** keeps the character behind
+    (`Desk::watching`); an open monitor that is minimised, covered or
+    hidden does not, and the viewer comes back behind without the
+    keyboard (`SW_SHOWNOACTIVATE` on Windows) when one shows it again.*
   - **In the host:** in a character's card, a **Monitor** checkbox; while
     it is open, the size (320 × 180, 480 × 270, 640 × 360) and the rate
     (0.5, 1, 2, 5 a second), the picture in its 16:9 box (1:1 when the
@@ -2133,7 +2138,9 @@ May be two small PRs: 1a profiles, 1b behind policy.
   shown by two windows (its own and the cycling one) is asked once, for
   the larger size and the faster rate of the two. While a monitor of a
   character is open, or the cycling monitor is, that character is not
-  minimised behind (Economy is kept as the choice, as before).
+  minimised behind (Economy is kept as the choice, as before). *Since
+  2026-11-18: while that monitor's window is on screen only
+  ([gpu-memory.md](gpu-memory.md), "Economy, second pass").*
 - **What checkpoint 6's Monitors window becomes:** it is gone. The
   panels are the chat, the characters and the inbox. A character's card
   keeps the **Monitor** box (it opens and closes that character's

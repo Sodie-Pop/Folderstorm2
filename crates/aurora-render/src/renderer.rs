@@ -6513,6 +6513,7 @@ impl Backend {
         }
         self.occlusion.harvest();
         self.cull.harvest();
+        self.cull.folderstorm_release(&self.device); // Folderstorm: Economy's release (folderstorm_cull.rs)
         self.depth_pick.harvest();
         self.depth_pick.harvest_clicks();
         self.drawn_pick.harvest();

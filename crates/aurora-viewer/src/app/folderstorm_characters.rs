@@ -90,7 +90,9 @@ impl App {
         state.behind = behind;
         state.paused = paused;
         state.place = gpu::place(has_keyboard, minimized, self.occluded, demo);
-        behind::cap(cap, policy, behind, self.settings.folderstorm_characters.behind_fps, exempt)
+        let cap = behind::cap(cap, policy, behind, self.settings.folderstorm_characters.behind_fps, exempt);
+        // (Economy's release empties the texture pages by frames)
+        self.folderstorm_release_cap(cap)
     }
 
     /// Every frame, before the screen is drawn: the session host's bar

@@ -44,10 +44,15 @@
 //! - [`splash`]: a character's splash names it, in its language, and the
 //!   host's characters' splashes do not stack.
 //!
+//! Video memory (`folderstorm/plans/gpu-memory.md`):
+//! - [`economy_render`]: the reflection probes and the shadows lowered
+//!   while Economy has given the memory back, the settings untouched.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod bar;
 pub mod chat_export;
+pub mod economy_render;
 pub mod foreground;
 pub mod host;
 pub mod managed;
@@ -167,6 +172,23 @@ pub struct MemoryState {
     pub since_passes: u64,
     pub began: Option<std::time::Instant>,
     pub applied: ::folderstorm_session::ipc::Memory,
+    /// What the release began from, for its line in the log.
+    pub before: Option<ReleaseFigures>,
+    /// The culling buffers were asked back and the probes and shadows
+    /// lowered for this release (once the 3D paused).
+    pub lowered: bool,
+    /// The window was minimised at the host's word and not shown since:
+    /// a monitor that shows it again brings it back behind.
+    pub minimised_by_host: bool,
+}
+
+/// The video memory when Economy's release began, or when it ended.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReleaseFigures {
+    /// What the driver counts for this process ("taken from the driver").
+    pub driver_mb: u64,
+    /// The texture pages.
+    pub pages_mb: u64,
 }
 
 /// What a managed viewer keeps of its reports to the host.
