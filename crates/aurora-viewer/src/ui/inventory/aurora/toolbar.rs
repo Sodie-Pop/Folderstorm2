@@ -73,7 +73,7 @@ pub(super) fn tabs(ui: &mut egui::Ui, p: &Palette, inv: &Inventory, st: &mut Inv
     // Folderstorm: the custom tabs follow the built-in ones (custom_tabs.rs)
     let custom = custom_tabs::entries(prefs);
     for (slot, name) in &custom {
-        entries.push((*slot, "bookmark-filled", name.as_str()));
+        entries.push((*slot, custom_tabs::icon::of_slot(prefs, *slot), name.as_str())); // Folderstorm: its own icon
     }
     let unseen = unseen_received(inv, st);
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), Sense::hover());
@@ -348,11 +348,10 @@ fn filters_tip(st: &InventoryUi) -> &'static str {
 /// that window is open (the Legacy Viewer's `new_inv_btn`); the other
 /// windows have none.
 fn additional_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
-    // Folderstorm: in every additional window too, opens the next one (extra_windows.rs)
+    // Folderstorm: in every Inventory window, opens the next additional one (extra_windows.rs)
     let draw = |ui: &mut egui::Ui, tip: &str, lit: bool| tool_button(ui, p, ADDITIONAL_ICON, tip, lit);
-    if let Some(rect) = super::super::extra_windows::aurora_button(ui, p, st, draw) {
-        additional_button_drawn(ui, rect);
-    }
+    let rect = super::super::extra_windows::aurora_button(ui, p, st, draw);
+    additional_button_drawn(ui, rect);
 }
 
 /// Direct counterparts of LLPanelMainInventory's collapse_btn / expand_btn.

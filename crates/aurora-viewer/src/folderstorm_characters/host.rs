@@ -116,6 +116,26 @@ pub const DEMO_SETTINGS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_SETTINGS";
 /// tell their own friends and groups (the demo's buddy list and groups).
 pub const DEMO_CONTACTS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_CONTACTS";
 
+/// `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<megabytes>` (either or
+/// both), demo only, with [`DEMO_VARIABLE`] (the video memory plan,
+/// `folderstorm_session::memory`): every demo character waits in Economy,
+/// and the background characters' share is that many megabytes.
+pub const DEMO_MEMORY_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_MEMORY";
+
+/// What [`DEMO_MEMORY_VARIABLE`] asks for: Economy for everyone, and the
+/// share.
+fn demo_memory(list: &str) -> (bool, Option<u32>) {
+    let mut economy = false;
+    let mut share = None;
+    for word in list.split(',').map(|word| word.trim().to_ascii_lowercase()) {
+        match word.as_str() {
+            "economy" | "eco" | "1" => economy = true,
+            other => share = other.trim_end_matches("mb").parse::<u32>().ok().or(share),
+        }
+    }
+    (economy, share)
+}
+
 fn demo_contacts(value: &str) -> Option<::folderstorm_session::contacts::Which> {
     use ::folderstorm_session::contacts::Which;
     match value.trim().to_ascii_lowercase().as_str() {
@@ -356,6 +376,16 @@ impl Host {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
             for slot in slots {
                 host.desk.launch(slot, slot == 0);
+            }
+            let (economy, share) = demo_memory(&std::env::var(DEMO_MEMORY_VARIABLE).unwrap_or_default());
+            if economy {
+                let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
+                for slot in slots {
+                    host.desk.set_standby(slot, ::folderstorm_session::ipc::Standby::Economy);
+                }
+            }
+            if let Some(mb) = share {
+                host.desk.set_background_memory_mb(mb);
             }
             host.demo_monitors(demo_monitors(&std::env::var(DEMO_MONITORS_VARIABLE).unwrap_or_default()));
             let out = std::env::var(DEMO_PANELS_VARIABLE).unwrap_or_default();
@@ -752,6 +782,15 @@ mod tests {
         for bad in ["0", "6", "-1", "", "three", "3.5"] {
             assert_eq!(demo_count(bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn the_demo_s_memory_is_economy_and_a_share() {
+        assert_eq!(demo_memory(""), (false, None));
+        assert_eq!(demo_memory("economy"), (true, None));
+        assert_eq!(demo_memory(" Economy , 512 "), (true, Some(512)));
+        assert_eq!(demo_memory("768mb"), (false, Some(768)));
+        assert_eq!(demo_memory("warm,lots"), (false, None));
     }
 
     #[test]

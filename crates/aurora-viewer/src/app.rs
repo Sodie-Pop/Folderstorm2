@@ -14428,6 +14428,7 @@ impl App {
         self.monitor_frame(&gfx.renderer);
         self.crash_state(&gfx.renderer, &gfx.window);
         self.gpu_stall_frame(&gfx.renderer);
+        self.folderstorm_gpu_diag_frame(&gfx.renderer, &gfx.window); // Folderstorm: the memory picture, written at a loss (app/folderstorm_characters/gpu_diag.rs)
         self.gfx = Some(gfx);
         if let Some(safe) = self.gpu_stall.recover.take() {
             if !self.recover_from_gpu_loss(event_loop, safe) {
@@ -17587,6 +17588,7 @@ impl App {
         self.options_ui.chat_log_shared = self.world.chat_log.shared();
         self.poll_folder_pick();
         self.poll_settings_backup();
+        self.folders.settings_changed |= crate::folderstorm::backup::frame(ctx, &mut self.settings, self.world.login.as_deref()); // Folderstorm: account backup
         if let Some(done) = self.world.chat_log.take_relocated() {
             self.options_ui.chat_log_status = match done {
                 Ok(count) => aurora_i18n::tr!("ui-options-chat-logs-moved", count = count),
@@ -25001,7 +25003,7 @@ impl ApplicationHandler for App {
         self.record_window_geometry();
         self.attention_window();
         self.external_links();
-        self.folderstorm_managed_pump(); // Folderstorm: the session host's commands, this viewer's reports
+        self.folderstorm_managed_pump(event_loop); // Folderstorm: the session host's commands, this viewer's reports
         if self.gfx.as_ref().is_some_and(|g| !g.shown) {
             // Hidden windows may receive no RedrawRequested event. Keep
             // producing frames until a real presentation makes it visible,
