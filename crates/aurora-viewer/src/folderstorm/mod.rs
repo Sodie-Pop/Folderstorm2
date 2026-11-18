@@ -10,6 +10,7 @@ pub mod desktop;
 pub mod diagram;
 pub mod folder_upload;
 pub mod gesture_boards;
+pub mod gpu_diag;
 pub mod keys;
 pub mod login_screen;
 pub mod photo_viewport;

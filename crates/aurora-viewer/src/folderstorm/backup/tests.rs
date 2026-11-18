@@ -106,7 +106,7 @@ fn full(config: &Path, account: Uuid) -> Settings {
     let desktop = &mut s.folderstorm_desktop;
     desktop.shortcuts_on = true;
     desktop.add(Opens::command("people"), 0, (0, 0)).expect("shortcut");
-    desktop.add(Opens::Folder { folder: FOLDER, account }, 1, (2, 1)).expect("shortcut");
+    desktop.add(Opens::Folder { folder: FOLDER }, 1, (2, 1)).expect("shortcut");
     let tabs = &mut s.inventory.custom_tabs;
     let id = custom_tabs::add(tabs, "Hair", Default::default(), "wig".into()).expect("tab");
     tabs[0].folders.insert(account, vec![FOLDER]);
@@ -415,10 +415,9 @@ fn another_account_s_inventory_is_left_out_or_kept_for_that_account() {
     plan.skip_inventory = false;
     let mut s = Settings::default();
     import(&plan, &mut s, &main.0);
-    assert!(matches!(
-        s.folderstorm_desktop.shortcuts[1].target,
-        Opens::Folder { account, .. } if account == ALT
-    ));
+    // (each account has its own desktop: the file's shortcuts are kept as
+    // they were, on the desktop being restored)
+    assert!(matches!(s.folderstorm_desktop.shortcuts[1].target, Opens::Folder { .. }));
     assert!(s.inventory.custom_tabs[0].folders.contains_key(&ALT));
     assert!(s.folderstorm_gesture_boards.accounts.contains_key(&ALT));
     assert!(!s.folderstorm_gesture_boards.accounts.contains_key(&ME));

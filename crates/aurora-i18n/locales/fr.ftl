@@ -1562,8 +1562,14 @@ inventory-folder-tab-already-one = « { $folder } » est déjà dans « { $tab }
 inventory-folder-tab-already-many = Ils sont déjà dans « { $tab } ».
 inventory-folder-tab-add = Ajouter la sélection
 inventory-folder-tab-replace = N'utiliser que la sélection
-inventory-folder-tab-clear = Tout afficher
-inventory-folder-tab-clear-tip = Afficher à nouveau tout l'inventaire dans cet onglet : aucun dossier, aucun objet épinglé. Ses filtres et sa recherche restent.
+inventory-custom-tab-show-all = Afficher tous les objets
+inventory-custom-tab-show-all-tip = Afficher tous les objets que contient cet onglet : efface ses types d'objets, les autres filtres qui masquent des objets, et sa recherche. Ses dossiers et ses objets épinglés restent.
+inventory-custom-tab-show-all-none = Les filtres et la recherche de cet onglet ne masquent déjà rien.
+inventory-folder-tab-remove-all = Tout retirer…
+inventory-folder-tab-remove-all-tip = Oublier tous les dossiers et objets épinglés de cet onglet : il affiche alors tout l'inventaire, avec ses filtres et sa recherche.
+inventory-folder-tab-remove-all-title = Retirer les dossiers et objets épinglés
+inventory-folder-tab-remove-all-question = Retirer tous les dossiers et objets épinglés de « { $name } » ? L'onglet affiche alors tout l'inventaire, avec ses filtres et sa recherche. Aucun objet de l'inventaire n'est modifié.
+inventory-folder-tab-remove-all-confirm = Tout retirer
 inventory-folder-tab-select-tip = Sélectionnez d'abord des dossiers ou des objets dans la liste de l'inventaire : { $count } dossiers au plus, ni la Corbeille ni la Bibliothèque.
 inventory-folder-tab-limit = Un onglet peut afficher au plus { $count } dossiers.
 inventory-folder-tab-heading = Dossiers et objets épinglés
@@ -1597,6 +1603,49 @@ inventory-quick-unpin = Désépingler : laisser d'autres fenêtres la couvrir
 inventory-quick-quiet = Vue simple : la liste seule
 inventory-quick-full = Vue complète : recherche, onglets et outils
 inventory-quick-demo-name = Accès rapide
+inventory-tab-icon = Icône
+inventory-tab-icon-default = Par défaut
+inventory-tab-icon-default-tip = Afficher à nouveau l'onglet avec le signet.
+inventory-tab-icon-shirt = Vêtements
+inventory-tab-icon-jacket = Veste
+inventory-tab-icon-shoe = Chaussures
+inventory-tab-icon-face = Visage
+inventory-tab-icon-body = Corps
+inventory-tab-icon-walk = Animations
+inventory-tab-icon-run = Mouvement
+inventory-tab-icon-wand = Magie
+inventory-tab-icon-sparkles = Effets
+inventory-tab-icon-cube = Objets
+inventory-tab-icon-box = Boîte
+inventory-tab-icon-package = Paquet
+inventory-tab-icon-gift = Cadeaux
+inventory-tab-icon-home = Maison
+inventory-tab-icon-armchair = Mobilier
+inventory-tab-icon-tree = Jardin
+inventory-tab-icon-leaf = Nature
+inventory-tab-icon-paw = Animaux
+inventory-tab-icon-photo = Images
+inventory-tab-icon-camera = Photographie
+inventory-tab-icon-palette = Couleurs
+inventory-tab-icon-brush = Pinceau
+inventory-tab-icon-music = Musique
+inventory-tab-icon-headphones = Sons
+inventory-tab-icon-movie = Vidéo
+inventory-tab-icon-notecard = Notes
+inventory-tab-icon-book = Livres
+inventory-tab-icon-map-pin = Lieux
+inventory-tab-icon-compass = Voyage
+inventory-tab-icon-car = Véhicules
+inventory-tab-icon-key = Clés
+inventory-tab-icon-heart = Cœur
+inventory-tab-icon-flag = Drapeau
+inventory-tab-icon-tag = Étiquette
+inventory-tab-icon-bolt = Éclair
+inventory-tab-icon-sun = Soleil
+inventory-tab-icon-moon = Lune
+inventory-tab-icon-gamepad = Jeux
+inventory-tab-icon-cart = Achats
+inventory-tab-icon-code = Scripts
 # Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
 inventory-windows-title = Inventaire { $number }
 inventory-windows-new = Nouvelle fenêtre d’inventaire
@@ -2126,11 +2175,14 @@ fs-switcher-command = Dispositions et espaces de travail
 fs-switcher-toggle-command = Changer de disposition
 fs-switcher-toggle-to = Passer à la disposition « { $name } »
 fs-switcher-toggle-unset = Choisissez ses deux dispositions dans Préférences › Disposition › Dispositions et espaces de travail (un clic l'ouvre).
-fs-keys-section = Dispositions
+fs-keys-section = Dispositions et bureau
 fs-keys-layout-switcher = Fenêtre Dispositions et espaces de travail
 fs-keys-layout-toggle = Passer de l'une des deux dispositions à l'autre
 fs-keys-next-favorite = Disposition favorite suivante
 fs-keys-previous-favorite = Disposition favorite précédente
+fs-keys-desktop-shortcuts = Afficher ou masquer les raccourcis du bureau
+fs-keys-desktop-focus = Donner le clavier au bureau
+fs-keys-desktop-taskbar = Donner le clavier à la barre des tâches
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Tableau de gestes
@@ -2426,7 +2478,7 @@ fs-background-shows = Affiche
 fs-desktop-group = Bureau dans les marges
 fs-desktop-intro = Affiché quand la fenêtre laisse de la place autour du monde, par exemple étirée sur plusieurs écrans. Activez la zone du monde ci-dessus pour le voir.
 fs-desktop-shortcuts = Raccourcis dans les marges
-fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y des dossiers de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer.
+fs-desktop-shortcuts-help = Utilise chaque écran laissé libre par le monde comme le bureau d'un ordinateur : des raccourcis sur une grille, sous toutes les fenêtres. Clic droit sur un emplacement libre pour ajouter une commande de la barre d'outils ; déposez-y les dossiers, les repères, les notes, les tenues et les vêtements et les objets de l'inventaire, ou utilisez Ajouter au bureau dans leur menu ; double-clic sur un raccourci pour l'ouvrir, glissez-le pour le déplacer. Chaque compte a ses propres raccourcis ; ce réglage et la taille des icônes sont communs à tous.
 fs-desktop-size = Taille des icônes
 fs-desktop-size-help = La taille des raccourcis et de la grille qui les porte.
 fs-desktop-size-small = Petite
@@ -2442,27 +2494,102 @@ fs-desktop-greyed-gone = Cette commande n'existe plus.
 fs-desktop-greyed-button-only = Celle-ci ne fonctionne que depuis son bouton de la barre d'outils.
 fs-desktop-greyed-rlva = Bloqué par RLVa.
 fs-desktop-greyed-folder-gone = Ce dossier n'est plus dans votre inventaire.
-fs-desktop-greyed-other-account = Ce dossier est dans l'inventaire d'un autre compte.
+fs-desktop-item = Objet de l'inventaire
+fs-desktop-greyed-item-gone = Cet objet n'est pas dans votre inventaire : il a été supprimé, ou son dossier n'est pas encore chargé.
+fs-desktop-greyed-item-trash = Cet objet est dans la corbeille.
+fs-desktop-greyed-item-other = Ce type d'objet ne s'ouvre pas depuis le bureau.
+fs-desktop-outfit = Tenue
+fs-desktop-wear-outfit = Porter cette tenue…
+fs-desktop-greyed-outfit-gone = Cette tenue n'est plus dans votre inventaire.
+fs-desktop-greyed-outfit-loading = Cette tenue est encore en cours de chargement : réessayez dans un instant.
+fs-desktop-greyed-outfit-empty = Cette tenue n'a rien à porter.
+fs-desktop-greyed-busy = Un changement de tenue est en cours : réessayez dans un instant.
+fs-desktop-greyed-worn = Vous le portez déjà.
+fs-desktop-greyed-listing = Un objet d'une annonce de la Place du marché ne peut pas être porté.
+fs-desktop-greyed-not-worn = Vous ne le portez pas.
+fs-desktop-take-off = Enlever
+fs-desktop-detach = Détacher
 fs-desktop-add = Ajouter au bureau
-fs-desktop-add-refused = Seuls les dossiers de votre propre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
+fs-desktop-add-refused = Seuls les dossiers, les repères, les notes, les tenues et les vêtements et les objets de votre inventaire, hors de la corbeille, peuvent être des raccourcis du bureau.
 fs-desktop-added =
     { $count ->
-        [one] Dossier ajouté au bureau.
-       *[other] { $count } dossiers ajoutés au bureau.
+        [one] Raccourci ajouté au bureau.
+       *[other] { $count } raccourcis ajoutés au bureau.
     }
 fs-desktop-add-existing = Déjà sur le bureau.
 fs-desktop-add-full =
     { $count ->
-        [one] Le bureau n'a plus de place pour un dossier.
-       *[other] Le bureau n'a plus de place pour { $count } dossiers.
+        [one] Un raccourci n'a pas trouvé de place.
+       *[other] { $count } raccourcis n'ont pas trouvé de place.
     }
+fs-desktop-full = Ce bureau est plein : retirez un raccourci ou choisissez une taille d'icône plus petite.
+fs-desktop-limit = Les bureaux contiennent au plus { $count } raccourcis : retirez-en un d'abord.
 fs-desktop-left-out =
     { $count ->
-        [one] Un élément laissé de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
-       *[other] { $count } éléments laissés de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.
+        [one] Un élément laissé de côté : il ne peut pas être un raccourci du bureau.
+       *[other] { $count } éléments laissés de côté : ils ne peuvent pas être des raccourcis du bureau.
     }
 fs-desktop-added-on = Les raccourcis dans les marges sont maintenant activés (Préférences › Disposition › Barres et fenêtres).
 fs-desktop-added-hidden = Ils s'affichent quand la fenêtre laisse de la place autour du monde.
+fs-desktop-rename = Renommer
+fs-desktop-icon = Icône
+fs-desktop-icon-default = Par défaut
+fs-desktop-icon-colour = Couleur…
+fs-desktop-icon-file = Image depuis un fichier…
+fs-desktop-icon-texture = Texture de l'inventaire…
+fs-desktop-icon-reset = Réinitialiser l'icône
+fs-desktop-icon-file-title = Choisir une image pour le raccourci
+fs-desktop-style-title = Icône du raccourci
+fs-desktop-style-colour = Couleur
+fs-desktop-style-custom = Autre couleur
+fs-desktop-style-colour-default = Couleur par défaut
+fs-desktop-style-colour-picture = Une image garde ses propres couleurs : cette couleur revient quand l'image est retirée.
+fs-desktop-style-picture = Image
+fs-desktop-style-picture-none = Aucune : l'icône est affichée.
+fs-desktop-style-picture-other = Une image que cette version ne sait pas afficher : l'icône est affichée.
+fs-desktop-style-picture-remove = Retirer l'image
+fs-desktop-style-file-note = Une copie de l'image, de 256 pixels de côté au plus, est gardée avec les réglages de ce compte : l'original peut être déplacé ou supprimé.
+fs-desktop-style-texture = Texture de l'inventaire
+fs-desktop-style-texture-gone = Une texture qui ne peut plus être utilisée : l'icône est affichée.
+fs-desktop-style-search = Chercher une texture
+fs-desktop-style-texture-none = Aucune texture trouvée. Seules les textures que vous pouvez copier, modifier et transférer peuvent servir.
+fs-desktop-style-texture-more = Seules les { $count } premières sont listées : affinez la recherche.
+fs-desktop-style-texture-note = Seules les textures que vous pouvez copier, modifier et transférer sont listées, comme pour afficher l'UUID d'une texture.
+fs-desktop-move-to = Déplacer vers
+fs-desktop-monitor = Écran { $number }
+fs-desktop-arrange = Ranger par nom
+fs-desktop-command-added = Raccourci ajouté au bureau.
+fs-desktop-single-click = Ouvrir d'un simple clic
+fs-desktop-single-click-help = Un simple clic ouvre un raccourci, comme pour un bouton de la barre d'outils. Désactivé : un clic le sélectionne et un double clic l'ouvre, pour qu'un clic égaré ne vous téléporte jamais chez vous ni ne vous fasse asseoir.
+fs-desktop-unused =
+    { $count ->
+        [one] Un raccourci est sur un écran qui n'est pas utilisé
+       *[other] { $count } raccourcis sont sur un écran qui n'est pas utilisé
+    }
+fs-desktop-unused-help = Un raccourci reste sur l'écran où il a été posé. Quand la fenêtre ne couvre plus cet écran, ou que le monde le remplit, le raccourci est conservé mais pas affiché.
+fs-desktop-bring = Les amener ici
+fs-desktop-clear = Retirer tous les raccourcis…
+fs-desktop-clear-help = Retire tous les raccourcis des bureaux de ce compte. Seuls les raccourcis disparaissent : les dossiers, les objets de l'inventaire et les barres d'outils restent tels quels.
+fs-desktop-clear-button = Tout retirer…
+fs-desktop-clear-ask =
+    { $count ->
+        [one] Retirer le raccourci de ce compte ?
+       *[other] Retirer les { $count } raccourcis de ce compte ?
+    }
+fs-desktop-clear-confirm = Tout retirer
+fs-taskbar-switch = Barre des tâches dans une marge
+fs-taskbar-switch-help = Les fenêtres réduites deviennent des boutons sur une barre en bas d’un écran de marge, au lieu de barres de titre : un clic ramène la fenêtre où elle était, un clic droit en propose plus. Désactivée, ou tant que la fenêtre ne laisse pas de place autour du monde, les fenêtres réduites sont des barres de titre comme avant.
+fs-taskbar-monitor = Écran
+fs-taskbar-monitor-help = L’écran où se tient la barre des tâches. Automatique : celui qui a la place libre la plus large. Quand l’écran choisi n’a pas de place, il n’y a pas de barre des tâches.
+fs-taskbar-monitor-auto = Automatique
+fs-taskbar-all = Toutes les fenêtres ouvertes
+fs-taskbar-all-help = Liste toutes les fenêtres ouvertes, pas seulement celles qui sont réduites : un clic met une fenêtre au premier plan, ou réduit celle qui y est déjà.
+fs-taskbar-restore = Restaurer
+fs-taskbar-front = Mettre au premier plan
+fs-taskbar-empty = Aucune fenêtre réduite
+fs-taskbar-empty-all = Aucune fenêtre ouverte
+fs-taskbar-spoken-collapsed = { $title }, réduite
+fs-taskbar-spoken-front = { $title }, au premier plan
 
 # Folderstorm: the account's setup backup (folderstorm/backup, Preferences › Language and updates)
 fs-backup-group = Sauvegarde de la configuration Folderstorm
@@ -2694,11 +2821,24 @@ fs-folder-upload-short = Pas assez de L$ : cet import coûte { $cost } L$ et le 
 fs-folder-upload-receipt = Import du dossier { $folder } : { $uploaded } importés, { $failed } en échec, { $cancelled } non envoyés, { $spent } L$ dépensés.
 fs-folder-upload-receipt-failed = En échec : { $names }.
 
+# Folderstorm: why the graphics card was reset (folderstorm/gpu_diag, the recovery notice and Help › Show the log folder)
+fs-gpu-reason-memory = La mémoire vidéo était pleine.
+fs-gpu-reason-memory-used = La mémoire vidéo était pleine ({ $used } Go utilisés sur { $total }).
+fs-gpu-reason-memory-characters = La mémoire vidéo était pleine ({ $count } personnages ouverts, { $used } Go utilisés sur { $total }).
+fs-gpu-reason-memory-viewers = La mémoire vidéo était pleine ({ $count } fenêtres du viewer ouvertes, { $used } Go utilisés sur { $total }).
+fs-gpu-reason-hang = La carte a mis trop longtemps à dessiner une image.
+fs-gpu-reason-fault = Le pilote graphique s'est arrêté sur une erreur pendant le dessin.
+fs-gpu-reset-then = Le viewer a rouvert sa fenêtre sur la carte : vous êtes resté connecté, et le monde se recharge dans un instant.
+fs-gpu-reset-then-safe = C'était la deuxième réinitialisation en quelques minutes : le viewer a donc rouvert sa fenêtre avec les graphismes de secours (le niveau Potato). Vous êtes resté connecté. Vos réglages graphiques sont gardés : l'écran de connexion vous les propose à nouveau.
+fs-gpu-reset-log = Les détails sont dans le dossier des journaux (Aide › Afficher le dossier des journaux), dans le fichier qui finit par gpu-losses.txt.
+fs-gpu-show-logs = Afficher le dossier des journaux
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter
 fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
 fs-search-desktop = bureau raccourci raccourcis icône icônes lanceur dossier dossiers marge marges écran écrans moniteur
+fs-search-taskbar = barre des tâches tâche fenêtre fenêtres réduite réduites minimisée minimisées dock
 fs-search-photo = mode photo capture image appareil
 fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
 fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer
@@ -6139,7 +6279,7 @@ folderstorm-host-end-yes = L'arrêter
 folderstorm-host-remove = Retirer
 folderstorm-host-remove-help = Retire ce personnage de la liste. Son profil, ses réglages et son cache restent sur le disque.
 folderstorm-host-economy = Réduire en arrière-plan
-folderstorm-host-economy-help = Veille économe : tant qu'un autre personnage est actif, cette fenêtre est réduite et rend ses textures, ce qui libère de la mémoire graphique ; le retour prend un peu plus de temps. Décoché (veille chaude) : la fenêtre reste derrière celle du personnage actif et revient aussitôt.
+folderstorm-host-economy-help = Économie : tant qu'un autre personnage est actif, cette fenêtre rend ses textures (les visages aussi) et la mémoire de sa 3D, puis elle est réduite ; le retour prend une seconde ou deux, le temps qu'elles se rechargent. Tant que son moniteur est ouvert, elle reste plutôt derrière et dessine ses images avec des textures plus floues. À chaud : la fenêtre reste derrière celle du personnage actif, garde ses textures dans sa part et revient aussitôt.
 folderstorm-host-add = Ajouter un personnage
 folderstorm-host-add-hint = Nom de profil (par exemple Alt1)
 folderstorm-host-add-empty = Saisissez d'abord un nom de profil.
@@ -6522,6 +6662,9 @@ folderstorm-settings-background = Pendant qu'un autre personnage est actif
 folderstorm-settings-background-mode = Mode d'arrière-plan
 folderstorm-settings-warm = À chaud
 folderstorm-settings-economy = Économie
+folderstorm-settings-background-memory = Mémoire vidéo des personnages en arrière-plan
+folderstorm-settings-background-memory-help = La part de la mémoire de la carte graphique que chaque personnage derrière le personnage actif peut occuper en tout (textures, 3D, décor). Moins laisse davantage au personnage actif et aux autres programmes ; plus garde un personnage « à chaud » plus net quand vous y revenez.
+folderstorm-settings-background-memory-note = Pour chaque personnage derrière le personnage actif ; le personnage actif garde le reste de la carte. Un personnage dans un lieu chargé peut occuper davantage rien qu'en décor : ses textures se réduisent alors au minimum. Les personnages en Économie rendent presque tout ; un personnage en Économie dont le moniteur est ouvert garde au plus 512 Mo pour les images de son moniteur.
 folderstorm-settings-include-attention = Inclure dans Attention
 folderstorm-settings-include-attention-help = Désactivé : ce qu'on demande à ce personnage (offres, demandes, boîtes de dialogue) n'apparaît pas dans la boîte Attention ni dans son compte. Cela attend toujours dans sa propre fenêtre.
 folderstorm-settings-position = Position de la carte

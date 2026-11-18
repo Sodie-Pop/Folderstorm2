@@ -34,8 +34,22 @@ behaviour reference is Aurora's own Inventory windows.
 | A tab of pins only | Shows only its pins (pins scope a tab as folders do: adding one to a tab that showed everything makes it show only what was added, as adding a folder does in row 2.2) |
 | Deleted / Trash | Skipped but kept, as folders: the note above the list counts folders and items, *Remove from tab* forgets them all |
 | Customize tab… | Its *Folders* part becomes *Folders and items*: each pin by name with its folder path, a remove button |
-| Clear | The tab menu's *Show all folders* becomes *Show everything*: no folders, no pins |
+| Clear | The tab menu's *Show all items* (was *Show everything*, which removed the folders and pins: "that kinda just ruins your custom tab", the human) **keeps the folders and pins** and clears what hides items: the item types, required permissions, links, creator, creation date, *coalesced objects only*, the advanced search's rules, and the search text (a typed search hides items as surely as a type filter); *Also show folders without matching items* and the flat list stay. Greyed when nothing is hidden. Removing every folder and pin at once is *Remove all…* in *Customize tab…* only, after a question (each one still has its own × there) |
 | Storage | `inventory.custom_tabs[].items`: account id → item ids, beside `folders` |
+
+### Tab icons
+
+Asked by the human after #75: "custom icons for custom inventory tabs".
+
+| Point | Decision |
+|---|---|
+| Choose | Right click on a custom tab › *Icon ›*: *Default* (checked while none is chosen), then a grid of icons; also an *Icon* row at the top of *Customize tab…* (the current icon, *Default*, the same grid). A choice closes the menu |
+| Which icons | A fixed list of 40 Tabler icons Aurora embeds (`custom_tabs/icon.rs`, `CHOICES`: clothes, objects, places, media, nature…), each with a translated name as its tooltip, as the contact sets' icon grid does. The built-in tabs' icons (briefcase, clock, hanger, star, inbox) are left out so a custom tab is not taken for one |
+| Default | The bookmark, as before |
+| Storage | `inventory.custom_tabs[].icon`: the Tabler name, left out while default. Read leniently: a value that is not a text is no icon and the rest loads; a name this version does not know is kept and drawn as the default. Clone copies it |
+| Aurora style | In place of the bookmark: the narrow tab icons, the wide shortcuts column, and the folder menu's *Add to ›* list |
+| Legacy style | Its tab strip is text only (the built-in tabs have no icon). A **chosen** icon is drawn before the tab's name, in room the label leaves (leading spaces); a tab at the default stays text only, so nothing changes for whoever never picks one |
+| Tab windows | Their title stays text: the viewer's floaters have no title icon, and adding one would change upstream's floater |
 
 ### Tab windows
 
@@ -136,6 +150,9 @@ not in the default mode are kept, at most 32 folder windows.
 - `context_catalog.rs`: *Create tab* / *Add to ›* on items too (the existing
   hook line loses its folders-only condition).
 - `app.rs`: the demo scenario's name and call.
+- Tab icons: `aurora/toolbar.rs` (narrow tabs) and `aurora/sidebar.rs`
+  (shortcuts column): the custom tabs' existing hook lines take
+  `custom_tabs::icon::of_slot` instead of the bookmark.
 
 ## 5. Demo
 

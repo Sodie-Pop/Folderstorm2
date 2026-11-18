@@ -271,6 +271,10 @@ impl App {
     /// arm of `on_input`): a request the next frame runs, as the menu's.
     pub(super) fn folderstorm_key(&mut self, key: crate::folderstorm::keys::Key) {
         use crate::folderstorm::workspaces::menu;
+        // (the margins' desktop has its own)
+        if self.folderstorm_desktop_key(key) {
+            return;
+        }
         let hidden = self.camera.mouselook() || ui::widgets::interface_hidden(&self.egui_ctx);
         if let Some(request) = menu::key_request(key, hidden) {
             menu::ask(&self.egui_ctx, request);

@@ -10,10 +10,13 @@
 //! `InventoryUi::windows`, drawn, fetched and closed under RLVa's @showinv
 //! exactly as Aurora's window is; its slot is read from its id.
 //!
-//! - Ctrl+Shift+I and the "New Inventory window" button (in the main window
-//!   and in every slot, both styles) open the lowest free slot. With all 16
-//!   open, nothing opens and the Inventory's notice says so; the button is
-//!   greyed;
+//! - Ctrl+Shift+I and the "New Inventory window" button open the lowest
+//!   free slot. The button is in every Inventory window, both styles: the
+//!   main window, every slot, the folder windows and the tab windows (the
+//!   human's choice: a new window from any window), in the place the main
+//!   window has it; hidden in quiet mode with the rest of the tools. With
+//!   all 16 open, nothing opens and the Inventory's notice says so; the
+//!   button is greyed;
 //! - right click on the button: *New Inventory window* and *Close all
 //!   additional windows* (the slots only, not the folder or tab windows);
 //! - titles "Inventory 2" … "Inventory 17"; the main window stays
@@ -23,8 +26,9 @@
 //!   is kept. Slots are not reopened at login; layouts and workspaces open,
 //!   place and close each one (`folderstorm/workspaces/windows.rs`).
 //!
-//! The tab windows of the custom tabs (`custom_tabs/window.rs`) are not
-//! slots and have no such button: each shows one tab, locked to it.
+//! The folder windows and the tab windows of the custom tabs
+//! (`custom_tabs/window.rs`) are not slots: their button opens a slot, and
+//! *Close all additional windows* leaves them open.
 
 use super::*;
 
@@ -167,7 +171,7 @@ impl InventoryUi {
     }
 }
 
-// ---- The button, in every window that has it ----
+// ---- The button, in every Inventory window ----
 
 /// What a button or its menu asks of the main window, which has the
 /// windows (`frame`).
@@ -224,13 +228,13 @@ struct Button {
 }
 
 impl Button {
-    /// The main window and the slots have it; the folder and tab windows
-    /// do not.
-    fn of(ctx: &egui::Context, st: &InventoryUi) -> Option<Self> {
-        (st.is_main() || slot_of(st.ui_id).is_some()).then(|| Self {
+    /// The button of the window `st`: every Inventory window has it (the
+    /// main one, the slots, the folder and tab windows).
+    fn of(ctx: &egui::Context, st: &InventoryUi) -> Self {
+        Self {
             window: st.ui_id,
             open: ctx.data(|d| d.get_temp(open_count_id())).unwrap_or(0),
-        })
+        }
     }
 
     fn tip(&self) -> String {
@@ -295,10 +299,10 @@ fn open_menu(ctx: &egui::Context, window: Uuid, pos: egui::Pos2) {
     egui::Popup::open_id(ctx, menu);
 }
 
-/// The Legacy style's button, beside "+" in the status line. Returns where
-/// it was drawn; none in a window without it.
-pub(super) fn legacy_button(ui: &mut egui::Ui, p: &Palette, st: &InventoryUi) -> Option<egui::Rect> {
-    let button = Button::of(ui.ctx(), st)?;
+/// The Legacy style's button, beside "+" in the status line of every
+/// window. Returns where it was drawn.
+pub(super) fn legacy_button(ui: &mut egui::Ui, p: &Palette, st: &InventoryUi) -> egui::Rect {
+    let button = Button::of(ui.ctx(), st);
     let tip = button.tip();
     let drawn = ui.scope(|ui| {
         if button.full() {
@@ -308,26 +312,26 @@ pub(super) fn legacy_button(ui: &mut egui::Ui, p: &Palette, st: &InventoryUi) ->
         }
     });
     button.after(ui, p, drawn.response.rect, drawn.inner);
-    Some(drawn.response.rect)
+    drawn.response.rect
 }
 
-/// Aurora's button in its toolbar, drawn by `draw` (its tool button, given
-/// the tooltip and whether it is lit). Returns where it was drawn; none in
-/// a window without it.
+/// Aurora's button in the toolbar of every window (the narrow tools row,
+/// or the explorer's), drawn by `draw` (its tool button, given the tooltip
+/// and whether it is lit). Returns where it was drawn.
 pub(super) fn aurora_button(
     ui: &mut egui::Ui,
     p: &Palette,
     st: &InventoryUi,
     draw: impl FnOnce(&mut egui::Ui, &str, bool) -> egui::Response,
-) -> Option<egui::Rect> {
-    let button = Button::of(ui.ctx(), st)?;
+) -> egui::Rect {
+    let button = Button::of(ui.ctx(), st);
     let tip = button.tip();
     let response = ui
         .add_enabled_ui(!button.full(), |ui| draw(ui, &tip, button.lit()))
         .inner
         .on_disabled_hover_text(&tip);
     button.after(ui, p, response.rect, response.clicked());
-    Some(response.rect)
+    response.rect
 }
 
 // ---- Demo ----

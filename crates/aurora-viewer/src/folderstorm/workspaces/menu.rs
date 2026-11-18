@@ -80,6 +80,8 @@ pub fn key_request(key: crate::folderstorm::keys::Key, hidden: bool) -> Option<R
         Key::PreviousArrangement => Some(Request::Previous),
         Key::NextFavoriteLayout => Some(Request::Favorite(true)),
         Key::PreviousFavoriteLayout => Some(Request::Favorite(false)),
+        // the margins' desktop's own (`app/folderstorm_desktop.rs`)
+        Key::DesktopShortcuts | Key::DesktopFocus | Key::DesktopTaskbar => None,
     }
 }
 

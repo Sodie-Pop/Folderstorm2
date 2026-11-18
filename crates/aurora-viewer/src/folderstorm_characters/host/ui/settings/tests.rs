@@ -343,6 +343,36 @@ fn two_cards_swap_from_the_characters_section() {
 }
 
 #[test]
+fn the_background_characters_video_memory_is_set_from_the_characters_section() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, now);
+    open(&mut app, Section::Characters, Some(1));
+    draw_in(&mut app, Which::Settings, 1000, 900);
+    let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 900);
+    assert!(shows(&drawn, tr!("folderstorm-settings-background-memory")), "{drawn:?}");
+    assert!(shows(&drawn, tr!("folderstorm-settings-background-memory-note")), "{drawn:?}");
+    keep("settings-characters-memory", &pixels, 1000, 900);
+    // a choice goes to the desk (which tells the characters behind at
+    // once: the desk's own tests)
+    app.apply(vec![HostAct::Settings(Act::BackgroundMemory(768))], now);
+    assert_eq!(app.host.desk.background_memory_mb(), 768);
+    // and the diagnostics say it, with what each viewer holds
+    let status = Status {
+        screen: Screen::World,
+        name: "Sam Resident".to_owned(),
+        vram_mb: 812,
+        ..Default::default()
+    };
+    app.host.desk.status(1, 1, status, now);
+    open(&mut app, Section::Advanced, None);
+    app.apply(vec![HostAct::Settings(Act::Diagnostics(true))], now);
+    draw_in(&mut app, Which::Settings, 1000, 1400);
+    let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 1400);
+    assert!(shows(&drawn, "768 MB") && shows(&drawn, "812 MB"), "{drawn:?}");
+}
+
+#[test]
 fn the_diagnostics_and_the_credits_show_when_asked() {
     let now = Instant::now();
     let mut app = window(host());
