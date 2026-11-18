@@ -142,6 +142,7 @@ impl App {
             interface: false,
             huds: false,
             photo: (width, height),
+            cube: None,
         };
         renderer.snapshot_request = Some(spec);
         renderer.snapshot_wait = Some(PICTURE_WAIT);
@@ -156,6 +157,7 @@ impl App {
             scale: crate::snapshot::viewfinder_scale((width, height), renderer.size(), self.settings.render_scale_percent),
             look: None,
             context: aurora_render::PhotoContext::None,
+            cube_face: false,
         })
     }
 
