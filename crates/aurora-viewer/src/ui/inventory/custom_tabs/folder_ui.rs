@@ -7,10 +7,13 @@
 //!   and the folders join the one picked (the entries are built in
 //!   `context_catalog/folder_tabs.rs`);
 //! - folders dragged from the list onto a custom tab's button join it too;
-//! - right click on a custom tab › "Add selected folders", "Use only selected
-//!   folders", "Show all folders" (Folderstorm's tab menu);
+//! - right click on a custom tab › "Add the selection", "Use only the
+//!   selection" (Folderstorm's tab menu; its "Show all folders" is not
+//!   offered there: the tab menu's "Show all items" clears the filters and
+//!   keeps the folders, `custom_tabs.rs`);
 //! - "Customize tab…" lists the tab's folders by path, each with a remove
-//!   button, and offers the same three actions;
+//!   button, and offers the same two actions and "Remove all…", which asks
+//!   first;
 //! - a note above the list when some of the tab's folders are gone, or when
 //!   it is scoped on another account only.
 //!
@@ -209,15 +212,11 @@ fn remove(st: &InventoryUi, prefs: &mut InventoryPreferences, id: u64, gone: imp
     }
 }
 
-/// The three entries of a custom tab's menu (and of its Customize dialog).
+/// The entries of a custom tab's menu that change its folders and pins
+/// (and of its Customize dialog, which adds "Remove all…").
 fn actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut InventoryPreferences, id: u64, in_menu: bool) {
     let seen = &st.custom_tabs.seen;
     let can_choose = !seen.choosable.is_empty();
-    let scoped = prefs
-        .custom_tabs
-        .iter()
-        .find(|t| t.id == id)
-        .is_some_and(|t| folders::scoped(t, seen.account));
     let select_tip = aurora_i18n::tr!("inventory-folder-tab-select-tip", count = MAX_FOLDERS);
     let entries = [
         (
@@ -233,13 +232,6 @@ fn actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut Inv
             aurora_i18n::tr!("inventory-folder-tab-replace"),
             can_choose,
             if can_choose { "" } else { select_tip.as_str() },
-        ),
-        (
-            Change::Clear,
-            "x",
-            aurora_i18n::tr!("inventory-folder-tab-clear"),
-            scoped,
-            aurora_i18n::tr!("inventory-folder-tab-clear-tip"),
         ),
     ];
     for (how, icon, label, enabled, tip) in entries {
@@ -257,10 +249,53 @@ fn actions(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &mut Inv
         if clicked {
             apply(st, prefs, id, how);
         }
-        if !in_menu && how == Change::Replace {
-            // the dialog: "Show all folders" on a line of its own
-            ui.end_row();
-        }
+    }
+    if !in_menu {
+        remove_all_button(ui, p, st, prefs, id);
+    }
+}
+
+/// "Remove all…" in the Customize dialog, on a line of its own: asks before
+/// the tab forgets its folders and pins on this account.
+fn remove_all_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi, prefs: &InventoryPreferences, id: u64) {
+    let Some(tab) = prefs.custom_tabs.iter().find(|t| t.id == id) else {
+        return;
+    };
+    let scoped = folders::scoped(tab, st.custom_tabs.seen.account);
+    ui.end_row();
+    let tip = aurora_i18n::tr!("inventory-folder-tab-remove-all-tip");
+    let resp = ui
+        .add_enabled_ui(scoped, |ui| flat_button(ui, p, aurora_i18n::tr!("inventory-folder-tab-remove-all")))
+        .inner
+        .on_hover_text(tip)
+        .on_disabled_hover_text(tip);
+    if resp.clicked() && scoped {
+        st.custom_tabs.unscope = Some((id, tab.name.clone()));
+    }
+}
+
+/// The question of "Remove all…": once confirmed, the tab forgets its
+/// folders and pinned items on this account and shows the whole inventory,
+/// with its filters and search.
+pub(super) fn remove_all_dialog(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &mut InventoryPreferences) {
+    let Some((id, name)) = st.custom_tabs.unscope.take() else {
+        return;
+    };
+    if position(prefs, id).is_none() {
+        return;
+    }
+    let answer = confirm(
+        ctx,
+        p,
+        &format!("inventory_custom_tab_unscope_{}", st.ui_id),
+        aurora_i18n::tr!("inventory-folder-tab-remove-all-title"),
+        &aurora_i18n::tr!("inventory-folder-tab-remove-all-question", name = name.as_str()),
+        aurora_i18n::tr!("inventory-folder-tab-remove-all-confirm"),
+    );
+    match answer {
+        Some(true) => apply(st, prefs, id, Change::Clear),
+        Some(false) => {}
+        None => st.custom_tabs.unscope = Some((id, name)),
     }
 }
 

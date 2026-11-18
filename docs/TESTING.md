@@ -8004,7 +8004,10 @@ failure. Grid validation and any paid upload are performed by the human.
   path (the deleted one marked), with a remove button. Select folders in the
   list (from the Inventory tab), then right-click the custom tab: "Add
   the selection", "Use only the selection" (greyed while the selection
-  holds something in the Trash or the Library), "Show everything". On the
+  holds something in the Trash or the Library), and "Show all items", which
+  clears the tab's item types, other hiding filters and search but keeps its
+  folders and pins (greyed when nothing is hidden). The dialog's "Remove
+  all…" asks, then empties the folders and pins (the whole inventory). On the
   Inventory tab, select folders (Ctrl+click, Shift+click for a range) and
   right-click them: "Create tab" makes a new tab named after the first, its
   Rename dialog open; "Add to ›" lists every custom tab (a check mark on one

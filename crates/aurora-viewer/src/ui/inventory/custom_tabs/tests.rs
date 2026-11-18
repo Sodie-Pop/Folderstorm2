@@ -337,6 +337,106 @@ fn advanced_rules_and_their_text_are_remembered() {
 }
 
 #[test]
+fn show_all_items_clears_what_hides_items_and_keeps_the_scope() {
+    let mut t = tab(1, "Wardrobe");
+    assert!(!hides_items(&t));
+    assert!(!show_all_items(&mut t), "nothing to clear");
+    let account = Uuid::from_u128(7);
+    t.folders.insert(account, vec![Uuid::from_u128(10)]);
+    t.items.insert(account, vec![Uuid::from_u128(110)]);
+    t.flat = true;
+    t.filters = Filters {
+        types: 1 << 0,
+        permissions: rules::COPY,
+        links: view::Links::Exclude,
+        creator: view::Creator::Me,
+        age: view::Age::Newer,
+        hours: 48,
+        always_folders: true,
+        coalesced: true,
+        smart: Some(smart::SmartQuery::from_quick("hat", SearchField::Name)),
+    };
+    t.search = "hat".into();
+    let before = t.clone();
+    assert!(hides_items(&t));
+    assert!(show_all_items(&mut t));
+    assert_eq!(
+        t.filters,
+        Filters {
+            hours: 48,
+            always_folders: true,
+            ..Filters::default()
+        },
+        "what hides nothing stays"
+    );
+    assert!(t.search.is_empty());
+    assert_eq!(t.folders, before.folders, "the folders stay");
+    assert_eq!(t.items, before.items, "the pins stay");
+    assert_eq!((t.id, t.name.as_str(), t.flat), (before.id, before.name.as_str(), before.flat));
+    assert!(!hides_items(&t));
+    // each one alone hides items
+    for hiding in [
+        Filters {
+            types: 1 << 6,
+            ..Filters::default()
+        },
+        Filters {
+            creator: view::Creator::Others,
+            ..Filters::default()
+        },
+        Filters {
+            coalesced: true,
+            ..Filters::default()
+        },
+    ] {
+        t.filters = hiding;
+        assert!(hides_items(&t));
+    }
+    t.filters = Filters::default();
+    t.search = "x".into();
+    assert!(hides_items(&t), "the search alone");
+}
+
+#[test]
+fn show_all_on_the_shown_tab_clears_the_live_filters_and_search() {
+    let mut prefs = prefs_with(&["Textures", "Other"]);
+    prefs.custom_tabs[0].filters = texture_filters();
+    let account = Uuid::from_u128(7);
+    prefs.custom_tabs[0].folders.insert(account, vec![Uuid::from_u128(10)]);
+    let id = prefs.custom_tabs[0].id;
+    let mut st = InventoryUi::default();
+    select(&mut st, &prefs, SLOT_BASE);
+    st.search = "sky".into();
+    show_all(&mut st, &mut prefs, id);
+    assert_eq!(st.filters, Filters::default(), "the window shows every type");
+    assert_eq!(st.search, "");
+    assert_eq!(prefs.custom_tabs[0].filters, Filters::default());
+    assert_eq!(prefs.custom_tabs[0].search, "");
+    assert_eq!(prefs.custom_tabs[0].folders[&account], [Uuid::from_u128(10)], "the folders stay");
+    assert_eq!(active(&st), Some(id), "the tab stays shown");
+
+    // advanced rules go too, and the window leaves advanced mode
+    st.search = "hat".into();
+    st.enter_advanced(SearchField::Name);
+    sync(&mut st, &mut prefs);
+    assert!(prefs.custom_tabs[0].filters.smart.is_some());
+    show_all(&mut st, &mut prefs, id);
+    assert!(!st.advanced && st.filters.smart.is_none());
+    assert_eq!((st.search.as_str(), st.quick_text.as_str()), ("", ""));
+    assert_eq!(prefs.custom_tabs[0].filters, Filters::default());
+
+    // another tab, not shown: its entry only; this window keeps its own
+    prefs.custom_tabs[1].filters = texture_filters();
+    st.filters.permissions = rules::COPY;
+    sync(&mut st, &mut prefs);
+    let other = prefs.custom_tabs[1].id;
+    show_all(&mut st, &mut prefs, other);
+    assert_eq!(prefs.custom_tabs[1].filters, Filters::default());
+    assert_eq!(st.filters.permissions, rules::COPY);
+    assert_eq!(prefs.custom_tabs[0].filters.permissions, rules::COPY);
+}
+
+#[test]
 fn temporary_modes_are_not_kept_by_the_tab() {
     let mut prefs = prefs_with(&["Mine"]);
     prefs.custom_tabs[0].filters = texture_filters();
