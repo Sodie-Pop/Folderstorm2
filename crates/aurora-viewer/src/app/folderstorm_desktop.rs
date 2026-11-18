@@ -139,6 +139,7 @@ impl App {
         let env = desktop::Env {
             p,
             icons: &self.skin.icons,
+            images: &self.ui_images,
             facts,
             folders: Folders {
                 inv: &self.world.inventory,
@@ -198,6 +199,12 @@ impl App {
                 // (Aurora's window of every command: one is dragged from
                 // it onto a desktop)
                 Request::ToolbarButtons => self.toolbar_ui.open = true,
+                // an Inventory texture a shortcut wears, fetched as the
+                // Inventory's own images are: the app drains that set each
+                // frame into `ui_images` (no hook of our own in app.rs)
+                Request::Fetch(asset) => {
+                    self.inventory_ui.wanted_images.insert(asset);
+                }
             }
         }
         // saved once the pointer is up, as the gesture boards are
@@ -443,8 +450,12 @@ impl App {
         // folders of the demo's inventory
         s.folderstorm_desktop.sign_in(self.world.agent_id);
         desktop::demo::seed_folders(&mut s.folderstorm_desktop);
-        if matches!(mode.as_str(), "items" | "outfit") {
+        if matches!(mode.as_str(), "items" | "outfit" | "icons") {
             desktop::demo::seed_items(&mut s.folderstorm_desktop, &mut self.world.inventory, self.world.agent_id);
+            desktop::demo::seed_styles(&mut s.folderstorm_desktop, &mut self.world.inventory, self.world.agent_id);
+            // the demo's texture, as its fetch would leave it
+            let texture = ctx.load_texture("demo-desktop-texture", desktop::demo::texture_image(), egui::TextureOptions::LINEAR);
+            self.ui_images.insert(desktop::demo::texture_asset(), texture);
         }
         if mode == "rlva" {
             self.settings.rlva_enabled = true;
@@ -529,6 +540,11 @@ impl App {
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
             // the landmark shortcut opened: Aurora's question before a teleport
             ("items", true) => vec![Request::OpenItem(demo::landmark())],
+            // the window *Shortcut icon* on the shortcut wearing a texture
+            ("icons", true) => {
+                demo::open_icon_window(ctx, d);
+                Vec::new()
+            }
             // then the notecard: Aurora's notecard window
             ("items", false) => vec![Request::OpenItem(demo::notecard())],
             // the outfit shortcut opened: the question of outfit safety

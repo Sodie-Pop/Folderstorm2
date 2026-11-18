@@ -20,6 +20,7 @@
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
+//! a colour or a picture ([`style`]),
 //! moved to another monitor and arranged by name; a toolbar button is
 //! dropped on a desktop, or sent there from its menu ([`toolbar_menu`]).
 //! A taskbar ([`taskbar`], optional, off by default) along the bottom of
@@ -31,6 +32,9 @@
 //! - [`surface`]: the areas, the shortcuts' faces, clicks, drags, menus,
 //!   the rename field and the keyboard.
 //! - [`icons`]: the icons a shortcut can be given.
+//! - [`style`]: a shortcut's icon colour or picture (a copied file, an
+//!   Inventory texture), and which textures may be one; `style_ui`: how
+//!   they are drawn, the file dialog and the window *Shortcut icon*.
 //! - [`taskbar`]: the windows seen, those held, the island of buttons.
 //! - [`demo`]: the demo, `AURORA_DEMO_DESKTOP`.
 //!
@@ -46,6 +50,8 @@ pub mod demo;
 pub mod icons;
 pub mod place;
 pub mod store;
+pub mod style;
+mod style_ui;
 pub mod surface;
 pub mod targets;
 pub mod taskbar;
@@ -70,6 +76,10 @@ use uuid::Uuid;
 pub struct Env<'a> {
     pub p: &'a Palette,
     pub icons: &'a Icons,
+    /// The interface's images (the app's `ui_images`), by asset id: an
+    /// Inventory texture a shortcut wears is drawn from there once fetched
+    /// ([`Request::Fetch`]).
+    pub images: &'a std::collections::HashMap<Uuid, egui::TextureHandle>,
     /// What greys a toolbar button now.
     pub facts: Facts,
     /// The Inventory as the folder shortcuts read it: RLVa's `@showinv`, the folders' colours.
@@ -113,6 +123,10 @@ pub enum Request {
     Settings,
     /// Open Aurora's *Toolbar buttons* window, to drag a command from.
     ToolbarButtons,
+    /// Fetch this texture for the interface: the asset of an Inventory
+    /// texture a shortcut wears, allowed by `style::texture_asset`. Never
+    /// shown nor written.
+    Fetch(Uuid),
 }
 
 /// What another part of the viewer asks the desktops: taken by the app's

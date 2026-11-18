@@ -33,8 +33,16 @@
 //!   300 the notecard (its window).
 //! - `outfit`: the same as `items`; at frame 200 the outfit shortcut is
 //!   opened: the question of outfit safety, nothing worn before its answer.
+//!
+//! In `items`, `outfit` and `icons`, three shortcuts of the left monitor
+//! wear a style of their own ([`seed_styles`]): *Conversations* a colour,
+//! *Snapshot* a picture copied from a file (made by the demo), *Home* a
+//! texture of the demo's Inventory (full permissions).
+//! - `icons`: the same as `items`; at frame 200 the window *Shortcut icon*
+//!   opens on *Home*: its colours, its picture, the textures offered.
 
 use super::store::{Desktop, Target, Taskbar};
+use super::style::{self, Picture};
 use crate::folderstorm::viewport::ViewportSettings;
 use uuid::Uuid;
 
@@ -159,6 +167,114 @@ pub fn seed_items(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inve
     }
 }
 
+/// The texture of `items` a shortcut wears: made up for the offline demo,
+/// full permissions, in the Photo Album.
+const TEXTURE: u128 = 0xF01D_E502;
+/// The commands that wear a style in `items`: a colour, a picture copied
+/// from a file, the demo's texture.
+pub const STYLED: [&str; 3] = ["conversations", "snapshot", "home"];
+
+/// The asset of the demo's texture (the offline demo's own: it names
+/// nothing on a grid). The app puts [`texture_image`] there, as the fetch
+/// of a texture would.
+pub fn texture_asset() -> Uuid {
+    crate::demo::u(TEXTURE + 0x1000)
+}
+
+/// The pixels of the demo's texture: blue and white diagonal stripes.
+pub fn texture_image() -> egui::ColorImage {
+    let side = 64;
+    let pixels = (0..side * side)
+        .map(|n| {
+            let (x, y) = (n % side, n / side);
+            if (x + y) / 8 % 2 == 0 {
+                egui::Color32::from_rgb(0x3E, 0x63, 0xDD)
+            } else {
+                egui::Color32::from_rgb(0xF0, 0xF4, 0xFF)
+            }
+        })
+        .collect();
+    egui::ColorImage::new([side, side], pixels)
+}
+
+/// The picture of `items` copied as a file would be: a sun over the sea.
+fn file_picture() -> Vec<u8> {
+    let (w, h) = (96u32, 96u32);
+    let picture = image::RgbaImage::from_fn(w, h, |x, y| {
+        let (dx, dy) = (x as f32 - 48.0, y as f32 - 52.0);
+        if dx * dx + dy * dy < 22.0 * 22.0 && y < 60 {
+            image::Rgba([0xFF, 0xD2, 0x3F, 255])
+        } else if y >= 60 {
+            image::Rgba([0x12, 0x5E, 0x8A, 255])
+        } else {
+            let t = y as f32 / 60.0;
+            image::Rgba([
+                0xF7,
+                (0x6B as f32 + 0x50 as f32 * (1.0 - t)) as u8,
+                (0x15 as f32 + 0x90 as f32 * t) as u8,
+                255,
+            ])
+        }
+    });
+    let mut out = std::io::Cursor::new(Vec::new());
+    let _ = picture.write_to(&mut out, image::ImageFormat::Png);
+    out.into_inner()
+}
+
+/// The styles of `items` ([`STYLED`]): the demo's texture added to its
+/// inventory, the file picture copied into the account's folder of the
+/// demo's own settings.
+pub fn seed_styles(desktop: &mut Desktop, inv: &mut crate::world::inventory::Inventory, agent: Uuid) {
+    use aurora_net::inventory::InvItem;
+    inv.add_items(vec![InvItem {
+        id: crate::demo::u(TEXTURE),
+        parent: crate::demo::u(FOLDERS[2]),
+        name: "Blue stripes".to_owned(),
+        asset_type: style::AT_TEXTURE,
+        inv_type: 0,
+        asset_id: texture_asset(),
+        creator: agent,
+        owner: agent,
+        base_mask: 0x7fff_ffff,
+        owner_mask: 0x7fff_ffff,
+        ..Default::default()
+    }]);
+    let id = |desktop: &Desktop, command: &str| {
+        desktop
+            .shortcuts
+            .iter()
+            .find(|s| s.target == Target::command(command))
+            .map(|s| s.id)
+    };
+    if let Some(id) = id(desktop, STYLED[0]) {
+        desktop.set_colour(id, Some(style::PRESETS[4]));
+    }
+    match style::store(&file_picture(), "sunset.png", &style::folder(agent)) {
+        Ok(picture) => {
+            if let Some(id) = id(desktop, STYLED[1]) {
+                desktop.set_picture(id, Some(picture));
+            }
+        }
+        Err(e) => log::warn!("AURORA_DEMO_DESKTOP: the demo's picture was not copied ({e:?})"),
+    }
+    if let Some(id) = id(desktop, STYLED[2]) {
+        desktop.set_picture(
+            id,
+            Some(Picture::Texture {
+                texture: crate::demo::u(TEXTURE),
+            }),
+        );
+    }
+}
+
+/// `icons` at frame 200: the window *Shortcut icon* on the shortcut that
+/// wears the demo's texture.
+pub fn open_icon_window(ctx: &egui::Context, desktop: &Desktop) {
+    if let Some(shortcut) = desktop.shortcuts.iter().find(|s| s.target == Target::command(STYLED[2])) {
+        super::style_ui::open(ctx, shortcut.id);
+    }
+}
+
 /// The demo's folder shortcuts (in the desktop of the demo's account).
 pub fn seed_folders(desktop: &mut Desktop) {
     for n in 0..FOLDERS.len() {
@@ -190,7 +306,7 @@ const RIGHT: &[&str] = &["preferences", "build"];
 pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, width: u32) -> bool {
     if !matches!(
         mode,
-        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow" | "items" | "outfit"
+        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow" | "items" | "outfit" | "icons"
     ) {
         return false;
     }

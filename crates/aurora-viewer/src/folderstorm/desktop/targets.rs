@@ -1105,6 +1105,7 @@ mod tests {
             row: 0,
             name: None,
             icon: None,
+            style: Default::default(),
         };
         let inv = Inventory::default();
         let folders = Folders {
@@ -1613,6 +1614,7 @@ mod tests {
             row: 0,
             name: None,
             icon: None,
+            style: Default::default(),
         }
     }
 
@@ -1815,6 +1817,7 @@ mod tests {
             row: 0,
             name: None,
             icon: None,
+            style: Default::default(),
         };
         let facts = Facts::default();
         // its name is the folder's, read now; its colour is the folder's
