@@ -633,6 +633,32 @@ click on a shortcut selects it and gives it the keyboard too, so F2 and
 Delete work at once; a click in the world gives the keyboard back to the
 avatar's keys.
 
+**Account setup backup (Folderstorm2).** `AURORA_DEMO_BACKUP=<mode>` makes,
+once (at frame 90, after the demo's login), a small setup (a layout "Desk",
+a People shortcut on the desktop, a custom Inventory tab "Outfits to try", a
+gesture board "Greetings") and writes two automatic backups (a daily one and
+one made before an import) into the demo's own backups folder, so that
+Preferences › Language and updates › *Folderstorm setup backup* lists them
+with *Restore…*. `import` then opens the import dialog on a backup of this
+account holding one more layout ("Couch") and tab ("Hair"); `other` on the
+same backup made by another account ("Demo Alt"), with a folder shortcut and
+a tab folder of that account (the warning and *Leave out…*, ticked);
+`newer` on a backup of a newer format with a section this version does not
+know (both notes shown, the section not offered):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=1 AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup"
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=import AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup import"
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=other AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup other"
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=newer AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup newer"
+```
+
+Check that Import makes a new "before an import" line in the list first,
+that Merge adds "Couch" and "Hair" to what is there and Replace leaves only
+the file's, and that *Restore…* on the line made before the import puts
+the setup back. Export… and Import… open the system's file dialog (by
+hand, on Windows).
+
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
 closed: the four favorites stand in a small bar under the top bar, each one
@@ -7016,6 +7042,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single\|edit\|unused\|taskbar\|overflow\|items\|outfit\|icons` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); a name edited in place at frame 200, a folder shortcut given a name and an icon at 300 (`edit`); two shortcuts on a monitor not in use and Preferences on the desktop's group at frame 200 (`unused`); the taskbar on the third monitor, the Inventory and a folder's window collapsed into it at frame 200, the Inventory restored at 300 (`taskbar`); twenty windows collapsed into it at frame 200, icon buttons and *More* (`overflow`); item shortcuts in a third column (a landmark, a notecard, an outfit, a shirt to add, a worn jacket, one whose item is gone), the landmark opened at frame 200 (the question before a teleport), the notecard at 300 (its window) (`items`); the same and the outfit shortcut opened at frame 200: the question of outfit safety (`outfit`); in those two and `icons`, a shortcut in a colour of its own, one wearing a picture copied from a file and one wearing a texture of the inventory, and the window *Shortcut icon* opened on the last at frame 200 (`icons`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_BACKUP=1\|import\|other\|newer` (Folderstorm2) | Account setup backup: a small setup and two automatic backups in the demo's backups folder (`1`); the import dialog on a backup of this account (`import`), of another account with Inventory entries of its own (`other`), of a newer format with an unknown section (`newer`); open Preferences with `AURORA_DEMO_OPTIONS=system` |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
