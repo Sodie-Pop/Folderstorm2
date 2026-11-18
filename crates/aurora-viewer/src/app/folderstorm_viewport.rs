@@ -149,6 +149,30 @@ impl App {
         self.build.cam = viewport::build_tools::world_cam(self.build.cam, renderer.world_rect());
     }
 
+    /// Before the interface's pass, after the session host's bar has kept
+    /// its strip (`folderstorm_bar_inset`): the login screen is laid out in
+    /// the world viewport's rectangle, or on one monitor when the window
+    /// spans several (`crate::folderstorm::login_screen`); every other
+    /// screen keeps the room the bar left it. Always said: egui keeps the
+    /// last inset it was given.
+    pub(super) fn folderstorm_login_inset(&self, raw: &mut egui::RawInput) {
+        use crate::folderstorm::login_screen;
+        let ppp = self.egui_ctx.pixels_per_point();
+        let window = raw.screen_rect.unwrap_or_else(|| self.egui_ctx.viewport_rect());
+        let size = crate::folderstorm_characters::bar::window_pixels(window, ppp);
+        let rect = match self.screen {
+            Screen::Login => login_screen::rect(
+                size,
+                &self.settings.folderstorm_viewport,
+                viewport::monitors(&self.egui_ctx).as_ref(),
+            ),
+            _ => None,
+        };
+        let bar = raw.safe_area_insets;
+        raw.safe_area_insets = Some(login_screen::insets(bar, size, rect, ppp));
+        login_screen::set_sky(&self.egui_ctx, rect.map(|_| window - bar.unwrap_or_default()));
+    }
+
     /// Width over height of the world's part of the window, when it has one.
     pub(super) fn world_aspect(&self) -> Option<f32> {
         let size = self.gfx.as_ref()?.window.inner_size();

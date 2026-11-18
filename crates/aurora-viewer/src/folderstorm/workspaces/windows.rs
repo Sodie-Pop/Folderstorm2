@@ -10,6 +10,7 @@
 //! their windows are made with; a test reads them back from those files.
 
 use aurora_i18n::tr;
+use std::borrow::Cow;
 
 /// How a window is drawn, so how it is placed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,31 +27,88 @@ pub struct Window {
     /// The id its window is made with (`egui::Id::unique(id)`).
     pub id: &'static str,
     pub kind: Kind,
-    label: fn() -> &'static str,
+    label: Label,
+}
+
+/// How a window's name is found.
+enum Label {
+    Text(fn() -> &'static str),
+    /// An additional Inventory window, by its slot: "Inventory 2" …
+    InventorySlot(u8),
 }
 
 impl Window {
     /// Its name, as its title bar or its menu entry has it.
-    pub fn label(&self) -> &'static str {
-        (self.label)()
+    pub fn label(&self) -> Cow<'static, str> {
+        match self.label {
+            Label::Text(label) => Cow::Borrowed(label()),
+            Label::InventorySlot(slot) => Cow::Owned(crate::ui::inventory::extra_windows::slot_title(slot)),
+        }
     }
 }
 
-/// The additional Inventory window (`ui/inventory.rs`, `ADDITIONAL_WINDOW`
-/// through `floater_id`): one window with a fixed id.
+/// The first additional Inventory window (`ui/inventory.rs`,
+/// `ADDITIONAL_WINDOW` through `floater_id`): Aurora's one window, with a
+/// fixed id.
 pub const ADDITIONAL_INVENTORY: &str = "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901090";
+
+/// The additional Inventory windows, slots 1 to 16
+/// (`ui/inventory/extra_windows.rs`, `id_of` through `floater_id`): the
+/// ids that follow the first one's.
+pub const INVENTORY_SLOTS: [&str; 16] = [
+    ADDITIONAL_INVENTORY,
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901091",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901092",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901093",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901094",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901095",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901096",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901097",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901098",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a901099",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a90109a",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a90109b",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a90109c",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a90109d",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a90109e",
+    "inventory_6b1f2c4e-9a37-4d58-8e21-0f3c5a90109f",
+];
 
 const fn floater(id: &'static str, label: fn() -> &'static str) -> Window {
     Window {
         id,
         kind: Kind::Floater,
-        label,
+        label: Label::Text(label),
+    }
+}
+
+/// The additional Inventory window of slot `slot` (1 to 16).
+const fn inventory_slot(slot: u8) -> Window {
+    Window {
+        id: INVENTORY_SLOTS[slot as usize - 1],
+        kind: Kind::Floater,
+        label: Label::InventorySlot(slot),
     }
 }
 
 static WINDOWS: &[Window] = &[
     floater("inventory", || tr!("common-inventory")),
-    floater(ADDITIONAL_INVENTORY, || tr!("inventory-additional-window")),
+    inventory_slot(1),
+    inventory_slot(2),
+    inventory_slot(3),
+    inventory_slot(4),
+    inventory_slot(5),
+    inventory_slot(6),
+    inventory_slot(7),
+    inventory_slot(8),
+    inventory_slot(9),
+    inventory_slot(10),
+    inventory_slot(11),
+    inventory_slot(12),
+    inventory_slot(13),
+    inventory_slot(14),
+    inventory_slot(15),
+    inventory_slot(16),
     // geometry only: never its conversations or what they say
     floater("conversations", || tr!("common-conversations")),
     floater(crate::ui::people::WINDOW, || tr!("common-people")),
@@ -60,7 +118,7 @@ static WINDOWS: &[Window] = &[
     Window {
         id: "minimap",
         kind: Kind::Bare,
-        label: || tr!("common-mini-map"),
+        label: Label::Text(|| tr!("common-mini-map")),
     },
     floater("worldmap", || tr!("common-world-map")),
     floater("perf", || tr!("common-performance")),
@@ -147,5 +205,23 @@ mod tests {
         assert!(inventory.contains("format!(\"inventory_{id}\")"));
         let id = uuid::Uuid::from_u128(0x6b1f_2c4e_9a37_4d58_8e21_0f3c_5a90_1090);
         assert_eq!(ADDITIONAL_INVENTORY, format!("inventory_{id}"));
+    }
+
+    /// Each additional Inventory window is on the list once, with the id
+    /// its slot is drawn with and its numbered title.
+    #[test]
+    fn every_additional_inventory_window_is_on_the_list() {
+        use crate::ui::inventory::extra_windows;
+        assert_eq!(INVENTORY_SLOTS.len(), usize::from(extra_windows::MAX_SLOTS));
+        for (slot, id) in (1..=extra_windows::MAX_SLOTS).zip(INVENTORY_SLOTS) {
+            assert_eq!(extra_windows::floater_of(slot).as_deref(), Some(id), "slot {slot}");
+            let window = find(id).unwrap_or_else(|| panic!("slot {slot} is on the list"));
+            assert_eq!(window.kind, Kind::Floater);
+            assert_eq!(window.label(), extra_windows::slot_title(slot));
+        }
+        assert_eq!(
+            find(ADDITIONAL_INVENTORY).map(|w| w.label()).as_deref(),
+            Some(tr!("inventory-windows-title", number = 2).as_str())
+        );
     }
 }
