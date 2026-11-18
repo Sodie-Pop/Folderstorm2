@@ -7,6 +7,8 @@
 pub mod backup;
 pub(crate) mod cx;
 mod pages;
+/// Aurora's own marked in its gradient, outside Preferences too.
+pub(crate) use pages::aurora::aurora_word;
 mod saved_graphics;
 mod scale;
 
@@ -292,10 +294,14 @@ pub fn demo(st: &mut OptionsUi, value: &str) {
         "group-titles" => row(Page::Avatars, 1, tr!("ui-options-group-titles")),
         "plates" => row(Page::Avatars, 0, tr!("ui-options-plate-click")),
         "attention" => row(Page::Chat, 1, tr!("ui-options-flash-on-message")),
+        "tip-toast" | "tip-toast-legacy" => row(Page::Chat, 1, tr!("ui-options-toast-friends-seconds")),
         "keywords" => row(Page::Chat, 2, tr!("ui-options-keywords-on")),
         "spelling" => row(Page::Chat, 6, tr!("ui-options-spelling-on")),
         "auto-replace" => row(Page::Chat, 6, tr!("ui-options-auto-replace-on")),
         "gifs" => row(Page::Chat, 0, tr!("ui-options-gifs-show")),
+        // the conversation options (AURORA_DEMO_CONV_OPTIONS)
+        "conversation-options" => row(Page::Chat, 0, tr!("ui-options-im-tab-order")),
+        "history-fade" => row(Page::Chat, 3, tr!("ui-options-history-fade")),
         "script-errors" => row(Page::Chat, 0, tr!("ui-options-script-errors-in-chat")),
         "crosshair" => row(Page::Camera, 2, tr!("ui-options-crosshair-image")),
         "joystick-zoom" => row(Page::Controls, 1, tr!("joystick-zoom-mode")),
@@ -304,6 +310,7 @@ pub fn demo(st: &mut OptionsUi, value: &str) {
         "animations" | "animations-sync" => row(Page::Aurora, 2, tr!("ui-options-aurora-animation-clock")),
         "remove-aurora" => row(Page::System, 0, tr!("ui-options-remove-aurora")),
         "local-assistant" => row(Page::Privacy, 0, tr!("fs-mcp-allow")), // Folderstorm
+        "alerts" => row(Page::Confirmations, 0, tr!("ui-options-driver-warning")),
         _ => None,
     };
     let audio = match what {
@@ -323,6 +330,8 @@ pub fn demo(st: &mut OptionsUi, value: &str) {
         st.confirm_reset = Some(ResetAsk::Page(page));
     } else if what == "reset-all-ask" {
         st.confirm_reset = Some(ResetAsk::All);
+    } else if what == "reset-windows-ask" {
+        st.confirm_reset = Some(ResetAsk::Windows);
     } else if what == "modified" || what == "modified-ask" {
         st.modified_view = true;
         if what == "modified-ask" {
@@ -349,6 +358,8 @@ enum Done {
     Modified,
     /// Every setting (the app also forgets the windows' layout).
     All,
+    /// The windows' places and sizes (done at once, by the app).
+    Windows,
 }
 
 /// A reset asked by a button, waiting for its "Reset" in a dialog. `Undo`
@@ -359,11 +370,19 @@ enum ResetAsk {
     Page(Page),
     Modified,
     All,
+    Windows,
 }
 
-/// The settings before a reset, while "Undo" shows.
+/// What "Undo" puts back.
+enum Before {
+    Settings(Box<Settings>),
+    /// The windows' layout, as `ui_layout.ron` holds it.
+    Windows(String),
+}
+
+/// What came before a reset, while "Undo" shows.
 struct Undo {
-    before: Box<Settings>,
+    before: Before,
     text: String,
     shown: f64,
     done: Done,
@@ -507,8 +526,14 @@ pub struct OptionsUi {
     pub chat_log_status: String,
     /// The transcripts are in a folder the user chose (set by the app).
     pub chat_log_custom: bool,
+    /// The transcripts are in the Legacy layout, shared with the Legacy
+    /// Viewer: no import nor erasing (set by the app).
+    pub chat_log_shared: bool,
     /// "Erase this account's history?" confirmation open.
     confirm_erase_logs: bool,
+    /// Entries of the conversation log of the account logged in.
+    pub conversation_log_entries: usize,
+    confirm_clear_conversation_log: bool,
     /// "Reset …?" confirmation open, then the reset it said yes to, done by
     /// the next pass of the window's body.
     confirm_reset: Option<ResetAsk>,
@@ -640,7 +665,7 @@ impl OptionsUi {
         if let Some(undo) = self.undo.take() {
             match undo.done {
                 Done::Page(page) => r.reset_section = Some(page),
-                Done::Modified => {}
+                Done::Modified | Done::Windows => {}
                 Done::All => r.reset = true,
             }
         }
@@ -666,6 +691,11 @@ pub struct OptionsResult {
     pub reset: bool,
     /// The settings of one page went back to their defaults.
     pub reset_section: Option<Page>,
+    /// "Reset window positions and sizes": the app does it after the window
+    /// (`widgets::reset_windows`).
+    pub reset_windows: bool,
+    /// Its undo: the layout to put back (`layout::apply`).
+    pub restore_layout: Option<String>,
     /// The camera settings went back to their defaults: the view follows.
     pub reset_camera: bool,
     /// Show the folder of the conversation transcripts.
@@ -675,6 +705,9 @@ pub struct OptionsResult {
     pub folder: Option<(Folder, FolderChoice)>,
     /// Erase the conversation transcripts of the account (confirmed).
     pub erase_chat_logs: bool,
+    /// Clear the conversation log of the account (confirmed,
+    /// PreferenceChatClearLog).
+    pub clear_conversation_log: bool,
     /// The import window opened: look for the Legacy Viewers' folders.
     pub find_legacy_logs: bool,
     /// Import from these folders.
@@ -754,7 +787,8 @@ fn media_pack_error(failure: aurora_updater::Failure) -> &'static str {
         Failure::Network | Failure::Busy | Failure::Startup => aurora_i18n::tr!("media-plugins-error-network"),
         Failure::Integrity | Failure::Package => aurora_i18n::tr!("media-plugins-error-integrity"),
         Failure::Filesystem => aurora_i18n::tr!("media-plugins-error-filesystem"),
-        Failure::Unsupported => aurora_i18n::tr!("media-plugins-error-unsupported"),
+        // the media pack goes to the data folder: never a drive root's
+        Failure::Unsupported | Failure::DriveRoot => aurora_i18n::tr!("media-plugins-error-unsupported"),
     }
 }
 
@@ -948,6 +982,45 @@ fn maturity_choice(ui: &mut egui::Ui, p: &Palette, access: aurora_net::search::A
     (picked != access.preferred).then_some(picked)
 }
 
+/// The order of the transparent surfaces (`Settings::blend_order`): its
+/// three methods in a list and, beside it while the exact order is chosen,
+/// that order's precision side by side, as the graphics levels. The
+/// precision comes back as it was left when the exact order is chosen again.
+fn blend_order_choice(ui: &mut egui::Ui, p: &Palette, order: &mut u8) -> bool {
+    use crate::graphics_presets::BlendMethod;
+    use aurora_i18n::tr;
+    let before = *order;
+    let kept = egui::Id::unique("preferences blend order precision");
+    let mut method = BlendMethod::of(*order);
+    if method == BlendMethod::Exact {
+        ui.data_mut(|d| d.insert_temp(kept, *order));
+    }
+    let methods = [
+        (BlendMethod::Standard, tr!("ui-options-blend-order-standard")),
+        (BlendMethod::Exact, tr!("ui-options-blend-order-exact")),
+        (BlendMethod::Stochastic, tr!("ui-options-blend-order-stochastic")),
+    ];
+    if combo(ui, &mut method, &methods) {
+        let precision = ui.data(|d| d.get_temp::<u8>(kept)).unwrap_or(0);
+        *order = method.order(precision);
+    }
+    if method == BlendMethod::Exact {
+        segmented(ui, p, order, &blend_precisions().map(|(v, label)| (v, label, true)));
+    }
+    *order != before
+}
+
+/// The precisions of the exact order, lightest first.
+fn blend_precisions() -> [(u8, &'static str); 4] {
+    use aurora_i18n::tr;
+    [
+        (1, tr!("ui-options-blend-order-fast")),
+        (2, tr!("ui-options-blend-order-balanced")),
+        (3, tr!("ui-options-blend-order-high")),
+        (4, tr!("ui-options-blend-order-full")),
+    ]
+}
+
 /// The five graphics levels, side by side; none is lit once a setting of
 /// the page no longer matches any of them ("Custom", like the Legacy
 /// Viewer's slider after a manual change).
@@ -1090,7 +1163,7 @@ fn binding_cell(
     }
     let others: Vec<&str> = b
         .as_ref()
-        .map(|b| kb.users(b).into_iter().filter(|x| *x != a).map(crate::keybinds::label).collect())
+        .map(|b| kb.rivals(a, b).into_iter().map(crate::keybinds::label).collect())
         .unwrap_or_default();
     let tip = if capturing {
         aurora_i18n::tr!("ui-options-key-combination-ctrl-shift-alt-or-mouse-button-wheel").to_owned()
@@ -1289,6 +1362,7 @@ pub fn show(ctx: &egui::Context, p: &Palette, icons: &Icons, s: &mut Settings, s
         st.finish_undo(&mut r);
     }
     erase_logs_modal(ctx, p, st, &mut r, *open);
+    clear_conversation_log_modal(ctx, p, st, &mut r, *open);
     reset_modal(ctx, p, st, *open);
     chat_import_modal(ctx, p, st, &mut r, *open);
     backup::restore_modal(ctx, p, s, st, &mut r, *open);
@@ -1339,6 +1413,52 @@ fn erase_logs_modal(ctx: &egui::Context, p: &Palette, st: &mut OptionsUi, r: &mu
     });
     if modal.should_close() {
         st.confirm_erase_logs = false;
+    }
+}
+
+/// PreferenceChatClearLog: asked before the conversation log is emptied.
+fn clear_conversation_log_modal(ctx: &egui::Context, p: &Palette, st: &mut OptionsUi, r: &mut OptionsResult, open: bool) {
+    if !(st.confirm_clear_conversation_log && open) {
+        return;
+    }
+    let modal = crate::ui::widgets::Modal::new(egui::Id::unique("options_clear_conversation_log")).show(ctx, |ui| {
+        ui.set_width(360.0);
+        ui.label(
+            RichText::new(aurora_i18n::tr!("ui-options-chat-logs-clear-title"))
+                .size(15.0)
+                .strong()
+                .color(p.ink),
+        );
+        ui.add_space(6.0);
+        ui.label(
+            RichText::new(aurora_i18n::tr!("ui-options-chat-logs-clear-text"))
+                .size(12.5)
+                .color(p.muted),
+        );
+        ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            use super::widgets::{ActionKind, action_button};
+            let size = Vec2::new(0.0, 26.0);
+            if action_button(
+                ui,
+                p,
+                "trash-filled",
+                aurora_i18n::tr!("ui-options-chat-logs-clear-confirm"),
+                ActionKind::Danger,
+                size,
+            )
+            .clicked()
+            {
+                r.clear_conversation_log = true;
+                st.confirm_clear_conversation_log = false;
+            }
+            if action_button(ui, p, "x", aurora_i18n::tr!("common-cancel"), ActionKind::Flat, size).clicked() {
+                st.confirm_clear_conversation_log = false;
+            }
+        });
+    });
+    if modal.should_close() {
+        st.confirm_clear_conversation_log = false;
     }
 }
 
@@ -1473,6 +1593,7 @@ fn body(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, d: &Settings, st: &mut
         Some(ResetAsk::Page(page)) => reset_page(ui, p, s, d, st, r, page, now),
         Some(ResetAsk::Modified) => reset_modified(ui, p, s, d, st, r, now),
         Some(ResetAsk::All) => reset_all(s, st, r, now),
+        Some(ResetAsk::Windows) => reset_windows(ui.ctx(), st, r, now),
         None => {}
     }
     // a row asked by its label (demo, another window): its page first,
@@ -1971,6 +2092,10 @@ fn reset_modal(ctx: &egui::Context, p: &Palette, st: &mut OptionsUi, open: bool)
             aurora_i18n::tr!("ui-options-reset-everything").to_string(),
             aurora_i18n::tr!("ui-options-reset-everything-text").to_string(),
         ),
+        ResetAsk::Windows => (
+            aurora_i18n::tr!("ui-options-reset-windows-title").to_string(),
+            aurora_i18n::tr!("ui-options-reset-windows-text").to_string(),
+        ),
     };
     let modal = crate::ui::widgets::Modal::new(egui::Id::unique("options_reset_confirm")).show(ctx, |ui| {
         ui.set_width(360.0);
@@ -2016,7 +2141,7 @@ fn reset_all(s: &mut Settings, st: &mut OptionsUi, r: &mut OptionsResult, now: f
     }
     st.finish_undo(r);
     st.undo = Some(Undo {
-        before,
+        before: Before::Settings(before),
         text: aurora_i18n::tr!("ui-options-all-were-reset").to_owned(),
         shown: now,
         done: Done::All,
@@ -2032,7 +2157,7 @@ fn reset_modified(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, d: &Settings
     }
     st.finish_undo(r);
     st.undo = Some(Undo {
-        before,
+        before: Before::Settings(before),
         text: aurora_i18n::tr!("ui-options-modified-were-reset").to_owned(),
         shown: now,
         done: Done::Modified,
@@ -2056,11 +2181,28 @@ fn reset_page(
     st.after_reset(page, s, r);
     st.finish_undo(r);
     st.undo = Some(Undo {
-        before,
+        before: Before::Settings(before),
         text: aurora_i18n::tr!("ui-options-page-was-reset", page = page.name()),
         shown: now,
         done: Done::Page(page),
     });
+}
+
+/// Every window back to its default place and size, expanded, the settings
+/// untouched: the app resets them after this window (`r.reset_windows`),
+/// and "Undo" puts the layout of now back.
+fn reset_windows(ctx: &egui::Context, st: &mut OptionsUi, r: &mut OptionsResult, now: f64) {
+    st.finish_undo(r);
+    r.reset_windows = true;
+    // no undo when the layout cannot be written out (logged)
+    if let Some(layout) = crate::ui::layout::text(ctx) {
+        st.undo = Some(Undo {
+            before: Before::Windows(layout),
+            text: aurora_i18n::tr!("ui-options-windows-were-reset").to_owned(),
+            shown: now,
+            done: Done::Windows,
+        });
+    }
 }
 
 /// "Graphics: default settings · Undo", over the bottom of the rows.
@@ -2088,9 +2230,14 @@ fn undo_bar(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut OptionsUi
             .clicked()
             && let Some(undo) = st.undo.take()
         {
-            *s = *undo.before;
-            for page in Page::ALL {
-                st.after_reset(page, s, r);
+            match undo.before {
+                Before::Settings(before) => {
+                    *s = *before;
+                    for page in Page::ALL {
+                        st.after_reset(page, s, r);
+                    }
+                }
+                Before::Windows(layout) => r.restore_layout = Some(layout),
             }
         }
     });

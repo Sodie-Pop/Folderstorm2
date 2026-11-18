@@ -271,8 +271,7 @@ impl Sim {
                         object_id: query.object,
                         item_id: query.item,
                         running,
-                        mono: Some(true),
-                        luau: aurora_net::scripts::Luau::Off,
+                        compile: Some(aurora_net::scripts::CompileTarget::Mono),
                     },
                     now,
                 );
@@ -348,8 +347,7 @@ impl Sim {
                 object_id: the_box(),
                 item_id: item,
                 running: self.running.get(&item).copied().unwrap_or(true),
-                mono: Some(true),
-                luau: aurora_net::scripts::Luau::Off,
+                compile: Some(aurora_net::scripts::CompileTarget::Mono),
             },
             now,
         );
@@ -875,6 +873,7 @@ fn the_feed_is_polled_through_the_desk_and_cleared_at_a_login_change() {
         owner_id: owner,
         source_type: ChatSourceType::Object,
         chat_type: ChatType::OwnerSay,
+        region: None,
         position: glam::Vec3::ZERO,
         message: text.into(),
     };
