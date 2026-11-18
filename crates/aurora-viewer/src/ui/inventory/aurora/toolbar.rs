@@ -348,19 +348,10 @@ fn filters_tip(st: &InventoryUi) -> &'static str {
 /// that window is open (the Legacy Viewer's `new_inv_btn`); the other
 /// windows have none.
 fn additional_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
-    if !st.is_main() {
-        return;
-    }
-    let button = tool_button(
-        ui,
-        p,
-        ADDITIONAL_ICON,
-        aurora_i18n::tr!("inventory-additional-window"),
-        st.additional_open(),
-    );
-    additional_button_drawn(ui, button.rect);
-    if button.clicked() {
-        st.toggle_additional_window(ui.ctx());
+    // Folderstorm: in every additional window too, opens the next one (extra_windows.rs)
+    let draw = |ui: &mut egui::Ui, tip: &str, lit: bool| tool_button(ui, p, ADDITIONAL_ICON, tip, lit);
+    if let Some(rect) = super::super::extra_windows::aurora_button(ui, p, st, draw) {
+        additional_button_drawn(ui, rect);
     }
 }
 
@@ -984,6 +975,7 @@ mod tests {
                 ))
             };
             for tab in [RECEIVED_TAB, 2, 0] {
+                let original_order = prefs.sort_for(tab);
                 let other_orders: Vec<_> = [0, 2, RECEIVED_TAB]
                     .into_iter()
                     .filter(|other| *other != tab)
@@ -1035,8 +1027,14 @@ mod tests {
                 let order = prefs.sort_for(tab);
                 assert!(!order.by_date);
                 assert_eq!(order.folders_by_name, tab != 0);
-                assert!(!order.system_first);
-                assert_eq!(sort_text(&prefs, tab), aurora_i18n::tr!("inventory-sort-name"));
+                assert_eq!(order.system_first, !original_order.system_first);
+                let name_order = aurora_i18n::tr!("inventory-sort-name");
+                let expected_label = if tab == 2 {
+                    aurora_i18n::tr!("inventory-sort-folders-first", order = name_order)
+                } else {
+                    name_order.to_owned()
+                };
+                assert_eq!(sort_text(&prefs, tab), expected_label);
             }
         }
     }

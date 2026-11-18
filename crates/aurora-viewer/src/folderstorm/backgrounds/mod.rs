@@ -12,8 +12,9 @@
 //! - [`record`]: what `settings.json` keeps.
 //! - [`place`]: the margins, the monitors' areas, each fit (pure maths).
 //! - [`import`]: the copy of a chosen picture, and its decoding.
-//! - [`paint`]: the texture, and the shapes put under everything egui
-//!   draws (one hook in `app.rs`).
+//! - [`paint`]: the texture, and the shapes put under the interface,
+//!   right after the world's labels (two hooks in `app.rs`: the mark in
+//!   the pass, the shapes after it).
 //! - [`demo`]: the demo, `AURORA_DEMO_BACKGROUND`.
 //!
 //! The world is never covered: only the window minus the world viewport is
@@ -62,8 +63,16 @@ pub fn referenced(store: &Store) -> std::collections::BTreeSet<String> {
     out
 }
 
-/// The background in effect painted under everything egui drew this frame
-/// (the app's hook, after the pass): its shapes go first in `frame`.
+/// Marks, in the pass, where the background goes among the frame's shapes:
+/// right after the world's labels (the app's hook after
+/// `aurora_render::end_world_labels`; [`paint::mark`]).
+pub fn mark(ctx: &egui::Context) {
+    paint::mark(ctx);
+}
+
+/// The background in effect painted under the interface this frame (the
+/// app's hook, after the pass): its shapes go where [`mark`] was in
+/// `frame`, else first.
 pub fn underlay(ctx: &egui::Context, store: &Store, frame: &mut Vec<egui::epaint::ClippedShape>) {
     paint::underlay_in(ctx, in_effect(store), &import::folder(), frame);
 }
