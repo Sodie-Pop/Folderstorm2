@@ -46,11 +46,11 @@ jobs:
       - name: Code changed?
         id: changes
         uses: ./.github/actions/code-changed
+      # the version of rust-toolchain.toml, as upstream's ci.yml
       - name: Rust stable
         if: steps.changes.outputs.code == 'true'
         run: |
-          ./.github/drop-extra-targets.ps1
-          rustup update stable --no-self-update
+          rustup toolchain install --profile minimal --no-self-update
       # reads the "tests" cache that ci.yml writes on pushes to main
       - uses: ./.github/actions/rust-cache
         if: steps.changes.outputs.code == 'true'

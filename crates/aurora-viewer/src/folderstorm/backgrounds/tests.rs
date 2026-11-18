@@ -24,8 +24,12 @@ struct Viewer {
     folder: PathBuf,
     painter: crate::crash::software::Painter,
     pixels: Vec<u32>,
-    /// The shapes the background put first in the last frame.
+    /// The shapes the background put in the last frame.
     added: usize,
+    /// Whether the pass marks where the background goes, as the app does
+    /// after the world's labels (`super::mark`); false: as before that
+    /// hook, the background first.
+    marked: bool,
     time: f64,
 }
 
@@ -47,13 +51,16 @@ impl Viewer {
             painter: Default::default(),
             pixels: vec![0; (width * height) as usize],
             added: 0,
+            marked: true,
             time: 0.0,
         }
     }
 
     /// One frame: the world's part of the window published before the
-    /// pass (as the app does), an empty interface, the background put
-    /// first, the frame painted over the world.
+    /// pass (as the app does); the end of the world's labels and the
+    /// background's mark, as the app paints them in the world; a window; the background put in after the pass; the frame
+    /// painted over the world as the renderer does it (what precedes the
+    /// end of the world's labels cut to the world viewport).
     fn frame(&mut self) {
         self.time += 1.0 / 60.0;
         viewport::set_world_area(&self.ctx, self.world);
@@ -68,6 +75,13 @@ impl Viewer {
                 ..Default::default()
             },
             |ui| {
+                // the end of the world's labels (none painted here) and the
+                // background's mark, as app.rs paints them in the world
+                let ctx = ui.ctx().clone();
+                aurora_render::end_world_labels(&ctx);
+                if self.marked {
+                    super::mark(&ctx);
+                }
                 // a window over a margin: drawn over the background
                 egui::Area::new(egui::Id::unique("a window"))
                     .fixed_pos(egui::pos2(10.0, 10.0))
@@ -79,8 +93,13 @@ impl Viewer {
         );
         let before = output.shapes.len();
         paint::underlay_in(&self.ctx, super::in_effect(&self.store), &self.folder, &mut output.shapes);
-        self.added = output.shapes.len() - before;
-        let primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
+        // the mark taken out again: only the end of the world's labels is
+        // left among the callbacks
+        let callbacks = output.shapes.iter().filter(|s| matches!(s.shape, egui::Shape::Callback(_))).count();
+        assert_eq!(callbacks, 1, "the background's mark is never left for the renderer");
+        self.added = output.shapes.len() + usize::from(self.marked) - before;
+        let mut primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
+        world_labels_cut(&mut primitives, self.world, output.pixels_per_point);
         self.painter.update_textures(&output.textures_delta);
         let size = [self.size[0] as usize, self.size[1] as usize];
         // the world drawn by the renderer, black around it
@@ -158,6 +177,30 @@ impl Drop for Viewer {
     }
 }
 
+/// What the renderer does with the world's labels
+/// (`aurora_render::Renderer::render`, `ui_world::take_end`): the
+/// primitives before the end of the world's labels are cut to the world
+/// viewport, `world` in pixels; the end itself is taken out.
+fn world_labels_cut(primitives: &mut Vec<egui::ClippedPrimitive>, world: Option<[u32; 4]>, pixels_per_point: f32) {
+    let Some(end) = primitives
+        .iter()
+        .position(|p| matches!(p.primitive, egui::epaint::Primitive::Callback(_)))
+    else {
+        return;
+    };
+    primitives.remove(end);
+    let Some([x, y, w, h]) = world else {
+        return;
+    };
+    let world = Rect::from_min_size(
+        egui::pos2(x as f32, y as f32) / pixels_per_point,
+        vec2(w as f32, h as f32) / pixels_per_point,
+    );
+    for primitive in &mut primitives[..end] {
+        primitive.clip_rect = primitive.clip_rect.intersect(world);
+    }
+}
+
 fn rgb(c: Color32) -> u32 {
     (u32::from(c.r()) << 16) | (u32::from(c.g()) << 8) | u32::from(c.b())
 }
@@ -207,6 +250,43 @@ fn a_colour_fills_the_margins_and_never_the_world() {
     }
     // the window drawn over it
     assert_eq!(v.at(30, 30), Color32::WHITE);
+}
+
+/// The bug of the first build: the background was put first among the
+/// frame's shapes, before the end of the world's labels, so the renderer
+/// cut it to the world viewport with the labels and the margins stayed
+/// black, colour and picture alike.
+#[test]
+fn the_background_goes_after_the_world_s_labels_and_is_not_cut_to_the_world() {
+    let mut v = Viewer::new("after-labels", 1280, 360);
+    // the world on the right monitor, the whole left one a margin
+    v.world = Some([640, 0, 640, 360]);
+    v.monitors = Some(two_monitors());
+    v.store.background = Background {
+        kind: Kind::Colour,
+        colour: [40, 160, 90, 255],
+        ..Default::default()
+    };
+    // without the mark, the colour is put first: cut with the labels
+    v.marked = false;
+    v.frame();
+    v.frame();
+    assert_eq!(v.added, 1, "the left margin's colour is in the frame");
+    assert_eq!(v.at(320, 180), Color32::BLACK, "but cut to the world, as before the fix");
+    // with the mark, as the app paints it: after the labels, shown
+    v.marked = true;
+    v.frame();
+    assert_eq!(v.added, 1);
+    assert_eq!(v.at(320, 180), Color32::from_rgb(40, 160, 90));
+    assert!(v.world_untouched());
+    // a picture too
+    v.with_picture(Fit::Fill);
+    v.settle();
+    assert_eq!(v.added, 2, "the colour, then the picture");
+    let left = v.at(320, 180);
+    assert_ne!(left, Color32::BLACK);
+    assert_ne!(left, Color32::from_rgb(20, 30, 60), "the picture, not only its colour");
+    assert!(v.world_untouched());
 }
 
 #[test]

@@ -221,7 +221,7 @@ impl App {
             // the Inventory's own *Open* of a notecard: that arm checks
             // @viewnote and the right to read it (LLPreviewNotecard::loadAsset)
             // before it asks for the content, and opens Aurora's window
-            Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item)),
+            Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item, None)),
             // the Inventory's *Add*: added to what is worn, nothing
             // replaced. What the outfit's plan would refuse (the limit of
             // attachments, an outfit not loaded yet) is said here: on its
@@ -414,6 +414,8 @@ impl App {
             no_guide: !self.toolbar_ui.destinations,
             // (set each frame by `draw_ui`, RlvActions::canStand / canGroundSit)
             sit_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::rlva_sit_locked_id())).unwrap_or(false),
+            build_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::rlva_build_locked_id())).unwrap_or(false),
+            fly_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::fly_locked_id())).unwrap_or(false),
             toggle_unset: !toolbar::look(ctx, toolbar::TOGGLE, false, true, String::new()).1,
             // (what greys *Teleport* on a landmark of the Inventory:
             // `ui::inventory::Facts::landmark_blocked`)

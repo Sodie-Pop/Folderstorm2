@@ -118,6 +118,16 @@ impl Source {
         }
     }
 
+    // Folderstorm: the media plugins pack comes from Aurora Viewer's releases
+    // (the fork publishes none); viewer updates stay on the fork's.
+    pub fn media_pack_url(&self, tag: &str, name: &str) -> Result<String> {
+        if self.loopback {
+            self.asset_url(tag, name)
+        } else {
+            Ok(format!("{}/{tag}/{name}", folderstorm_brand::MEDIA_PACK_DOWNLOADS))
+        }
+    }
+
     pub fn client(&self) -> Result<Client> {
         let source = self.clone();
         let builder = Client::builder()
