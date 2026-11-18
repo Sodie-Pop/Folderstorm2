@@ -17,9 +17,9 @@ mod context;
 /// The viewer's windows for the layouts and the workspaces
 /// (`apply::Shell`): which of the allowlisted windows are open, Aurora's
 /// own way of opening each (the path of its menu entry or toolbar button:
-/// `ui::bars::run_command`, `ui::controls::request`,
-/// `InventoryUi::open_additional_window`), and of closing one (a workspace
-/// closes the windows it does not list).
+/// `ui::bars::run_command`, `ui::controls::request`, the Inventory's
+/// additional windows by their slot: `InventoryUi::folderstorm_open_slot`),
+/// and of closing one (a workspace closes the windows it does not list).
 struct Windows<'a> {
     panels: &'a mut ui::Panels,
     inventory: &'a mut ui::inventory::InventoryUi,
@@ -69,14 +69,19 @@ macro_rules! window_flag {
     };
 }
 
+/// The slot of the Inventory's additional window `id`, if it is one.
+fn inventory_slot(id: &str) -> Option<u8> {
+    ui::inventory::extra_windows::slot_of_floater(id)
+}
+
 impl Windows<'_> {
     /// Whether the viewer has the window `id` as things are: not while
     /// RLVa hides it, and not a window of the other look of the controls
     /// or a Contacts window while Contacts is a tab of Conversations.
     fn available(&self, id: &str) -> bool {
-        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
         match id {
-            "inventory" | ADDITIONAL_INVENTORY => !self.no_inventory,
+            "inventory" => !self.no_inventory,
+            _ if inventory_slot(id).is_some() => !self.no_inventory,
             "minimap" => !self.no_minimap,
             "worldmap" => !self.no_world_map,
             "contacts" => self.contacts_torn_off,
@@ -89,10 +94,11 @@ impl Windows<'_> {
 
 impl apply::Shell for Windows<'_> {
     fn is_open(&self, window: &crate::folderstorm::workspaces::windows::Window) -> bool {
-        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
         let id = window.id;
+        if let Some(slot) = inventory_slot(id) {
+            return self.inventory.folderstorm_slot_open(slot);
+        }
         match id {
-            ADDITIONAL_INVENTORY => self.inventory.additional_open(),
             // Aurora's one window for the camera and the movement controls
             ui::controls::WINDOW => !self.classic_controls && (self.panels.camera_controls || self.panels.movement_controls),
             ui::controls::CLASSIC_CAMERA | ui::controls::CLASSIC_MOVEMENT if !self.classic_controls => false,
@@ -101,13 +107,15 @@ impl apply::Shell for Windows<'_> {
     }
 
     fn open(&mut self, ctx: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) -> bool {
-        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
         let id = window.id;
         if !self.available(id) {
             return false;
         }
+        if let Some(slot) = inventory_slot(id) {
+            self.inventory.folderstorm_open_slot(ctx, slot);
+            return true;
+        }
         match id {
-            ADDITIONAL_INVENTORY => self.inventory.open_additional_window(ctx),
             // on its Camera tab, as the View button opens it
             ui::controls::WINDOW => ui::controls::request(
                 ctx,
@@ -130,11 +138,14 @@ impl apply::Shell for Windows<'_> {
     }
 
     fn close(&mut self, _: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) {
-        use crate::folderstorm::workspaces::windows::ADDITIONAL_INVENTORY;
         let id = window.id;
+        // that window alone (not `close_additional_window`, RLVa's: every
+        // additional window and every tab window)
+        if let Some(slot) = inventory_slot(id) {
+            self.inventory.folderstorm_close_slot(slot);
+            return;
+        }
         match id {
-            // as `app/rlva.rs` closes it under @showinv
-            ADDITIONAL_INVENTORY => self.inventory.close_additional_window(),
             // Aurora's one window for the camera and the movement controls
             ui::controls::WINDOW => {
                 self.panels.camera_controls = false;
@@ -785,6 +796,45 @@ mod tests {
             assert!(!panels.inventory && !panels.minimap && !panels.camera_controls && !panels.movement_controls);
             assert!(!inventory.additional_open());
         }
+    }
+
+    /// A workspace opens and closes each additional Inventory window alone:
+    /// closing one leaves the other slots and the tab windows open (it used
+    /// to close them all, as RLVa does).
+    #[test]
+    fn each_additional_inventory_window_is_opened_and_closed_alone() {
+        let ctx = egui::Context::default();
+        let mut panels = closed();
+        let mut inventory = ui::inventory::InventoryUi::default();
+        let mut prefs = ui::inventory::InventoryPreferences::default();
+        // (the quick access demo opens a tab in a window of its own)
+        ui::inventory::custom_tabs::quick_access_demo(&ctx, &mut inventory, &mut prefs, uuid::Uuid::nil());
+        assert_eq!(inventory.windows.len(), 1, "a tab window");
+        let mut shell = Windows {
+            panels: &mut panels,
+            inventory: &mut inventory,
+            classic_controls: false,
+            contacts_torn_off: false,
+            no_inventory: false,
+            no_minimap: false,
+            no_world_map: false,
+            account: uuid::Uuid::nil(),
+            folders: None,
+            huds: Vec::new(),
+            outfit: None,
+        };
+        let slot = |n: usize| windows::find(windows::INVENTORY_SLOTS[n - 1]).expect("on the list");
+        for n in [1, 2, 3, 16] {
+            assert!(shell.open(&ctx, slot(n)), "slot {n}");
+        }
+        assert!(shell.is_open(slot(16)) && !shell.is_open(slot(4)));
+        shell.close(&ctx, slot(1));
+        shell.close(&ctx, slot(16));
+        assert!(!shell.is_open(slot(1)) && !shell.is_open(slot(16)));
+        assert!(shell.is_open(slot(2)) && shell.is_open(slot(3)), "the others stay");
+        assert!(!inventory.additional_open(), "slot 1 is the additional window");
+        assert_eq!(inventory.folderstorm_open_slots(), 2);
+        assert!(inventory.windows.iter().any(|w| w.open && !w.additional), "the tab window stays");
     }
 
     /// A workspace's folder windows go through the Inventory's own way of

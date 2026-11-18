@@ -25,6 +25,7 @@ mod bulk_review;
 pub use bulk_review::demo as bulk_review_demo;
 mod clipboard;
 pub use clipboard::demo_events as clipboard_demo_events;
+pub(crate) use clipboard::return_focus_to;
 mod context;
 mod context_catalog;
 pub(crate) mod context_customize;
@@ -37,6 +38,7 @@ pub(crate) mod default_permissions;
 mod delete;
 pub use delete::DeleteRequest;
 pub(crate) use delete::DeleteSelection;
+pub(crate) use delete::request_from_window as delete_from_window;
 pub(crate) mod menu_layout;
 pub use delete::demo_events as delete_demo_events;
 mod dialogs;
@@ -44,6 +46,9 @@ mod document;
 pub use embedded::save_focused as document_save_focused;
 pub(crate) mod drag;
 mod embedded;
+// Folderstorm: up to 16 additional Inventory windows
+pub(crate) mod extra_windows;
+pub use extra_windows::demo_frame as extra_windows_demo_frame;
 mod folder_colors;
 mod folderstorm_windows; // Folderstorm: folder windows for workspaces
 pub use folder_colors::{demo as folder_colors_demo, demo_frame as folder_colors_demo_frame};
@@ -149,6 +154,8 @@ pub enum InvAction {
     DefaultPermissions,
     /// Folderstorm: upload a disk folder into this one (folderstorm/folder_upload)
     FolderstormUploadFolder(Uuid),
+    /// Folderstorm: shortcuts to these folders on the margins' desktop (folderstorm/desktop)
+    FolderstormDesktopAdd(Vec<Uuid>),
     ExportMenuNotecard {
         name: String,
         text: String,
@@ -191,9 +198,10 @@ pub enum InvAction {
     Restore(Uuid),
     Share {
         items: Vec<Uuid>,
-        resident: Uuid,
+        residents: Vec<Uuid>,
     },
-    Preview(Uuid),
+    /// Preview the item and return to its originating inventory list when it closes.
+    Preview(Uuid, Option<egui::Id>),
     /// Open a sky or water settings item in its editor (LLSettingsBridgeAction).
     EditEnvironment(Uuid),
     Gesture(crate::ui::gestures::Action),
@@ -209,7 +217,8 @@ pub enum InvAction {
         text: String,
         close: bool,
     },
-    Environment(Uuid, u32),
+    /// A sky, water or day for myself: its asset, flags and item.
+    Environment(Uuid, u32, Uuid),
     EnvironmentParcel(Uuid),
     ExportTextures {
         items: Vec<Uuid>,
@@ -275,7 +284,7 @@ pub struct Facts {
     pub online: HashSet<Uuid>,
     pub parcel_environment: bool,
     /// What RLVa locks leave of wearing and taking off, for the menus.
-    pub rlva: crate::world::rlva::WearLocks,
+    pub rlva: std::sync::Arc<crate::world::rlva::WearLocks>,
     /// RLVa @tplm (or @unsit while seated): a landmark's Teleport is greyed
     /// (LLLandmarksPanel "teleport", LLPanelPlaces' Teleport button).
     pub landmark_blocked: bool,
@@ -384,7 +393,8 @@ impl Facts {
 pub enum EditDialog {
     Properties(Uuid),
     Discard(Uuid),
-    Share(Vec<Uuid>, Uuid),
+    /// Items to give, then one or more residents (LLAvatarActions::shareWithAvatars).
+    Share(Vec<Uuid>, Vec<Uuid>),
     Delete(Vec<Uuid>, bool),
     Empty(Uuid),
     Ungroup(Uuid),
@@ -416,7 +426,7 @@ pub struct PropertyEdit {
 impl From<&aurora_net::inventory::InvItem> for PropertyEdit {
     fn from(it: &aurora_net::inventory::InvItem) -> Self {
         Self {
-            name: it.name.clone(),
+            name: shown_name(it).to_owned(),
             desc: it.desc.clone(),
             next: it.next_owner_mask,
             group: it.group_mask,
@@ -459,6 +469,16 @@ pub struct InvDrag(pub Uuid);
 /// A single folder dragged to inventory or Marketplace listings.
 #[derive(Debug, Clone, Copy)]
 pub struct FolderDrag(pub Uuid);
+
+/// An object embedded in an open notecard, dragged out of its text
+/// (LLViewerTextEditor::handleHover, SOURCE_NOTECARD): the editor and the
+/// notecard that hold it, and its marker in the text.
+#[derive(Debug, Clone, Copy)]
+pub struct NotecardDrag {
+    pub editor: Uuid,
+    pub notecard: Uuid,
+    pub marker: char,
+}
 
 pub(crate) struct WorldDrag {
     pub item: Uuid,
@@ -590,6 +610,9 @@ pub struct InventoryUi {
     list_focus_frame: Option<u64>,
     /// Which row order the list drew last, for the work done outside it.
     shown_order: keyboard::ShownOrder,
+    /// The list's focus target that opened this document window, so closing
+    /// it hands the keyboard back there (see `clipboard::return_focus_to`).
+    document_owner: Option<egui::Id>,
     visible: Vec<Uuid>,
     pub clipboard: Vec<Uuid>,
     pub cut: bool,
@@ -741,7 +764,8 @@ impl InventoryUi {
     }
 
     pub(crate) fn additional_open(&self) -> bool {
-        self.windows.iter().any(|w| w.additional && w.open)
+        // Folderstorm: the first of the additional windows (extra_windows.rs)
+        self.windows.iter().any(|w| w.id == ADDITIONAL_WINDOW && w.open)
     }
 
     /// The main window's "Additional inventory window" button: the
@@ -755,7 +779,8 @@ impl InventoryUi {
     pub fn toggle_additional_window(&mut self, ctx: &egui::Context) {
         let id = floater_id(ADDITIONAL_WINDOW);
         // Still kept by a document or a dialog it opened: the same window.
-        if let Some(w) = self.windows.iter_mut().find(|w| w.additional) {
+        // Folderstorm: the first of the additional windows (extra_windows.rs)
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == ADDITIONAL_WINDOW) {
             super::widgets::toggle_floater(ctx, &id, &mut w.open);
             return;
         }
@@ -797,11 +822,14 @@ impl InventoryUi {
         self.selection.clear();
         self.selection.insert(id);
         self.reveal = Some(id);
-        self.rename = Some(InlineRename {
-            id,
-            name: rules::name(inv, id),
-            focus: true,
-        });
+        // a coded settings item: its name without the Aurora Weather code,
+        // which the rename keeps (`finish_rename`)
+        let name = inv
+            .items
+            .get(&id)
+            .and_then(weather_coded_name)
+            .map_or_else(|| rules::name(inv, id), str::to_owned);
+        self.rename = Some(InlineRename { id, name, focus: true });
         self.message.clear();
     }
     /// show_item_original: clear filters, expand ancestors, select and scroll to the original.
@@ -1051,6 +1079,8 @@ pub fn item_icon(asset_type: i32, inv_type: i32, flags: u32) -> &'static str {
         (5 | 13, _) => wearable_icon(asset_type, flags),
         (6, _) => "Inv_Object",
         (7, _) => "Inv_Notecard",
+        // LLInventoryIcon::getIconName: SST_LUA scripts get Inv_Script_Luau
+        (10, _) if aurora_net::scripts::is_slua_item(flags) => "Inv_Script_Luau",
         (10, _) => "Inv_Script",
         (20, _) => "Inv_Animation",
         (21, _) => "Inv_Gesture",
@@ -1145,6 +1175,36 @@ fn icon(ui: &mut egui::Ui, icons: &Icons, name: &str, p: &Palette) {
     tree::icon(ui, icons, name, p, None);
 }
 
+/// A settings item's name without its Aurora Weather code (weather/region.rs),
+/// when it has one: shown with [`weather_tag`] instead.
+pub(crate) fn weather_coded_name(it: &aurora_net::inventory::InvItem) -> Option<&str> {
+    if it.asset_type != 56 {
+        return None;
+    }
+    crate::weather::region::coded_name(&it.name)
+}
+
+/// The name an item's fields show: a coded settings item's without its
+/// code, which a rename keeps (`weather::region::keep_code`).
+pub(crate) fn shown_name(it: &aurora_net::inventory::InvItem) -> &str {
+    weather_coded_name(it).unwrap_or(&it.name)
+}
+
+/// " [Aurora Weather]" after a coded settings item's name, "Aurora" in the
+/// aurora gradient (as the Environment window's section), the rest muted.
+pub(crate) fn weather_tag(p: &Palette, job: &mut egui::text::LayoutJob, font: egui::FontId) {
+    job.append(" [", 0.0, egui::TextFormat::simple(font.clone(), p.muted));
+    let tag = crate::ui::options::aurora_word(p, aurora_i18n::tr!("ui-weather-aurora"), font.clone(), p.muted);
+    let start = job.text.len();
+    job.text.push_str(&tag.text);
+    for mut section in tag.sections {
+        section.byte_range = section.byte_range.start + start..section.byte_range.end + start;
+        section.leading_space = 0.0;
+        job.sections.push(section);
+    }
+    job.append("]", 0.0, egui::TextFormat::simple(font, p.muted));
+}
+
 fn item_row(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -1175,15 +1235,20 @@ fn item_row(
         }
         let worn = facts.worn_label(inv, *id);
         let font_id = egui::FontId::proportional(13.0);
-        let mut label = super::widgets::name_with_suffix(&it.name, "", font_id.clone(), p.ink);
+        let coded = weather_coded_name(it);
+        let shown = coded.unwrap_or(&it.name);
+        let mut label = super::widgets::name_with_suffix(shown, "", font_id.clone(), p.ink);
         if worn.is_some()
             && let Some(section) = label.sections.first_mut()
         {
             super::widgets::embolden(ui, &mut section.format);
         }
+        if coded.is_some() {
+            weather_tag(p, &mut label, font_id.clone());
+        }
         let name = worn
             .filter(|_| super::widgets::faux_bold_offset(ui).is_some())
-            .map(|_| ui.painter().layout_no_wrap(it.name.clone(), font_id, p.ink));
+            .map(|_| ui.painter().layout_no_wrap(shown.to_owned(), font_id, p.ink));
         // The same worn tag as Aurora's rows and Appearance, before the rights.
         let tag = worn.map(|worn| (p, worn, super::widgets::reserve_row_tag(ui, &mut label, worn, p), true));
         let permissions = permissions::Permissions::inventory(inv, *id).map(|permissions| permissions.with_next_owner(st.show_next_owner));
@@ -1538,21 +1603,9 @@ fn status(
 /// the Legacy Viewer's `new_inv_btn`, lit while that window is open; the
 /// other windows have none.
 fn additional_button(ui: &mut egui::Ui, p: &Palette, st: &mut InventoryUi) {
-    if !st.is_main() {
-        return;
-    }
-    let button = ui.scope(|ui| {
-        super::widgets::icon_toggle(
-            ui,
-            p,
-            ADDITIONAL_ICON,
-            aurora_i18n::tr!("inventory-additional-window"),
-            st.additional_open(),
-        )
-    });
-    additional_button_drawn(ui, button.response.rect);
-    if button.inner {
-        st.toggle_additional_window(ui.ctx());
+    // Folderstorm: in every additional window too, opens the next one (extra_windows.rs)
+    if let Some(rect) = extra_windows::legacy_button(ui, p, st) {
+        additional_button_drawn(ui, rect);
     }
 }
 
@@ -1605,7 +1658,10 @@ fn request_search(inv: &mut Inventory, root: Uuid, st: &mut InventoryUi, prefs: 
             continue;
         }
         complete &= folder.state == FetchState::Fetched;
-        if matches!(folder.state, FetchState::Unknown | FetchState::Failed) && inv.queue.len() + requests.len() < 16 {
+        if !inv.too_big.contains(&id)
+            && matches!(folder.state, FetchState::Unknown | FetchState::Failed)
+            && inv.queue.len() + requests.len() < 16
+        {
             requests.push(id);
         }
         todo.extend(folder.children.iter().copied());
@@ -1823,7 +1879,12 @@ fn finish_rename(inv: &Inventory, st: &mut InventoryUi, actions: &mut Vec<InvAct
     if !rules::renameable(inv, edit.id) {
         return;
     }
-    match rules::clean_name(&edit.name) {
+    // a coded settings item keeps its weather code (`begin_rename`)
+    let typed = rules::clean_name(&edit.name).map(|name| match inv.items.get(&edit.id).filter(|it| weather_coded_name(it).is_some()) {
+        Some(it) => crate::weather::region::keep_code(&it.name, &name),
+        None => name,
+    });
+    match typed {
         Ok(name) if name == rules::name(inv, edit.id) => return,
         Ok(name) if st.pending.is_none() => match rules::patch(inv, edit.id, aurora_llsd::llsd_map! { "name" => name }) {
             Ok(change) => {
@@ -2214,12 +2275,17 @@ pub fn show(
     // asked of the app (issue #1197)
     let mut wanted = Vec::new();
     for state in std::iter::once(&*st).chain(st.windows.iter().map(|w| &*w.state)) {
-        if let Some(EditDialog::Share(_, resident)) = &state.dialog {
-            world.social.want_name(*resident);
-            facts.names.insert(*resident, world.social.name_of(resident));
-            wanted.push(*resident);
-            if let Some(t) = pics.get(resident) {
-                facts.pictures.insert(*resident, t.clone());
+        if let Some(EditDialog::Share(_, residents)) = &state.dialog {
+            for resident in residents {
+                world.social.want_name(*resident);
+                facts.names.insert(*resident, world.social.name_of(resident));
+            }
+            // Only the first resident's portrait is shown.
+            if let Some(first) = residents.first() {
+                wanted.push(*first);
+                if let Some(t) = pics.get(first) {
+                    facts.pictures.insert(*first, t.clone());
+                }
             }
         }
     }
@@ -2257,6 +2323,7 @@ pub fn show(
         }
     }
     custom_tabs::window::open_requested(ctx, st, prefs); // Folderstorm: a custom tab in its own window
+    extra_windows::frame(ctx, st); // Folderstorm: the additional windows' buttons
     let inv = &mut world.inventory;
     context_catalog::process_deferred(inv, st, prefs, &facts, &mut actions);
     bulk_permissions::show(ctx, p, inv, st, world.agent_id, &mut actions);
@@ -2352,9 +2419,9 @@ pub fn show(
         &mut actions,
     );
     if let Some(residents) = st.share_picker.show(ctx, p, world)
-        && let Some(resident) = residents.first()
+        && !residents.is_empty()
     {
-        st.dialog = Some(EditDialog::Share(std::mem::take(&mut st.share_items), *resident));
+        st.dialog = Some(EditDialog::Share(std::mem::take(&mut st.share_items), residents));
     }
     let mut windows = std::mem::take(&mut st.windows);
     let mut spawned = Vec::new();
@@ -2402,8 +2469,8 @@ pub fn show(
             fetch_whole_inventory(&mut world.inventory, &mut w.state);
             super::widgets::Floater::new(
                 &window_id,
-                aurora_i18n::tr!("common-inventory"),
-                additional_window_pos(ctx, screen),
+                extra_windows::title(w.id), // Folderstorm: numbered, each slot first opens a step further
+                extra_windows::first_pos(w.id, additional_window_pos(ctx, screen), screen),
                 DEFAULT_SIZE,
             )
         } else {
@@ -2524,9 +2591,9 @@ pub fn show(
             &mut actions,
         );
         if let Some(residents) = w.state.share_picker.show(ctx, p, world)
-            && let Some(resident) = residents.first()
+            && !residents.is_empty()
         {
-            w.state.dialog = Some(EditDialog::Share(std::mem::take(&mut w.state.share_items), *resident));
+            w.state.dialog = Some(EditDialog::Share(std::mem::take(&mut w.state.share_items), residents));
         }
         st.wanted_images.extend(w.state.wanted_images.drain());
         st.wanted_hover_images.extend(w.state.wanted_hover_images.drain());
@@ -3183,6 +3250,8 @@ mod tests {
     /// whole inventory and stays lit while it shows; that window has neither
     /// the button nor the Received tab; a second click closes it and forgets
     /// its search.
+    /// Folderstorm: the button is in the additional window too, and a second
+    /// click opens another window (extra_windows.rs, whose tests cover more).
     #[test]
     fn the_main_window_toggles_one_additional_inventory_window() {
         use crate::ui::widgets::elide_tests::Frames;
@@ -3270,7 +3339,8 @@ mod tests {
             assert!(texts.iter().any(|t| t.source == all), "classic={classic}: its tabs");
             assert!(!texts.iter().any(|t| t.source == received), "classic={classic}: no Received tab");
             assert!(
-                ctx.data(|d| d.get_temp::<egui::Rect>(button_id)).is_none(),
+                // Folderstorm: the button is there too (extra_windows.rs)
+                ctx.data(|d| d.get_temp::<egui::Rect>(button_id)).is_some(),
                 "classic={classic}: no button"
             );
 
@@ -3282,6 +3352,10 @@ mod tests {
             for events in click(&ctx) {
                 frame(&mut st, true, events);
             }
+            frame(&mut st, true, Vec::new());
+            // Folderstorm: the second click opens another window; closed, both are dropped
+            assert_eq!(st.windows.len(), 2, "classic={classic}: the second click opens another");
+            st.windows.iter_mut().for_each(|w| w.open = false);
             frame(&mut st, true, Vec::new());
             assert!(!st.additional_open(), "classic={classic}: the second click closes it");
             assert!(st.windows.is_empty(), "classic={classic}: dropped once closed");
@@ -3520,6 +3594,7 @@ mod tests {
         // A snapshot is a texture whatever its asset type says.
         assert_eq!(item_icon_color(0, 15, &p), p.indigo_light);
         assert_eq!(item_icon_color(24, 24, &p), p.muted);
+        assert_eq!(item_icon_color(10, 10, &p), p.teal);
     }
 
     #[test]
@@ -4886,9 +4961,11 @@ mod tests {
         let mut outside = nested.clone();
         outside.id = Uuid::from_u128(8200);
         outside.parent = Uuid::from_u128(8002);
+        // the item's own name ("Instructions…"), in the language's words
+        let search = inv.items[&Uuid::from_u128(8103)].name.clone();
         inv.add_items(vec![nested, outside]);
         let mut st = InventoryUi {
-            search: "instructions".into(),
+            search,
             ..Default::default()
         };
         folder_window_frame(&ctx, &mut inv, root, &mut st);

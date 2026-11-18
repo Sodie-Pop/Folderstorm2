@@ -3,6 +3,11 @@
 //! feature 2.13). What may be chosen and the changes are in
 //! `custom_tabs/folder_ui.rs`; this builds the entries of the shared menu,
 //! so both Inventory styles have them.
+//!
+//! And "Add to desktop" (the margins' desktop, FEATURES row 1.10): a
+//! shortcut to each folder of the selection, through
+//! `InvAction::FolderstormDesktopAdd`. Which folders can be shortcuts is in
+//! `crate::folderstorm::desktop::targets`.
 use super::*;
 use crate::ui::inventory::custom_tabs::folder_ui;
 
@@ -17,6 +22,7 @@ pub(in crate::ui::inventory) enum Command {
 const CREATE: &str = "folder-tab";
 const ADD: &str = "folder-tab-add";
 const NEW: &str = "folder-tab-add-new";
+const DESKTOP: &str = "desktop-add";
 
 fn tab_entry(id: u64) -> String {
     format!("{ADD}:{id}")
@@ -83,6 +89,25 @@ pub(super) fn entries(c: &mut Catalog, inv: &Inventory, st: &InventoryUi, prefs:
         c.help.insert(CREATE.into(), why.clone());
         c.help.insert(NEW.into(), why.clone());
     }
+    desktop_entry(c, inv, ids);
+}
+
+/// "Add to desktop": greyed, with the reason, when the selection has no
+/// folder that can be a shortcut (items, the Library, the Trash). Whether
+/// RLVa hides the Inventory is checked by the app when it adds them.
+fn desktop_entry(c: &mut Catalog, inv: &Inventory, ids: &[Uuid]) {
+    let offer = crate::folderstorm::desktop::targets::offer(inv, ids, false);
+    c.add(
+        DESKTOP,
+        TEXT,
+        "device-desktop-filled",
+        aurora_i18n::tr!("fs-desktop-add"),
+        offer.is_ok(),
+        super::Command::Invoke(InvAction::FolderstormDesktopAdd(ids.to_vec())),
+    );
+    if let Err(why) = offer {
+        c.help.insert(DESKTOP.into(), why.text().to_owned());
+    }
 }
 
 impl From<Command> for super::Command {
@@ -97,5 +122,42 @@ pub(super) fn execute(command: Command, inv: &Inventory, st: &mut InventoryUi, p
             folder_ui::save_as_tab(inv, st, prefs, facts.agent, &ids);
         }
         Command::AddTo(tab, ids) => folder_ui::add_to_tab(inv, st, prefs, facts.agent, tab, &ids),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_to_desktop_is_offered_for_folders_and_greyed_with_the_reason_otherwise() {
+        let mut inv = Inventory {
+            root: Uuid::from_u128(1),
+            ..Default::default()
+        };
+        crate::world::inventory::demo::seed(&mut inv, Uuid::from_u128(42));
+        let entry = |ids: &[Uuid]| {
+            let mut c = Catalog::default();
+            desktop_entry(&mut c, &inv, ids);
+            let e = c.entries.iter().find(|e| e.id == DESKTOP).expect("listed");
+            let adds = matches!(
+                c.commands.first(),
+                Some(Some(super::super::Command::Invoke(InvAction::FolderstormDesktopAdd(carried)))) if carried == ids
+            );
+            (e.enabled, adds, c.help.get(DESKTOP).cloned())
+        };
+        let (mine, item) = (Uuid::from_u128(8000), Uuid::from_u128(710));
+        assert!(inv.items.get(&item).is_some());
+        // a folder, and a selection with one
+        assert_eq!(entry(&[mine]), (true, true, None));
+        assert_eq!(entry(&[item, mine]), (true, true, None));
+        // an item, the Library, the Trash: greyed, and why
+        let why = Some(crate::folderstorm::desktop::targets::Refusal::NoFolder.text().to_owned());
+        let trash = rules::system(&inv, 14).expect("a Trash");
+        for refused in [item, inv.lib_root, trash] {
+            let (enabled, _, help) = entry(&[refused]);
+            assert!(!enabled, "{refused}");
+            assert_eq!(help, why);
+        }
     }
 }
