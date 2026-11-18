@@ -264,8 +264,7 @@ fn pump(desk: &mut Desk, world: &mut World, sim: &Sim, now: Instant) -> Vec<Send
                     object_id: *object,
                     item_id: *item,
                     running: sim.running,
-                    mono: Some(true),
-                    luau: aurora_net::scripts::Luau::Off,
+                    compile: Some(aurora_net::scripts::CompileTarget::Mono),
                 });
             }
         } else {
@@ -284,6 +283,7 @@ fn says(chat_type: ChatType, text: &str) -> ChatMessage {
         owner_id: DEMO_AGENT,
         source_type: ChatSourceType::Object,
         chat_type,
+        region: None,
         position: glam::Vec3::ZERO,
         message: text.into(),
     }
