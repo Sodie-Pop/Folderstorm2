@@ -204,6 +204,8 @@ impl App {
             no_guide: !self.toolbar_ui.destinations,
             // (set each frame by `draw_ui`, RlvActions::canStand / canGroundSit)
             sit_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::rlva_sit_locked_id())).unwrap_or(false),
+            build_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::rlva_build_locked_id())).unwrap_or(false),
+            fly_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::fly_locked_id())).unwrap_or(false),
             toggle_unset: !toolbar::look(ctx, toolbar::TOGGLE, false, true, String::new()).1,
         }
     }
