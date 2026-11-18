@@ -95,7 +95,7 @@ pub fn buttons(s: &State) -> Buttons {
 /// never brings it above a window that overlaps it (a click raises an area
 /// within its own layer only).
 pub fn show(ctx: &egui::Context, p: &Palette, shown: Buttons, bottom_top: f32) -> Option<Action> {
-    let screen = ctx.content_rect();
+    let screen = crate::folderstorm::viewport::dialog_area(ctx); // Folderstorm: centred in the world viewport
     let mut action = None;
     egui::Area::new(Id::unique("stand_stop_flying"))
         .order(egui::Order::Background)
