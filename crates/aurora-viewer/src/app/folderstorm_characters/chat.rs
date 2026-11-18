@@ -146,7 +146,7 @@ impl App {
             Open::Group(_) => {
                 // as Contacts › Groups' "Group chat"
                 self.world.ui_sounds.push(crate::ui_sound::UiSound::StartIm);
-                self.world.start_group_chat(target);
+                self.world.start_group_chat(target, true);
                 self.open_conversation_to_type(target);
             }
             Open::Profile(_) => {
@@ -226,6 +226,7 @@ impl App {
                 owner_id: crate::demo::DEMO_NOVA,
                 source_type: aurora_net::ChatSourceType::Agent,
                 chat_type: aurora_net::ChatType::Normal,
+                region: None,
                 position: glam::Vec3::new(130.0, 128.0, 30.0),
                 message: aurora_i18n::tr!("folderstorm-chat-demo-nearby", n = number),
             })],
