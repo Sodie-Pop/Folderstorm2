@@ -7092,7 +7092,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_BACKGROUND_ALERTS=1` (Folderstorm2) | The alert sounds of a background character on for the run (nothing saved), with made-up interface sounds (a short tick, its pitch by sound); outside the session host the window counts as a background character until a click in it and gets a made-up event every 5 s (new conversation, two instant messages of one conversation, two group lines of one group, a conference line, a mention, an inventory offer, a teleport offer), the second line of a conversation held by the quiet time; with `AURORA_DEMO_SESSION_HOST`, the demo viewers inherit it and their background characters sound for the shared chat's demo instant message and teleport offer |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
 | `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
-| `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures and 3D targets back before its window is minimised, a watched Economy character stays behind with a small share, each viewer holds the share the host gives it |
+| `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures, texture pages, 3D targets, GPU culling buffers, reflection probes and shadow atlas back before its window is minimised (also after a switch from the docked bar or a hotkey), a watched Economy character (its monitor's window on screen) stays behind with a small share, each viewer holds the share the host gives it |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -9198,7 +9198,8 @@ failure. Grid validation and any paid upload are performed by the human.
   `<file>-monitor-<n>.png` (its picture included: demo viewers have no
   grid) and the cycling monitor's to `<file>-cycling.png`.
 - **Video memory with several characters** (Folderstorm2, session host,
-  `folderstorm/plans/gpu-memory.md` phases 2 to 4).
+  `folderstorm/plans/gpu-memory.md` phases 2 to 4 and "Economy, second
+  pass").
   `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (with
   `AURORA_DEMO_SESSION_HOST`; either word alone works) puts every demo
   character in Economy and sets the background characters' share:
@@ -9216,26 +9217,50 @@ failure. Grid validation and any paid upload are performed by the human.
     Economy, giving the video memory back before the window is minimised`,
     Aurora's `texture memory: … freeing up video memory; the 3D drawing
     pauses` (its 3D targets are at a sixteenth of the window, as the Off
-    policy already had them), then
-    `session memory: released after N ms (… MB of video memory …), the
-    window is minimised` (5 s at most). Back to it: textures and faces load
-    again within a second or two (`texture memory: the window is in front
-    again`).
+    policy already had them), then `session memory: the 3D is paused, the
+    GPU culling buffers, the reflection probes (8 slots) and the shadow
+    atlas (512 px maps) go to their smallest; the settings are unchanged`,
+    the render thread's `GPU culling: N MB of buffers given back …`, and
+    `session memory: released after N ms, the window is minimised: A MB
+    taken from the driver (was B), texture pages C MB (was D), …, GPU
+    culling G MB back, probes and shadows at their smallest …` (5 s at
+    most; the window draws at 20 frames a second meanwhile, so the texture
+    pages are emptied and destroyed before the minimise). Back to it:
+    textures and faces load again within a second or two (`texture memory:
+    the window is in front again`), `session memory: the reflection probes
+    and the shadows as set again`, and the reflections come back within a
+    few seconds; Preferences › Graphics shows the probes and shadows as
+    they were all along.
+  - **a switch from the bar** (second pass): with
+    `AURORA_DEMO_SESSION_HOST_BAR=docked` too, switch by clicking another
+    character in the active viewer's bar (or with a hotkey): the viewer
+    that leaves still logs the release, with `(it still has the keyboard:
+    minimised once the keyboard leaves it)` when the click reached it
+    first, then the `released after` line once the other window has the
+    keyboard.
   - **a watched Economy character**: with
     `AURORA_DEMO_SESSION_HOST_MONITORS=windows` too, the characters behind
-    are not minimised; their logs say `session memory: Economy watched by a
-    monitor, … 512 MB`, the monitors' pictures are blurrier than with Warm,
-    and switching still moves the active character's monitor to the one
-    that left. Each picture's `world resolution:` lines are at the
-    picture's size (640 × 360 at most) or a sixteenth of it, never at the
-    window's size (`snapshot …` lines as before).
+    whose monitor window is on screen are not minimised; their logs say
+    `session memory: Economy watched by a monitor, … 512 MB`, the monitors'
+    pictures are blurrier than with Warm, and switching still moves the
+    active character's monitor to the one that left. Each picture's
+    `world resolution:` lines are at the picture's size (640 × 360 at most)
+    or a sixteenth of it, never at the window's size (`snapshot …` lines as
+    before). Minimise a monitor's window (second pass): its character is
+    released and minimised as above; restore the monitor's window: the
+    character's log says `session memory: a monitor shows this character
+    again, the window comes back behind`, its window is back behind the
+    active one without taking the keyboard, and its pictures come back.
+    The same with the cycling monitor's window (`…_MONITORS=cycling`).
   - **On Windows, with the grid** (the human): Task Manager › Details, add
     the column "Dedicated GPU memory"; log in two or three characters in a
     busy place. Note each viewer's figure with every character in Warm,
     then set the background ones to Economy and switch once: each Economy
     viewer falls to its geometry and little else (hundreds of MB rather
     than gigabytes) within a few seconds of the switch, and its log has the
-    `released after` line. With a monitor open on an Economy character, its
+    `released after` line, whether the switch was made from the host, the
+    docked bar or a hotkey (second pass: compare the line's "taken from the
+    driver" figures with Task Manager's). With a monitor on screen on an Economy character, its
     viewer stays near its 512 MB share plus its geometry; with the share at
     256 MB and Warm characters, each Warm viewer's textures shrink within
     about ten seconds of the switch. Compare the active viewer's figure and

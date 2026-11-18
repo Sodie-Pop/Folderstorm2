@@ -381,27 +381,34 @@ fn a_character_shown_twice_is_asked_once_for_the_larger_and_the_faster() {
 }
 
 #[test]
-fn nobody_is_minimised_behind_while_the_cycling_monitor_is_open() {
+fn nobody_is_minimised_behind_while_the_cycling_monitor_is_on_screen() {
     let (mut d, now) = running(3);
     for slot in 0..3 {
         d.set_standby(slot, Standby::Economy);
     }
     d.set_cycling(true);
+    // (its window shows a character behind: it goes round all of them)
+    d.cycling_seen(Some(2), now);
     d.take_effects();
     d.switch(1, now);
-    let minimised = d.take_effects().iter().any(|e| {
-        matches!(
-            e,
-            Effect::Send {
-                message: ToViewer::Minimise,
-                ..
-            }
-        )
-    });
-    assert!(!minimised);
+    let minimised = |effects: &[Effect]| {
+        effects.iter().any(|e| {
+            matches!(
+                e,
+                Effect::Send {
+                    message: ToViewer::Minimise,
+                    slot: 0,
+                    ..
+                }
+            )
+        })
+    };
+    assert!(!minimised(&d.take_effects()));
     assert_eq!(d.slot(0).expect("slot").sent.expect("sent").0.standby, Standby::Warm);
-    // the choice is kept: closed, the one left behind is Economy again
+    // the choice is kept: closed, the one left behind is Economy again,
+    // and minimised now that nothing shows it
     d.set_cycling(false);
+    assert!(minimised(&d.take_effects()));
     assert_eq!(d.slot(0).expect("slot").sent.expect("sent").0.standby, Standby::Economy);
     assert_eq!(d.slot(0).expect("slot").standby, Standby::Economy);
 }

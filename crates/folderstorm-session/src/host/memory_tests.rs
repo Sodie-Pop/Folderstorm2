@@ -107,6 +107,9 @@ fn a_watched_economy_character_stays_behind_with_a_small_share() {
     start(&mut d, 1, false, now);
     d.set_standby(1, Standby::Economy);
     d.set_monitor(1, Some(Spec::default()));
+    // open, but not on screen yet: nobody watches it
+    assert_eq!(memory(&d, 1).release, Release::Full);
+    d.monitors_seen([true; MAX_SLOTS], now);
     let watched = memory(&d, 1);
     assert_eq!(watched.release, Release::Lowered);
     assert_eq!(watched.share_mb, memory::WATCHED_ECONOMY_MB);
@@ -118,8 +121,10 @@ fn a_watched_economy_character_stays_behind_with_a_small_share() {
     // closed: Economy again
     d.set_monitor(1, None);
     assert_eq!(memory(&d, 1).release, Release::Full);
-    // the cycling monitor keeps every Economy character behind too
+    // the cycling monitor on screen keeps every Economy character behind too
     d.edit_monitors(|config| config.cycling.open = true);
+    assert_eq!(memory(&d, 1).release, Release::Full, "open, not on screen");
+    d.cycling_seen(Some(1), now);
     assert_eq!(memory(&d, 1).release, Release::Lowered);
 }
 
@@ -130,8 +135,10 @@ fn the_monitor_swap_stays_and_the_character_that_left_is_watched_with_little() {
         start(&mut d, slot, slot == 0, now);
         d.set_standby(slot, Standby::Economy);
     }
-    // the second character's monitor is open; it comes to the front
+    // the second character's monitor is open and on screen; it comes to
+    // the front
     d.set_monitor(1, Some(Spec::default()));
+    d.monitors_seen([true; MAX_SLOTS], now);
     d.switch(1, now);
     let effects = d.take_effects();
     // its monitor moved to the one that left, which is not minimised

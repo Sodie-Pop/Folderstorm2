@@ -35,6 +35,18 @@ pub fn bring_forward(window: &Window) {
     window.focus_window();
 }
 
+/// Brings a minimised window back behind the others, without the
+/// keyboard: a monitor shows this character again (Economy had minimised
+/// it), and the active character keeps the keyboard. On Windows the
+/// window's last place, not activated; elsewhere winit's restore.
+pub fn restore_behind(window: &Window) {
+    #[cfg(windows)]
+    if imp::restore_behind(window) {
+        return;
+    }
+    window.set_minimized(false);
+}
+
 /// The user clicked this window's bar for something another window of
 /// the session shows (checkpoint 8: the host's chat, its settings, another
 /// character): this process has the foreground, and lets whichever
@@ -123,6 +135,26 @@ mod imp {
             });
             SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32);
             SetForegroundWindow(hwnd);
+        }
+        true
+    }
+
+    /// False when winit's way is to be used (no window handle).
+    pub fn restore_behind(window: &winit::window::Window) -> bool {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SW_SHOWNOACTIVATE, ShowWindow};
+        let Ok(handle) = window.window_handle() else {
+            return false;
+        };
+        let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+            return false;
+        };
+        let hwnd = handle.hwnd.get() as HWND;
+        // SAFETY: a window manager call on the window this thread created;
+        // nothing is read back.
+        unsafe {
+            if IsIconic(hwnd) != 0 {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            }
         }
         true
     }

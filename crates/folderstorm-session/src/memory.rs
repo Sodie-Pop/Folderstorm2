@@ -17,7 +17,11 @@
 //!   window gets few frames or none, and the textures are given back by
 //!   frames. The window is minimised once the release is done (or after
 //!   [`RELEASE_WAIT`]), and while it waits the viewer draws a frame itself
-//!   when none came for [`DRAW_AFTER`].
+//!   when none came for [`DRAW_AFTER`], and draws at [`RELEASE_FPS`] at
+//!   least: the texture pages are emptied and destroyed a few per frame.
+//!   A window that still has the keyboard is not minimised: the host's
+//!   switch through the bar or a hotkey reaches it before the character
+//!   brought forward has taken the keyboard, and it waits for that.
 //! - **A monitor's picture** ([`monitor_viewport`]): a watched window
 //!   draws its world at the picture's size, so that a picture never makes
 //!   the window's full-size render targets again (twice per picture
@@ -51,6 +55,12 @@ pub const RELEASE_WAIT: Duration = Duration::from_secs(5);
 /// During the release, a frame is drawn by the viewer itself when the
 /// window got none for this long.
 pub const DRAW_AFTER: Duration = Duration::from_millis(500);
+/// During the release, a window behind draws at least this many frames a
+/// second (its 3D is paused: a frame is the interface and a sky at a
+/// sixteenth of the size): the texture table empties at most one page per
+/// 50 ms and destroys the emptied ones a few per frame, so the release
+/// would otherwise last as long as the slow frames of a window behind.
+pub const RELEASE_FPS: f32 = 20.0;
 /// Frames drawn since the release began before it can be done: the first
 /// one pauses the 3D, the next ones draw it with its targets at their
 /// smallest.
@@ -69,8 +79,8 @@ pub struct Character {
     pub active: bool,
     /// Its standby, as chosen, is Economy.
     pub economy: bool,
-    /// A monitor that shows it is open (its own, or the cycling monitor):
-    /// its window stays behind for the pictures.
+    /// A monitor that shows it is on screen (its own, or the cycling
+    /// monitor): its window stays behind for the pictures.
     pub watched: bool,
     /// Megabytes of video memory its viewer last said it holds (0: not
     /// said yet).
@@ -180,8 +190,20 @@ impl Releasing {
     }
 
     /// At each turn of the event loop: `frame` the viewer's frame count,
-    /// `released` whether its textures say they gave everything back.
-    pub fn poll(&mut self, now: Instant, frame: u64, released: bool) -> Step {
+    /// `released` whether its textures say they gave everything back,
+    /// `keyboard` whether its window still has the keyboard: the release
+    /// and its wait then start over once the keyboard has left, however
+    /// long it stays (a window the user is in is never minimised under
+    /// them, and it counts as in front for its textures until then).
+    pub fn poll(&mut self, now: Instant, frame: u64, released: bool, keyboard: bool) -> Step {
+        if self.began.is_none() {
+            return Step::Idle;
+        }
+        if keyboard {
+            self.began = Some((now, frame));
+            self.seen = Some((frame, now));
+            return Step::Wait { draw: false };
+        }
         let Some((since, first)) = self.began else {
             return Step::Idle;
         };
@@ -320,20 +342,42 @@ mod tests {
     fn economy_minimises_once_released_or_after_its_wait() {
         let t0 = Instant::now();
         let mut r = Releasing::default();
-        assert_eq!(r.poll(t0, 0, true), Step::Idle);
+        assert_eq!(r.poll(t0, 0, true, false), Step::Idle);
         r.start(t0, 10);
         assert!(r.under_way());
         // released but no frame drawn since: not yet (the targets shrink
         // with the frames)
-        assert_eq!(r.poll(t0, 10, true), Step::Wait { draw: false });
-        assert_eq!(r.poll(t0 + Duration::from_millis(50), 11, true), Step::Wait { draw: false });
-        assert_eq!(r.poll(t0 + Duration::from_millis(100), 12, true), Step::Minimise);
+        assert_eq!(r.poll(t0, 10, true, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(t0 + Duration::from_millis(50), 11, true, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(t0 + Duration::from_millis(100), 12, true, false), Step::Minimise);
         assert!(!r.under_way());
-        assert_eq!(r.poll(t0 + Duration::from_millis(120), 13, true), Step::Idle);
+        assert_eq!(r.poll(t0 + Duration::from_millis(120), 13, true, false), Step::Idle);
         // never released: minimised after the wait all the same
         r.start(t0, 0);
-        assert_eq!(r.poll(t0 + Duration::from_secs(1), 40, false), Step::Wait { draw: false });
-        assert_eq!(r.poll(t0 + RELEASE_WAIT, 41, false), Step::Minimise);
+        assert_eq!(r.poll(t0 + Duration::from_secs(1), 40, false, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(t0 + RELEASE_WAIT, 41, false, false), Step::Minimise);
+    }
+
+    #[test]
+    fn a_window_with_the_keyboard_is_minimised_once_it_lost_it() {
+        // the switch came through the bar of this very window: the host's
+        // Minimise reached it before the other character took the keyboard
+        let t0 = Instant::now();
+        let mut r = Releasing::default();
+        r.start(t0, 0);
+        assert_eq!(r.poll(t0 + Duration::from_millis(100), 3, true, true), Step::Wait { draw: false });
+        let left = t0 + RELEASE_WAIT * 3;
+        assert_eq!(r.poll(left, 40, false, true), Step::Wait { draw: false });
+        assert!(r.under_way(), "it goes on");
+        // the keyboard left: the release starts from there (its frames, its
+        // wait)
+        assert_eq!(r.poll(left, 40, true, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(left + Duration::from_millis(100), 42, true, false), Step::Minimise);
+        // never released once the keyboard left: after the wait from there
+        r.start(t0, 0);
+        assert_eq!(r.poll(left, 40, false, true), Step::Wait { draw: false });
+        assert_eq!(r.poll(left + RELEASE_WAIT / 2, 41, false, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(left + RELEASE_WAIT, 42, false, false), Step::Minimise);
     }
 
     #[test]
@@ -341,23 +385,23 @@ mod tests {
         let t0 = Instant::now();
         let mut r = Releasing::default();
         r.start(t0, 5);
-        assert_eq!(r.poll(t0 + Duration::from_millis(100), 5, false), Step::Wait { draw: false });
-        assert_eq!(r.poll(t0 + DRAW_AFTER, 5, false), Step::Wait { draw: true });
+        assert_eq!(r.poll(t0 + Duration::from_millis(100), 5, false, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(t0 + DRAW_AFTER, 5, false, false), Step::Wait { draw: true });
         // asked once: the next one after another wait
         assert_eq!(
-            r.poll(t0 + DRAW_AFTER + Duration::from_millis(10), 5, false),
+            r.poll(t0 + DRAW_AFTER + Duration::from_millis(10), 5, false, false),
             Step::Wait { draw: false }
         );
-        assert_eq!(r.poll(t0 + DRAW_AFTER * 2, 5, false), Step::Wait { draw: true });
+        assert_eq!(r.poll(t0 + DRAW_AFTER * 2, 5, false, false), Step::Wait { draw: true });
         // frames come: none asked
-        assert_eq!(r.poll(t0 + DRAW_AFTER * 3, 6, false), Step::Wait { draw: false });
+        assert_eq!(r.poll(t0 + DRAW_AFTER * 3, 6, false, false), Step::Wait { draw: false });
         // a second start while under way changes nothing
         r.start(t0 + Duration::from_secs(1), 99);
-        assert_eq!(r.poll(t0 + RELEASE_WAIT, 7, false), Step::Minimise);
+        assert_eq!(r.poll(t0 + RELEASE_WAIT, 7, false, false), Step::Minimise);
         // cancelled: nothing to minimise
         r.start(t0, 0);
         r.cancel();
-        assert_eq!(r.poll(t0 + RELEASE_WAIT, 7, true), Step::Idle);
+        assert_eq!(r.poll(t0 + RELEASE_WAIT, 7, true, false), Step::Idle);
     }
 
     #[test]

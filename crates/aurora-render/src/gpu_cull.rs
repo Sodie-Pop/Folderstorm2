@@ -1435,6 +1435,11 @@ impl GpuCull {
     }
 }
 
+// Folderstorm: Economy gives the culling buffers back (folderstorm_cull.rs)
+#[path = "folderstorm_cull.rs"]
+mod folderstorm_cull;
+pub use folderstorm_cull::{folderstorm_freed, folderstorm_release}; // Folderstorm
+
 #[cfg(test)]
 mod tests {
     use super::*;
