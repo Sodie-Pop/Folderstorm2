@@ -5,8 +5,8 @@
 //! `FOLDERSTORM_TEST_CAPTURE_DIR=<folder>` keeps the pictures
 //! (`desktop-*.png`).
 
-use super::store::{Desktop, Size, Target};
-use super::surface::{self, Room};
+use super::store::{Desktop, MAX_SHORTCUTS, Size, Target};
+use super::surface::{self, NoRoom, Room};
 use super::targets::{Facts, Folders};
 use super::{Env, Request, demo};
 use crate::folderstorm::viewport::{self, MonitorLayout};
@@ -910,5 +910,137 @@ fn folders_are_added_in_the_first_free_cells_and_kept_without_a_room() {
     }
     let none = super::add_folders(&mut full, &rooms, ME, &ids, Some(0), Some((1, 1)));
     assert_eq!((none.added, none.no_room), (0, 2));
-    assert!(super::added_notice(&none, 0, false, true).is_some());
+    assert_eq!(super::added_notice(&none, 0, false, true), Some(NoRoom::Full.text()));
+}
+
+/// A desktop whose room 0 has a shortcut in every cell.
+fn fill(b: &mut Bench) {
+    let grid = b.room(0).grid;
+    for (n, cell) in grid.cells().enumerate() {
+        b.add(&format!("c{n}"), 0, cell);
+    }
+    b.frames(2);
+}
+
+#[test]
+fn a_full_desktop_says_so_for_every_way_of_adding() {
+    // what it says
+    assert_eq!(NoRoom::Full.text(), aurora_i18n::tr!("fs-desktop-full"));
+    assert!(NoRoom::Limit.text().contains(&MAX_SHORTCUTS.to_string()));
+    // the folders of a selection: all left out, or some
+    let all = surface::Added {
+        no_room: 2,
+        ..Default::default()
+    };
+    assert_eq!(super::added_notice(&all, 0, false, true), Some(NoRoom::Full.text()));
+    let some = surface::Added {
+        added: 1,
+        no_room: 1,
+        ..Default::default()
+    };
+    let said = super::added_notice(&some, 0, false, true).expect("a notice");
+    assert!(said.starts_with(&aurora_i18n::tr!("fs-desktop-add-full", count = 1)) && said.ends_with(&NoRoom::Full.text()));
+    let limit = surface::Added {
+        limit: 1,
+        ..Default::default()
+    };
+    assert_eq!(super::added_notice(&limit, 0, false, true), Some(NoRoom::Limit.text()));
+
+    let mut b = Bench::new();
+    b.frames(2);
+    fill(&mut b);
+    let room = b.room(0);
+    let taken: Vec<_> = room.grid.cells().collect();
+    let count = b.desktop.shortcuts.len();
+    // a command: refused with the reason; one that desktop has is shown
+    assert_eq!(surface::no_room(&b.desktop, &room.grid, &taken), Some(NoRoom::Full));
+    assert_eq!(
+        surface::add_command(&mut b.desktop, &room, &taken, "people", Some((0, 0))),
+        surface::CommandAdded::Refused(NoRoom::Full)
+    );
+    let c0 = b.desktop.shortcuts[0].id;
+    assert_eq!(
+        surface::add_command(&mut b.desktop, &room, &taken, "c0", None),
+        surface::CommandAdded::Existing(c0)
+    );
+    assert_eq!(b.desktop.shortcuts.len(), count);
+    // another monitor's desktop has room
+    let other = b.room(2);
+    assert_eq!(surface::no_room(&b.desktop, &other.grid, &[]), None);
+    assert!(matches!(
+        surface::add_command(&mut b.desktop, &other, &[], "people", None),
+        surface::CommandAdded::New(_)
+    ));
+    // folders (Add to desktop, a drop): none added, one there already found
+    let ids: Vec<Uuid> = [MINE, SUB].into_iter().map(Uuid::from_u128).collect();
+    let rooms = b.rooms();
+    let none = super::add_folders(&mut b.desktop, &rooms, ME, &ids, None, None);
+    assert_eq!((none.added, none.no_room, none.limit), (0, 2, 0));
+    // a drop on that desktop: nothing added, and said
+    b.out.clear();
+    b.drop_inventory(&[MINE], room.grid.rect((1, 1)).center());
+    assert_eq!(b.notices(), vec![NoRoom::Full.text().as_str()]);
+    assert!(!b.out.contains(&Request::Changed));
+    assert!(
+        crate::ui::inventory::drag::carried_ids(&b.ctx).is_none(),
+        "nothing left for the world"
+    );
+    // the desktop's menu (on the room's edge, past its last column: every
+    // cell has a shortcut): Add a command is greyed and opens nothing
+    let edge = pos2(room.rect.right() - 4.0, room.rect.center().y);
+    assert!(room.grid.cell_at(edge).is_none(), "the bench's room has a strip past its cells");
+    b.time += 2.0;
+    b.click_with(edge, egui::PointerButton::Secondary);
+    let add = b
+        .drawn(aurora_i18n::tr!("fs-desktop-add-command"))
+        .expect("Add a command is listed");
+    b.pointer = add.center();
+    b.frames(3);
+    b.click(add.center());
+    b.frames(2);
+    let (_, label, ..) = *super::targets::addable()
+        .iter()
+        .find(|(_, _, _, refused)| refused.is_none())
+        .expect("a command to add");
+    assert!(b.drawn(label).is_none(), "no list of commands: {:?}", b.texts);
+    b.picture("desktop-full-menu");
+    // a cell made free: the same entry lists the commands again
+    b.frame(vec![egui::Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }]);
+    b.desktop.remove(c0).expect("removed");
+    b.frames(2);
+    b.time += 2.0;
+    b.click_with(edge, egui::PointerButton::Secondary);
+    let add = b
+        .drawn(aurora_i18n::tr!("fs-desktop-add-command"))
+        .expect("Add a command is listed");
+    b.click(add.center());
+    b.frames(3);
+    assert!(b.drawn(label).is_some(), "the commands are listed: {:?}", b.texts);
+}
+
+#[test]
+fn the_profile_s_limit_is_said_rather_than_a_full_room() {
+    let mut b = Bench::new();
+    b.frames(2);
+    // the shortcuts kept on a monitor not in use
+    for n in 0..MAX_SHORTCUTS {
+        b.add(&format!("c{n}"), 5, ((n / 8) as u16, (n % 8) as u16));
+    }
+    let room = b.room(0);
+    assert_eq!(surface::no_room(&b.desktop, &room.grid, &[]), Some(NoRoom::Limit));
+    assert_eq!(
+        surface::add_command(&mut b.desktop, &room, &[], "people", None),
+        surface::CommandAdded::Refused(NoRoom::Limit)
+    );
+    let added = super::add_folders(&mut b.desktop, &[room], ME, &[Uuid::from_u128(MINE)], None, None);
+    assert_eq!((added.added, added.no_room, added.limit), (0, 0, 1));
+    b.out.clear();
+    b.drop_inventory(&[MINE], room.grid.rect((1, 1)).center());
+    assert_eq!(b.notices(), vec![NoRoom::Limit.text().as_str()]);
 }

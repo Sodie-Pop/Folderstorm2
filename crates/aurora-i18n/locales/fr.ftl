@@ -2453,9 +2453,11 @@ fs-desktop-added =
 fs-desktop-add-existing = Déjà sur le bureau.
 fs-desktop-add-full =
     { $count ->
-        [one] Le bureau n'a plus de place pour un dossier.
-       *[other] Le bureau n'a plus de place pour { $count } dossiers.
+        [one] Un dossier n'a pas trouvé de place.
+       *[other] { $count } dossiers n'ont pas trouvé de place.
     }
+fs-desktop-full = Ce bureau est plein : retirez un raccourci ou choisissez une taille d'icône plus petite.
+fs-desktop-limit = Les bureaux contiennent au plus { $count } raccourcis : retirez-en un d'abord.
 fs-desktop-left-out =
     { $count ->
         [one] Un élément laissé de côté : seuls les dossiers de votre propre inventaire peuvent être des raccourcis.

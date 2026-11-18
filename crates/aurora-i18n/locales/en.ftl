@@ -2441,9 +2441,11 @@ fs-desktop-added =
 fs-desktop-add-existing = Already on the desktop.
 fs-desktop-add-full =
     { $count ->
-        [one] The desktop has no room for one folder.
-       *[other] The desktop has no room for { $count } folders.
+        [one] One folder did not fit.
+       *[other] { $count } folders did not fit.
     }
+fs-desktop-full = This desktop is full: remove a shortcut or use a smaller icon size.
+fs-desktop-limit = The desktops hold { $count } shortcuts at most: remove one first.
 fs-desktop-left-out =
     { $count ->
         [one] One entry left out: only folders of your own inventory can be shortcuts.
