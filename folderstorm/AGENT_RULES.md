@@ -85,7 +85,7 @@ Read these sections when the task touches them:
 | Legacy Viewer as the behaviour reference, porting comments | § 2 | Yes (the sources are `../phoenix-firestorm`; for Folderstorm-only behaviour, see `FEATURES.md`) |
 | Creators' permissions | § 2 | Yes, always |
 | Demo mode and `AURORA_*` variables | § 4, `docs/TESTING.md` | Yes |
-| Code quality (no `unwrap` on external data, `SAFETY` comments, performance) | § 5 | Yes |
+| Code quality (no `unwrap` on external data, `SAFETY` comments, performance), "Tests" and "Tools" (the command rules of section 4) | § 5 | Yes |
 | Interface and branding (Palette, shared widgets, Tabler icons, theme guard) | § 7, `docs/BRANDING.md` | Yes, for any UI |
 | Commit message style (English, imperative) | § 10 | Yes, but **not** its "no mention of AI" rule: see section 7 |
 | Worktrees and PowerShell scripts (`new-task.ps1`, `check.ps1`, …) | § 3, § 5 | Only on the human's Windows PC; elsewhere use the plain `cargo` commands of section 4 |
@@ -98,15 +98,37 @@ viewer the **Legacy Viewer**. In `folderstorm/` docs, the original fork is
 ## 4. Checks
 
 Run the full checks **once per PR**, just before the commit that goes up for
-review, not after each change. While working, run only the tests you need
-(`cargo test --profile ci -p aurora-viewer <filter>`). From the repository
-root:
+review, not after each change. While working, run only the tests you need,
+always on the whole workspace and filtered by name
+(`cargo test --workspace --profile ci <filter>`). From the repository root:
 
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --profile ci -- -D warnings
-cargo test --workspace --profile ci   # filter by name if needed; never -p alone
+cargo test --workspace --profile ci   # add a name filter if needed
 ```
+
+**Command rules.** Upstream's Claude Code hook
+(`.claude/hooks/shell-rules.sh`, set up in `.claude/settings.json`; the
+reasons are in `AGENTS.md` § 5, "Tools") refuses these commands, and its
+message names the one to use. Use that one; do not reword the refused
+command to get it through.
+
+- **No `cargo +<toolchain>`**: plain `cargo`. `rust-toolchain.toml` pins
+  the Rust version and rustup picks it; `cargo --version` shows which. If
+  that version is missing, install it with rustup
+  (`rustup toolchain install <version> --profile minimal -c clippy -c rustfmt`).
+- **No `cargo test -p <crate>`**: `cargo test --workspace <filter>`. One crate
+  alone resolves its dependencies' features differently and builds them a
+  second time.
+- **No compiler wrapper override**: no `RUSTC_WRAPPER` (nor
+  `CARGO_BUILD_RUSTC_WRAPPER`, nor `--config build.rustc-wrapper`).
+- **No recursive grep** (`grep -r`, `rgrep`, `findstr /s`, a recursive
+  `Get-ChildItem | Select-String`): search with `rg` (for example
+  `rg -n "pattern" <folder>`), which skips `target/`.
+
+The hook reads the program at the start of each command, so it does not see
+a `cargo` behind `flock`: the rules hold there all the same.
 
 **Builds in a cloud session** (one or several agents):
 
@@ -119,6 +141,8 @@ cargo test --workspace --profile ci   # filter by name if needed; never -p alone
 - Agents take turns behind one shared lock:
   `flock <scratchpad>/cargo.lock cargo …`. Two builds at once fight over the
   build folder and the machine.
+- Put together, a filtered test run is:
+  `CARGO_TARGET_DIR=<repository root>/target flock <scratchpad>/cargo.lock cargo test --workspace --profile ci -- <filter>`.
 
 On Linux (a cloud session), Windows-only helpers look unused, so run clippy
 with `-- -D warnings -A dead-code` as upstream's Linux CI job does, then run it
