@@ -706,7 +706,22 @@ rewritten by a fit.
    layout: `place_floater` for floaters (then `minimize_floater` if it was
    minimized), our own request for the mini-map (`bare_window` hook). A
    closed window takes its place when it next opens; its id stays in
-   `pending` until then, so a restart issues the request again;
+   `pending` until then, so a restart issues the request again. The
+   mini-map's request is held until the window has been shown twice at
+   a size egui knows (`BARE_HOLD`): one closed since the viewer started
+   has no size (egui keeps none in `ui_layout.ron`), is only measured on
+   its first frame, and `layout::Slot` put it back at its recorded place
+   on the next (the human's report of 2026-11-17: opened by a layout, it
+   stayed where it was). The same hook keeps the mini-map's last size
+   (`folderstorm_bare_size`), so a layout saved while it is closed and
+   not shown since the start still captures it. Checked in the viewer
+   itself by `AURORA_DEMO_LAYOUTS=minimap` (open, closed, saved, in the
+   margin of a world viewport, through a workspace) and by the frame tests,
+   which run `layout::frame` as the app does and move and resize the
+   mini-map by hand. A workspace keeps no place of its own: the mini-map,
+   like every window, goes where the workspace's layout has it, so a place
+   changed after that layout was saved needs the layout's *Update* (a
+   workspace's *Update* records only which windows are open);
 4. mark the layout active and not modified, save the settings.
 
 A new apply replaces one still waiting for its frame. *Previous
