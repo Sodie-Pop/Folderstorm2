@@ -600,8 +600,9 @@ give *Focus the desktop* a key in Preferences › Shortcuts (it has none by
 default, as *Show or hide the desktop shortcuts*), press it: the selected
 shortcut, else the first, takes the keyboard (outlined); the arrows go to
 the neighbour shortcut, Enter or Space opens, F2 renames, Delete removes. A
-click selects a shortcut without taking the keyboard, so F2 and Delete do
-nothing after a mere click: the avatar keeps its keys.
+click on a shortcut selects it and gives it the keyboard too, so F2 and
+Delete work at once; a click in the world gives the keyboard back to the
+avatar's keys.
 
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher

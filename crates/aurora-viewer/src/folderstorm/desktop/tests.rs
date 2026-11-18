@@ -1471,7 +1471,9 @@ fn the_keyboard_goes_to_the_desktop_and_the_arrows_from_shortcut_to_shortcut() {
     // with a shortcut selected, the keyboard goes to that one
     b.time += 2.0;
     b.click(b.cell_of(build).center());
-    assert!(!focused(&b, build), "a click selects without taking the keyboard");
+    b.click(b.world_point());
+    assert!(!focused(&b, build));
+    assert_eq!(selected(&b), Some(build));
     b.focus = true;
     b.frames(2);
     assert!(focused(&b, build));
@@ -1480,10 +1482,95 @@ fn the_keyboard_goes_to_the_desktop_and_the_arrows_from_shortcut_to_shortcut() {
     let kept = other.add("people", 0, (0, 0));
     other.frames(3);
     other.click(other.cell_of(kept).center());
+    other.click(other.world_point());
     other.key(egui::Key::Delete);
     other.key(egui::Key::F2);
     assert!(other.desktop.shortcut(kept).is_some());
     assert_eq!(surface::state(&other.ctx).rename, None);
+}
+
+impl Bench {
+    /// A point of the world viewport, where no shortcut stands.
+    fn world_point(&self) -> Pos2 {
+        let [x, y, w, h] = self.world.expect("a world viewport");
+        pos2((x + w / 2) as f32, (y + h / 2) as f32)
+    }
+}
+
+#[test]
+fn a_click_gives_the_keyboard_to_a_shortcut_and_a_click_in_the_world_takes_it_back() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    let build = b.add("build", 0, (0, 1));
+    let map = b.add("worldmap", 0, (2, 0));
+    b.frames(3);
+    let focused = |b: &Bench, id: u32| b.ctx.memory(|m| m.has_focus(surface::shortcut_id(0, id)));
+    // a click, then F2: its name is edited at once
+    b.click(b.cell_of(people).center());
+    assert_eq!(surface::state(&b.ctx).selected, Some(people));
+    assert!(focused(&b, people), "a click takes the keyboard");
+    assert!(b.ctx.egui_wants_keyboard_input());
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, Some(people));
+    b.type_text("Friends");
+    b.key(egui::Key::Enter);
+    b.frames(1);
+    assert_eq!(b.name_of(people).as_deref(), Some("Friends"));
+    // a click in the world gives the keyboard back: the avatar's keys
+    // reach the world, and the desktop's keys do nothing
+    b.time += 2.0;
+    b.click(b.world_point());
+    assert!(!focused(&b, people));
+    assert!(!b.ctx.egui_wants_keyboard_input(), "movement keys belong to the world");
+    b.key(egui::Key::Delete);
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert!(b.desktop.shortcut(people).is_some());
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    // a click, then the arrows and Enter
+    b.time += 2.0;
+    b.click(b.cell_of(people).center());
+    b.key(egui::Key::ArrowDown);
+    assert!(focused(&b, build));
+    assert_eq!(surface::state(&b.ctx).selected, Some(build));
+    b.key(egui::Key::Enter);
+    assert_eq!(b.ran(), vec!["build"]);
+    // a click, then Delete: it goes at once
+    b.time += 2.0;
+    b.click(b.cell_of(map).center());
+    assert!(focused(&b, map));
+    b.key(egui::Key::Delete);
+    b.frames(2);
+    assert!(b.desktop.shortcut(map).is_none());
+    assert!(!b.ctx.egui_wants_keyboard_input(), "nothing keeps the keyboard once it went");
+    // a click on the room's empty cell gives the keyboard back too
+    b.time += 2.0;
+    b.click(b.cell_of(people).center());
+    assert!(focused(&b, people));
+    b.click(b.room(0).grid.rect((3, 1)).center());
+    assert!(!b.ctx.egui_wants_keyboard_input());
+    assert_eq!(surface::state(&b.ctx).selected, None);
+    // a drag still moves a shortcut, and a click still does not open it
+    b.time += 2.0;
+    let to = b.room(0).grid.rect((1, 2)).center();
+    b.drag(b.cell_of(people).center(), to);
+    assert_eq!(b.place_of(people), (0, (1, 2)));
+    assert_eq!(b.ran(), vec!["build"], "a single click or a drag opens nothing");
+}
+
+#[test]
+fn a_clicked_folder_shortcut_is_not_renamed_while_rlva_hides_the_inventory() {
+    let mut b = Bench::new();
+    let folder = b.add_folder(8000, 0, (0, 0));
+    b.no_inventory = true;
+    b.frames(3);
+    b.click(b.cell_of(folder).center());
+    assert!(b.ctx.memory(|m| m.has_focus(surface::shortcut_id(0, folder))));
+    b.key(egui::Key::F2);
+    b.frames(1);
+    assert_eq!(surface::state(&b.ctx).rename, None);
+    assert_eq!(b.name_of(folder), None);
 }
 
 #[test]
