@@ -1,7 +1,7 @@
 //! The desktops as drawn: one area per room, on the layer between the
 //! margins' background and the windows, its shortcuts on the grid, their
 //! hover, selection, drag between cells and menus, the Inventory folders
-//! and the toolbar buttons dropped on it, the name edited in place and
+//! and items and the toolbar buttons dropped on it, the name edited in place and
 //! the keyboard on a focused (clicked) shortcut (F2, Delete, the arrows)
 //! (folderstorm/plans/margin-desktop.md, "Drawing order and input",
 //! "Arranging and editing", "Accessibility and keyboard").
@@ -97,7 +97,10 @@ enum Op {
         room: Rect,
     },
     ShowFolder(Uuid),
-    /// Inventory dropped on a room: the folders it gives, or why none.
+    /// Show this item in the main Inventory window.
+    ShowItem(Uuid),
+    /// Inventory dropped on a room: the folders and items it gives, or why
+    /// none.
     DropFolders {
         slot: u8,
         cell: Option<(u16, u16)>,
@@ -145,6 +148,7 @@ const ICON_ADD: &str = "plus";
 const ICON_SIZE: &str = "dimensions";
 const ICON_SETTINGS: &str = "settings-filled";
 const ICON_SHOW: &str = "folder-open-filled";
+const ICON_WINDOW: &str = "app-window-filled";
 const ICON_RENAME: &str = "pencil-filled";
 const ICON_ICON: &str = "mood-smile-filled";
 const ICON_DEFAULT: &str = "restore";
@@ -161,6 +165,7 @@ pub(super) const ICONS: &[&str] = &[
     ICON_SIZE,
     ICON_SETTINGS,
     ICON_SHOW,
+    ICON_WINDOW,
     ICON_RENAME,
     ICON_ICON,
     ICON_DEFAULT,
@@ -170,16 +175,16 @@ pub(super) const ICONS: &[&str] = &[
     super::ICON_ADD_TO_DESKTOP,
 ];
 
-/// What adding folders to a desktop did.
+/// What adding folders and items to a desktop did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Added {
     /// New shortcuts.
     pub added: usize,
-    /// Folders that desktop has a shortcut to already.
+    /// Those that desktop has a shortcut to already.
     pub existing: usize,
-    /// Folders left out: that desktop has no free cell.
+    /// Those left out: that desktop has no free cell.
     pub no_room: usize,
-    /// Folders left out: the desktops hold [`MAX_SHORTCUTS`] already.
+    /// Those left out: the desktops hold [`MAX_SHORTCUTS`] already.
     pub limit: usize,
     /// The first shortcut added, else the first one found there already.
     pub first: Option<u32>,
@@ -363,16 +368,23 @@ fn by_name(desktop: &Desktop, env: &Env, slot: u8) -> Vec<u32> {
 /// columns of this many cells; a room shows them where they fit.
 const UNSEEN_ROWS: u16 = 8;
 
-/// Adds a shortcut to each of `folders` in the desktop of
+/// Adds a shortcut to each of `folders` ([`add_targets`]).
+pub fn add_folders(desktop: &mut Desktop, rooms: &[Room], folders: &[Uuid], slot: Option<u8>, cell: Option<(u16, u16)>) -> Added {
+    let targets: Vec<_> = folders.iter().map(|folder| Target::Folder { folder: *folder }).collect();
+    add_targets(desktop, rooms, &targets, slot, cell)
+}
+
+/// Adds a shortcut to each of `targets` (folders and items of the
+/// Inventory) in the desktop of
 /// `slot` (None: the first room's): from `cell` when one is given, each in
 /// the free cell nearest to it; else in the first free cells. Without a
 /// room for that slot they are kept for when it has one.
-pub fn add_folders(desktop: &mut Desktop, rooms: &[Room], folders: &[Uuid], slot: Option<u8>, cell: Option<(u16, u16)>) -> Added {
+pub fn add_targets(desktop: &mut Desktop, rooms: &[Room], targets: &[Target], slot: Option<u8>, cell: Option<(u16, u16)>) -> Added {
     let slot = slot.or(rooms.first().map(|room| room.slot)).unwrap_or(0);
     let grid = rooms.iter().find(|room| room.slot == slot).map(|room| room.grid);
     let mut out = Added::default();
-    for folder in folders {
-        let target = Target::Folder { folder: *folder };
+    for target in targets {
+        let target = target.clone();
         // (a full desktop still shows the one it has)
         if let Some(id) = existing(desktop, slot, &target) {
             out.existing += 1;
@@ -503,7 +515,9 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     let is_folder = matches!(shortcut.target, Target::Folder { .. });
                     let own_icon = shortcut.icon.clone();
                     let rect = room.grid.rect(cell);
-                    let open = || match face.folder {
+                    // (a folder's window; a command, and an item as the
+                    // Inventory opens its kind, through `Op::Open`)
+                    let open = || match face.folder.filter(|_| is_folder) {
                         Some(folder) => Op::OpenFolder {
                             folder,
                             cell: rect,
@@ -517,8 +531,8 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         response.request_focus();
                         state.selected = Some(id);
                     }
-                    // (RLVa hides a folder's name: none is typed over it then)
-                    let editable = face.greyed != Some(Greyed::Rlva);
+                    // (RLVa hides a folder's or an item's name: none is typed over it then)
+                    let editable = !face.hidden;
                     let mut rename = false;
                     if response.has_focus() {
                         // the arrows go from shortcut to shortcut, not
@@ -588,6 +602,10 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                         id,
                         face: &face,
                         is_folder,
+                        is_item: matches!(shortcut.target, Target::Item { .. }),
+                        is_outfit: matches!(shortcut.target, Target::Outfit { .. }),
+                        cell: rect,
+                        room: room.rect,
                         editable,
                         own_icon: own_icon.as_deref(),
                         slot: room.slot,
@@ -646,9 +664,10 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     if state.drag.is_none() && cargo.is_none() && button.is_none() {
                         // (built only while it shows; a folder's path too)
                         response.on_hover_ui(|ui| {
-                            ui.label(match face.folder {
-                                Some(folder) => face.tip_of(&crate::ui::inventory::inventory_path(env.folders.inv, folder)),
-                                None => face.tip(),
+                            ui.label(match (face.folder, face.item) {
+                                (Some(folder), _) => face.tip_of(&crate::ui::inventory::inventory_path(env.folders.inv, folder)),
+                                (_, Some(item)) => face.tip_of(&targets::item_path(env.folders.inv, item)),
+                                _ => face.tip(),
                             });
                         });
                     }
@@ -742,14 +761,17 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
         match op {
             Op::Open(id) => match desktop.shortcut(id).map(|s| &s.target) {
                 Some(Target::Command { command }) => out.push(Request::Run(command.clone())),
+                Some(Target::Item { item }) => out.push(Request::OpenItem(*item)),
+                Some(Target::Outfit { outfit }) => out.push(Request::WearOutfit(*outfit)),
                 // (a folder that can open asks with `Op::OpenFolder`)
                 Some(Target::Folder { .. }) | None => {}
             },
             Op::OpenFolder { folder, cell, room } => out.push(Request::OpenFolder { folder, cell, room }),
             Op::ShowFolder(folder) => out.push(Request::ShowFolder(folder)),
+            Op::ShowItem(item) => out.push(Request::ShowItem(item)),
             Op::DropFolders { slot, cell, offer } => match offer {
                 Ok(picked) => {
-                    let added = add_folders(desktop, rooms, &picked.folders, Some(slot), cell);
+                    let added = add_targets(desktop, rooms, &picked.targets, Some(slot), cell);
                     changed |= added.added > 0;
                     if added.first.is_some() {
                         state.selected = added.first;
@@ -856,6 +878,12 @@ struct MenuOf<'a> {
     id: u32,
     face: &'a Face,
     is_folder: bool,
+    is_item: bool,
+    /// An outfit: its folder's window is a second entry of its menu.
+    is_outfit: bool,
+    /// Its cell and its room: a folder's window opens beside it.
+    cell: Rect,
+    room: Rect,
     /// Its name and icon can be changed now (RLVa hides a folder's).
     editable: bool,
     /// The icon of its own, when it has one.
@@ -882,11 +910,51 @@ fn shortcut_menu(response: &egui::Response, p: &Palette, of: &MenuOf, open: impl
     let mut rename = false;
     menu::context_menu(response, p, |ui| {
         let why = face.greyed.map_or("", |why| why.text());
-        if menu::item_tip(ui, p, ICON_OPEN, tr!("fs-desktop-open"), face.greyed.is_none(), why) {
+        if menu::item_tip(ui, p, ICON_OPEN, face.verb, face.greyed.is_none(), why) {
             ops.push(open());
+        }
+        // an outfit is a folder too: its own window, as a folder shortcut
+        // opens (not while RLVa hides the Inventory, nor once it is gone)
+        if of.is_outfit {
+            let shown = face.folder.is_some();
+            let label = tr!("ui-inventory-context-open-in-a-new-window");
+            if menu::item_tip(ui, p, ICON_WINDOW, label, shown, if shown { "" } else { why })
+                && let Some(folder) = face.folder
+            {
+                ops.push(Op::OpenFolder {
+                    folder,
+                    cell: of.cell,
+                    room: of.room,
+                });
+            }
+            if menu::item_tip(
+                ui,
+                p,
+                ICON_SHOW,
+                tr!("ui-context-show-in-inventory"),
+                shown,
+                if shown { "" } else { why },
+            ) {
+                ops.extend(face.folder.map(Op::ShowFolder));
+            }
         }
         if of.is_folder && menu::item_tip(ui, p, ICON_SHOW, tr!("ui-context-show-in-inventory"), face.folder.is_some(), why) {
             ops.extend(face.folder.map(Op::ShowFolder));
+        }
+        // (an item that RLVa keeps from opening is still shown there; one
+        // that is gone, or hidden with the Inventory, is not)
+        if of.is_item {
+            let shown = face.item.is_some();
+            if menu::item_tip(
+                ui,
+                p,
+                ICON_SHOW,
+                tr!("ui-context-show-in-inventory"),
+                shown,
+                if shown { "" } else { why },
+            ) {
+                ops.extend(face.item.map(Op::ShowItem));
+            }
         }
         menu::separator(ui, p);
         let locked = if of.editable { "" } else { why };

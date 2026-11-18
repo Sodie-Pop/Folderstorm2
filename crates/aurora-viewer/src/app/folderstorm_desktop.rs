@@ -11,7 +11,19 @@
 //! *Open in a new window* does), one window per folder, and never while
 //! RLVa hides the Inventory (`@showinv`). Folders come from the Inventory's
 //! menu (*Add to desktop*, `InvAction::FolderstormDesktopAdd`) or are
-//! dropped on a desktop; only their ids are kept. A toolbar button's menu
+//! dropped on a desktop; only their ids are kept. An item shortcut (the
+//! same menu entry, the same drop; its item id is kept, never its asset's)
+//! opens as the Inventory opens that kind of item: a landmark teleports
+//! through Aurora's own question (`PlacesUi::confirm_landmark`, the Legacy
+//! Viewer's TeleportFromLandmark) and then `request_user_teleport`, where
+//! RLVa is checked as for every teleport; a notecard opens in Aurora's
+//! notecard window through `InvAction::Preview`, which checks the right to
+//! read it; an outfit is worn as *Replace Current Outfit* of the
+//! Inventory's menu wears it, behind what greys that entry and always
+//! after the question of outfit safety (FEATURES row 2.7), the wearing
+//! itself going through `apply_appearance_action`, RLVa included; clothing
+//! and an object are added to what is worn through the Inventory's *Add*
+//! (`Action::WearItems { replace: false }`), never replacing anything. A toolbar button's menu
 //! has *Add to desktop* too (`desktop::toolbar_menu`, which asks; the ask
 //! is run here), and three keyboard actions of `crate::folderstorm::keys`
 //! show or hide the shortcuts and give the desktop or the taskbar the
@@ -19,7 +31,7 @@
 //! with or without the shortcuts.
 
 use super::*;
-use crate::folderstorm::desktop::{self, Facts, Folders, Request, place, targets};
+use crate::folderstorm::desktop::{self, Facts, Folders, Request, Wearing, place, targets};
 use crate::world::notice_topics::Topic;
 use uuid::Uuid;
 
@@ -120,6 +132,7 @@ impl App {
         let facts = self.desktop_facts(ctx);
         // (RlvBehaviourToggleHandler<RLV_BHVR_SHOWINV>: the Inventory is hidden)
         let no_inventory = self.world.rlva.has("showinv");
+        let wearing = self.desktop_wearing();
         let prefs = &self.settings.inventory;
         let env = desktop::Env {
             p,
@@ -129,6 +142,7 @@ impl App {
                 inv: &self.world.inventory,
                 no_inventory,
                 colors: prefs.folder_colors_enabled.then_some(&prefs.folder_colors),
+                wear: wearing.as_ref(),
             },
             hidden,
             focus,
@@ -158,6 +172,17 @@ impl App {
                         ui::widgets::bring_floater_front(ctx, "inventory");
                     }
                 }
+                Request::OpenItem(item) => self.desktop_open_item(item, &facts, no_inventory),
+                Request::WearOutfit(outfit) => self.desktop_wear_outfit(outfit, no_inventory),
+                Request::ShowItem(item) => {
+                    // (show_item_original refuses under @showinv)
+                    if no_inventory {
+                        self.world.system_notice(aurora_i18n::tr!("rlva-blocked"), Topic::Warning);
+                    } else if let targets::ItemState::Live { original, .. } = targets::item_state(&self.world.inventory, item) {
+                        self.apply_inventory_action(ui::inventory::InvAction::ShowMain(original));
+                        ui::widgets::bring_floater_front(ctx, "inventory");
+                    }
+                }
                 Request::Notice(text) => self.world.system_notice(text, Topic::Items),
                 Request::Changed => {
                     ctx.data_mut(|d| d.insert_temp(dirty_id(), true));
@@ -180,10 +205,96 @@ impl App {
         }
     }
 
+    /// Opens the item of a shortcut as the Inventory opens its kind
+    /// (`targets::item_open`, checked again here: what greys it may have
+    /// changed since the shortcut was drawn). What cannot open says why.
+    fn desktop_open_item(&mut self, item: Uuid, facts: &Facts, no_inventory: bool) {
+        let wearing = self.desktop_wearing_now(true);
+        match targets::item_open_worn(&self.world.inventory, item, facts, Some(&wearing), no_inventory) {
+            // LLLandmarkBridgeAction::doIt: TeleportFromLandmark asks first
+            // (unless its "do not show again" box was ticked); the answer
+            // goes through `request_user_teleport`, RLVa included
+            Ok(targets::ItemOpen::Teleport { asset, name }) => self.places_ui.confirm_landmark(asset, name),
+            // the Inventory's own *Open* of a notecard: that arm checks
+            // @viewnote and the right to read it (LLPreviewNotecard::loadAsset)
+            // before it asks for the content, and opens Aurora's window
+            Ok(targets::ItemOpen::Notecard(item)) => self.apply_inventory_action(ui::inventory::InvAction::Preview(item, None)),
+            // the Inventory's *Add*: added to what is worn, nothing
+            // replaced. What the outfit's plan would refuse (the limit of
+            // attachments, an outfit not loaded yet) is said here: on its
+            // own that message only shows in the Appearance window.
+            Ok(targets::ItemOpen::Add(item)) => {
+                use crate::world::appearance::{Action, plan};
+                let action = Action::WearItems {
+                    items: vec![item],
+                    replace: false,
+                    point: 0,
+                };
+                match plan(&self.world.inventory, action.clone(), &self.world.outfit_attachment_points()) {
+                    // (`apply_appearance_action`: the same plan, then RLVa's
+                    // `rlva_prepare_outfit` and `rlva_allows_command`)
+                    Ok(_) => self.apply_inventory_action(ui::inventory::InvAction::Appearance(action)),
+                    Err(reason) => self.world.system_notice(reason, Topic::Warning),
+                }
+            }
+            Err(why) => self.world.system_notice(why.text(), Topic::Warning),
+        }
+    }
+
+    /// What is worn and what RLVa locks, for the outfit and the wearable
+    /// shortcuts drawn this frame; None while the desktop has none. What
+    /// is worn is only gathered for a desktop with an item shortcut.
+    fn desktop_wearing(&self) -> Option<Wearing> {
+        use desktop::store::Target;
+        let d = &self.settings.folderstorm_desktop;
+        let items = d.shortcuts.iter().any(|s| matches!(s.target, Target::Item { .. }));
+        if !items && !d.shortcuts.iter().any(|s| matches!(s.target, Target::Outfit { .. })) {
+            return None;
+        }
+        Some(self.desktop_wearing_now(items))
+    }
+
+    /// What is worn (when `worn`) and what RLVa locks, now.
+    fn desktop_wearing_now(&self, worn: bool) -> Wearing {
+        Wearing {
+            // (ERlvWearMask, LLAppearanceMgr::getCanReplaceCOF: what greys
+            // the Inventory's own entries)
+            locks: self.world.rlva_wear_locks(),
+            // (what the Inventory marks "worn")
+            worn: if worn {
+                ui::appearance::items::worn_items(&self.world)
+            } else {
+                Default::default()
+            },
+            busy: self.appearance_ui.pending.is_some(),
+        }
+    }
+
+    /// Wears the outfit of a shortcut: checked as *Replace Current Outfit*
+    /// of the Inventory's menu is (`targets::outfit_open`), then asked
+    /// through outfit safety; only its answer wears
+    /// (`InvAction::Appearance(WearContents)`, from the Inventory's pass,
+    /// to `apply_appearance_action`, where RLVa is checked again).
+    fn desktop_wear_outfit(&mut self, outfit: Uuid, no_inventory: bool) {
+        let wearing = self.desktop_wearing_now(false);
+        match targets::outfit_open(&self.world.inventory, outfit, Some(&wearing), no_inventory) {
+            Ok(()) => self.inventory_ui.folderstorm_ask_outfit(outfit),
+            Err(why) => {
+                // what it holds is asked for, as the Inventory's menu
+                // does when it opens on a folder not loaded yet
+                if why == targets::Greyed::OutfitLoading {
+                    self.apply_inventory_action(ui::inventory::InvAction::PrepareOutfit(outfit));
+                }
+                self.world.system_notice(why.text(), Topic::Warning);
+            }
+        }
+    }
+
     /// *Add to desktop* of the Inventory's menu
-    /// (`InvAction::FolderstormDesktopAdd`): a shortcut to each folder of
-    /// `ids`, in the first free cells of the first desktop. It turns the
-    /// shortcuts on when they are off, and says so.
+    /// (`InvAction::FolderstormDesktopAdd`): a shortcut to each folder and
+    /// each item of `ids` that can be one, in the first free cells of the
+    /// first desktop. It turns the shortcuts on when they are off, and
+    /// says so.
     pub(super) fn folderstorm_desktop_add(&mut self, ids: Vec<Uuid>) {
         let ctx = self.egui_ctx.clone();
         let no_inventory = self.world.rlva.has("showinv");
@@ -197,7 +308,7 @@ impl App {
         self.desktop_sign_in();
         let d = &mut self.settings.folderstorm_desktop;
         let rooms = desktop::rooms(&ctx, d);
-        let added = desktop::add_folders(d, &rooms, &picked.folders, None, None);
+        let added = desktop::add_targets(d, &rooms, &picked.targets, None, None);
         let turned_on = added.added > 0 && !d.shortcuts_on;
         if added.added > 0 {
             d.shortcuts_on = true;
@@ -283,6 +394,9 @@ impl App {
             build_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::rlva_build_locked_id())).unwrap_or(false),
             fly_locked: ctx.data(|d| d.get_temp::<bool>(ui::bars::fly_locked_id())).unwrap_or(false),
             toggle_unset: !toolbar::look(ctx, toolbar::TOGGLE, false, true, String::new()).1,
+            // (what greys *Teleport* on a landmark of the Inventory:
+            // `ui::inventory::Facts::landmark_blocked`)
+            landmark_blocked: !self.world.rlva_can_teleport_landmark(),
         }
     }
 
@@ -306,6 +420,9 @@ impl App {
         // folders of the demo's inventory
         s.folderstorm_desktop.sign_in(self.world.agent_id);
         desktop::demo::seed_folders(&mut s.folderstorm_desktop);
+        if matches!(mode.as_str(), "items" | "outfit") {
+            desktop::demo::seed_items(&mut s.folderstorm_desktop, &mut self.world.inventory, self.world.agent_id);
+        }
         if mode == "rlva" {
             self.settings.rlva_enabled = true;
             self.world.rlva_configure(true);
@@ -314,7 +431,9 @@ impl App {
     }
 
     /// What the demo asks at this frame, as a shortcut would: `open` opens
-    /// a folder shortcut then a command, `drop` adds a folder where a drop
+    /// a folder shortcut then a command, `items` opens the landmark
+    /// shortcut (the teleport's question) then the notecard, `outfit` the
+    /// outfit shortcut (the question of outfit safety), `drop` adds a folder where a drop
     /// from the Inventory would then moves it to the third monitor, `rlva`
     /// tries to open a folder shortcut under `@showinv`, `edit` edits a
     /// name in place then gives a folder shortcut a name and an icon,
@@ -385,6 +504,12 @@ impl App {
                 }]
             }
             ("open", false) => vec![Request::Run(demo::OPENED.to_owned())],
+            // the landmark shortcut opened: Aurora's question before a teleport
+            ("items", true) => vec![Request::OpenItem(demo::landmark())],
+            // then the notecard: Aurora's notecard window
+            ("items", false) => vec![Request::OpenItem(demo::notecard())],
+            // the outfit shortcut opened: the question of outfit safety
+            ("outfit", true) => vec![Request::WearOutfit(demo::outfit())],
             // the name of the People shortcut edited in place, as F2 does
             ("edit", true) => {
                 let people = d
@@ -399,6 +524,7 @@ impl App {
                             inv: &self.world.inventory,
                             no_inventory: false,
                             colors: None,
+                            wear: None,
                         },
                     );
                     desktop::surface::begin_rename(ctx, shortcut.id, &face.name);

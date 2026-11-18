@@ -4,9 +4,11 @@ Plan for [FEATURES.md](../FEATURES.md) row **1.10**. Branch
 `claude/margin-desktop`. **Checkpoint 1 is built** (command shortcuts, the
 desktops, Preferences, the demo), and **checkpoint 2** on
 `claude/margin-desktop-folders` (folder shortcuts), and **checkpoint 3**
-on `claude/margin-desktop-cp3` (editing, the toolbar, the keyboard);
-checkpoint 4 (the taskbar) and checkpoint 5 (item shortcuts) are not. What
-they changed against this plan is in sections 19 to 22.
+on `claude/margin-desktop-cp3` (editing, the toolbar, the keyboard),
+**checkpoint 4** on `claude/margin-desktop-taskbar` (the taskbar) and
+**checkpoint 5** on `claude/margin-desktop-items` (item shortcuts:
+landmarks, notecards, outfits, clothing and objects). What they changed
+against this plan is in sections 19 to 24.
 The human's request (2026-11-16):
 
 > On a 2nd or 3rd monitor, which we've been referring to as margins (where
@@ -47,8 +49,9 @@ The FEATURES row says what it does in one paragraph.
    longer drawn as a title bar: its button stands for it.
 
 **In v1:** folders and commands (checkpoints 1 to 3), the taskbar
-(checkpoint 4). **Not in v1:** single items (landmarks, notecards, outfits:
-section 2, "Items"), files of the computer, web links, widgets, a free
+(checkpoint 4), and since checkpoint 5 single items (landmarks,
+notecards, outfits, clothing and objects: section 24). **Not in v1:**
+files of the computer, web links, widgets, a free
 (unsnapped) placement, a desktop of its own per layout.
 
 ## 2. What Folderstorm (C++) had
@@ -140,7 +143,7 @@ Each line gives the default the build starts from.
 |---|---|
 | Folders | A folder of the agent's own inventory, out of the Trash and of the Library (the rule of the folder tabs, row 2.2). A link to a folder gives the folder |
 | Commands | Every command of the catalogue that is `ready`, but **Favorites** and **VR view** (their button is a pop-up anchored to the button). A command that is not ready is refused with Aurora's "Not available yet" |
-| Items | **Not in v1.** Each kind opens its own way (a double click wears clothing, plays a gesture, opens a notecard in a window owned by an Inventory window), and outfit safety (row 2.7) asks before a folder is worn. Cheapest to add later: landmarks (`InvAction::TeleportLandmark` exists). To decide after v1 |
+| Items | **Built with checkpoint 5 (section 24)**, asked by the human: landmarks, notecards, outfits, clothing and objects. What follows was the first plan. ~~Not in v1.~~ Each kind opens its own way (a double click wears clothing, plays a gesture, opens a notecard in a window owned by an Inventory window), and outfit safety (row 2.7) asks before a folder is worn. Cheapest to add later: landmarks (`InvAction::TeleportLandmark` exists). To decide after v1 |
 | The same thing twice | Allowed on different slots, refused in one desktop (the existing one is selected instead) |
 | A folder that is gone (deleted, or put in the Trash) | The shortcut stays, greyed, with "This folder is no longer in your inventory" and *Remove* |
 | Another account's shortcuts | Never shown: each account has its own desktop (section 6) |
@@ -509,7 +512,7 @@ Sizes are added lines, tests and translations included.
 | 2 | **Folder shortcuts.** *Add to desktop* in the Inventory menu, the drop from Inventory, one window per folder placed beside the shortcut, gone and other-account folders, `@showinv`; *Show in Inventory* | `ui/inventory.rs`, `app/inventory.rs` | ~1,000 |
 | 3 | **Editing and the toolbar** (built, section 22)**.** Rename, the icon list, *Arrange by name*, single-click switch, the unused-monitor note; drag and *Add to desktop* from a toolbar; keyboard (focus, arrows, F2, Delete) and the two desktop key actions | `ui/toolbar.rs` (2) | ~1,000 |
 | 4 | **The taskbar** (built, section 23)**.** The windows seen, held windows, the island, clicks and menus, overflow, attention, its Preferences rows, its key action; demos `taskbar`, `overflow` | `ui/widgets.rs` | ~1,200 |
-| 5 | **Item shortcuts** (asked by the human). In this order: landmarks (opening teleports, `InvAction::TeleportLandmark`), notecards (its window), outfits (through outfit safety, row 2.7), then wearables, whose shortcut **adds** the item to what is worn (*Add*, never *Replace*). Each kind through `world::inventory::actions` (`agent_mask`, as the gesture boards): an item id is kept, never an asset id. The record already keeps a target it cannot read (`kept`), so a build without them loses nothing | to be planned (the Inventory's menu entry is ours already) | to be planned |
+| 5 | **Item shortcuts** (asked by the human; built, section 24)**.** In this order: landmarks (opening teleports, `InvAction::TeleportLandmark`), notecards (its window), outfits (through outfit safety, row 2.7), then wearables, whose shortcut **adds** the item to what is worn (*Add*, never *Replace*). Each kind through `world::inventory::actions` (`agent_mask`, as the gesture boards): an item id is kept, never an asset id. The record already keeps a target it cannot read (`kept`), so a build without them loses nothing | none (the Inventory's menu entry and its action are checkpoint 2's) | ~2,300 |
 | 6 | **Later, each on request.** A layout's own desktop and taskbar choices; *Keep the taskbar above the windows*; several selected at once; lit while open; a colour of its own for a shortcut; the menu key on a focused shortcut; MCP tools | to be planned | – |
 
 Checkpoint 4 needs only checkpoint 1's `place` and settings field. If the
@@ -1032,4 +1035,257 @@ the key action found in three languages), `keys.rs` and
 `workspaces/tests/switcher.rs` (the third action, without a key). The
 frame tests fail if the hook is lost at an upstream merge.
 
-**Left for checkpoint 5**: item shortcuts (section 15).
+**Left for checkpoint 5**: item shortcuts (section 15; built since,
+section 24).
+
+## 24. Checkpoint 5 as built
+
+Item shortcuts, on `claude/margin-desktop-items` (over checkpoint 4 and
+the click that gives a shortcut the keyboard). Asked by the human, in this
+order: landmarks, notecards, outfits, then wearables that are **added**.
+What is built is listed kind by kind; each kind is its own commit.
+
+### What every item shortcut shares
+
+- **The record**: a third target, `{ item: <uuid> }` (`store::Target::Item`):
+  the **inventory item id**, under the account (section 21). Never an asset
+  id, a name or the item's kind: the kind is read from the inventory when
+  the shortcut is drawn (`targets::ItemKind::of`, by asset type). A build
+  that does not know a kind shows the shortcut greyed ("This kind of item
+  cannot be opened from the desktop") and keeps it.
+- **Links are followed when the shortcut is added** (`actions::original`,
+  as LLInvFVBridgeAction::doAction): a link and its item give the same
+  shortcut, which keeps the item's id. A stored link is followed again
+  when it is drawn.
+- **Adding** is checkpoint 2's, extended: *Add to desktop* in the
+  Inventory's menu (the same entry, `desktop-add`, the same
+  `InvAction::FolderstormDesktopAdd`: it now carries items too) and a drop
+  on a desktop. A selection gives its folders and its items that can be
+  shortcuts; the rest is counted in the notice ("N entries left out").
+  The full-desktop and the account-limit notices are checkpoint 2's
+  (`surface::add_targets`, which `add_folders` now calls).
+- **What it shows**: the item's name, read now, under the Inventory's own
+  icon for its type (`ui::inventory::item_icon`, the skin's `Inv_*`); its
+  path in the Inventory as tooltip; *Rename*, *Icon ›*, *Move to ›*,
+  *Remove* as any shortcut. Its menu's first entry says what opening does
+  (*Teleport* for a landmark, *Open* for a notecard, *Add to current
+  outfit* for clothing and objects), then *Show in inventory* (the main
+  Inventory window on the item, `InvAction::ShowMain`).
+- **Greyed, with the reason**: not in the inventory ("deleted, or its
+  folder is not loaded yet": the inventory loads folder by folder, and
+  the two cannot be told apart, as for a gesture board's tile), in the
+  Trash, of a kind a shortcut does not open, the inventory not known yet,
+  refused by RLVa. A greyed item shortcut says nothing of its item (the
+  generic "Inventory item", or the name the user typed).
+- **`@showinv`** (stricter than the Legacy Viewer, as decided for
+  folders): every item shortcut wears the lock and "Inventory item", its
+  name, its path and the name the user typed are hidden, it does not
+  open, it is neither renamed nor shown in the Inventory, and nothing is
+  added.
+- **Creators' permissions**: no new rule. A shortcut opens an item only
+  through the path the Inventory uses for that kind, so the rights are
+  checked where they already are; nothing of an asset is read, copied or
+  shown by the desktop, and no asset id is kept or drawn (tests look for
+  it in what is written and in what is painted).
+- **Upstream hooks**: none added. The menu entry and its action are
+  checkpoint 2's (`ui/inventory.rs:153`, `app/inventory.rs:302`), and the
+  drop reads the Inventory's own payload.
+
+### Landmarks
+
+- **Opening teleports, after Aurora's question.** The glue calls
+  `PlacesUi::confirm_landmark` (the entry Aurora made for "a landmark
+  opened from elsewhere", the Legacy Viewer's TeleportFromLandmark that
+  LLLandmarkBridgeAction::doIt shows): "Do you really want to teleport
+  to…", with its "Do not show again" box (`Settings::confirm_teleports`).
+  Yes goes through `PlacesAction::TeleportLandmark` to
+  `request_user_teleport`, the one path of every teleport the user asks
+  for. **Stricter than Aurora's Inventory**, whose double click teleports
+  at once: on a desktop a stray double click must not.
+- **RLVa**: the shortcut is greyed "Blocked by RLVa" while
+  `World::rlva_can_teleport_landmark` is false (what greys *Teleport* on
+  a landmark of the Inventory: `@tplm`, `@tploc`, `@unsit` while
+  seated…), and `request_user_teleport` checks the command again when
+  the question is answered.
+- **The asset id** of the landmark names it in the teleport request
+  (`NetCommand::TeleportLandmark`, as `InvAction::TeleportLandmark`
+  carries it). It is read from the inventory when the shortcut is opened,
+  handed to that path, and never kept, logged by us or shown.
+- **The Library**: a landmark of the Library can be a shortcut (the
+  Legacy Viewer and Aurora's Inventory teleport to it). **Decision**:
+  what only reads an item may come from the Library; folders of the
+  Library stay refused (checkpoint 2).
+- **No right is asked** for a teleport (the Legacy Viewer asks for none):
+  a no-copy, no-modify, no-transfer landmark teleports as a full one.
+
+### Notecards
+
+- **Opening is the Inventory's own *Open***: the glue hands the item to
+  `apply_inventory_action(InvAction::Preview(item))`, the arm a double
+  click on a notecard of the Inventory reaches. That arm, not the
+  desktop, checks RLVa's `@viewnote` (`Inventory::can_preview`), opens
+  Aurora's notecard window (one per notecard: opened again, it comes to
+  the front with its unsaved text), checks the right to read
+  (LLPreviewNotecard::loadAsset: copy, or a god; otherwise the window
+  says "You are not allowed to read this content") and only then asks
+  the grid for the content. Saving goes through the same window, with
+  its own check (`preview::can_edit`).
+- **Nothing of the notecard is read by the desktop**: not its asset id,
+  not its text, not its rights. A notecard the agent may not read is
+  still a shortcut (the Inventory shows it too), and its window refuses.
+- **RLVa**: greyed "Blocked by RLVa" under `@viewnote`; the name stays.
+- **The Library**: allowed, read through the same rights (the rule of
+  section "Landmarks").
+- The notecard's window is Aurora's own floater, so it is placed by
+  Aurora's cascade, not beside the shortcut.
+
+### Outfits
+
+- **A fourth target**, `{ outfit: <uuid> }` (`store::Target::Outfit`): the
+  id of an outfit folder (LLFolderType::FT_OUTFIT, the folders of My
+  Outfits). **Decision**: from this checkpoint on, an outfit folder added
+  to a desktop (menu or drop, or a link to it) gives an **outfit
+  shortcut**, whose opening **wears** it; any other folder still gives a
+  folder shortcut. A folder shortcut made earlier to an outfit's folder
+  stays one (it opens the window). An outfit shortcut's menu keeps the
+  folder's side: *Open in a new window* (checkpoint 2's window, beside
+  the shortcut) and *Show in inventory*.
+- **Opening wears it as *Replace Current Outfit*** of the Inventory's
+  menu, **always after the question of outfit safety** (row 2.7): the
+  glue checks what greys that entry (`targets::outfit_open`: the folder
+  is a live outfit, RLVa does not lock adding from it
+  (`WearLocks::folder_allows`), no outfit change is under way, what it
+  holds is loaded and has something to wear), then sets the question
+  through `InventoryUi::folderstorm_ask_outfit` (in our
+  `ui/inventory/outfit_safety.rs`). The window is outfit safety's own:
+  Cancel first and focused, Escape cancels, no "do not ask again". Only
+  its answer wears: it checks the folder again and emits
+  `InvAction::Appearance(WearContents { ReplaceOutfit })` from the
+  Inventory's pass, which reaches `apply_appearance_action`, the path of
+  every outfit change (`appearance::plan`, then RLVa's
+  `rlva_prepare_outfit` and `rlva_allows_command`: `@addoutfit`,
+  `@remoutfit`, locked attachments and layers).
+- **Not loaded yet**: opening says "This outfit is still loading" and asks
+  for what it holds (`InvAction::PrepareOutfit`, as the Inventory's menu
+  does when it opens on such a folder); the next try wears.
+- **Greyed**: gone, in the Trash, no longer an outfit ("This outfit is no
+  longer in your inventory"); an RLVa add lock on its folder ("Blocked by
+  RLVa"). What it holds is not walked while it is drawn, so "nothing to
+  wear", "still loading" and "an outfit change is under way" are said
+  when it is opened, in the chat's notices.
+- **The Library**: refused, as its folders are (Aurora's *Replace Current
+  Outfit* is greyed there too).
+- **No new upstream hook**: the question is set by a method of ours on
+  `InventoryUi` and drawn by outfit safety's existing line
+  (`ui/inventory.rs:2330`).
+- **Not tested here**: the greyed state under an RLVa folder lock
+  (`WearLocks` cannot be built outside `world::rlva` without a hook; the
+  rule itself is upstream's, with its tests).
+
+### Wearables: clothing and objects, added
+
+Built: Aurora's *Add* made it straightforward.
+
+- **Clothing (asset type 5) and objects (6: attachments, HUDs,
+  accessories)** can be shortcuts. Opening one **adds** it to what is
+  worn, as *Add* of the Inventory's menu does:
+  `Action::WearItems { items: [item], replace: false, point: 0 }` through
+  `apply_inventory_action(InvAction::Appearance(…))`. Nothing is replaced:
+  clothing goes on as one more layer, an object on its own point beside
+  what is there. A shortcut never takes anything off.
+- **A body part (13) is never a shortcut** (refused when added, greyed
+  "This kind of item cannot be opened from the desktop" if one is in the
+  file): a shape, a skin, hair or eyes can only **replace** the one worn
+  (the Inventory offers *Wear* alone for it), and the human asked for
+  "add, never replace".
+- **Behind what greys *Add*** (`item_attachments` of
+  `ui/inventory/context_catalog.rs`; ERlvWearMask in
+  LLWearableBridge / LLObjectBridge::buildContextMenu): greyed "You are
+  wearing it already" while worn (`ui::appearance::items::worn_items`:
+  what the Inventory marks worn), "Blocked by RLVa" while a wear lock
+  forbids adding it (`WearLocks::wear(…).add`: `@addoutfit`,
+  `@addattach`, a locked point or layer, a locked folder), and an item of
+  a Marketplace listing is never worn (AlertMerchantListingCannotWear).
+  "An outfit change is under way" is said when it is opened.
+- **Limits**: before the action is handed over, the glue runs
+  `appearance::plan` on it, and what it refuses (the 38 attachments, an
+  outfit not loaded yet) is said in the chat's notices; on its own that
+  message only shows in the Appearance window. Then
+  `apply_appearance_action` runs the same plan and RLVa's
+  `rlva_prepare_outfit` / `rlva_allows_command`.
+- **Outfit safety** (row 2.7) greys *Wear* (which replaces) and makes the
+  folder entries ask; it leaves *Add* and the double click as they are,
+  and so does the desktop: no question before an item is added. The
+  double click of the Inventory can replace (by a preference); the
+  shortcut never does.
+- **The Library**: refused (wearing an item of the Library first copies
+  it into the inventory, and Aurora's *Add* is greyed there).
+- **What is worn is gathered** once a frame, only for a desktop that has
+  an item shortcut (`desktop_wearing`), and RLVa's locks cost nothing
+  while RLVa locks nothing.
+- **Not tested here**: the greyed state under an RLVa wear lock (as for
+  the outfits), and the app's arms themselves (a teleport question set,
+  an action applied): they need an `App`. The rules they call are tested.
+- **A place for later** (asked for after this checkpoint: an "X" on a
+  worn object's shortcut that detaches it): the face of a worn wearable
+  is already known (`Greyed::Worn`, with its item), so the "X" is a small
+  hit area on that face in `surface.rs`, a `Request::Detach(item)`, and
+  the glue's `Action::Remove(item)` through `apply_appearance_action`
+  (RLVa's `@remattach` / `@detach` are checked there, and `WearLocks`
+  says beforehand whether to show it).
+
+### Decided in the build, beyond the plan
+
+- **One target for every kind of item** (`{ item }`), its kind read from
+  the inventory, rather than one target per kind: a new kind is a line of
+  `ItemKind::of`, and the file's shape does not change.
+- **An outfit folder gives an outfit shortcut** (a target of its own),
+  not a folder shortcut whose folder happens to be an outfit: the two
+  open differently, and the file says which was meant.
+- **A landmark asks before it teleports**, where Aurora's Inventory does
+  not (the Legacy Viewer's TeleportFromLandmark; the user can tick "Do
+  not show again").
+- **The Library**: landmarks and notecards yes (they only read the
+  item), outfits, clothing and objects no.
+- **Body parts are refused**: they cannot be added.
+- **`@showinv` locks every item and outfit shortcut**, as it locks the
+  folder shortcuts: stricter than the Legacy Viewer, which still lets a
+  landmark of the Places window teleport.
+- **The refusal texts are generic** ("N entries left out: they cannot be
+  desktop shortcuts"; "Shortcut added to the desktop"): the earlier ones
+  named folders only.
+- **`Face` says what opening does** (`verb`) and whether RLVa hides it
+  (`hidden`): a landmark greyed by `@tplm` keeps its name and can still
+  be renamed, where checkpoint 3 read "greyed by RLVa" as "hidden".
+
+**Upstream hooks of checkpoint 5**: none added, none moved. Touched
+upstream files: the three catalogues of `crates/aurora-i18n/locales/`
+(12 new `fs-desktop-*` keys each, 6 reworded) and `docs/TESTING.md` (the
+modes `items` and `outfit`). `ui/inventory/outfit_safety.rs` and
+`ui/inventory/context_catalog/folder_tabs.rs` are the fork's own files.
+
+**Demo**: `items` (a third column: a landmark, a notecard, an outfit, a
+shirt to add, a worn jacket, an item that is gone; the landmark opened at
+frame 200, the notecard at 300) and `outfit` (the outfit opened at frame
+200: the question of outfit safety). Both in `docs/TESTING.md`.
+
+**Tests**: `targets.rs` (pure: what each kind gives a selection, links
+followed, the Trash, the Library, other kinds, a body part; what opening
+does and what refuses it: `@tplm`, `@viewnote`, `@showinv`, worn already,
+an outfit change under way, a Marketplace listing, an empty or unloaded
+outfit; the faces; a landmark with no right at all, a notecard the agent
+may not read, a Library item; no asset id in what is kept or said),
+`store.rs` (the item target written and read back), `tests/items.rs`
+(frames: each kind drawn, opened by double click, single click, Enter and
+its menu, greyed, hidden under `@showinv`, dropped from the Inventory
+alone, as a link, in a selection; the full desktop and the other
+account), `tests.rs` (the demo's seeds), `outfit_safety.rs` (the desktop's
+question is *Replace Current Outfit*'s),
+`context_catalog/folder_tabs.rs` (the menu entry on an item).
+
+**Left**: the "X" that detaches a worn object from its shortcut (asked
+after this checkpoint; see "Wearables"); gestures, sounds, textures and
+other kinds as shortcuts (the gesture boards already play gestures and
+sounds); an item's own colour (the Inventory tints its icons by family,
+the desktop uses the theme's); a notecard's window placed beside its
+shortcut; lit while worn rather than greyed.

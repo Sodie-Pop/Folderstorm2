@@ -9,6 +9,12 @@
 //! `app/folderstorm_desktop.rs`), behind the same gates. A shortcut to an
 //! Inventory folder opens that folder's own window (Aurora's *Open in a
 //! new window*), one window per folder; it keeps the folder's id, nothing else.
+//! A shortcut to an Inventory item opens it as the Inventory does (a
+//! landmark: the teleport, after Aurora's question; a notecard: its
+//! window); it keeps the item's id, never its asset's. A shortcut to an
+//! outfit wears it, as *Replace Current Outfit* does, after the question
+//! of outfit safety; one to clothing or an object adds it to what is
+//! worn, as the Inventory's *Add* does, never replacing anything.
 //! Each account has its own desktop ([`store`]): the shortcuts shown are
 //! those of the account logged in, and the choices of Preferences are the
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
@@ -48,8 +54,8 @@ mod taskbar_tests;
 mod tests;
 
 pub use store::Desktop;
-pub use surface::{Added, add_folders};
-pub use targets::{Facts, Folders};
+pub use surface::{Added, add_folders, add_targets};
+pub use targets::{Facts, Folders, Wearing};
 
 use crate::folderstorm::viewport;
 use crate::theme::Palette;
@@ -84,6 +90,15 @@ pub enum Request {
     OpenFolder { folder: Uuid, cell: Rect, room: Rect },
     /// Show this folder in the main Inventory window.
     ShowFolder(Uuid),
+    /// Open this item of the Inventory as the Inventory opens its kind (a
+    /// landmark: teleport there, after Aurora's question; a notecard: its
+    /// window; clothing or an object: added to what is worn).
+    OpenItem(Uuid),
+    /// Show this item in the main Inventory window.
+    ShowItem(Uuid),
+    /// Wear this outfit (its folder of My Outfits), after the question of
+    /// outfit safety.
+    WearOutfit(Uuid),
     /// Say this in the chat's notices (what a drop added, or why not).
     Notice(String),
     /// The desktop changed: save the settings once the pointer is up.
@@ -272,8 +287,8 @@ pub fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env) -> Vec<Reques
     surface::show(ctx, desktop, env, &rooms)
 }
 
-/// What to say after folders were added (`added`), `left_out` entries of
-/// the selection not being folders that can be shortcuts. `turned_on`: the
+/// What to say after folders and items were added (`added`), `left_out`
+/// entries of the selection not being ones that can be shortcuts. `turned_on`: the
 /// shortcuts were off and this turned them on; `shown`: a desktop shows
 /// now. None when there is nothing to say (a plain drop that worked).
 pub fn added_notice(added: &Added, left_out: usize, turned_on: bool, shown: bool) -> Option<String> {

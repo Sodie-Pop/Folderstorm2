@@ -2417,7 +2417,7 @@ fs-background-shows = Shows
 fs-desktop-group = Desktop in the margins
 fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
-fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop Inventory folders on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders, landmarks, notecards, outfits and clothing and objects of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
 fs-desktop-size = Icon size
 fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
 fs-desktop-size-small = Small
@@ -2433,25 +2433,37 @@ fs-desktop-greyed-gone = This command no longer exists.
 fs-desktop-greyed-button-only = This one only works from its toolbar button.
 fs-desktop-greyed-rlva = Blocked by RLVa.
 fs-desktop-greyed-folder-gone = This folder is no longer in your inventory.
+fs-desktop-item = Inventory item
+fs-desktop-greyed-item-gone = This item is not in your inventory: it was deleted, or its folder is not loaded yet.
+fs-desktop-greyed-item-trash = This item is in the Trash.
+fs-desktop-greyed-item-other = This kind of item cannot be opened from the desktop.
+fs-desktop-outfit = Outfit
+fs-desktop-wear-outfit = Wear this outfit…
+fs-desktop-greyed-outfit-gone = This outfit is no longer in your inventory.
+fs-desktop-greyed-outfit-loading = This outfit is still loading: try again in a moment.
+fs-desktop-greyed-outfit-empty = This outfit has nothing to wear.
+fs-desktop-greyed-busy = An outfit change is under way: try again in a moment.
+fs-desktop-greyed-worn = You are wearing it already.
+fs-desktop-greyed-listing = An item of a Marketplace listing cannot be worn.
 fs-desktop-add = Add to desktop
-fs-desktop-add-refused = Only folders of your own inventory, out of the Trash, can be desktop shortcuts.
+fs-desktop-add-refused = Only folders, landmarks, notecards, outfits and clothing and objects of your inventory, out of the Trash, can be desktop shortcuts.
 fs-desktop-added =
     { $count ->
-        [one] Folder added to the desktop.
-       *[other] { $count } folders added to the desktop.
+        [one] Shortcut added to the desktop.
+       *[other] { $count } shortcuts added to the desktop.
     }
 fs-desktop-add-existing = Already on the desktop.
 fs-desktop-add-full =
     { $count ->
-        [one] One folder did not fit.
-       *[other] { $count } folders did not fit.
+        [one] One shortcut did not fit.
+       *[other] { $count } shortcuts did not fit.
     }
 fs-desktop-full = This desktop is full: remove a shortcut or use a smaller icon size.
 fs-desktop-limit = The desktops hold { $count } shortcuts at most: remove one first.
 fs-desktop-left-out =
     { $count ->
-        [one] One entry left out: only folders of your own inventory can be shortcuts.
-       *[other] { $count } entries left out: only folders of your own inventory can be shortcuts.
+        [one] One entry left out: it cannot be a desktop shortcut.
+       *[other] { $count } entries left out: they cannot be desktop shortcuts.
     }
 fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Layout › Bars and windows).
 fs-desktop-added-hidden = They show when the window leaves room around the world.
@@ -2472,7 +2484,7 @@ fs-desktop-unused =
 fs-desktop-unused-help = A shortcut stays on the monitor it was put on. When the window no longer covers that monitor, or the world fills it, the shortcut is kept but not shown.
 fs-desktop-bring = Bring them here
 fs-desktop-clear = Remove all shortcuts…
-fs-desktop-clear-help = Removes every shortcut of this account's desktops. Only the shortcuts go: the folders and the toolbars stay as they are.
+fs-desktop-clear-help = Removes every shortcut of this account's desktops. Only the shortcuts go: the folders, the items and the toolbars stay as they are.
 fs-desktop-clear-button = Remove all…
 fs-desktop-clear-ask =
     { $count ->
