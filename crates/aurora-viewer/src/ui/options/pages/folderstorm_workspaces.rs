@@ -3,8 +3,9 @@
 //! section after Layout. Folderstorm (C++) had its layouts under Move &
 //! View › Layout and its workspaces under Move & View › Workspaces.
 //!
-//! Four tabs, in the order of use: *Saved* ([`saved`]: the layouts and the
-//! workspaces in one list, the selected entry's editor, the save form),
+//! Four tabs, in the order of use: *Saved* ([`saved`]: the workspaces and
+//! the layouts in a list, the selected entry's editor beside it, *New from
+//! current…*),
 //! *World viewport* and *Margins* (`super::folderstorm_viewport`: the live
 //! arrangement a layout saves, and what the margins show), *Switching*
 //! ([`switching`]: the standing preferences, and the ways back). Like the
@@ -51,7 +52,6 @@ const ICON_WORKSPACE: &str = "app-window-filled";
 
 const ROW_H: f32 = 28.0;
 const BUTTON_H: f32 = 26.0;
-const LIST_W: f32 = 640.0;
 /// The width of a list of layouts to pick from.
 const PICKER_W: f32 = 220.0;
 
@@ -303,7 +303,6 @@ fn window_editor(ui: &mut egui::Ui, p: &Palette, layout: &Layout, frame: &Window
     let saved = &layout.monitors;
     let mut edited = None;
     ui.add_space(4.0);
-    ui.label(egui::RichText::new(tr!("fs-layouts-part-window")).size(12.5).color(p.ink));
     let mut mode = mode_of(frame);
     // full screen and borderless name monitors of the layout's own list
     let modes = [
@@ -584,8 +583,9 @@ mod tests {
             self.click_at(rect.center());
         }
 
-        /// The save form on "Layout".
+        /// *New from current…*, on "Layout".
         fn layout_form(&mut self) {
+            self.click(tr!("fs-saved-new"));
             self.click_last(tr!("fs-workspaces-save-layout"));
         }
 
@@ -643,7 +643,7 @@ mod tests {
         // listed, selected, in use; the field is ready for another name
         assert!(w.shows("Wide") && w.shows(tr!("fs-layouts-active")));
         assert!(!w.shows(tr!("fs-saved-empty")));
-        assert!(w.shows(tr!("fs-layouts-name-hint")));
+        assert!(!w.shows(tr!("fs-layouts-name-hint")), "the form gives way to the new entry");
         assert!(w.shows(tr!("fs-layouts-apply")));
         let holds = format!("{} · {}", tr!("fs-layouts-part-world"), tr!("fs-layouts-holds-windows", count = 2));
         assert!(w.shows(&holds), "what it holds");
@@ -1407,7 +1407,7 @@ mod tests {
             tr!("fs-layouts-modified"),
             tr!("fs-layouts-newer"),
             tr!("fs-layouts-apply"),
-            tr!("fs-layouts-save"),
+            tr!("fs-saved-new"),
         ] {
             assert!(texts.iter().any(|t| t == expected), "“{expected}” is drawn");
         }
@@ -1445,11 +1445,12 @@ mod tests {
         };
         assert!(s.folderstorm_workspaces.window_held);
         let texts = drawn("preferences-layouts-window", tab::SAVED, s.clone(), false);
+        let window = tr!("fs-layouts-part-window").to_uppercase();
         for icon in [ICON_LOCK, ICON_UNLOCK] {
             assert!(crate::ui::icons::global(icon).is_some(), "the icon “{icon}” is embedded");
         }
         for expected in [
-            tr!("fs-layouts-part-window"),
+            window.as_str(),
             tr!("fs-layouts-mode-normal"),
             tr!("fs-layouts-mode-fullscreen"),
             tr!("fs-layouts-mode-borderless"),
@@ -1509,10 +1510,10 @@ mod tests {
         assert!(!w.shows(tr!("fs-margins-off")), "no notice once it is on");
     }
 
-    /// The Saved tab's list: favorites first, then the workspaces, then the
-    /// layouts, each under its title.
+    /// The Saved tab's list: the workspaces, then the layouts, each under
+    /// its title, in the user's order (a favorite keeps its place).
     #[test]
-    fn the_list_puts_the_favorites_first_then_workspaces_then_layouts() {
+    fn the_list_puts_the_workspaces_first_then_the_layouts() {
         let mut w = Window::new();
         w.s.folderstorm_workspaces = serde_json::from_value(serde_json::json!({
             "layouts": [
@@ -1534,12 +1535,133 @@ mod tests {
                 .map(|t| t.rect.top())
                 .unwrap_or_else(|| panic!("{name}"))
         };
-        let favorites = top(&tr!("fs-switcher-favorites").to_uppercase());
         let workspaces = top(&tr!("fs-workspaces-list").to_uppercase());
         let layouts = top(&tr!("fs-layouts-list").to_uppercase());
-        assert!(favorites < top("Single") && top("Single") < top("Exploring"));
-        assert!(top("Exploring") < workspaces && workspaces < top("Sorting"));
-        assert!(top("Sorting") < layouts && layouts < top("Wide"));
+        assert!(workspaces < top("Sorting") && top("Sorting") < top("Exploring"));
+        assert!(top("Exploring") < layouts && layouts < top("Wide") && top("Wide") < top("Single"));
+        // nothing in use, nothing selected: the right pane says what to do
+        assert!(w.shows(tr!("fs-saved-pick")));
+    }
+
+    /// The texts of the Saved tab drawn in a window `width` wide, with where
+    /// each is.
+    fn placed(s: Settings, width: f32) -> Vec<(String, Rect)> {
+        let theme = crate::theme::Theme::default();
+        let p = theme.skin_palette();
+        let ctx = egui::Context::default();
+        theme.apply(&ctx, 1.0);
+        ctx.all_styles_mut(|s| s.animation_time = 0.0);
+        let icons = crate::ui::icons::Icons::load(&ctx, None);
+        let mut st = OptionsUi::default();
+        st.open(Page::Workspaces, tab::SAVED);
+        let mut s = s;
+        let mut texts = Vec::new();
+        for frame in 0..8 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(width, 900.0))),
+                    time: Some(frame as f64 / 60.0),
+                    ..Default::default()
+                },
+                |ui| {
+                    show(ui.ctx(), &p, &icons, &mut s, &mut st, &mut true);
+                },
+            );
+            texts.clear();
+            fn collect(shape: &egui::Shape, out: &mut Vec<(String, Rect)>) {
+                match shape {
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
+                    egui::Shape::Text(t) => out.push((t.galley.text().to_owned(), Rect::from_min_size(t.pos, t.galley.size()))),
+                    _ => {}
+                }
+            }
+            for clipped in &output.shapes {
+                collect(&clipped.shape, &mut texts);
+            }
+            output.textures_delta.clear();
+        }
+        texts
+    }
+
+    fn rect_in(texts: &[(String, Rect)], text: &str) -> Rect {
+        texts
+            .iter()
+            .find(|(t, _)| t == text)
+            .map(|(_, r)| *r)
+            .unwrap_or_else(|| panic!("“{text}” is drawn"))
+    }
+
+    /// Two panes on a wide page, the editor right of the list; under the
+    /// window's narrow width, the list above the editor.
+    #[test]
+    fn the_editor_is_beside_the_list_or_under_it_when_narrow() {
+        let seeded = || {
+            let mut s = Settings::default();
+            s.folderstorm_workspaces
+                .add(Layout::new("Wide", Some(wide()), None, Vec::new()))
+                .expect("added");
+            s.folderstorm_workspaces.set_active(Some("Wide".into()));
+            s
+        };
+        let texts = placed(seeded(), 1280.0);
+        let (new, apply) = (rect_in(&texts, tr!("fs-saved-new")), rect_in(&texts, tr!("fs-layouts-apply")));
+        assert!(apply.left() > new.right(), "side by side: {new:?} {apply:?}");
+        let texts = placed(seeded(), 700.0);
+        let (new, apply) = (rect_in(&texts, tr!("fs-saved-new")), rect_in(&texts, tr!("fs-layouts-apply")));
+        assert!(apply.top() > new.bottom(), "the editor under the list: {new:?} {apply:?}");
+    }
+
+    /// A workspace shows its layout as a card, which opens it; a layout
+    /// shows the workspaces and the button that use it, which lead back.
+    #[test]
+    fn a_workspace_shows_its_layout_and_a_layout_what_uses_it() {
+        let mut w = Window::new();
+        w.s.folderstorm_workspaces = serde_json::from_value(serde_json::json!({
+            "layouts": [Layout::new("Single", Some(Default::default()), None, Vec::new())],
+            "workspaces": [{ "schema": 1, "name": "Sorting", "layout": "Single", "open": ["inventory"] }],
+            "active_workspace": "Sorting",
+            "toggle": ["Single", null],
+        }))
+        .expect("read");
+        w.settle();
+        let selected = |w: &Window| saved::load(&w.frames.ctx).selected;
+        assert_eq!(selected(&w).map(|pick| pick.kind), Some(saved::Kind::Workspace));
+        w.reveal(tr!("fs-saved-open-layout"));
+        w.click(tr!("fs-saved-open-layout"));
+        w.settle();
+        assert_eq!(
+            selected(&w),
+            Some(saved::Pick {
+                kind: saved::Kind::Layout,
+                index: 0
+            })
+        );
+        // the layout's users: the workspace, the first layout of the toggle
+        w.reveal(tr!("fs-saved-used-by-some"));
+        assert!(w.shows(tr!("fs-saved-used-by-some")) && w.shows(tr!("fs-saved-toggle-first")));
+        assert!(!w.shows(tr!("fs-saved-toggle-second")));
+        // the workspace's name leads back to it
+        w.click_last("Sorting");
+        w.settle();
+        assert_eq!(selected(&w).map(|pick| pick.kind), Some(saved::Kind::Workspace));
+    }
+
+    /// A layout's *Edit the current viewport* opens the World viewport
+    /// tab; *Switching* opens that tab.
+    #[test]
+    fn a_layout_leads_to_the_viewport_and_switching_tabs() {
+        let mut w = Window::new();
+        w.save_as("Wide");
+        w.reveal(tr!("fs-saved-edit-viewport"));
+        w.click(tr!("fs-saved-edit-viewport"));
+        w.settle();
+        assert_eq!((w.st.page, w.st.tab), (Page::Workspaces, tab::VIEWPORT));
+        w.tab(tab::SAVED);
+        w.reveal(tr!("fs-saved-switching"));
+        w.click_last(tr!("fs-saved-switching"));
+        w.settle();
+        assert_eq!((w.st.page, w.st.tab), (Page::Workspaces, tab::SWITCHING));
+        assert!(w.shows(tr!("fs-saved-used-by-none")) || w.shows(tr!("fs-layouts-toggle-first")));
     }
 
     /// Each list's own report: what the last apply did, in one line under

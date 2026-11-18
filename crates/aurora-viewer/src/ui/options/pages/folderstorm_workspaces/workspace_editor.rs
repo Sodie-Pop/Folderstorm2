@@ -4,9 +4,9 @@
 //! Preferences → Move & View → Workspaces, "Arrange your windows and
 //! choose Save current".
 //!
-//! Under the selected workspace's actions ([`super::saved`]): the layout
-//! applied with it, the windows it opens (the ticked ones first, the
-//! others folded, the additional Inventory windows as one entry), its
+//! The parts of the selected workspace's editor ([`super::saved`]): the
+//! layout applied with it, the windows it opens (the ticked ones first,
+//! the others folded, the additional Inventory windows as one entry), its
 //! Inventory folders, and its graphics, camera and HUDs.
 
 use super::{BUTTON_H, ICON_DELETE, PICKER_W, muted};
@@ -22,19 +22,9 @@ use crate::ui::widgets::{self, ActionKind};
 use aurora_i18n::tr;
 use egui::vec2;
 
-/// Everything of the workspace at `index` but its actions. True when the
-/// settings changed.
-pub(super) fn editor(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, name: &str) -> bool {
-    let mut changed = layout_picker(ui, s, index);
-    changed |= window_boxes(ui, p, s, index, name);
-    changed |= folders_box(ui, p, s, index);
-    changed |= context_section(ui, p, s, index, name);
-    changed
-}
-
 /// The layout applied with the workspace at `index`: "keep the layout in
 /// use", or a layout of the list. True when the choice changed.
-fn layout_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
+pub(super) fn layout_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
     let store = &mut s.folderstorm_workspaces;
     let mut choices: Vec<(Option<usize>, &str)> = vec![(None, tr!("fs-workspaces-layout-keep"))];
     choices.extend(
@@ -51,7 +41,7 @@ fn layout_picker(ui: &mut egui::Ui, s: &mut Settings, index: usize) -> bool {
         .map(|(at, _)| at);
     let mut pick = chosen;
     let shown = choices.iter().find(|(value, _)| *value == chosen).map_or("", |(_, label)| *label);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(tr!("fs-workspaces-layout"));
         egui::ComboBox::from_id_salt("folderstorm-workspace-layout")
             .width(PICKER_W)
@@ -85,9 +75,9 @@ fn window_box(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, wi
 /// The windows the workspace opens, ticked, first; the others folded
 /// under *More windows*, the 16 additional Inventory windows there as one
 /// entry. True when its list changed.
-fn window_boxes(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, name: &str) -> bool {
+pub(super) fn window_boxes(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, name: &str) -> bool {
     let mut changed = false;
-    muted(ui, p, tr!("fs-workspaces-windows"));
+    muted(ui, p, tr!("fs-workspaces-closes"));
     let opens = |s: &Settings, window: &Window| {
         s.folderstorm_workspaces
             .workspace(index)
@@ -132,7 +122,7 @@ fn window_boxes(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, 
 
 /// *Remember Inventory folders* of the workspace: ticked, it takes the
 /// folder windows open now; unticked, it forgets them. True when changed.
-fn folders_box(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) -> bool {
+pub(super) fn folders_box(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) -> bool {
     let ctx = ui.ctx().clone();
     let mut on = s
         .folderstorm_workspaces
@@ -148,7 +138,7 @@ fn folders_box(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) -
 /// The workspace's context (row 1.7), folded until it has one (C++: every
 /// group "Do not change" by default, its save section collapsed): the
 /// graphics profile, the camera, the HUDs it wears. True when changed.
-fn context_section(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, name: &str) -> bool {
+pub(super) fn context_section(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize, name: &str) -> bool {
     let has = s
         .folderstorm_workspaces
         .workspace(index)

@@ -382,7 +382,7 @@ world, the bars and the three windows, and says how many windows it placed;
 that the layout in use shows "In use", then "In use · modified" within a
 second of moving one of its windows or changing the viewport, until Update
 (which asks first) or another Apply; that "Previous arrangement" goes back and
-forth (Workspaces › Switching); that "Save the current setup" on *Layout*
+forth (Workspaces › Switching); that *New from current…* on *Layout*
 refuses an empty or taken name and saves only the ticked parts; that Rename, Delete (asks first) and the arrows work;
 that a window closed when a layout is applied is opened at its place if the
 layout was saved with it open, and otherwise takes its place when opened; and
@@ -706,12 +706,18 @@ AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=1 AURORA_DEMO_OPTIONS=workspaces/3 \
   cargo run -p aurora-viewer -- --title "Test switching tab"
 ```
 
-Check that *Saved* lists the favorites, then the workspaces, then the layouts,
-each line with its kind's icon; that the selected entry's buttons and editor
-show under its line (a workspace's ticked windows first, the others under
-*More windows*, Inventory 2 to 17 as one entry); that the last apply is one
-line under the buttons with the rest on hover; and that *Save the current
-setup* saves a workspace or a layout. *Margins* shows one notice with *Turn
+Check that *Saved* lists the workspaces, then the layouts, each line with its
+kind's icon and its star, then *New from current…*; that the selected
+entry's editor is on the right (under the list when the window is at its
+narrowest): a workspace's ticked windows first, the others under *More
+windows*, Inventory 2 to 17 as one entry, and beside its layout's choice a
+card of that layout with its picture and *Open this layout*; a layout's
+viewer window, the picture of what it gives on the monitors of now, *Edit
+the current viewport* (World viewport tab), its background, and *Used by*
+(the workspaces that apply it, which select them, and the *Switch layout*
+button); that the last apply is one line under the buttons with the rest on
+hover; and that *New from current…* saves a workspace or a layout in the
+right pane. *Margins* shows one notice with *Turn
 the world viewport on* while the viewport is off, the rows greyed; the
 background shows only the rows of its kind. *Switching* holds the favorites
 strip, the two layouts of *Switch layout*, *When the monitors change* and the
