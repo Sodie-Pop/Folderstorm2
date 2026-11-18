@@ -57,7 +57,7 @@ Behaviour (as in Folderstorm (C++) unless marked **differs**):
 | Add folders to a tab | Right click on folders › *Add to ›* (**adds**): every custom tab by name, then *New tab…*; picking one adds the folders (union, not repeated) and the status line says so; a check mark on a tab that has them all. Dragging folders onto a custom tab's button does the same (**adds**) |
 | Several folders | Ctrl+click and Shift+click select them (Aurora's own selection); the menu and the drag take the whole selection |
 | Greyed entries | Say why on hover (an item selected, the root, Trash or Library, 32 folders, 10 tabs) |
-| Change a tab's folders | Right click on a custom tab › *Add selected folders* / *Use only selected folders* / *Show all folders*; also in *Customize tab…* (**adds**: a *Folders* part listing each folder by path, with a remove button) |
+| Change a tab's folders | Right click on a custom tab › *Add the selection* / *Use only the selection*; also in *Customize tab…* (**adds**: a *Folders* part listing each folder by path, with a remove button, and *Remove all…*, which asks first). **Differs**: Folderstorm (C++)'s *Show all folders* is not in the tab menu; its *Show all items* clears the tab's hiding filters and search and keeps the folders ([quick access plan](inventory-quick-access.md), "Clear") |
 | What can be chosen | Folders only; not the root, the Trash or what it holds, the Library; up to 32 (row 2.13 adds single items, pinned: [plan](inventory-quick-access.md)) |
 | Sub-folders | Included, at any depth; the parents are shown as the path only |
 | Filters and search | Apply inside the scope; *Reset* in the filter editor keeps the scope |

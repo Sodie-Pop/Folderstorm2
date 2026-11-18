@@ -160,6 +160,7 @@ pub fn page(cx: &mut Cx) {
             },
         );
     });
+    super::folderstorm_backup::group(cx); // Folderstorm: the account's setup backup
     // the Legacy Viewer's uninstaller, from the viewer (uninstall.rs): what
     // it registered outside its folders, confirmed first
     cx.group(tr!("ui-options-remove-aurora"), |cx| {

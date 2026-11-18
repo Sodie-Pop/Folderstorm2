@@ -11,8 +11,8 @@
 //! a shortcut first, then a HUD the background does not hide, then the
 //! room of the desktop. A desktop that took every press of its room left a
 //! HUD moved into the margin there for good: it could be moved in, never
-//! out again. The windows and bars above all of these are the interface's,
-//! decided before this.
+//! out again. The windows, the bars and the desktop's taskbar (an island of
+//! the bars) above all of these are the interface's, decided before this.
 
 /// What is drawn under the pointer, of what this decides between.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

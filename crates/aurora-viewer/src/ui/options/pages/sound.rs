@@ -450,6 +450,7 @@ fn interface_sounds(cx: &mut Cx) {
             }
         });
     });
+    super::folderstorm_alerts::group(cx); // Folderstorm: background characters' alert sounds
 }
 
 fn voice(cx: &mut Cx) {

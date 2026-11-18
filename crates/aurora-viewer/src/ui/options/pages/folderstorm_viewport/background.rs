@@ -1,9 +1,8 @@
 //! Folderstorm: the background of the margins in Preferences
 //! (`crate::folderstorm::backgrounds`, FEATURES.md row 1.8). Folderstorm
 //! (C++) had it under Move & View › Backgrounds; here the default is a
-//! group of Layout › Bars and windows, after *World viewport*, and a
-//! layout's own is chosen under the selected layout in Layout › Layouts &
-//! workspaces ([`layout_part`]).
+//! group of Workspaces › Margins, and a layout's own is chosen under the
+//! selected layout in Workspaces › Saved ([`layout_part`]).
 
 use super::super::super::cx::{Cx, field};
 use crate::folderstorm::backgrounds::import::{self, ImportError};
@@ -37,13 +36,13 @@ fn fits() -> [(Fit, &'static str); 5] {
 }
 
 /// *Background around the world*: the default, for the layouts without
-/// their own.
-pub(in crate::ui::options) fn group(cx: &mut Cx) {
+/// their own. Its kind first, then only the rows that kind uses (the
+/// others stay found by the search); all greyed while the viewport is
+/// `off`.
+pub(in crate::ui::options) fn group(cx: &mut Cx, off: bool) {
     let p = cx.p;
     cx.group(tr!("fs-background-group"), |cx| {
-        if !cx.s.folderstorm_viewport.enabled {
-            cx.note(tr!("fs-background-intro"));
-        }
+        cx.greyed(off);
         // (Folderstorm (C++)'s words: "wallpaper", "background", "monitor")
         cx.keywords("wallpaper background margins monitors desktop").choice(
             tr!("fs-background-kind"),
@@ -52,53 +51,56 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
             &kinds(),
         );
         let kind = cx.s.folderstorm_workspaces.background.kind;
-        cx.greyed(kind != Kind::Picture);
-        cx.keywords("wallpaper image photo file").wide().row(
-            tr!("fs-background-picture"),
-            tr!("fs-background-picture-help"),
-            &field!(folderstorm_workspaces.background.picture),
-            |ui, s| picture_row(ui, &p, s, &Target::Default),
-        );
-        cx.combo(
-            tr!("fs-background-fit"),
-            tr!("fs-background-fit-help"),
-            &field!(folderstorm_workspaces.background.fit),
-            &fits(),
-        );
-        cx.keywords("span spanning wallpaper").toggle(
-            tr!("fs-background-span"),
-            tr!("fs-background-span-help"),
-            &field!(folderstorm_workspaces.background.span),
-        );
-        cx.greyed(kind == Kind::None);
-        cx.color(
-            tr!("fs-background-colour"),
-            tr!("fs-background-colour-help"),
-            &field!(folderstorm_workspaces.background.colour),
-        );
-        cx.greyed(kind != Kind::Picture);
-        cx.keywords("dim dimming darker").slider(
-            tr!("fs-background-brightness"),
-            tr!("fs-background-brightness-help"),
-            &field!(folderstorm_workspaces.background.brightness),
-            crate::folderstorm::backgrounds::record::BRIGHTNESS,
-            " %",
-        );
+        cx.conditional(kind == Kind::Picture, |cx| {
+            cx.keywords("wallpaper image photo file").wide().row(
+                tr!("fs-background-picture"),
+                tr!("fs-background-picture-help"),
+                &field!(folderstorm_workspaces.background.picture),
+                |ui, s| picture_row(ui, &p, s, &Target::Default),
+            );
+            cx.combo(
+                tr!("fs-background-fit"),
+                tr!("fs-background-fit-help"),
+                &field!(folderstorm_workspaces.background.fit),
+                &fits(),
+            );
+            cx.keywords("span spanning wallpaper").toggle(
+                tr!("fs-background-span"),
+                tr!("fs-background-span-help"),
+                &field!(folderstorm_workspaces.background.span),
+            );
+        });
+        cx.conditional(kind != Kind::None, |cx| {
+            cx.color(
+                tr!("fs-background-colour"),
+                tr!("fs-background-colour-help"),
+                &field!(folderstorm_workspaces.background.colour),
+            );
+        });
+        cx.conditional(kind == Kind::Picture, |cx| {
+            cx.keywords("dim dimming darker").slider(
+                tr!("fs-background-brightness"),
+                tr!("fs-background-brightness-help"),
+                &field!(folderstorm_workspaces.background.brightness),
+                crate::folderstorm::backgrounds::record::BRIGHTNESS,
+                " %",
+            );
+        });
         // (on until unticked; the store keeps the opposite, so that a file
         // without it keeps the HUDs on top)
-        cx.greyed(kind == Kind::None);
-        super::super::folderstorm_search::words(cx, &["fs-search-background-huds"]).row(
-            tr!("fs-background-huds-over"),
-            tr!("fs-background-huds-over-help"),
-            &field!(folderstorm_workspaces.background_over_huds),
-            |ui, s| {
-                let mut on = !s.folderstorm_workspaces.background_over_huds;
-                let changed = super::super::super::toggle(ui, &p, &mut on);
-                s.folderstorm_workspaces.background_over_huds = !on;
-                changed
-            },
-        );
-        cx.greyed(false);
+        cx.conditional(kind != Kind::None, |cx| {
+            super::super::folderstorm_search::words(cx, &["fs-search-background-huds"]).row(
+                tr!("fs-background-huds-over"),
+                tr!("fs-background-huds-over-help"),
+                &field!(folderstorm_workspaces.background_over_huds),
+                |ui, s| {
+                    let mut on = !s.folderstorm_workspaces.background_over_huds;
+                    let changed = super::super::super::toggle(ui, &p, &mut on);
+                    s.folderstorm_workspaces.background_over_huds = !on;
+                    changed
+                },
+            );
+        });
     });
 }
 
@@ -292,8 +294,8 @@ fn picture_row(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, target: &Target
     changed
 }
 
-/// The selected layout's background, under its actions (Layout ›
-/// Layouts & workspaces): *Use the default* or *Its own*, and its own's
+/// The selected layout's background, under its actions (Workspaces ›
+/// Saved): *Use the default* or *Its own*, and its own's
 /// choices. True when the layout changed.
 pub(in crate::ui::options) fn layout_part(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, index: usize) -> bool {
     let Some(layout) = s.folderstorm_workspaces.layout(index) else {

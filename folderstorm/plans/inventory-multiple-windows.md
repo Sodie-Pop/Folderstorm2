@@ -10,7 +10,7 @@ Proposed FEATURES row:
 
 | # | Feature | What it does | Aurora today | Source | Prio | Status |
 |---|---|---|---|---|---|---|
-| 2.14 | Multiple Inventory windows | Up to 16 additional Inventory windows, each the whole inventory with its own tabs, search, filters, place and size ("Inventory 2" … "Inventory 17"). Ctrl+Shift+I and the "New Inventory window" button (in the main window and in every additional window) open the next one; right click on that button: *Close all additional windows*. Layouts and workspaces place and open each one. | One additional window (fixed id) | `doc/help.md` "Workspaces"; Legacy `LLPanelMainInventory::newWindow` | P2 | 📝 plan: [plans/inventory-multiple-windows.md](plans/inventory-multiple-windows.md) |
+| 2.14 | Multiple Inventory windows | Up to 16 additional Inventory windows, each the whole inventory with its own tabs, search, filters, place and size ("Inventory 2" … "Inventory 17"). Ctrl+Shift+I and the "New Inventory window" button (in every Inventory window: the main one, the additional ones, the folder and tab windows) open the next one; right click on that button: *Close all additional windows*. Layouts and workspaces place and open each one. | One additional window (fixed id) | `doc/help.md` "Workspaces"; Legacy `LLPanelMainInventory::newWindow` | P2 | 📝 plan: [plans/inventory-multiple-windows.md](plans/inventory-multiple-windows.md) |
 
 ## 0. Decisions made by the human (2026-11-16)
 
@@ -31,6 +31,13 @@ Proposed FEATURES row:
 7. **Base**: an up-to-date `main` once #74 and #75 are merged.
 8. **Performance**: the human tests 16 windows on a large inventory on the
    grid.
+9. **The button in every window** (decided after PR #80, 2026-11-16: "Prefer
+   to have a button to open new Inventory windows from any window"): the
+   folder windows and the tab windows (#75) show it too, both styles, with
+   the same behaviour (lowest free slot, tooltip "n of 16", greyed at 16
+   with its menu still working, lit while any slot is open). Hidden in
+   quiet mode with the rest of the toolbar, as in the other windows. This
+   replaces the "no button in tab or folder windows" choice of PR #80.
 
 The "to confirm" marks below are settled by this list where they overlap.
 
@@ -58,12 +65,20 @@ build differs from or settles the sections below:
   *Close all* stays at hand at 16.
 - **Right-click menu**: *New Inventory window* (greyed at 16, the same
   tooltip) and *Close all additional windows* (greyed when none is open).
-- **Tab windows (#75)** are not slots (their own ids, `additional: false`)
-  and get **no button**: a tab window is locked to one tab, often in quiet
-  mode without a toolbar; a whole-inventory button there would be out of
-  place. They still close with their tab and under `@showinv`, not with
-  *Close all additional windows*. Folder windows: no button either, as
-  before.
+- **Tab windows (#75) and folder windows** are not slots (their own ids,
+  `additional: false`). PR #80 first gave them **no button** (a tab window
+  is locked to one tab, often in quiet mode); the human then chose a button
+  in every window (decision 9, branch `claude/inventory-button-everywhere`).
+  Both already draw the Legacy status line or Aurora's toolbar through the
+  same `additional_button` hooks as the other windows (Legacy: beside "+"
+  in the status line; Aurora: in the narrow tools row, which a tab window
+  always uses, or in the explorer row of a wide folder window), so the only
+  change is that `extra_windows::Button::of` no longer filters them out, and
+  `legacy_button` / `aurora_button` return the button's place rather than
+  an `Option`. No new place was needed. In quiet mode their toolbar is
+  hidden, and the button with it. They still close with their tab (tab
+  windows), their own cross and under `@showinv`, not with *Close all
+  additional windows*.
 - **Pin and quiet mode (#75)**: `window_mode::Key::Additional(slot)`, slot 1
   `"additional"` (modes saved before still apply), slots 2-16
   `"additional:<n>"`.
@@ -332,6 +347,11 @@ menu open with *New Inventory window* greyed.
 - Two slots keep separate searches and tabs (headless draw, both styles).
 - Right-click menu: *New Inventory window* opens the next slot, greyed at 16;
   *Close all* closes slots only (not folder windows).
+- Decision 9: a folder window and a tab window each show the button, in
+  both styles; it opens the next slot (twice, then a freed slot 1), the
+  window stays open; hidden in quiet mode; greyed at 16 with the
+  right-click menu's *Close all* and *New Inventory window* still working
+  from there.
 - The upstream test `the_main_window_toggles_one_additional_inventory_window`
   tests the old toggle, which the repurposed button replaces: it gets a
   `// Folderstorm:` change (the second click opens slot 2 instead of closing

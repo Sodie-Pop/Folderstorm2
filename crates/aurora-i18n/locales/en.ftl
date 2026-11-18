@@ -1213,9 +1213,15 @@ inventory-move-folder-count = { $count ->
 inventory-move-loading = Loading folders…
 inventory-move-loading-failed = Some folders could not be loaded.
 inventory-move-confirm = Move
-# Folderstorm: Preferences › Privacy › Local assistant (src/mcp_bridge.rs)
+# Folderstorm: Preferences › Local assistant (src/mcp_bridge.rs)
 fs-mcp-group = Local assistant
-fs-mcp-intro = Lets an assistant running on this computer (Claude Code, Cursor, Codex…) read and organise your inventory and outfits, move the camera and take pictures, and move your avatar, through the folderstorm-mcp helper. Other programs running under your account can use this access too.
+fs-mcp-page-about = Lets an assistant on this computer, such as Claude Code, Cursor or Codex, use the viewer through the folderstorm-mcp helper, with the permissions you choose.
+fs-mcp-access = Access
+fs-mcp-access-note = Other programs running under your account can use this access too.
+fs-mcp-setup = Setup
+fs-mcp-link-help = Its settings have their own page, Local assistant, in the System section.
+fs-mcp-link-on = On
+fs-mcp-link-button = Settings
 fs-mcp-allow = Allow local assistant access
 fs-mcp-allow-hint = Opens a connection on this computer only (127.0.0.1), with a new access key each time. Off by default. The --mcp-api command-line option turns it on for one session.
 fs-mcp-session-only = Use these settings for this session only
@@ -1559,8 +1565,14 @@ inventory-folder-tab-already-one = “{ $folder }” is already in “{ $tab }�
 inventory-folder-tab-already-many = These are already in “{ $tab }”.
 inventory-folder-tab-add = Add the selection
 inventory-folder-tab-replace = Use only the selection
-inventory-folder-tab-clear = Show everything
-inventory-folder-tab-clear-tip = Show the whole inventory in this tab again: no folders, no pinned items. Its filters and search stay.
+inventory-custom-tab-show-all = Show all items
+inventory-custom-tab-show-all-tip = Show every item this tab holds: clears its item types, the other filters that hide items, and its search. Its folders and pinned items stay.
+inventory-custom-tab-show-all-none = This tab's filters and search already hide nothing.
+inventory-folder-tab-remove-all = Remove all…
+inventory-folder-tab-remove-all-tip = Forget every folder and pinned item of this tab: it then shows the whole inventory, with its filters and search.
+inventory-folder-tab-remove-all-title = Remove folders and pinned items
+inventory-folder-tab-remove-all-question = Remove every folder and pinned item from “{ $name }”? The tab then shows the whole inventory, with its filters and search. No inventory items are changed.
+inventory-folder-tab-remove-all-confirm = Remove all
 inventory-folder-tab-select-tip = Select folders or items in the Inventory list first: up to { $count } folders, not the Trash or the Library.
 inventory-folder-tab-limit = A tab can show up to { $count } folders.
 inventory-folder-tab-heading = Folders and pinned items
@@ -1594,6 +1606,49 @@ inventory-quick-unpin = Unpin: let other windows cover it
 inventory-quick-quiet = Simple view: only the list
 inventory-quick-full = Full view: search, tabs and tools
 inventory-quick-demo-name = Quick access
+inventory-tab-icon = Icon
+inventory-tab-icon-default = Default
+inventory-tab-icon-default-tip = Show the tab with the bookmark again.
+inventory-tab-icon-shirt = Clothes
+inventory-tab-icon-jacket = Jacket
+inventory-tab-icon-shoe = Shoes
+inventory-tab-icon-face = Face
+inventory-tab-icon-body = Body
+inventory-tab-icon-walk = Animations
+inventory-tab-icon-run = Movement
+inventory-tab-icon-wand = Magic
+inventory-tab-icon-sparkles = Effects
+inventory-tab-icon-cube = Objects
+inventory-tab-icon-box = Box
+inventory-tab-icon-package = Package
+inventory-tab-icon-gift = Gifts
+inventory-tab-icon-home = Home
+inventory-tab-icon-armchair = Furniture
+inventory-tab-icon-tree = Garden
+inventory-tab-icon-leaf = Nature
+inventory-tab-icon-paw = Pets
+inventory-tab-icon-photo = Pictures
+inventory-tab-icon-camera = Photography
+inventory-tab-icon-palette = Colours
+inventory-tab-icon-brush = Brush
+inventory-tab-icon-music = Music
+inventory-tab-icon-headphones = Sounds
+inventory-tab-icon-movie = Video
+inventory-tab-icon-notecard = Notecards
+inventory-tab-icon-book = Books
+inventory-tab-icon-map-pin = Places
+inventory-tab-icon-compass = Travel
+inventory-tab-icon-car = Vehicles
+inventory-tab-icon-key = Keys
+inventory-tab-icon-heart = Heart
+inventory-tab-icon-flag = Flag
+inventory-tab-icon-tag = Tag
+inventory-tab-icon-bolt = Lightning
+inventory-tab-icon-sun = Sun
+inventory-tab-icon-moon = Moon
+inventory-tab-icon-gamepad = Games
+inventory-tab-icon-cart = Shopping
+inventory-tab-icon-code = Scripts
 # Folderstorm: multiple Inventory windows (ui/inventory/extra_windows.rs)
 inventory-windows-title = Inventory { $number }
 inventory-windows-new = New Inventory window
@@ -1949,7 +2004,7 @@ folderstorm-viewport-monitor = Monitor { $n } ({ $width }×{ $height })
 folderstorm-viewport-no-monitors = No monitor found under the window.
 folderstorm-viewport-mouselook = Keep the viewport in mouselook
 folderstorm-viewport-mouselook-help = Off, mouselook uses the whole window.
-folderstorm-viewport-bars = Bars
+folderstorm-viewport-bars = Bars around the world
 folderstorm-viewport-bars-help = Where the top, bottom and side bars go. Inside the world: over it, as before. Around the world: each bar in the margin beside the world when that margin has room for it, inside the world otherwise. Over the whole window: stretched across the window, as without a viewport.
 folderstorm-viewport-bars-inside = Inside the world
 folderstorm-viewport-bars-around = Around the world
@@ -1965,13 +2020,8 @@ folderstorm-viewport-not-under = This monitor is not under the viewer window.
 folderstorm-viewport-too-small = Too little of this monitor is under the viewer window.
 folderstorm-viewport-set-aside = These margins leave the world less than a quarter of the window: for now the world fills the whole window.
 
-# Folderstorm: layouts (folderstorm/workspaces, Preferences › Layout › Layouts)
-fs-layouts-tab = Layouts & workspaces
-fs-layouts-group = Saved layouts
-fs-layouts-intro = A layout remembers where things go: the viewer window, the world viewport with the bars, and the position and size of your windows. Applying it opens the windows it was saved with open and closes none (closing is what a workspace does), and it never holds what a window shows. Keep one per monitor setup, for example “2 monitors” and “1 monitor”, and switch between them here or in World › Layouts.
+# Folderstorm: layouts (folderstorm/workspaces, Preferences › Workspaces)
 fs-layouts-list = Layouts
-fs-layouts-list-help = Click a layout to select it, then Apply; a double click applies it at once. Applying puts the viewer window, the world, the bars and the windows where the layout has them. What you move afterwards is only saved when you choose Update.
-fs-layouts-empty = No layout saved yet. Arrange the world and your windows as you like them, then save the arrangement below.
 fs-layouts-unnamed = (no name)
 fs-layouts-active = In use
 fs-layouts-modified = In use · modified
@@ -2022,8 +2072,6 @@ fs-layouts-waiting = { $count ->
    *[other] { $count } closed windows will take their places when you open them.
     }
 fs-layouts-previous-done = Back to the arrangement before.
-fs-layouts-save-group = Save the current arrangement
-fs-layouts-save-new = Save as a new layout
 fs-layouts-save-new-help = Saves where things are now under a new name. Untick a part to leave it out: a layout without the viewer window leaves it where it is, one without window positions only changes the rest. Lock the window size keeps the viewer window from being resized by hand while the layout is in use.
 fs-layouts-name-hint = Name, for example 2 monitors
 fs-layouts-save = Save
@@ -2034,13 +2082,11 @@ fs-layouts-error-taken = Another layout already has this name.
 fs-layouts-error-full = There are already { $count } layouts: delete one first.
 fs-layouts-error-parts = Choose at least one part to save.
 fs-layouts-error-invalid = The current arrangement could not be read. Try again in a moment.
-fs-layouts-arrangement = Arrangement
 fs-layouts-previous = Previous arrangement
 fs-layouts-previous-help = Goes back to the viewer window, the world, the bars and the window positions in place before the last layout was applied, or before Reset bars and world. Pressing it again comes back. Remembered until the viewer closes.
 fs-layouts-previous-button = Go back
 fs-layouts-reset = Reset bars and world
 fs-layouts-reset-help = Turns the world viewport off and puts the bars back inside the world, as on a first start. Windows stay where they are, and no layout is changed or deleted.
-fs-layouts-reset-button = Reset
 fs-layouts-menu = Layouts
 fs-layouts-menu-open = Layouts & workspaces…
 fs-layouts-part-window = Viewer window
@@ -2081,12 +2127,50 @@ fs-layouts-monitors-applied = Your monitors changed: the layout “{ $name }” 
 fs-layouts-monitors-unlocked = Your monitors changed: the viewer window was unlocked.
 fs-layouts-monitors-later = Not now
 fs-layouts-favorite = Favorite
-fs-layouts-quick = Quick switch
-fs-layouts-quick-intro = Three ways to change layout without opening Preferences. The Layouts & workspaces window (World › Layouts › Layouts & workspaces…): type part of a name and press Enter. Two toolbar buttons, found in Toolbar buttons…: “Layouts & workspaces” opens that window, “Switch layout” goes from one of the two layouts chosen below to the other in one click. And five shortcuts without a key until you give them one, in Preferences › Shortcuts › Other › Layouts. Favorites come first in the window and in World › Layouts; the favorite layouts are the ones the shortcuts Next and Previous favorite layout go round.
 fs-layouts-toggle-first = First layout
 fs-layouts-toggle-second = Second layout
 fs-layouts-toggle-help = The two layouts the “Switch layout” toolbar button and its shortcut switch between, for example “2 monitors” and “1 monitor”: the second when the first is in use, the first otherwise.
 fs-layouts-toggle-none = Not chosen
+fs-workspaces-page = Workspaces
+fs-workspaces-page-about = Save and switch setups: which windows are open, where they go, and the world viewport.
+fs-workspaces-tab-saved = Saved
+fs-workspaces-tab-margins = Margins
+fs-workspaces-tab-switching = Switching
+fs-saved-group = Saved setups
+fs-saved-intro = A workspace opens the windows of an activity and closes the others; a layout puts the viewer window, the world and the windows in place, and a workspace can apply one.
+fs-saved-list = Workspaces and layouts
+fs-saved-list-help = Click an entry to select it: its actions and settings show beside the list. A double click applies it at once.
+fs-saved-empty = Nothing saved yet. Open the windows you want and arrange them, then choose New from current…
+fs-saved-save-help = Saves the setup of now under a new name: as a workspace (the windows open now) or as a layout (where things are now).
+fs-saved-keeps = It keeps:
+fs-saved-new = New from current…
+fs-saved-list-hint = A double click applies. The star puts an entry in the favorites strip and first in World › Layouts.
+fs-saved-pick = Choose an entry on the left, or New from current…
+fs-saved-section-windows = Windows it opens
+fs-saved-section-where = Where they go
+fs-saved-no-window = Saved without the viewer window: applying it leaves the window where it is.
+fs-saved-edit-viewport = Edit the current viewport
+fs-saved-used-by = Used by
+fs-saved-used-by-none = No workspace applies it.
+fs-saved-used-by-some = These workspaces apply it:
+fs-saved-toggle-first = The “Switch layout” button uses it as its first layout.
+fs-saved-toggle-second = The “Switch layout” button uses it as its second layout.
+fs-saved-switching = Switching settings
+fs-saved-open-layout = Open this layout
+fs-workspaces-more-windows = More windows ({ $count })
+fs-workspaces-more-inventories = Inventory 2 to 17 ({ $ticked } of { $count } opened)
+fs-margins-off = Off: the margins wait until it leaves room around the world
+fs-margins-off-help = The margins exist only while the world viewport leaves room around the world (World viewport tab). Until then, the settings below wait.
+fs-margins-turn-on = Turn the world viewport on
+fs-switching-favorites-intro = Give an entry its star in the Saved tab: favorites come first in World › Layouts and in the Layouts & workspaces window.
+fs-switching-toggle = “Switch layout” toolbar button
+fs-switching-toggle-intro = Goes from one layout to the other in one click, for example 2 monitors and 1 monitor.
+fs-switching-keys = Keys
+fs-switching-keys-help = The “Switch layout” button, the Layouts & workspaces window and the favorite layouts have shortcuts without a key until you give them one, in Shortcuts › Other › Layouts.
+fs-switching-keys-button = Choose in Shortcuts
+fs-switching-auto = Automatically
+fs-switching-back = Get back
+fs-switching-back-help = Previous arrangement undoes the last layout applied; Unlock the viewer window gives it its border and resizing back; Reset bars and world turns the world viewport off. No layout is deleted.
 
 # Folderstorm: the layouts' switcher, toolbar buttons and shortcuts (folderstorm/workspaces/switcher.rs, folderstorm/keys.rs)
 fs-switcher-title = Layouts & workspaces
@@ -2114,17 +2198,20 @@ fs-switcher-note-fitted = { $count ->
 fs-switcher-update = Update “{ $name }”
 fs-switcher-update-help = Saves the arrangement of now in the layout in use, for the parts it holds. Asks first.
 fs-switcher-save-new = Save new…
-fs-switcher-preferences-help = Rename, delete and reorder the layouts and the workspaces, edit a layout's viewer window or the windows of a workspace, and choose the two layouts of the “Switch layout” button, in Preferences › Layout › Layouts & workspaces.
+fs-switcher-preferences-help = Rename, delete and reorder the layouts and the workspaces, edit a layout's viewer window or the windows of a workspace, and choose the two layouts of the “Switch layout” button, in Preferences › Workspaces.
 fs-switcher-keys = Up and Down choose, Enter applies and closes, Esc closes.
 fs-switcher-command = Layouts & workspaces
 fs-switcher-toggle-command = Switch layout
 fs-switcher-toggle-to = Switch to the layout “{ $name }”
-fs-switcher-toggle-unset = Choose its two layouts in Preferences › Layout › Layouts & workspaces (a click opens it).
-fs-keys-section = Layouts
+fs-switcher-toggle-unset = Choose its two layouts in Preferences › Workspaces › Switching (a click opens it).
+fs-keys-section = Layouts and desktop
 fs-keys-layout-switcher = Layouts & workspaces window
 fs-keys-layout-toggle = Switch between the two layouts
 fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
+fs-keys-desktop-shortcuts = Show or hide the desktop shortcuts
+fs-keys-desktop-focus = Focus the desktop
+fs-keys-desktop-taskbar = Focus the taskbar
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Gesture board
@@ -2241,8 +2328,6 @@ fs-workspaces-name-hint = Name, for example Sorting
 fs-workspaces-with-layout = Always use the layout “{ $name }” with it
 fs-workspaces-with-no-layout = Always use the layout in use with it (none is in use)
 fs-workspaces-save-help = Saves which windows are open now under a new name. Applying the workspace opens them and closes the others, wherever the layout in use puts them; tick the box to make it also apply the layout in use now. It never holds what a window shows.
-fs-workspaces-save-new = Save as a new workspace
-fs-workspaces-save = Save workspace
 fs-workspaces-ask-update = Replace the windows of the workspace “{ $name }” with the ones open now?
 fs-workspaces-ask-delete = Delete the workspace “{ $name }”?
 fs-workspaces-update-help = Saves the windows open now in the workspace. Its layout choice is kept. Asks first.
@@ -2268,16 +2353,11 @@ fs-workspaces-applied-blocked = { $count ->
     [one] { $count } window cannot be opened right now and was left closed.
    *[other] { $count } windows cannot be opened right now and were left closed.
     }
-fs-workspaces-group = Saved workspaces
-fs-workspaces-intro = A workspace remembers which windows are open, for an activity: “Sorting” with both Inventory windows, “Exploring” with the maps. Applying it opens those windows and closes the others; where they go is the layout's business, so a workspace works on any layout. It can also name a layout to apply with it. Conversations is never opened or closed, and nothing a window shows is saved.
 fs-workspaces-list = Workspaces
-fs-workspaces-list-help = Click a workspace to select it, then Apply; a double click applies it at once. Applying opens the windows ticked below and closes the others, after its layout if it has one. Update saves the windows open now in it.
-fs-workspaces-empty = No workspace saved yet. Open the windows you want for an activity, then save them below.
 fs-workspaces-newer-help = This workspace was made by a newer version of the viewer. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
 fs-workspaces-invalid-help = This entry of the settings file is not a workspace this version can read. It is kept exactly as it is and cannot be applied or changed here; it can only be deleted.
 fs-workspaces-layout = Layout applied with it
 fs-workspaces-layout-keep = Keep the layout in use
-fs-workspaces-windows = Windows it opens (the others are closed; Conversations stays as it is):
 fs-workspaces-remember-folders = Remember Inventory folders
 fs-strip-show = Favorites strip
 fs-strip-show-help = Shows your favorite layouts and workspaces under the top bar, one click to apply: at the right end of the favourites' row when it is shown (Interface › Favourites access › Row below the top bar), in a small bar of their own otherwise. What does not fit is in More…, with the Layouts & workspaces window and Previous arrangement. Hidden in mouselook. Give a layout or a workspace its star in the Layouts & workspaces window.
@@ -2371,9 +2451,8 @@ fs-context-huds-stuck = { $count ->
 fs-context-take-off = Take off the previous workspace's HUDs
 fs-context-take-off-help = When you switch to a workspace that has HUDs, the HUDs the workspace before put on are taken off, unless the new one wears them too. Only HUDs a workspace put on: a HUD you were already wearing, or put on yourself, is never taken off; RLVa can keep one on. Previous arrangement puts them back. Turn off to only ever add HUDs.
 
-# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Layout › Bars and windows)
+# Folderstorm: backgrounds of the margins (folderstorm/backgrounds, Preferences › Workspaces › Margins)
 fs-background-group = Background around the world
-fs-background-intro = Shown in the margins the world viewport leaves, as when the window is stretched over several monitors. Turn the world viewport on above to see it.
 fs-background-kind = Background
 fs-background-kind-help = What the margins around the world show instead of black. Windows, bars and HUDs stay on top of it, and the world is never covered.
 fs-background-kind-none = Nothing
@@ -2407,16 +2486,15 @@ fs-background-brightness-help = Dims the picture. The colour stays as chosen.
 fs-background-huds-over = HUDs over the background
 fs-background-huds-over-help = A HUD moved into a margin stays visible over the background. Off, the background covers the part of a HUD that lies outside the world. The HUDs' text stays on top either way.
 fs-background-layout = Background
-fs-background-layout-help = What the margins show while this layout is in use. The default is chosen in Layout › Bars and windows.
+fs-background-layout-help = What the margins show while this layout is in use. The default is chosen in Workspaces › Margins.
 fs-background-layout-default = Use the default
 fs-background-layout-own = Its own
 fs-background-shows = Shows
 
-# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Layout › Bars and windows)
+# Folderstorm: the margins' desktop (folderstorm/desktop, Preferences › Workspaces › Margins)
 fs-desktop-group = Desktop in the margins
-fs-desktop-intro = Shown when the window leaves room around the world, as when it is stretched over several monitors. Turn the world viewport on above to see it.
 fs-desktop-shortcuts = Shortcuts in the margins
-fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop Inventory folders on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it.
+fs-desktop-shortcuts-help = Uses each monitor the world leaves free like a computer's desktop: shortcuts on a grid, under every window. Right-click a free spot there to add a toolbar command; drop folders, landmarks, notecards, outfits and clothing and objects of the Inventory on it, or use Add to desktop in their menu; double-click a shortcut to open it, drag it to move it. Each account has its own shortcuts; this switch and the icon size are shared by all of them.
 fs-desktop-size = Icon size
 fs-desktop-size-help = The size of the shortcuts and of the grid they stand on.
 fs-desktop-size-small = Small
@@ -2432,27 +2510,208 @@ fs-desktop-greyed-gone = This command no longer exists.
 fs-desktop-greyed-button-only = This one only works from its toolbar button.
 fs-desktop-greyed-rlva = Blocked by RLVa.
 fs-desktop-greyed-folder-gone = This folder is no longer in your inventory.
-fs-desktop-greyed-other-account = This folder is in another account's inventory.
+fs-desktop-item = Inventory item
+fs-desktop-greyed-item-gone = This item is not in your inventory: it was deleted, or its folder is not loaded yet.
+fs-desktop-greyed-item-trash = This item is in the Trash.
+fs-desktop-greyed-item-other = This kind of item cannot be opened from the desktop.
+fs-desktop-outfit = Outfit
+fs-desktop-wear-outfit = Wear this outfit…
+fs-desktop-greyed-outfit-gone = This outfit is no longer in your inventory.
+fs-desktop-greyed-outfit-loading = This outfit is still loading: try again in a moment.
+fs-desktop-greyed-outfit-empty = This outfit has nothing to wear.
+fs-desktop-greyed-busy = An outfit change is under way: try again in a moment.
+fs-desktop-greyed-worn = You are wearing it already.
+fs-desktop-greyed-listing = An item of a Marketplace listing cannot be worn.
+fs-desktop-greyed-not-worn = You are not wearing it.
+fs-desktop-take-off = Take off
+fs-desktop-detach = Detach
 fs-desktop-add = Add to desktop
-fs-desktop-add-refused = Only folders of your own inventory, out of the Trash, can be desktop shortcuts.
+fs-desktop-add-refused = Only folders, landmarks, notecards, outfits and clothing and objects of your inventory, out of the Trash, can be desktop shortcuts.
 fs-desktop-added =
     { $count ->
-        [one] Folder added to the desktop.
-       *[other] { $count } folders added to the desktop.
+        [one] Shortcut added to the desktop.
+       *[other] { $count } shortcuts added to the desktop.
     }
 fs-desktop-add-existing = Already on the desktop.
 fs-desktop-add-full =
     { $count ->
-        [one] The desktop has no room for one folder.
-       *[other] The desktop has no room for { $count } folders.
+        [one] One shortcut did not fit.
+       *[other] { $count } shortcuts did not fit.
     }
+fs-desktop-full = This desktop is full: remove a shortcut or use a smaller icon size.
+fs-desktop-limit = The desktops hold { $count } shortcuts at most: remove one first.
 fs-desktop-left-out =
     { $count ->
-        [one] One entry left out: only folders of your own inventory can be shortcuts.
-       *[other] { $count } entries left out: only folders of your own inventory can be shortcuts.
+        [one] One entry left out: it cannot be a desktop shortcut.
+       *[other] { $count } entries left out: they cannot be desktop shortcuts.
     }
-fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Layout › Bars and windows).
+fs-desktop-added-on = Shortcuts in the margins are now on (Preferences › Workspaces › Margins).
 fs-desktop-added-hidden = They show when the window leaves room around the world.
+fs-desktop-rename = Rename
+fs-desktop-icon = Icon
+fs-desktop-icon-default = Default
+fs-desktop-icon-colour = Colour…
+fs-desktop-icon-file = Picture from a file…
+fs-desktop-icon-texture = Inventory texture…
+fs-desktop-icon-reset = Reset icon
+fs-desktop-icon-file-title = Choose a picture for the shortcut
+fs-desktop-style-title = Shortcut icon
+fs-desktop-style-colour = Colour
+fs-desktop-style-custom = Another colour
+fs-desktop-style-colour-default = Default colour
+fs-desktop-style-colour-picture = A picture is drawn in its own colours: this colour shows again when the picture is removed.
+fs-desktop-style-picture = Picture
+fs-desktop-style-picture-none = None: the icon is shown.
+fs-desktop-style-picture-other = A picture this version cannot show: the icon is shown.
+fs-desktop-style-picture-remove = Remove the picture
+fs-desktop-style-file-note = A copy of the picture, at most 256 pixels a side, is kept with this account's settings: the original may be moved or deleted.
+fs-desktop-style-texture = Inventory texture
+fs-desktop-style-texture-gone = A texture that cannot be used any more: the icon is shown.
+fs-desktop-style-search = Search textures
+fs-desktop-style-texture-none = No texture found. Only textures you may copy, modify and transfer can be used.
+fs-desktop-style-texture-more = Only the first { $count } are listed: search to narrow the list.
+fs-desktop-style-texture-note = Only textures you may copy, modify and transfer are listed, as for showing a texture's UUID.
+fs-desktop-move-to = Move to
+fs-desktop-monitor = Monitor { $number }
+fs-desktop-arrange = Arrange by name
+fs-desktop-command-added = Shortcut added to the desktop.
+fs-desktop-single-click = Open with a single click
+fs-desktop-single-click-help = A single click opens a shortcut, as a toolbar button does. Off: a click selects it and a double click opens it, so that a stray click never teleports you home or sits you down.
+fs-desktop-unused =
+    { $count ->
+        [one] One shortcut is on a monitor that is not in use
+       *[other] { $count } shortcuts are on a monitor that is not in use
+    }
+fs-desktop-unused-help = A shortcut stays on the monitor it was put on. When the window no longer covers that monitor, or the world fills it, the shortcut is kept but not shown.
+fs-desktop-bring = Bring them here
+fs-desktop-clear = Remove all shortcuts…
+fs-desktop-clear-help = Removes every shortcut of this account's desktops. Only the shortcuts go: the folders, the items and the toolbars stay as they are.
+fs-desktop-clear-button = Remove all…
+fs-desktop-clear-ask =
+    { $count ->
+        [one] Remove this account's shortcut?
+       *[other] Remove this account's { $count } shortcuts?
+    }
+fs-desktop-clear-confirm = Remove all
+fs-taskbar-switch = Taskbar in a margin
+fs-taskbar-switch-help = Collapsed windows become buttons on a bar along the bottom of a margin monitor instead of title bars: click one to bring its window back where it was, right-click for more. Off, or while the window leaves no room around the world, collapsed windows are title bars as before.
+fs-taskbar-monitor = Monitor
+fs-taskbar-monitor-help = The monitor the taskbar stands on. Automatic: the one with the widest free room. When the chosen monitor has no room, there is no taskbar.
+fs-taskbar-monitor-auto = Automatic
+fs-taskbar-all = All open windows
+fs-taskbar-all-help = Lists every open window, not only the collapsed ones: a click brings a window to the front, or collapses the one in front.
+fs-taskbar-restore = Restore
+fs-taskbar-front = Bring to front
+fs-taskbar-empty = No collapsed windows
+fs-taskbar-empty-all = No open windows
+fs-taskbar-spoken-collapsed = { $title }, collapsed
+fs-taskbar-spoken-front = { $title }, in front
+
+# Folderstorm: the account's setup backup (folderstorm/backup, Preferences › Language and updates)
+fs-backup-group = Folderstorm setup backup
+fs-backup-intro = One file with this account's Folderstorm setup: layouts and workspaces, backgrounds, the desktop, Inventory tabs and windows, gesture boards, the world viewport, media choices and the session host's characters. Never passwords, logins, chat or e-mail addresses.
+fs-backup-export = Export
+fs-backup-export-help = Writes the setup of this profile and of the account logged in to a file you choose, to keep or to carry to another PC.
+fs-backup-export-button = Export…
+fs-backup-import = Import
+fs-backup-import-help = Reads a backup file and shows what it holds; you choose the parts and how each one is put back.
+fs-backup-import-button = Import…
+fs-backup-folder = Backups folder
+fs-backup-folder-help = Where the automatic backups are kept: a safety backup before each import, and the daily ones.
+fs-backup-folder-button = Open backups folder
+fs-backup-daily = Daily automatic backup
+fs-backup-daily-help = Once a day, while logged in, a backup of the account's setup in the backups folder.
+fs-backup-keep = Daily backups kept
+fs-backup-keep-help = The older ones are removed, for each account.
+fs-backup-list = Automatic backups
+fs-backup-list-help = Restore puts a backup back as it was: use the one made before an import to undo it.
+fs-backup-list-empty = None yet.
+fs-backup-list-entry = { $date } · { $kind } · { $account } · { $count ->
+        [one] 1 part
+       *[other] { $count } parts
+    }
+fs-backup-no-account-name = no account
+fs-backup-restore-button = Restore…
+fs-backup-kind-manual = exported
+fs-backup-kind-before-import = before an import
+fs-backup-kind-daily = daily
+fs-backup-file-type = Folderstorm setup backup
+fs-backup-exported = Exported to { $path }
+fs-backup-write-failed = The file could not be written.
+fs-backup-read-failed = The file could not be read.
+fs-backup-not-a-backup = This file is not a Folderstorm setup backup.
+fs-backup-too-large = This file is too large to be a setup backup.
+fs-backup-import-title = Import a Folderstorm setup
+fs-backup-restore-title = Restore an automatic backup
+fs-backup-from = Backup of { $account }, { $date }, version { $version }.
+fs-backup-newer = Made by a newer version: only the parts this version knows can be imported.
+fs-backup-unknown = Left alone (this version does not know them): { $sections }
+fs-backup-other-account = This backup is of { $account }, not of { $current }. Its gesture boards stay with { $account } and show when that account logs in here; Inventory folders and items only exist in that account's Inventory.
+fs-backup-not-logged-in = Not logged in: what points to an Inventory is kept for the account the backup is of.
+fs-backup-skip-inventory = { $count ->
+        [one] Leave out the shortcut or tab entry that points to that account's Inventory
+       *[other] Leave out the { $count } shortcuts and tab entries that point to that account's Inventory
+    }
+fs-backup-nothing = Nothing in this file can be imported by this version.
+fs-backup-merge = Merge
+fs-backup-replace = Replace
+fs-backup-merge-help = Merge adds the file's entries; one with the same name as one of yours takes its place. Replace makes the part exactly as in the file.
+fs-backup-safety-note = A backup of your setup as it is now is made first: restore it from Automatic backups to undo the import.
+fs-backup-import-confirm = Import
+fs-backup-restore-confirm = Restore
+fs-backup-safety-failed = The safety backup could not be written: nothing was imported.
+fs-backup-imported = { $count ->
+        [one] 1 part imported.
+       *[other] { $count } parts imported.
+    }
+fs-backup-section-failed = { $section } not imported: { $reason }
+fs-backup-undo-hint = To undo, restore the backup made before the import, under Automatic backups.
+fs-backup-unreadable = its content cannot be read
+fs-backup-no-account = the backup does not say which account made it
+fs-backup-host-running = close the session host first
+fs-backup-section-layouts = Layouts and workspaces
+fs-backup-section-background = Background around the world
+fs-backup-section-desktop = Desktop in the margins
+fs-backup-section-inventory-tabs = Custom Inventory tabs
+fs-backup-section-inventory-windows = Inventory windows (pin and quiet mode)
+fs-backup-section-gesture-boards = Gesture boards
+fs-backup-section-viewport = World viewport
+fs-backup-section-media = Media choices
+fs-backup-section-session-host = Session host characters
+fs-backup-note-limit = { $count ->
+        [one] 1 entry left out: the list is full.
+       *[other] { $count } entries left out: the list is full.
+    }
+fs-backup-note-kept = { $count ->
+        [one] 1 entry is kept but cannot be used by this version.
+       *[other] { $count } entries are kept but cannot be used by this version.
+    }
+fs-backup-note-unread = { $count ->
+        [one] 1 entry could not be read and was left out.
+       *[other] { $count } entries could not be read and were left out.
+    }
+fs-backup-note-workspace-inventory = { $count ->
+        [one] 1 Inventory folder or HUD of another account left out of the workspaces.
+       *[other] { $count } Inventory folders and HUDs of another account left out of the workspaces.
+    }
+fs-backup-note-desktop-inventory = { $count ->
+        [one] 1 folder shortcut of another account left out.
+       *[other] { $count } folder shortcuts of another account left out.
+    }
+fs-backup-note-desktop-there = { $count ->
+        [one] 1 shortcut was already on your desktop.
+       *[other] { $count } shortcuts were already on your desktop.
+    }
+fs-backup-note-tabs-inventory = { $count ->
+        [one] 1 folder or item of another account left out of the tabs.
+       *[other] { $count } folders and items of another account left out of the tabs.
+    }
+fs-backup-note-windows-inventory = { $count ->
+        [one] 1 folder window's mode left out.
+       *[other] { $count } folder windows' modes left out.
+    }
+fs-backup-note-boards-inventory = Gesture boards left out: their buttons are items of another account's Inventory.
+fs-search-backup = backup back up export import restore save copy transfer migrate setup profile undo
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
@@ -2578,11 +2837,71 @@ fs-folder-upload-short = Not enough L$: this upload costs L${ $cost } and the ba
 fs-folder-upload-receipt = Folder upload { $folder }: { $uploaded } uploaded, { $failed } failed, { $cancelled } not sent, L${ $spent } spent.
 fs-folder-upload-receipt-failed = Failed: { $names }.
 
+# Folderstorm: why the graphics card was reset (folderstorm/gpu_diag, the recovery notice and Help › Show the log folder)
+fs-gpu-reason-memory = Video memory was full.
+fs-gpu-reason-memory-used = Video memory was full ({ $used } of { $total } GB in use).
+fs-gpu-reason-memory-characters = Video memory was full ({ $count } characters open, { $used } of { $total } GB in use).
+fs-gpu-reason-memory-viewers = Video memory was full ({ $count } viewer windows open, { $used } of { $total } GB in use).
+fs-gpu-reason-hang = The card took too long to draw a frame.
+fs-gpu-reason-fault = The graphics driver stopped on an error while drawing.
+fs-gpu-reset-then = The viewer reopened its window on the card: you stayed logged in, and the world reloads in a moment.
+fs-gpu-reset-then-safe = It was the second reset within a few minutes, so the viewer reopened its window with the safe graphics (the Potato level): you stayed logged in. Your graphics settings are kept: the login screen offers them back.
+fs-gpu-reset-log = The details are in the log folder (Help › Show the log folder), in the file ending in gpu-losses.txt.
+fs-gpu-show-logs = Show the log folder
+# Folderstorm: background characters' alert sounds (folderstorm/background_alerts, Preferences › Sound › Interface sounds)
+fs-alerts-group = Alerts for characters in the background
+fs-alerts-intro = While the session host keeps a character in the background, its sounds are cut. These alerts let you hear that it got something; the character in front keeps its own sounds and plays none of them. No alert in Do Not Disturb, from someone it blocked, or while its Main or Interface volume is muted. These choices are shared by all your characters.
+fs-alerts-enable = Play alert sounds
+fs-alerts-enable-help = A short sound when a character in the background gets an instant message, a group or conference line, a mention in nearby chat, an inventory offer or a teleport offer.
+fs-alerts-volume = Alert volume
+fs-alerts-volume-help = Multiplied by the character's own Main and Interface volumes.
+fs-alerts-cooldown = Quiet time
+fs-alerts-cooldown-help = After an alert, the same kind of alert from the same conversation stays quiet this long, so that a busy group does not ring all the time. Two alerts of one character are always at least one second apart.
+fs-alerts-seconds = s
+fs-alerts-event-help = Whether this kind of event plays an alert, and which sound. A sound that cannot be played (a file gone) plays this kind's default instead.
+fs-alerts-event-new-im = New conversation
+fs-alerts-event-im = Instant message
+fs-alerts-event-group = Group chat
+fs-alerts-event-conference = Conference
+fs-alerts-event-mention = Mention in nearby chat
+fs-alerts-event-inventory-offer = Inventory offer
+fs-alerts-event-teleport-offer = Teleport offer
+fs-alerts-reset = Default alert choices
+fs-alerts-reset-help = Puts back the shared choices: alerts off, the default volume, quiet time and sounds. Each character's own sounds stay.
+fs-alerts-silent = Silent
+fs-alerts-built-in = Interface sounds
+fs-alerts-files = Sound files
+fs-alerts-inventory = This character's inventory
+fs-alerts-inventory-search = Search by name
+fs-alerts-inventory-more = More sounds: narrow the search
+fs-alerts-inventory-none = No sound in this inventory (or not loaded yet)
+fs-alerts-inventory-unknown = Inventory sound (not found)
+fs-alerts-choose-file = Choose a file…
+fs-alerts-choose-title = Choose an alert sound
+fs-alerts-file-type = WAV or OGG sound
+fs-alerts-test = Test
+fs-alerts-file-refused = Sound file not taken
+fs-alerts-dismiss = OK
+fs-alerts-file-kind = Only WAV and OGG files are taken.
+fs-alerts-file-too-large = The file is larger than { $mib } MB.
+fs-alerts-file-unreadable = The file could not be read.
+fs-alerts-file-not-sound = The file is not a sound this viewer can play.
+fs-alerts-file-too-long = The sound is longer than { $seconds } seconds.
+fs-alerts-file-copy = The file could not be copied into the viewer's settings folder.
+fs-alerts-own-group = This character's alerts ({ $name })
+fs-alerts-own-group-main = This character's alerts (main profile)
+fs-alerts-own-intro = Saved with this character's profile only: give each character its own sounds to tell them apart by ear. A sound from the inventory is chosen here only, by name; it plays as the inventory's Play does.
+fs-alerts-own-off = No alerts for this character
+fs-alerts-own-off-help = This character plays no alert sound while it is in the background, whatever the shared choices.
+fs-alerts-own-help = This character's own sound for this kind of event, or the shared one.
+fs-alerts-own-inherit = Shared sound ({ $sound })
+
 # Folderstorm: settings search keywords (Preferences search, ui/options/pages/folderstorm_search.rs); space-separated words, English ones are found in every language
 fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code Cursor Codex --mcp-api
 fs-search-mcp-activity = activity history log receipts operations stop
 fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
 fs-search-desktop = desktop shortcut shortcuts icon icons launcher folder folders margin margins monitor monitors
+fs-search-taskbar = taskbar task bar minimized minimised collapsed windows window tray dock
 fs-search-photo = photo mode snapshot picture camera
 fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
 fs-search-layouts-list = favorite favorites star apply rename delete
@@ -2601,6 +2920,7 @@ fs-search-background-huds = hud huds attachment attachments over above under bel
 fs-search-characters = multiple accounts alts alt characters character multibox session host background monitors
 fs-search-chat-upload = image upload picture photo screenshot paste drop share link Zipline host
 fs-search-outfit-safety = outfit safety wear misclick replace protect
+fs-search-background-alerts = alert alerts sound sounds notification ding chime beep background alt alts characters session host wav ogg
 
 ui-options-place-bar-stretch = Stretch the place bar to the right
 ui-options-place-bar-stretch-help = The place island reaches the account island; off, it is as wide as what it shows.
@@ -6021,7 +6341,7 @@ folderstorm-host-end-yes = End it
 folderstorm-host-remove = Remove
 folderstorm-host-remove-help = Takes this character off the list. Its profile, settings and cache stay on the disk.
 folderstorm-host-economy = Minimise in the background
-folderstorm-host-economy-help = Economy standby: while another character is active, this window is minimised and gives its textures back, which frees graphics memory; coming back takes a little longer. Off (warm standby): the window stays behind the active one and comes back at once.
+folderstorm-host-economy-help = Economy: while another character is active, this window gives back its textures (the faces too) and the memory of its 3D, then is minimised; coming back takes a second or two while they load again. While its monitor is open it stays behind instead and draws its pictures with blurrier textures. Warm: the window stays behind the active one, keeps its textures within its share, and comes back at once.
 folderstorm-host-add = Add character
 folderstorm-host-add-hint = Profile name (for example Alt1)
 folderstorm-host-add-empty = Type a profile name first.
@@ -6404,6 +6724,9 @@ folderstorm-settings-background = While another character is active
 folderstorm-settings-background-mode = Background mode
 folderstorm-settings-warm = Warm
 folderstorm-settings-economy = Economy
+folderstorm-settings-background-memory = Background characters' video memory
+folderstorm-settings-background-memory-help = How much of the graphics card's memory each character behind the active one may hold in all (textures, 3D, scenery). Less leaves more to the active character and to other programs; more keeps a Warm character sharper when you come back to it.
+folderstorm-settings-background-memory-note = For every character behind the active one; the active character keeps the rest of the card. A character in a busy place may hold more than this in scenery alone: its textures then shrink to their least. Economy characters give back nearly everything; a watched Economy character keeps at most 512 MB for its monitor's pictures.
 folderstorm-settings-include-attention = Include in Attention
 folderstorm-settings-include-attention-help = Off: what this character is asked (offers, requests, dialogs) is left out of the Attention inbox and its count. It still waits in its own window.
 folderstorm-settings-position = Card position
@@ -6442,6 +6765,7 @@ folderstorm-settings-seconds-suffix = { " " }s
 folderstorm-settings-voice-and-sound = Voice and background sound
 folderstorm-settings-alert = Alert
 folderstorm-settings-alert-note = Which messages sound it is each character's choice (Characters). The system's sound plays at the system's volume; a sound file of your own is not available yet.
+folderstorm-settings-alert-replaced = Replaced by the alert sounds in Preferences › Sound
 folderstorm-settings-heard = Heard in the background
 folderstorm-settings-files = Files
 folderstorm-settings-open-folder = Open the settings folder
@@ -6479,7 +6803,7 @@ folderstorm-controller-off = Off: nothing listens.
 folderstorm-controller-listening = On: listening on 127.0.0.1:{ $port } for this computer only.
 folderstorm-controller-starting = Starting…
 folderstorm-controller-failed = It could not start ({ $reason }). Turn it off and on to try again.
-folderstorm-controller-separate = Each character's own local assistant (its viewer's Preferences › Privacy › Local assistant) stays as it is: this grants nothing in a viewer, and a viewer's access grants nothing here. Nobody is ever logged in from here.
+folderstorm-controller-separate = Each character's own local assistant (its viewer's Preferences › Local assistant) stays as it is: this grants nothing in a viewer, and a viewer's access grants nothing here. Nobody is ever logged in from here.
 folderstorm-controller-actions = What it may do
 folderstorm-controller-actions-intro = Ask: this host asks you each time, in a window of its own. Allow: done without asking. Never: refused.
 folderstorm-controller-class-activate = Activate characters

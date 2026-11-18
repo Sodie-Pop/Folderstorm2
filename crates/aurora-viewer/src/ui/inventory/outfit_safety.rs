@@ -129,6 +129,17 @@ pub(super) fn show(ctx: &egui::Context, p: &Palette, inv: &Inventory, st: &mut I
     }
 }
 
+impl InventoryUi {
+    /// The margins' desktop (FEATURES row 1.10) wears an outfit from its
+    /// shortcut: the same question as *Replace Current Outfit* of the
+    /// menu, asked by the main Inventory window (which draws it whether
+    /// it is open or not). The caller has checked what greys that entry;
+    /// accepting checks the folder again ([`still_allowed`]).
+    pub fn folderstorm_ask_outfit(&mut self, folder: Uuid) {
+        self.outfit_ask = Some(Ask::new(folder, WearMode::ReplaceOutfit));
+    }
+}
+
 /// `AURORA_DEMO_INVENTORY=outfit-ask|aurora-outfit-ask`: the confirmation of
 /// Replace Current Outfit open on the demo's "Right-click tests" folder, over
 /// the Legacy or Aurora inventory.
@@ -164,6 +175,19 @@ mod tests {
             folder: Uuid::from_u128(8000),
             mode,
         }))
+    }
+
+    #[test]
+    fn an_outfit_worn_from_the_desktop_is_asked_as_replace_current_outfit() {
+        let outfit = Uuid::from_u128(703);
+        let mut st = InventoryUi::default();
+        assert!(st.outfit_ask.is_none());
+        st.folderstorm_ask_outfit(outfit);
+        // nothing is worn yet: the question waits for its answer
+        assert!(matches!(
+            st.outfit_ask.map(|ask| ask.target()),
+            Some((folder, WearMode::ReplaceOutfit)) if folder == outfit
+        ));
     }
 
     #[test]

@@ -40,10 +40,21 @@ pub(super) fn in_language(language: &str, key: &'static str) -> String {
 }
 
 /// A keyboard action of Preferences › Shortcuts: the Folderstorm ones (the
-/// layouts' switcher and its toggle) are found as the layouts are.
+/// layouts' switcher and its toggle) are found as the layouts are, those
+/// of the margins' desktop as the desktop is.
 pub(super) fn shortcut(cx: &mut Cx, action: Action) {
-    if matches!(action, Action::Folderstorm(_)) {
-        words(cx, &["fs-search-layouts", "fs-search-layouts-quick"]);
+    use crate::folderstorm::keys::Key;
+    match action {
+        Action::Folderstorm(Key::DesktopShortcuts | Key::DesktopFocus) => {
+            words(cx, &["fs-search-desktop"]);
+        }
+        Action::Folderstorm(Key::DesktopTaskbar) => {
+            words(cx, &["fs-search-taskbar"]);
+        }
+        Action::Folderstorm(_) => {
+            words(cx, &["fs-search-layouts", "fs-search-layouts-quick"]);
+        }
+        _ => {}
     }
 }
 
@@ -60,6 +71,7 @@ mod tests {
         "fs-search-mcp-activity",
         "fs-search-viewport",
         "fs-search-desktop",
+        "fs-search-taskbar",
         "fs-search-photo",
         "fs-search-layouts",
         "fs-search-layouts-list",
@@ -72,6 +84,8 @@ mod tests {
         "fs-search-characters",
         "fs-search-chat-upload",
         "fs-search-outfit-safety",
+        "fs-search-backup",
+        "fs-search-background-alerts",
         "fs-search-background-huds",
     ];
 
@@ -85,6 +99,10 @@ mod tests {
         ("en", "launcher", "fs-search-desktop"),
         ("fr", "raccourci bureau", "fs-search-desktop"),
         ("ja", "ショートカット", "fs-search-desktop"),
+        ("en", "taskbar", "fs-search-taskbar"),
+        ("en", "minimized windows", "fs-search-taskbar"),
+        ("fr", "barre des tâches", "fs-search-taskbar"),
+        ("ja", "タスクバー", "fs-search-taskbar"),
         ("en", "multi-monitor", "fs-search-viewport"),
         ("en", "margins", "fs-search-viewport"),
         ("fr", "double écran", "fs-search-viewport"),
@@ -126,6 +144,13 @@ mod tests {
         ("en", "outfit safety", "fs-search-outfit-safety"),
         ("fr", "tenue sécurité", "fs-search-outfit-safety"),
         ("ja", "誤クリック", "fs-search-outfit-safety"),
+        ("en", "backup", "fs-search-backup"),
+        ("en", "migrate", "fs-search-backup"),
+        ("fr", "sauvegarde", "fs-search-backup"),
+        ("ja", "バックアップ", "fs-search-backup"),
+        ("en", "notification sound", "fs-search-background-alerts"),
+        ("fr", "son alerte", "fs-search-background-alerts"),
+        ("ja", "アラート 通知", "fs-search-background-alerts"),
         ("en", "hud wallpaper", "fs-search-background-huds"),
         ("fr", "hud fond d'écran", "fs-search-background-huds"),
         ("ja", "HUD 壁紙", "fs-search-background-huds"),
@@ -180,24 +205,31 @@ mod tests {
     #[test]
     fn the_search_finds_the_folderstorm_rows_on_their_pages() {
         let cases: &[(&str, Page, usize)] = &[
-            // Privacy › Local assistant: access, session only, permissions,
-            // status, activity, setup (client, copy, check)
-            ("MCP", Page::Privacy, 8),
-            ("agent", Page::Privacy, 8),
-            // Layout: the world viewport's rows, the layouts' rows
-            ("dual monitor", Page::Layout, 12),
-            ("multi-monitor", Page::Layout, 12),
-            ("viewport margins", Page::Layout, 5),
-            // Layout: the margins' desktop (the switch, the icon size)
-            ("desktop shortcut", Page::Layout, 2),
-            ("launcher", Page::Layout, 2),
-            ("icon size", Page::Layout, 1),
-            ("photo mode", Page::Layout, 1),
-            ("workspace", Page::Layout, 8),
-            ("favorites", Page::Layout, 3),
-            ("quick switch", Page::Layout, 2),
-            ("undo", Page::Layout, 1),
-            ("hud wallpaper", Page::Layout, 1),
+            // Local assistant: access, session only, permissions, status,
+            // activity, setup (client, copy, check); Privacy keeps its link
+            ("MCP", Page::LocalAssistant, 8),
+            ("agent", Page::LocalAssistant, 8),
+            ("MCP", Page::Privacy, 1),
+            // Workspaces: the world viewport's rows, the saved list, the
+            // margins' notice
+            ("dual monitor", Page::Workspaces, 10),
+            ("multi-monitor", Page::Workspaces, 10),
+            ("viewport margins", Page::Workspaces, 5),
+            // Workspaces › Margins: the desktop (the switch, the icon size,
+            // the single click, Remove all shortcuts)
+            ("desktop shortcut", Page::Workspaces, 4),
+            ("launcher", Page::Workspaces, 4),
+            ("icon size", Page::Workspaces, 1),
+            // the taskbar: the switch, its monitor, All open windows
+            ("taskbar", Page::Workspaces, 3),
+            ("minimized windows", Page::Workspaces, 3),
+            ("taskbar", Page::Shortcuts, 1),
+            ("photo mode", Page::Workspaces, 1),
+            ("workspace", Page::Workspaces, 2),
+            ("favorites", Page::Workspaces, 2),
+            ("quick switch", Page::Workspaces, 2),
+            ("undo", Page::Workspaces, 1),
+            ("hud wallpaper", Page::Workspaces, 1),
             // Shortcuts › Other: the layouts' keyboard actions
             ("workspace", Page::Shortcuts, 5),
             ("switcher", Page::Shortcuts, 5),
@@ -210,6 +242,8 @@ mod tests {
             ("Zipline", Page::Chat, 4),
             // Inventory: outfit safety
             ("outfit safety", Page::Inventory, 1),
+            // Language and updates: the account's setup backup
+            ("migrate", Page::System, 5),
         ];
         for (query, page, at_least) in cases {
             let found = counts(query);

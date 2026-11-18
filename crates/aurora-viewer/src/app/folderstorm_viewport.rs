@@ -56,12 +56,15 @@ impl App {
     /// The world's part of a window of `size` this frame, None for all of
     /// it: under the session host's bar when the bar is over the world
     /// viewport (`app/folderstorm_characters/bar.rs`).
+    /// A background window whose monitor the host watches draws its world
+    /// at the picture's size in the middle of that part
+    /// (`app/folderstorm_characters/memory.rs`).
     pub(super) fn world_viewport(&self, size: (u32, u32)) -> Option<[u32; 4]> {
-        let world = self.whole_world_viewport(size)?;
-        Some(match self.folderstorm_bar_strip(size) {
+        let world = self.whole_world_viewport(size).map(|world| match self.folderstorm_bar_strip(size) {
             Some(crate::folderstorm_characters::bar::Strip::World(strip)) => crate::folderstorm_characters::bar::world_under(world, strip),
             _ => world,
-        })
+        });
+        self.folderstorm_monitor_viewport(size, world).or(world)
     }
 
     /// The world's part of a window of `size` this frame by the viewport's
