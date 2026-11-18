@@ -109,6 +109,7 @@ const RUNS: &[&str] = &[
     "hide_interface",
     "huds",
     "photo_roll",
+    "director",
     "avatar",
     "destinations",
     "picks",
@@ -167,6 +168,10 @@ pub struct Facts {
     pub no_guide: bool,
     /// RLVa would refuse the Sit / Stand button's action.
     pub sit_locked: bool,
+    /// RLVa refuses the Build button (`ui::bars::rlva_build_locked_id`).
+    pub build_locked: bool,
+    /// The Fly button is held (RLVa, `ui::bars::fly_locked_id`).
+    pub fly_locked: bool,
     /// No layout is set for the two-layout toggle.
     pub toggle_unset: bool,
     /// RLVa refuses a teleport to a landmark now (`@tplm`, `@unsit` while
@@ -638,7 +643,7 @@ pub fn outfit_state(inv: &Inventory, id: Uuid) -> FolderState {
 pub struct Wearing {
     /// What RLVa's locks leave of wearing (`World::rlva_wear_locks`, what
     /// greys the Inventory's own entries).
-    pub locks: WearLocks,
+    pub locks: std::sync::Arc<WearLocks>,
     /// The items worn now (`ui::appearance::items::worn_items`: what the
     /// Inventory marks "worn").
     pub worn: std::collections::HashSet<Uuid>,
@@ -760,6 +765,8 @@ pub fn command_gate(id: &str, facts: &Facts) -> Result<(), Greyed> {
         "destinations" if facts.no_guide => Err(Greyed::NoGuide),
         "layout_toggle" if facts.toggle_unset => Err(Greyed::ToggleUnset),
         "sit" if facts.sit_locked => Err(Greyed::Rlva),
+        "build" if facts.build_locked => Err(Greyed::Rlva),
+        "fly" if facts.fly_locked => Err(Greyed::Rlva),
         _ => Ok(()),
     }
 }
@@ -1052,11 +1059,13 @@ mod tests {
         assert_eq!(command_gate(unready.id, &free), Err(Greyed::NotReady));
         // gone from the catalogue
         assert_eq!(command_gate("no-such-command", &free), Err(Greyed::Gone));
-        // the row's three gates, and the layouts' own
+        // the row's gates, and the layouts' own
         let all = Facts {
             photo_roll_empty: true,
             no_guide: true,
             sit_locked: true,
+            build_locked: true,
+            fly_locked: true,
             toggle_unset: true,
             landmark_blocked: true,
         };
@@ -1066,6 +1075,11 @@ mod tests {
         assert_eq!(command_gate("destinations", &all), Err(Greyed::NoGuide));
         assert_eq!(command_gate("sit", &free), Ok(()));
         assert_eq!(command_gate("sit", &all), Err(Greyed::Rlva));
+        // upstream's RLVa holds on the Build and Fly buttons
+        assert_eq!(command_gate("build", &free), Ok(()));
+        assert_eq!(command_gate("build", &all), Err(Greyed::Rlva));
+        assert_eq!(command_gate("fly", &free), Ok(()));
+        assert_eq!(command_gate("fly", &all), Err(Greyed::Rlva));
         assert_eq!(command_gate("layout_toggle", &all), Err(Greyed::ToggleUnset));
         // they grey nothing else
         assert_eq!(command_gate("people", &all), Ok(()));

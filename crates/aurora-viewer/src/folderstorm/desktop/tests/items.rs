@@ -542,7 +542,7 @@ impl Bench {
 
 /// RLVa's wear locks with `@remoutfit=n` in force (no clothing comes off),
 /// read from a world whose inventory is the bench's demo inventory.
-fn remoutfit_locks() -> crate::world::rlva::WearLocks {
+fn remoutfit_locks() -> std::sync::Arc<crate::world::rlva::WearLocks> {
     let mut w = crate::world::World::new(std::sync::Arc::new(crate::scene::avatar::AvatarLibrary::load()));
     w.inventory = crate::world::inventory::Inventory {
         root: Uuid::from_u128(77),
@@ -558,6 +558,7 @@ fn remoutfit_locks() -> crate::world::rlva::WearLocks {
         chat_type: aurora_net::ChatType::OwnerSay,
         position: glam::Vec3::ZERO,
         message: "@remoutfit=n".to_owned(),
+        region: None,
     }));
     w.rlva_wear_locks()
 }

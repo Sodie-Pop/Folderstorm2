@@ -188,8 +188,8 @@ pub(crate) fn terms_link(ui: &mut egui::Ui, p: &Palette, url: &str) {
 /// last view).
 pub fn draw_background(ui: &egui::Ui, p: &Palette) {
     let ctx = ui.ctx();
-    let rect = ctx.content_rect();
-    let painter = ctx.layer_painter(egui::LayerId::background());
+    let rect = crate::folderstorm::login_screen::sky(ctx); // Folderstorm: the whole window while the login keeps to one monitor
+    let painter = egui::Painter::new(ctx.clone(), egui::LayerId::background(), rect); // Folderstorm: (same)
     let t = ctx.input(|i| i.time) as f32;
     super::aurora_bg::paint(&painter, p, rect, t, 1.0);
     // slow animation: ~30 images/s are plenty
@@ -284,6 +284,17 @@ fn field(
             .inner
         })
         .inner
+}
+
+/// Where "Remember password" keeps the login hash on this system.
+fn remember_password_hint() -> &'static str {
+    if cfg!(windows) {
+        aurora_i18n::tr!("ui-login-stored-in-windows-credential-manager-as-the-hash-sent")
+    } else if cfg!(target_os = "macos") {
+        aurora_i18n::tr!("ui-login-stored-in-the-macos-keychain-as-the-hash-sent")
+    } else {
+        aurora_i18n::tr!("ui-login-stored-in-the-secret-service-as-the-hash-sent")
+    }
 }
 
 fn caption(ui: &mut egui::Ui, p: &Palette, text: &str) {
@@ -533,7 +544,8 @@ fn glass_card<R>(
             ),
         ];
         behind.0.set(behind.1, egui::Shape::Vec(lights.clone()));
-        let mut shapes = super::aurora_bg::frosted_pane(p, ctx.content_rect(), ctx.input(|i| i.time) as f32, rect, lights);
+        let sky = crate::folderstorm::login_screen::sky(ctx); // Folderstorm: the sky behind, as `draw_background` paints it
+        let mut shapes = super::aurora_bg::frosted_pane(p, sky, ctx.input(|i| i.time) as f32, rect, lights);
         let top = |height: f32| egui::Rect::from_min_size(rect.min, Vec2::new(rect.width(), height));
         if accent {
             shapes.push(strip(top(2.0), &[(0.0, p.violet), (1.0, p.teal)]));
@@ -854,7 +866,7 @@ pub fn show(
                                 .size(12.5)
                                 .color(p.muted),
                         )
-                        .on_hover_text(aurora_i18n::tr!("ui-login-stored-in-windows-credential-manager-as-the-hash-sent"));
+                        .on_hover_text(remember_password_hint());
                     });
                     ui.add_space(10.0);
                     let can = form.block_reason.is_none()
@@ -1044,7 +1056,7 @@ mod tests {
         fn position(shape: &egui::Shape, label: &str) -> Option<egui::Pos2> {
             match shape {
                 egui::Shape::Text(t) if t.galley.text() == label => Some(t.pos + egui::vec2(3.0, 5.0)),
-                egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| position(s, label)),
+                egui::Shape::Vec(shapes) => shapes.iter().rev().find_map(|s| position(s, label)),
                 _ => None,
             }
         }
@@ -1087,6 +1099,7 @@ mod tests {
         let pos = output
             .shapes
             .iter()
+            .rev() // the button, painted after the heading (Japanese writes both ログイン)
             .find_map(|s| position(&s.shape, aurora_i18n::tr!("ui-login-log-in")))
             .expect("button");
         for pressed in [true, false] {
@@ -1150,6 +1163,7 @@ mod tests {
         let pos = output
             .shapes
             .iter()
+            .rev() // the button, painted after the heading (Japanese writes both ログイン)
             .find_map(|s| position(&s.shape, aurora_i18n::tr!("ui-login-log-in")))
             .expect("enabled button");
         draw(

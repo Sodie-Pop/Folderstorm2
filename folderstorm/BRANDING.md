@@ -30,7 +30,10 @@ directly:** add it to `folderstorm-brand` and read it from there.
   registration name, the Windows pipe and window names and the Linux bus name
   that hand a link to a running viewer;
 - updates: the updater reads only this repository's releases, so it can never
-  replace Folderstorm2 with Aurora Viewer.
+  replace Folderstorm2 with Aurora Viewer. The one exception is the media
+  plugins pack (CEF, LibVLC or GStreamer): the fork publishes none, so it is
+  downloaded from Aurora Viewer's releases (`MEDIA_PACK_DOWNLOADS`), and only
+  the exact archive whose size and SHA-256 the viewer pins is installed.
 
 A test in `folderstorm-brand` fails if one of these equals Aurora's.
 
