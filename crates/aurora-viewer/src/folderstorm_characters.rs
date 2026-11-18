@@ -207,6 +207,11 @@ pub struct MemoryState {
     /// The window was minimised at the host's word and not shown since:
     /// a monitor that shows it again brings it back behind.
     pub minimised_by_host: bool,
+    /// Whether the texture pages stopped dropping during the release.
+    pub pages: ::folderstorm_session::memory::Plateau,
+    /// When Economy's release minimised the window, until the pages are
+    /// logged again (`memory::PAGES_AFTER_MINIMISE` later).
+    pub minimised_at: Option<std::time::Instant>,
 }
 
 /// The video memory when Economy's release began, or when it ended.

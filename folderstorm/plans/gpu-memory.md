@@ -820,6 +820,22 @@ no page waiting for its bind group or its destruction), still bounded by
 during the release (`folderstorm_release_cap`, in the fork's frame cap; a
 paused frame is the interface and a sky at a sixteenth of the size).
 
+### The release waits until the pages stop dropping (2026-11-18)
+
+`TextureTable::folderstorm_settled` can be true between two eager
+compaction passes while the spare pages (2 s) and the compaction (once a
+second) still free memory, so the window was still minimised with pages
+that went back later (the Windows test: 593 MB at the minimise, 226 MB two
+minutes later). The release is done now when the textures are released,
+the table settled **and** `page_bytes()` has not dropped for a second
+(`memory::Plateau`, `memory::PLATEAU`), bounded by `RELEASE_WAIT` raised to
+10 s. The pages are never required to reach the textures' target:
+fixed-size textures (HUDs, sculpts, terrain) are never lowered. Ten seconds
+after the minimise the pages and the driver's figure are logged again
+(`session memory: 10 s after the minimise: texture pages X MB, A MB taken
+from the driver`) to see whether anything still went back once minimised.
+Plan: `deep-sleep.md`, phase P0.
+
 ### Logged
 
 One line per release, when the window is minimised:
@@ -828,7 +844,7 @@ One line per release, when the window is minimised:
 session memory: released after <N> ms, the window is minimised: <A> MB taken from the driver (was <B>), texture pages <C> MB (was <D>), texture target <T> MB, GPU culling <G> MB back, probes and shadows at their smallest (8 probes, shadow maps of 512 px)
 ```
 
-(`not all released` when the 5 s ran out), with, before it, `session
+(`not all released` when the 10 s ran out), with, before it, `session
 memory: the 3D is paused, the GPU culling buffers, the reflection probes …
 go to their smallest` and the render thread's `GPU culling: N MB of buffers
 given back …`; coming back, `session memory: the reflection probes and the
