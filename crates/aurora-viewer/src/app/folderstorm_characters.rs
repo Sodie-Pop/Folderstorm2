@@ -451,6 +451,8 @@ impl App {
                 Some(_) => state.monitor.state,
             },
             vram_mb: self.folderstorm_vram_mb(),
+            // (P2: said once the renderer sleeps)
+            hibernating: false,
         }
         .cleaned()
     }

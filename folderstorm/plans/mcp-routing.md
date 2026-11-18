@@ -139,7 +139,7 @@ character's viewer was started again since (`session_changed`).
 |---|---|---|---|
 | `host_characters` | none (controller on) | the characters with controller access: `slot`, `profile`, `state` (`stopped`, `starting`, `login`, `loading`, `in_world`, `ended`, `crashed`, `unmanaged`), `active`, `background_mode`, `launch`, `closing`; with metadata: `character` (logged-in name), `alias`, `colour`, `monitor` (open, size, rate, what it shows), and the cycling monitor | — |
 | `host_activate` | Activate characters | that character comes forward (the card's Switch) | not in the world (at its login screen: `host_open_login`) |
-| `host_background_mode` | Change background mode | `mode`: `warm` / `economy` | — |
+| `host_background_mode` | Change background mode | `mode`: `warm` / `economy` / `hibernation` | — |
 | `host_monitor` | Manage monitor previews | `open`: true / false, for a character (`profile`) or the cycling monitor (`cycling: true`) | the active character (no monitor), not in the world (open) |
 | `host_open_login` | Open login windows | a character not logged in: its viewer started, or its login screen brought forward (the bar's "Open a login"); never fills or sends anything | logged in, starting, closing, unmanaged |
 | `host_restart` | Restart characters | its viewer logs out and closes (the card's Close), then starts again at its login screen; one that ended starts again | unmanaged, starting, already closing |

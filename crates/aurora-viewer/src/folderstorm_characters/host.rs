@@ -121,19 +121,24 @@ pub const DEMO_CONTACTS_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_CONTACTS";
 /// `folderstorm_session::memory`): every demo character waits in Economy,
 /// and the background characters' share is that many megabytes.
 pub const DEMO_MEMORY_VARIABLE: &str = "AURORA_DEMO_SESSION_HOST_MEMORY";
+/// `AURORA_DEMO_HIBERNATE_AFTER=<seconds>`: the demo host's "Hibernate
+/// after" (5 s to 10 min).
+pub const DEMO_HIBERNATE_AFTER_VARIABLE: &str = "AURORA_DEMO_HIBERNATE_AFTER";
 
-/// What [`DEMO_MEMORY_VARIABLE`] asks for: Economy for everyone, and the
-/// share.
-fn demo_memory(list: &str) -> (bool, Option<u32>) {
-    let mut economy = false;
+/// What [`DEMO_MEMORY_VARIABLE`] asks for: Economy or Hibernation for
+/// everyone, and the share.
+fn demo_memory(list: &str) -> (Option<::folderstorm_session::memory::Waiting>, Option<u32>) {
+    use ::folderstorm_session::memory::Waiting;
+    let mut waiting = None;
     let mut share = None;
     for word in list.split(',').map(|word| word.trim().to_ascii_lowercase()) {
         match word.as_str() {
-            "economy" | "eco" | "1" => economy = true,
+            "economy" | "eco" | "1" => waiting = Some(Waiting::Economy),
+            "hibernate" | "hibernation" => waiting = Some(Waiting::Hibernation),
             other => share = other.trim_end_matches("mb").parse::<u32>().ok().or(share),
         }
     }
-    (economy, share)
+    (waiting, share)
 }
 
 fn demo_contacts(value: &str) -> Option<::folderstorm_session::contacts::Which> {
@@ -377,15 +382,21 @@ impl Host {
             for slot in slots {
                 host.desk.launch(slot, slot == 0);
             }
-            let (economy, share) = demo_memory(&std::env::var(DEMO_MEMORY_VARIABLE).unwrap_or_default());
-            if economy {
+            let (waiting, share) = demo_memory(&std::env::var(DEMO_MEMORY_VARIABLE).unwrap_or_default());
+            if let Some(waiting) = waiting {
                 let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
                 for slot in slots {
-                    host.desk.set_standby(slot, ::folderstorm_session::ipc::Standby::Economy);
+                    host.desk.set_waiting(slot, waiting);
                 }
             }
             if let Some(mb) = share {
                 host.desk.set_background_memory_mb(mb);
+            }
+            if let Some(seconds) = std::env::var(DEMO_HIBERNATE_AFTER_VARIABLE)
+                .ok()
+                .and_then(|s| s.trim().trim_end_matches('s').parse::<u32>().ok())
+            {
+                host.desk.set_hibernate_after_s(seconds);
             }
             host.demo_monitors(demo_monitors(&std::env::var(DEMO_MONITORS_VARIABLE).unwrap_or_default()));
             let out = std::env::var(DEMO_PANELS_VARIABLE).unwrap_or_default();
@@ -786,11 +797,14 @@ mod tests {
 
     #[test]
     fn the_demo_s_memory_is_economy_and_a_share() {
-        assert_eq!(demo_memory(""), (false, None));
-        assert_eq!(demo_memory("economy"), (true, None));
-        assert_eq!(demo_memory(" Economy , 512 "), (true, Some(512)));
-        assert_eq!(demo_memory("768mb"), (false, Some(768)));
-        assert_eq!(demo_memory("warm,lots"), (false, None));
+        use ::folderstorm_session::memory::Waiting;
+        assert_eq!(demo_memory(""), (None, None));
+        assert_eq!(demo_memory("economy"), (Some(Waiting::Economy), None));
+        assert_eq!(demo_memory(" Economy , 512 "), (Some(Waiting::Economy), Some(512)));
+        assert_eq!(demo_memory("768mb"), (None, Some(768)));
+        assert_eq!(demo_memory("warm,lots"), (None, None));
+        assert_eq!(demo_memory("hibernate,512"), (Some(Waiting::Hibernation), Some(512)));
+        assert_eq!(demo_memory("Hibernation"), (Some(Waiting::Hibernation), None));
     }
 
     #[test]

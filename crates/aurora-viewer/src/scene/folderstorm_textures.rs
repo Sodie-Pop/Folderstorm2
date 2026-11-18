@@ -172,6 +172,7 @@ mod tests {
             share_mb: 1024,
             reserved_mb: 0,
             release: Release::Keep,
+            ..Memory::default()
         });
         assert_eq!(warm.share, Some(GB));
         // 600 MB of pages, 1 GB held in all: 424 MB of the rest, 600 left
@@ -190,6 +191,7 @@ mod tests {
             share_mb: 0,
             reserved_mb: 2048,
             release: Release::Keep,
+            ..Memory::default()
         });
         // 10 GB budget less 2 GB left aside: Aurora's target on 8 GB
         // (min(8 - 0.5, 8 * 0.8) = 6.4 GB) less the 1 GB the rest holds
@@ -209,12 +211,14 @@ mod tests {
             share_mb: 1024,
             reserved_mb: 0,
             release: Release::Full,
+            ..Memory::default()
         });
         assert!(full.economy() && !full.held());
         let lowered = Limits::from_host(Memory {
             share_mb: 512,
             reserved_mb: 0,
             release: Release::Lowered,
+            ..Memory::default()
         });
         assert!(lowered.held() && !lowered.economy());
     }

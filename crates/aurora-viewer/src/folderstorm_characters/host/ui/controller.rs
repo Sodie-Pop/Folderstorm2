@@ -14,7 +14,7 @@ use super::{Act as HostAct, BUTTON, Window_};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::controller::{Action, Settings};
-use ::folderstorm_session::ipc::Standby;
+use ::folderstorm_session::memory::Waiting;
 use aurora_i18n::tr;
 use egui::RichText;
 use folderstorm_mcp_bridge::Level;
@@ -135,8 +135,9 @@ impl Window_ {
         let (number, name) = name.unwrap_or((0, String::new()));
         match action {
             Action::Activate => tr!("folderstorm-controller-ask-activate", name = name, number = number),
-            Action::Background(Standby::Warm) => tr!("folderstorm-controller-ask-warm", name = name, number = number),
-            Action::Background(Standby::Economy) => tr!("folderstorm-controller-ask-economy", name = name, number = number),
+            Action::Background(Waiting::Warm) => tr!("folderstorm-controller-ask-warm", name = name, number = number),
+            Action::Background(Waiting::Economy) => tr!("folderstorm-controller-ask-economy", name = name, number = number),
+            Action::Background(Waiting::Hibernation) => tr!("folderstorm-controller-ask-hibernation", name = name, number = number),
             Action::Monitor(true) => tr!("folderstorm-controller-ask-monitor-open", name = name, number = number),
             Action::Monitor(false) => tr!("folderstorm-controller-ask-monitor-close", name = name, number = number),
             Action::Cycling(true) => tr!("folderstorm-controller-ask-cycling-open").to_owned(),
@@ -357,11 +358,11 @@ mod tests {
         let (drawn, _) = draw_in(&mut app, Which::Ask, 460, 250);
         let text = drawn.join("\n");
         assert!(text.contains("Claude Code"), "{text}");
-        assert!(text.contains(&app.question_sentence(Some(1), Action::Background(Standby::Economy))));
+        assert!(text.contains(&app.question_sentence(Some(1), Action::Background(Waiting::Economy))));
         assert!(text.contains(tr!("fs-mcp-ask-allow")) && text.contains(tr!("fs-mcp-ask-refuse")));
         let number = app.host.controller.questions.front().expect("asked").number;
         app.apply(vec![HostAct::Controller(Act::Answer(number, true))], now);
-        assert_eq!(app.host.desk.slot(1).expect("demo-2").standby, Standby::Economy);
+        assert_eq!(app.host.desk.slot(1).expect("demo-2").waiting(), Waiting::Economy);
         assert_eq!(answer.try_recv().expect("answered").expect("done")["done"], true);
         assert!(app.host.controller.questions.is_empty());
         // a second answer to it does nothing
@@ -377,7 +378,7 @@ mod tests {
             answer.try_recv().expect("answered").expect_err("refused").code,
             folderstorm_mcp_bridge::ErrorCode::PermissionDenied
         );
-        assert_eq!(app.host.desk.slot(1).expect("demo-2").standby, Standby::Economy);
+        assert_eq!(app.host.desk.slot(1).expect("demo-2").waiting(), Waiting::Economy);
         assert!(app.host.controller.questions.take(number).is_none());
     }
 }

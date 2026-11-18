@@ -105,6 +105,8 @@ fn every_section_is_drawn_whole_at_a_narrow_and_a_wide_size() {
                 tr!("folderstorm-alias"),
                 tr!("folderstorm-colour"),
                 tr!("folderstorm-settings-warm"),
+                tr!("folderstorm-settings-hibernation"),
+                tr!("folderstorm-settings-hibernate-after"),
                 tr!("folderstorm-host-sound-all"),
                 tr!("folderstorm-settings-include-attention"),
                 tr!("folderstorm-settings-move-down"),
@@ -370,6 +372,46 @@ fn the_background_characters_video_memory_is_set_from_the_characters_section() {
     draw_in(&mut app, Which::Settings, 1000, 1400);
     let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 1400);
     assert!(shows(&drawn, "768 MB") && shows(&drawn, "812 MB"), "{drawn:?}");
+}
+
+#[test]
+fn the_characters_section_offers_three_ways_to_wait_and_the_grace() {
+    use ::folderstorm_session::memory::{self, Waiting};
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, now);
+    open(&mut app, Section::Characters, Some(1));
+    draw_in(&mut app, Which::Settings, 1000, 1000);
+    let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 1000);
+    for text in [
+        tr!("folderstorm-settings-warm"),
+        tr!("folderstorm-settings-economy"),
+        tr!("folderstorm-settings-hibernation"),
+        tr!("folderstorm-host-hibernation-help"),
+        tr!("folderstorm-settings-hibernate-after"),
+    ] {
+        assert!(shows(&drawn, text), "{text}: {drawn:?}");
+    }
+    assert!(drawn.iter().any(|t| t == "20"), "the default grace, 20 s: {drawn:?}");
+    keep("settings-characters-hibernation", &pixels, 1000, 1000);
+    // the choice goes to the desk, saved as Economy and the word
+    app.apply(vec![HostAct::Standby(1, Waiting::Hibernation)], now);
+    assert_eq!(app.host.desk.slot(1).map(|s| s.waiting()), Some(Waiting::Hibernation));
+    assert!(app.host.desk.config().slots[1].hibernate);
+    // heard in the background: the section says why it stays in Economy
+    app.host.desk.set_sound(1, ::folderstorm_session::host::BackgroundSound::All);
+    draw_in(&mut app, Which::Settings, 1000, 1000);
+    let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 1000);
+    assert!(shows(&drawn, tr!("folderstorm-settings-hibernation-fallback-heard")), "{drawn:?}");
+    // the grace, kept to its choices
+    app.apply(vec![HostAct::Settings(Act::HibernateAfter(45))], now);
+    assert_eq!(app.host.desk.hibernate_after_s(), 45);
+    app.apply(vec![HostAct::Settings(Act::HibernateAfter(100_000))], now);
+    assert_eq!(app.host.desk.hibernate_after_s(), memory::MAX_HIBERNATE_AFTER_S);
+    // the card's choice too: three segments in place of Economy's checkbox
+    let (drawn, _) = draw(&mut app, 1120, 760);
+    assert!(shows(&drawn, tr!("folderstorm-host-waiting")), "{drawn:?}");
+    assert!(shows(&drawn, tr!("folderstorm-settings-hibernation")), "{drawn:?}");
 }
 
 #[test]

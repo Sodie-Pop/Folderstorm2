@@ -84,8 +84,14 @@ impl App {
         let (frame, passes) = (self.frame_count, self.scene.textures.wants_passes());
         let figures = self.folderstorm_release_figures();
         let keyboard = self.folderstorm_focused();
+        let hibernate = self.folderstorm_characters.managed.memory().hibernate;
         let state = &mut self.folderstorm_characters.memory;
         if !state.releasing.under_way() {
+            if hibernate {
+                // (P1 of folderstorm/plans/deep-sleep.md: the renderer's
+                // sleep comes with P2)
+                log::info!("session memory: Hibernation asked: Economy until the renderer can sleep");
+            }
             state.since_passes = passes;
             state.pages.reset();
             state.began = Some(Instant::now());
