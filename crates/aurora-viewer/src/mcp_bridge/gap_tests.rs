@@ -576,6 +576,7 @@ fn rlva_showloc_hides_a_landmarks_location() {
         owner_id: owner,
         source_type: aurora_net::ChatSourceType::Object,
         chat_type: aurora_net::ChatType::OwnerSay,
+        region: None,
         position: glam::Vec3::ZERO,
         message: "@showloc=n".to_owned(),
     }));
@@ -774,7 +775,8 @@ fn batch_rename_is_all_or_nothing() {
 
 /// AGENTS.md § 2 "Tests": every owner case for the new changes. A batch
 /// rename needs Modify (`actions::renameable`); a picture's texture needs
-/// Copy and Transfer, or the Library (`thumbnail::usable`); favorites mark
+/// Copy and Transfer, a Library one by its everyone rights
+/// (`thumbnail::usable`); favorites mark
 /// any entry of My Inventory (the menu's rule), never the Library's.
 #[test]
 fn creators_permissions_for_the_new_changes() {
@@ -785,11 +787,12 @@ fn creators_permissions_for_the_new_changes() {
         (AGENT, false, full, 0, true, true),
         (AGENT, true, full, 0, false, false),
         (OTHER, false, full, 0, false, false),
-        (inv.lib_owner, false, full, actions::COPY, false, true),
+        (inv.lib_owner, false, full, actions::COPY, false, false),
         (AGENT, false, full & !actions::COPY, 0, true, false),
         (AGENT, false, full & !actions::TRANSFER, 0, true, false),
         (AGENT, false, full & !actions::MODIFY, 0, false, true),
         (OTHER, false, full, actions::FULL, true, true),
+        (inv.lib_owner, false, full, actions::COPY | actions::TRANSFER, false, true),
     ];
     for (n, (owner, group_owned, owner_mask, everyone_mask, rename, picture)) in cases.into_iter().enumerate() {
         let id = Uuid::from_u128(99_300 + n as u128);

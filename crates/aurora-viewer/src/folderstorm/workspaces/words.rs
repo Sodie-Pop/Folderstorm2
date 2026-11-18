@@ -39,7 +39,7 @@ pub fn workspace_holds(workspace: &Workspace) -> String {
         Some(name) => tr!("fs-workspaces-holds-layout", name = name.as_str()),
         None => tr!("fs-workspaces-holds-no-layout").to_owned(),
     };
-    let names: Vec<&str> = workspace.opens().map(windows::Window::label).collect();
+    let names: Vec<_> = workspace.opens().map(windows::Window::label).collect();
     let opens = if names.is_empty() {
         tr!("fs-workspaces-holds-none").to_owned()
     } else {

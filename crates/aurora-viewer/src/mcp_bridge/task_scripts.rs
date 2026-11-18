@@ -436,7 +436,7 @@ impl TaskScripts {
                 item: item.item_id,
                 asset: item.asset_id,
                 name: item.name.clone(),
-                lua: aurora_net::scripts::lua_source(item.flags),
+                lua: aurora_net::scripts::is_slua_item(item.flags),
                 handle: target.handle,
                 owner: item.owner_id,
                 source_request: Uuid::new_v4(),
@@ -865,9 +865,11 @@ impl TaskScripts {
                 object_id,
                 item_id,
                 running,
-                mono,
-                ..
-            } => self.running(*object_id, *item_id, *running, *mono, now),
+                compile,
+            } => {
+                let mono = compile.map(|c| c == aurora_net::scripts::CompileTarget::Mono);
+                self.running(*object_id, *item_id, *running, mono, now)
+            }
             NetEvent::TaskInventory {
                 object, result: Ok(items), ..
             } => self.listed(*object, items),
