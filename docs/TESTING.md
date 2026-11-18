@@ -7025,6 +7025,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
 | `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
+| `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures and 3D targets back before its window is minimised, a watched Economy character stays behind with a small share, each viewer holds the share the host gives it |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -9096,6 +9097,49 @@ failure. Grid validation and any paid upload are performed by the human.
   `<file>-settings.png`, each monitor's window to
   `<file>-monitor-<n>.png` (its picture included: demo viewers have no
   grid) and the cycling monitor's to `<file>-cycling.png`.
+- **Video memory with several characters** (Folderstorm2, session host,
+  `folderstorm/plans/gpu-memory.md` phases 2 to 4).
+  `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (with
+  `AURORA_DEMO_SESSION_HOST`; either word alone works) puts every demo
+  character in Economy and sets the background characters' share:
+  `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_MEMORY=economy,512 cargo run -p aurora-viewer -- --title "Test host"`.
+  What to look at:
+  - the host's settings › Characters: "Background characters' video
+    memory" (256 MB to 4 GB, 1 GB by default), with its note; a change is
+    saved and said to every viewer at once. Advanced › diagnostics lists the
+    share and each viewer's video memory (`… · 812 MB`).
+  - each background viewer's log: `session memory: a background character,
+    512 MB of video memory in all` (Warm) or `session memory: Economy, every
+    texture goes to its last level …`; the active one's `session memory: the
+    active character, … MB left to the characters behind`.
+  - **Economy**: on a switch the viewer that leaves logs `session memory:
+    Economy, giving the video memory back before the window is minimised`,
+    Aurora's `texture memory: … freeing up video memory; the 3D drawing
+    pauses` (its 3D targets are at a sixteenth of the window, as the Off
+    policy already had them), then
+    `session memory: released after N ms (… MB of video memory …), the
+    window is minimised` (5 s at most). Back to it: textures and faces load
+    again within a second or two (`texture memory: the window is in front
+    again`).
+  - **a watched Economy character**: with
+    `AURORA_DEMO_SESSION_HOST_MONITORS=windows` too, the characters behind
+    are not minimised; their logs say `session memory: Economy watched by a
+    monitor, … 512 MB`, the monitors' pictures are blurrier than with Warm,
+    and switching still moves the active character's monitor to the one
+    that left. Each picture's `world resolution:` lines are at the
+    picture's size (640 × 360 at most) or a sixteenth of it, never at the
+    window's size (`snapshot …` lines as before).
+  - **On Windows, with the grid** (the human): Task Manager › Details, add
+    the column "Dedicated GPU memory"; log in two or three characters in a
+    busy place. Note each viewer's figure with every character in Warm,
+    then set the background ones to Economy and switch once: each Economy
+    viewer falls to its geometry and little else (hundreds of MB rather
+    than gigabytes) within a few seconds of the switch, and its log has the
+    `released after` line. With a monitor open on an Economy character, its
+    viewer stays near its 512 MB share plus its geometry; with the share at
+    256 MB and Warm characters, each Warm viewer's textures shrink within
+    about ten seconds of the switch. Compare the active viewer's figure and
+    `GPU load:` lines with and without the others.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer

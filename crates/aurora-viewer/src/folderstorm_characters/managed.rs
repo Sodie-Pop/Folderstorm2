@@ -411,6 +411,7 @@ mod tests {
             sound_muted: true,
             voice_allowed: false,
             off_taskbar: false,
+            memory: Default::default(),
         }
     }
 

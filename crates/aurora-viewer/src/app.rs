@@ -25001,7 +25001,7 @@ impl ApplicationHandler for App {
         self.record_window_geometry();
         self.attention_window();
         self.external_links();
-        self.folderstorm_managed_pump(); // Folderstorm: the session host's commands, this viewer's reports
+        self.folderstorm_managed_pump(event_loop); // Folderstorm: the session host's commands, this viewer's reports
         if self.gfx.as_ref().is_some_and(|g| !g.shown) {
             // Hidden windows may receive no RedrawRequested event. Keep
             // producing frames until a real presentation makes it visible,

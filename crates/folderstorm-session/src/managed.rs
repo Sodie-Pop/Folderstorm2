@@ -15,7 +15,7 @@
 //!   voice settings. Nothing was saved while managed, so nothing is undone.
 
 use crate::behind::Behind3d;
-use crate::ipc::{Assignment, Role, Standby};
+use crate::ipc::{Assignment, Memory, Role, Standby};
 use crate::monitor::Order;
 
 /// The host's hold on this viewer.
@@ -63,6 +63,12 @@ impl Managed {
 
     pub fn standby(&self) -> Option<Standby> {
         self.assignment.map(|a| a.standby)
+    }
+
+    /// The share of the graphics card's memory and the release the host
+    /// asks for (`crate::memory`); none without a host or an assignment.
+    pub fn memory(&self) -> Memory {
+        self.assignment.filter(|_| self.linked).map(|a| a.memory).unwrap_or_default()
     }
 
     /// In front, for the rules that used the keyboard focus.
@@ -131,6 +137,7 @@ mod tests {
             sound_muted: false,
             voice_allowed: true,
             off_taskbar: false,
+            memory: Default::default(),
         }
     }
 
@@ -143,6 +150,7 @@ mod tests {
             sound_muted: true,
             voice_allowed: false,
             off_taskbar: false,
+            memory: Default::default(),
         }
     }
 
@@ -303,6 +311,27 @@ mod tests {
         assert_eq!((m.seq(), m.role()), (5, Some(Role::Active)));
         assert!(m.assign(background(6)));
         assert_eq!((m.seq(), m.role()), (6, Some(Role::Background)));
+    }
+
+    #[test]
+    fn the_memory_share_is_the_host_s_and_goes_with_it() {
+        use crate::ipc::Release;
+        let mut m = Managed::default();
+        assert_eq!(m.memory(), Memory::default(), "no host: Aurora's own rules");
+        m.link();
+        assert_eq!(m.memory(), Memory::default(), "nothing asked yet");
+        let economy = Memory {
+            share_mb: 1024,
+            reserved_mb: 0,
+            release: Release::Full,
+        };
+        assert!(m.assign(Assignment {
+            memory: economy,
+            ..background(1)
+        }));
+        assert_eq!(m.memory(), economy);
+        m.release();
+        assert_eq!(m.memory(), Memory::default(), "the host is gone: no share");
     }
 
     #[test]

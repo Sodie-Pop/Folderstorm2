@@ -78,7 +78,7 @@ impl Section {
         let name = name.trim().to_ascii_lowercase();
         let found = match name.as_str() {
             "bar" | "quick" | "windows" => Section::Toolbar,
-            "character" => Section::Characters,
+            "character" | "memory" | "video-memory" | "vram" | "economy" => Section::Characters,
             "attention" | "reading" | "chats" => Section::Chat,
             "voice" | "audio" | "alerts" => Section::Sound,
             "monitor" => Section::Monitors,
