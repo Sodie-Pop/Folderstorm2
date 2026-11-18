@@ -126,6 +126,95 @@ fn a_layout_saved_with_the_mini_map_closed_since_the_start_has_its_size() {
     assert!(!saved.open, "closed");
 }
 
+/// The user's hand: a press at `from`, a drag to `to` over ten frames and
+/// the release there.
+fn drag(v: &mut Viewer, from: Pos2, to: Pos2) {
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: Default::default(),
+    };
+    v.events = vec![egui::Event::PointerMoved(from)];
+    v.frame();
+    v.events = vec![button(from, true)];
+    v.frame();
+    for step in 1..=10 {
+        v.events = vec![egui::Event::PointerMoved(from + (to - from) * (step as f32 / 10.0))];
+        v.frame();
+    }
+    v.events = vec![button(to, false)];
+    v.frame();
+    v.frames(3);
+}
+
+/// The mini-map moved by its surface and resized by its corner, by hand.
+fn by_hand(v: &mut Viewer) -> Rect {
+    let was = v.rect(MINIMAP);
+    drag(v, was.center(), was.center() + vec2(-300.0, 200.0));
+    let moved = v.rect(MINIMAP);
+    assert!(close(moved, was.translate(vec2(-300.0, 200.0))), "moved: {moved:?}");
+    drag(v, moved.max - vec2(3.0, 3.0), moved.max + vec2(80.0, -60.0));
+    let resized = v.rect(MINIMAP);
+    assert_eq!(resized.min, moved.min, "resized by its corner");
+    assert!(
+        resized.width() > moved.width() + 50.0 && resized.height() < moved.height() - 30.0,
+        "resized: {resized:?}"
+    );
+    v.settle();
+    resized
+}
+
+#[test]
+fn a_mini_map_placed_by_hand_is_saved_and_put_back_there() {
+    let mut v = two_places();
+    let placed = by_hand(&mut v);
+    v.save_new("Hand", Parts::default()).expect("saved");
+    let saved = v.layout("Hand").windows.as_ref().expect("the windows part").windows[MINIMAP];
+    let rect = Rect::from_min_size(pos2(saved.x, saved.y), vec2(saved.width, saved.height));
+    assert!(close(rect, placed), "saved {rect:?}, placed {placed:?}");
+    // moved by hand again, then the layout in use applied again
+    let r = v.rect(MINIMAP);
+    drag(&mut v, r.center(), r.center() + vec2(200.0, -100.0));
+    assert!(!close(v.rect(MINIMAP), placed), "moved away");
+    v.apply("Hand");
+    v.settle();
+    assert!(close(v.rect(MINIMAP), placed), "{:?}", v.rect(MINIMAP));
+    // another layout, then this one with the mini-map closed
+    v.apply("Corner");
+    v.settle();
+    v.open.remove(MINIMAP);
+    v.frames(3);
+    v.apply("Hand");
+    v.settle();
+    assert!(v.open.contains(MINIMAP), "opened");
+    assert!(close(v.rect(MINIMAP), placed), "{:?}", v.rect(MINIMAP));
+}
+
+/// A workspace keeps no place of its own: the mini-map takes the place of
+/// the layout it names (plans/workspaces.md, checkpoint 6).
+#[test]
+fn a_workspace_puts_the_mini_map_where_its_layout_has_it() {
+    let mut v = two_places();
+    let placed = by_hand(&mut v);
+    v.save_new("Hand", Parts::default()).expect("saved");
+    let keep = apply::Keep {
+        layout: true,
+        folders: false,
+    };
+    let ctx = v.ctx.clone();
+    apply::save_new_workspace(&ctx, &mut v.live(), "Map", keep).expect("saved");
+    v.apply("Corner");
+    v.settle();
+    v.open.remove(MINIMAP);
+    v.frames(3);
+    let (index, _) = v.store.find_workspace("Map").expect("in the list");
+    apply::apply_workspace(&ctx, &mut v.live(), index).expect("applied");
+    v.settle();
+    assert!(v.open.contains(MINIMAP), "opened by the workspace");
+    assert!(close(v.rect(MINIMAP), placed), "{:?}", v.rect(MINIMAP));
+}
+
 #[test]
 fn saving_records_the_mini_map_where_it_is() {
     let mut v = two_places();

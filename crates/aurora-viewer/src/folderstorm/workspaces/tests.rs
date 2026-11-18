@@ -320,6 +320,7 @@ impl Viewer {
                 let p = crate::theme::Theme::default().palette();
                 crate::ui::layout::set_work_area(ctx, screen);
                 crate::ui::layout::set_move_area(ctx, screen);
+                crate::ui::layout::frame(ctx, &p, true);
                 // as the interface's pass does: the card and the switcher,
                 // and the menu when open
                 super::interface(ctx, &p, hidden);

@@ -396,6 +396,16 @@ margin, just outside the world's edge and centred on the world's height. A
 side toolbar with no room outside (the world against the window's edge) stays
 inside the world at that edge.
 
+`AURORA_DEMO_LAYOUTS=minimap` seeds two layouts of the mini-map alone:
+"Margin" (the world on the right half, the mini-map wide in the left
+margin) and "Tall" (no viewport, the mini-map narrow in the middle). It
+applies "Margin" at frame 180 and "Tall" at 360, closes the mini-map at 540
+and applies "Margin" at 600 (it opens there), saves "Saved" at 800, applies
+"Tall" at 820 and "Saved" at 1000, saves the workspace "Map" (with "Saved")
+at 1200, applies "Tall" at 1220 and "Map" at 1400. Before each step the log
+has a line `AURORA_DEMO_LAYOUTS=minimap: frame …: the mini-map is at …,
+asked at …`: the two rects should match.
+
 The viewer window in a layout needs a window the demo may move: run these
 three **without** `AURORA_WINDOW_SIZE` (under a forced size, as in a capture,
 the layouts leave the viewer window alone and say so). `toggle` gives "Wide"
