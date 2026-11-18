@@ -5,8 +5,8 @@
 //! (`aurora_render::Renderer::set_world_rect`).
 
 use super::*;
-use crate::folderstorm::photo_viewport;
 use crate::folderstorm::viewport::{self, Overrides};
+use crate::folderstorm::{margin_pointer, photo_viewport};
 
 impl App {
     /// When the world fills the window whatever the viewport settings: a
@@ -171,6 +171,38 @@ impl App {
         let bar = raw.safe_area_insets;
         raw.safe_area_insets = Some(login_screen::insets(bar, size, rect, ppp));
         login_screen::set_sky(&self.egui_ctx, rect.map(|_| window - bar.unwrap_or_default()));
+    }
+
+    /// Whether a press, a release or the wheel at the cursor is the margins'
+    /// (the hook of `ui_takes_pointer`): a desktop's, or the background's
+    /// over a HUD it hides; never the world's
+    /// (`crate::folderstorm::margin_pointer`).
+    pub(super) fn folderstorm_margin_takes_pointer(&self) -> bool {
+        self.folderstorm_margin_taker().is_interface()
+    }
+
+    /// Who takes a press at the cursor among what the margins draw: a
+    /// desktop's shortcut, a HUD attachment seen there, the desktop's room,
+    /// the background over the HUD attachments. `World` where none of these
+    /// is (the HUD is only looked for over a desktop or such a background:
+    /// elsewhere the world's press finds it itself).
+    pub(super) fn folderstorm_margin_taker(&self) -> margin_pointer::Taker {
+        use crate::folderstorm::{backgrounds, desktop};
+        let ctx = &self.egui_ctx;
+        let ppp = ctx.pixels_per_point();
+        let pos = egui::pos2(self.cursor_pos.0 / ppp, self.cursor_pos.1 / ppp);
+        let room = desktop::takes_pointer(ctx, pos);
+        let hidden = backgrounds::hides_huds_at(ctx, pos);
+        // (the visible surface, as the HUD move gesture grabs it: texture
+        // holes and invisible faces let the press through to the margin)
+        let hud = (room || hidden)
+            && (self.hud_drag.is_some() || (self.huds_shown() && self.scene.hud_move_pick(&self.world, self.cursor_pos).is_some()));
+        margin_pointer::taker(margin_pointer::Under {
+            shortcut: room && desktop::shortcut_at(ctx, pos),
+            hud,
+            background_over_huds: hidden,
+            room,
+        })
     }
 
     /// Width over height of the world's part of the window, when it has one.

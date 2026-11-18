@@ -2832,7 +2832,7 @@ impl BuildTool {
             return;
         }
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::unique("build_overlay")));
-        let painter = crate::folderstorm::viewport::build_tools::clip(ctx, painter); // Folderstorm: world viewport
+        let painter = crate::folderstorm::viewport::build_tools::clip(ctx, painter, self.cam.hud.is_some()); // Folderstorm: world viewport
         let cam = self.cam;
         let mut p = draw::Painter3d::new(painter, &cam, *pal);
         let now = Instant::now();

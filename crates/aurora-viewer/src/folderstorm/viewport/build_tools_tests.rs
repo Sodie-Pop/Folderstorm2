@@ -245,10 +245,39 @@ fn the_overlay_is_cut_at_the_world_edges() {
         |ui| {
             crate::folderstorm::viewport::set_world_area(ui.ctx(), Some(RECT));
             let painter = ui.ctx().layer_painter(egui::LayerId::background());
-            clip = Some(crate::folderstorm::viewport::build_tools::clip(ui.ctx(), painter).clip_rect());
+            clip = Some(crate::folderstorm::viewport::build_tools::clip(ui.ctx(), painter, false).clip_rect());
         },
     );
     crate::ui::login::test_output(output);
     let clip = clip.unwrap();
     assert_eq!(clip, egui::Rect::from_min_size(egui::pos2(1920.0, 0.0), egui::vec2(1920.0, 1080.0)));
+}
+
+#[test]
+fn a_hud_s_overlay_goes_over_the_margins_unless_the_background_hides_them() {
+    let ctx = egui::Context::default();
+    let window = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(3840.0, 1080.0));
+    let mut clips = Vec::new();
+    for hides in [false, true] {
+        let output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(window),
+                ..Default::default()
+            },
+            |ui| {
+                crate::folderstorm::viewport::set_world_area(ui.ctx(), Some(RECT));
+                crate::folderstorm::backgrounds::set_hides_huds(ui.ctx(), hides);
+                let painter = ui.ctx().layer_painter(egui::LayerId::background());
+                clips.push(crate::folderstorm::viewport::build_tools::clip(ui.ctx(), painter, true).clip_rect());
+            },
+        );
+        crate::ui::login::test_output(output);
+    }
+    // a HUD moved into a margin keeps its outline and its handles there
+    assert!(clips[0].contains_rect(window), "{:?}", clips[0]);
+    // hidden there by the background: in the world's part only
+    assert_eq!(
+        clips[1],
+        egui::Rect::from_min_size(egui::pos2(1920.0, 0.0), egui::vec2(1920.0, 1080.0))
+    );
 }

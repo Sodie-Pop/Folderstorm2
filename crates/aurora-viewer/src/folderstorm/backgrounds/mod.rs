@@ -76,5 +76,33 @@ pub fn mark(ctx: &egui::Context) {
 /// `frame`, else first; under the HUD attachments unless the user chose
 /// the background over them.
 pub fn underlay(ctx: &egui::Context, store: &Store, frame: &mut Vec<egui::epaint::ClippedShape>) {
-    paint::underlay_in(ctx, in_effect(store), !store.background_over_huds, &import::folder(), frame);
+    let background = in_effect(store);
+    set_hides_huds(ctx, background.paints() && store.background_over_huds);
+    paint::underlay_in(ctx, background, !store.background_over_huds, &import::folder(), frame);
+}
+
+fn hides_huds_id() -> egui::Id {
+    egui::Id::unique("folderstorm_background_hides_huds")
+}
+
+/// Says whether the background in effect hides the HUD attachments in the
+/// margins: painted over them ([`hides_huds`]).
+pub fn set_hides_huds(ctx: &egui::Context, hides: bool) {
+    ctx.data_mut(|d| d.insert_temp(hides_huds_id(), hides));
+}
+
+/// Whether the background hides the HUD attachments at `pos` (points): `pos`
+/// is in a margin of the world viewport, and the background in effect is
+/// painted over the HUD attachments (*HUDs over the background* off; as
+/// [`underlay`] last painted it). A HUD there is not seen, so neither the
+/// pointer (`crate::folderstorm::margin_pointer`) nor the build tools'
+/// overlay reaches it.
+pub fn hides_huds_at(ctx: &egui::Context, pos: egui::Pos2) -> bool {
+    hides_huds(ctx) && crate::folderstorm::viewport::world_area(ctx).is_some_and(|world| !world.contains(pos))
+}
+
+/// Whether the background in effect, as [`underlay`] last painted it, hides
+/// the HUD attachments in the margins (there being margins or not).
+pub fn hides_huds(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(hides_huds_id())).unwrap_or(false)
 }

@@ -58,6 +58,10 @@ pub struct Env<'a> {
     /// The interface is hidden (its shortcut, immersive mode, mouselook
     /// without the interface): no desktop.
     pub hidden: bool,
+    /// A HUD attachment seen under the pointer takes its presses
+    /// (`crate::folderstorm::margin_pointer`): the room under it does not
+    /// sense them, its shortcuts, drawn over it, still do.
+    pub hud_at_pointer: bool,
 }
 
 /// What the desktops ask the app.
@@ -119,10 +123,12 @@ pub fn rooms(ctx: &egui::Context, size: store::Size) -> Vec<surface::Room> {
 /// called in the interface's pass once the bars are laid out.
 pub fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env) -> Vec<Request> {
     if !desktop.shortcuts_on || env.hidden {
+        surface::set_drawn_shortcuts(ctx, Vec::new());
         return Vec::new();
     }
     let rooms = rooms(ctx, desktop.size);
     if rooms.is_empty() {
+        surface::set_drawn_shortcuts(ctx, Vec::new());
         return Vec::new();
     }
     surface::show(ctx, desktop, env, &rooms)
@@ -164,4 +170,12 @@ pub fn added_notice(added: &Added, left_out: usize, turned_on: bool, shown: bool
 pub fn takes_pointer(ctx: &egui::Context, pos: egui::Pos2) -> bool {
     ctx.layer_id_at(pos)
         .is_some_and(|layer| layer.order == egui::Order::Background && (0..store::MAX_SLOTS).any(|slot| layer.id == surface::area_id(slot)))
+}
+
+/// Whether the pointer at `pos` is over one of the shortcuts a desktop drew
+/// (this frame or the last), the desktop being the topmost layer there: what
+/// is drawn over the HUD attachments, where a HUD under the room does not
+/// take the press (`crate::folderstorm::margin_pointer`).
+pub fn shortcut_at(ctx: &egui::Context, pos: egui::Pos2) -> bool {
+    takes_pointer(ctx, pos) && surface::drawn_shortcuts(ctx).iter().any(|rect| rect.contains(pos))
 }

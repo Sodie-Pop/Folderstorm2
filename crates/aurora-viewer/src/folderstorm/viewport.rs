@@ -320,9 +320,29 @@ pub fn bars_screen(ctx: &egui::Context) -> egui::Rect {
     confined_bars(ctx).unwrap_or_else(|| ctx.content_rect())
 }
 
+/// Whether the HUD attachments may be kept on screen in `view` (the hook of
+/// `App::keep_scaled_huds_accessible`): not while the window is minimized,
+/// which Windows reports as 0 × 0 pixels and the HUD view as 1 × 1. Kept in
+/// that view, every HUD with a local scale of its own was pulled towards
+/// the middle of the window and stayed there once the window came back: a
+/// HUD moved into a margin of the world viewport went back over the world,
+/// while one at its normal scale stayed in the margin.
+pub fn huds_kept_in(view: &aurora_render::HudView) -> bool {
+    view.width > 1.0 && view.height > 1.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_minimized_window_keeps_no_hud_on_screen() {
+        let view = |w, h| aurora_render::HudView::new([w, h], 1.0, -1.0, 1.0);
+        assert!(!huds_kept_in(&view(0, 0)), "minimized on Windows");
+        assert!(!huds_kept_in(&view(1920, 0)));
+        assert!(huds_kept_in(&view(1920, 1080)));
+        assert!(huds_kept_in(&view(5760, 1080).in_area([1920.0, 0.0, 3840.0, 1080.0])));
+    }
 
     fn on(left: u32, right: u32, top: u32, bottom: u32) -> ViewportSettings {
         ViewportSettings {

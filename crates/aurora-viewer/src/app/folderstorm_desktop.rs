@@ -104,6 +104,7 @@ impl App {
                 colors: prefs.folder_colors_enabled.then_some(&prefs.folder_colors),
             },
             hidden: mouselook || self.interface.hidden || self.interface.immersive || ui::widgets::interface_hidden(ctx),
+            hud_at_pointer: self.folderstorm_margin_taker() == crate::folderstorm::margin_pointer::Taker::Hud,
         };
         let mut requests = desktop::show(ctx, &mut self.settings.folderstorm_desktop, &env);
         requests.extend(self.desktop_demo_frame(ctx));
@@ -175,14 +176,6 @@ impl App {
         if let Some(text) = desktop::added_notice(&added, picked.left_out, turned_on, !rooms.is_empty()) {
             self.world.system_notice(text, Topic::Items);
         }
-    }
-
-    /// Whether the pointer is over a desktop (the hook of
-    /// `ui_takes_pointer`): a press, a release or the wheel there is the
-    /// interface's, never the world's.
-    pub(super) fn folderstorm_desktop_takes_pointer(&self) -> bool {
-        let ppp = self.egui_ctx.pixels_per_point();
-        desktop::takes_pointer(&self.egui_ctx, egui::pos2(self.cursor_pos.0 / ppp, self.cursor_pos.1 / ppp))
     }
 
     /// What greys a toolbar button this frame: the facts the toolbar's row

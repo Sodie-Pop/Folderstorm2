@@ -39,6 +39,8 @@ struct Bench {
     /// RLVa hides the Inventory (`@showinv`).
     no_inventory: bool,
     hidden: bool,
+    /// A HUD attachment seen under the pointer (`Env::hud_at_pointer`).
+    hud_at_pointer: bool,
     /// A window drawn over that rectangle, above the desktops.
     window: Option<Rect>,
     /// A label of the world painted over that rectangle, before the end of
@@ -123,6 +125,7 @@ impl Bench {
             },
             no_inventory: false,
             hidden: false,
+            hud_at_pointer: false,
             window: None,
             label: None,
             out: Vec::new(),
@@ -193,6 +196,7 @@ impl Bench {
             .world
             .map(|[x, y, w, h]| Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)));
         let (window, label, hidden, facts, p) = (self.window, self.label, self.hidden, self.facts, self.p);
+        let hud_at_pointer = self.hud_at_pointer;
         let (desktop, icons) = (&mut self.desktop, &self.icons);
         let folders = Folders {
             inv: &self.inv,
@@ -227,6 +231,7 @@ impl Bench {
                     facts,
                     folders,
                     hidden,
+                    hud_at_pointer,
                 };
                 out = super::show(&ctx, desktop, &env);
                 // a window, drawn after the desktops as before them: its
@@ -510,6 +515,55 @@ fn the_pointer_is_the_desktop_s_over_a_room_only() {
         super::takes_pointer(&b.ctx, room.max - vec2(20.0, 20.0)),
         "beside the window, still the desktop"
     );
+}
+
+#[test]
+fn the_shortcuts_drawn_are_told_from_the_room_around_them() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    b.frames(3);
+    let cell = b.cell_of(people);
+    let room = b.room(0).rect;
+    assert!(super::shortcut_at(&b.ctx, cell.center()));
+    assert!(!super::shortcut_at(&b.ctx, room.max - vec2(20.0, 20.0)), "the room around it");
+    assert!(!super::shortcut_at(&b.ctx, pos2(960.0, 200.0)), "the world");
+    b.window = Some(cell.expand(4.0));
+    b.frames(3);
+    assert!(!super::shortcut_at(&b.ctx, cell.center()), "under a window: the window's");
+    b.window = None;
+    b.hidden = true;
+    b.frames(3);
+    assert!(!super::shortcut_at(&b.ctx, cell.center()), "none while the desktop is hidden");
+}
+
+#[test]
+fn under_a_hud_the_room_lets_its_presses_go_and_a_shortcut_keeps_them() {
+    let mut b = Bench::new();
+    let people = b.add("people", 0, (0, 0));
+    b.frames(3);
+    let at = b.cell_of(people).center();
+    b.click(at);
+    assert_eq!(surface::state(&b.ctx).selected, Some(people));
+    // a HUD moved into the margin, under the pointer: a click on the room
+    // there is the HUD's (the selection stays), its menu does not open
+    b.hud_at_pointer = true;
+    let free = b.room(0).grid.rect((3, 3)).center();
+    b.time += 2.0;
+    b.click(free);
+    assert_eq!(surface::state(&b.ctx).selected, Some(people), "the room took no click");
+    b.time += 2.0;
+    b.click_with(free, egui::PointerButton::Secondary);
+    assert!(b.drawn(aurora_i18n::tr!("fs-desktop-add-command")).is_none(), "no menu of the room");
+    assert!(!b.ctx.egui_is_using_pointer());
+    // a shortcut, drawn over the HUD, still takes its own
+    b.time += 2.0;
+    b.double_click(at);
+    assert_eq!(b.ran(), vec!["people"]);
+    // no HUD there any more: the room's again
+    b.hud_at_pointer = false;
+    b.time += 2.0;
+    b.click(free);
+    assert_eq!(surface::state(&b.ctx).selected, None);
 }
 
 #[test]

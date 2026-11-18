@@ -384,6 +384,45 @@ fn a_hud_in_a_margin_shows_over_the_background_unless_the_user_chooses_otherwise
     assert_eq!(v.at(750, 70), HUD);
 }
 
+/// Where the background hides a HUD, as the pointer and the build tools
+/// read it: in a margin, while the background in effect is painted over the
+/// HUD attachments (`super::hides_huds_at`), as `super::underlay` last
+/// painted it.
+#[test]
+fn the_background_hides_the_huds_only_in_a_margin_and_only_when_over_them() {
+    let ctx = egui::Context::default();
+    let mut store = Store::default();
+    let hides = |store: &Store, world: Option<[u32; 4]>| {
+        let mut shapes = Vec::new();
+        let output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1280.0, 360.0))),
+                ..Default::default()
+            },
+            |ui| {
+                viewport::set_world_area(ui.ctx(), world);
+                super::underlay(ui.ctx(), store, &mut shapes);
+            },
+        );
+        crate::ui::login::test_output(output);
+        let margin = egui::pos2(100.0, 100.0);
+        let in_world = egui::pos2(900.0, 100.0);
+        assert!(!super::hides_huds_at(&ctx, in_world), "never in the world");
+        super::hides_huds_at(&ctx, margin)
+    };
+    let world = Some([640, 0, 640, 360]);
+    assert!(!hides(&store, world), "no background: nothing hides them");
+    store.background = Background {
+        kind: Kind::Colour,
+        colour: [40, 160, 90, 255],
+        ..Default::default()
+    };
+    assert!(!hides(&store, world), "HUDs over the background, by default");
+    store.background_over_huds = true;
+    assert!(hides(&store, world), "the background over the HUDs");
+    assert!(!hides(&store, None), "no margin while the world fills the window");
+}
+
 #[test]
 fn the_store_writes_the_huds_order_only_when_the_background_goes_over_them() {
     let mut store = Store::default();

@@ -296,7 +296,7 @@ impl App {
         }
         let ppp = self.egui_ctx.pixels_per_point();
         ui::widgets::pointer_over_ui(&self.egui_ctx, egui::pos2(self.cursor_pos.0 / ppp, self.cursor_pos.1 / ppp))
-            || self.folderstorm_desktop_takes_pointer() // Folderstorm: the margins' desktop
+            || self.folderstorm_margin_takes_pointer() // Folderstorm: the margins' desktop and background
     }
 
     /// A mouse button of the window, pressed or released: handled now, or

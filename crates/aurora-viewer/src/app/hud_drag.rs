@@ -90,6 +90,10 @@ impl App {
         if self.hud_drag.is_some() || self.build.manip.dragging() {
             return;
         }
+        // Folderstorm: nor in the 0 × 0 window of a minimized viewer
+        if !crate::folderstorm::viewport::huds_kept_in(&view) {
+            return;
+        }
         // View zoom must only change the projection, not local HUD positions.
         self.world.hud_scales.prepare_clamp([view.width, view.height]);
         let Some(me) = self

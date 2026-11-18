@@ -493,6 +493,23 @@ Check that nothing is ever drawn over the world, that windows, bars, chat
 lines and HUD labels stay over the picture, and that the margins go black
 again when the viewport is turned off.
 
+A HUD in a margin is moved as in the world, there and back. With `hud`,
+and with `AURORA_DEMO_DESKTOP=1` added (a desktop in the same margin),
+hold Ctrl and drag the HUD's part in the margin: it follows, into the world
+and out again; in Build › Edit, a click on it selects it and its outline
+and handles show in the margin too. A shortcut drawn over the HUD still
+opens, and a click or a right-click on the empty desktop beside the HUD is
+the desktop's. With `hud-over` the picture hides the HUD's left half:
+there the press is the margin's (the desktop's, or nothing), never the
+hidden HUD's, and its handles stay in the world. Give the HUD a scale of
+its own (hold Ctrl and turn the wheel over it), leave it in the margin,
+minimize the viewer and bring it back: the HUD stays where it was.
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=hud AURORA_DEMO_DESKTOP=1 \
+  cargo run -p aurora-viewer -- --title "Test backgrounds hud"
+```
+
 **The margins' desktop (Folderstorm2).** `AURORA_DEMO_DESKTOP=<mode>` makes,
 once, a desktop of shortcuts in the margins around the world (row 1.10):
 `1` puts eight command shortcuts on the first monitor (Conversations,
