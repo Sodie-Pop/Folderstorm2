@@ -86,6 +86,11 @@
 //! - [`links`]: the links of a line, and which of them the host may open;
 //! - [`chat`]: a conversation opened from the host, who types, and the
 //!   volume of a line of the nearby chat.
+//!
+//! Video memory with several characters (folderstorm/plans/gpu-memory.md):
+//! - [`memory`]: each character's share of the graphics card, Economy that
+//!   gives its memory back before the window is minimised, a monitor's
+//!   picture drawn without the window's full-size targets.
 
 pub mod bar;
 pub mod behind;
@@ -103,6 +108,7 @@ pub mod inbox;
 pub mod ipc;
 pub mod links;
 pub mod managed;
+pub mod memory;
 pub mod monitor;
 pub mod monitor_windows;
 pub mod panels;

@@ -44,6 +44,11 @@
 //! - [`splash`]: a character's splash names it, in its language, and the
 //!   host's characters' splashes do not stack.
 //!
+//! Alert sounds of background characters (FEATURES.md 5.2): the choices
+//! and rules are in `crate::folderstorm::background_alerts`; this module
+//! keeps a character's own choices ([`Settings::background_alerts`]) and
+//! its player ([`State::alerts`]).
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod bar;
@@ -72,6 +77,14 @@ pub struct Settings {
     /// A named profile reads and writes the main profile's asset cache
     /// instead of its own (applies at the next start).
     pub share_main_cache: bool,
+    /// This character's own choices for the alert sounds it plays while
+    /// the session host keeps it in the background
+    /// (`crate::folderstorm::background_alerts`); the shared ones are in
+    /// the main profile's folder. Left out of a profile copy with the rest
+    /// of this group (`copy::strip_settings`): an inventory sound is one
+    /// account's.
+    #[serde(skip_serializing_if = "crate::folderstorm::background_alerts::Override::is_default")]
+    pub background_alerts: crate::folderstorm::background_alerts::Override,
 }
 
 impl Default for Settings {
@@ -80,6 +93,7 @@ impl Default for Settings {
             behind_3d: Behind3d::default_for(profile::current().is_some()),
             behind_fps: behind::FPS_DEFAULT,
             share_main_cache: false,
+            background_alerts: Default::default(),
         }
     }
 }
@@ -115,6 +129,9 @@ pub struct State {
     pub window_focus: std::cell::Cell<Option<bool>>,
     /// The monitor's pictures taken for the session host (checkpoint 5).
     pub monitor: Monitoring,
+    /// The session host's share of the video memory and Economy's release
+    /// (`app/folderstorm_characters/memory.rs`).
+    pub memory: MemoryState,
     /// The bar the session host asks this viewer to draw (checkpoint 8):
     /// kept here only, for the bar's drawing only, and dropped with the
     /// link. Nothing of it (an alias, a colour, another character's name)
@@ -122,6 +139,19 @@ pub struct State {
     pub bar: Option<::folderstorm_session::bar::State>,
     /// What this window was last made on the taskbar (checkpoint 8).
     pub taskbar: taskbar::Tracker,
+    /// The memory picture of the last minute and the loss written down
+    /// (folderstorm/gpu_diag, app/folderstorm_characters/gpu_diag.rs).
+    pub gpu_diag: crate::folderstorm::gpu_diag::Recorder,
+    /// The alert sounds of a background character (FEATURES.md 5.2).
+    pub alerts: crate::folderstorm::background_alerts::player::Player,
+    /// The inventory's generation last listed for Preferences' choice of
+    /// an inventory sound.
+    pub alerts_inventory: Option<u64>,
+    /// When what the alerts may play was last fetched ahead.
+    pub alerts_prefetched: Option<std::time::Instant>,
+    /// `AURORA_DEMO_BACKGROUND_ALERTS`: ended by a click in the window, and
+    /// when its next made-up event is due.
+    pub alerts_demo: (bool, Option<(std::time::Instant, u32)>),
 }
 
 /// What a managed viewer keeps of its monitor (plan section 12): when the
@@ -152,6 +182,18 @@ pub fn window_focus(remembered: &std::cell::Cell<Option<bool>>, window: Option<b
         remembered.set(window);
     }
     remembered.get()
+}
+
+/// What a managed viewer keeps of the host's video memory word
+/// (`folderstorm_session::memory`): the release before Economy's minimise,
+/// the texture passes when it began, and the share last handed to the
+/// textures.
+#[derive(Debug, Default)]
+pub struct MemoryState {
+    pub releasing: ::folderstorm_session::memory::Releasing,
+    pub since_passes: u64,
+    pub began: Option<std::time::Instant>,
+    pub applied: ::folderstorm_session::ipc::Memory,
 }
 
 /// What a managed viewer keeps of its reports to the host.
