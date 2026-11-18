@@ -11,7 +11,8 @@
 //!   `actions::patch`) for each entry, all in one change;
 //! - `inventory_set_thumbnail`: the Image window (LLFloaterChangeItemThumbnail):
 //!   "Choose image" with a texture of the inventory (`thumbnail::usable`:
-//!   Copy and Transfer, or the Library; never from the Trash), run through
+//!   Copy and Transfer, a Library one by its everyone rights; never from
+//!   the Trash), run through
 //!   the window's own image path, and "Remove image". Stricter than the
 //!   window: an item needs Modify.
 //!
@@ -355,7 +356,8 @@ fn batch_rename(args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
 /// The Image window of an item or folder: offered for an entry
 /// `actions::mutable` allows, never for a link (`context_catalog`'s
 /// "image" entries); an item held without Modify is refused too. "Choose image" takes a texture `thumbnail::usable`
-/// allows (the picker's rule: Copy and Transfer, or the Library) or an id
+/// allows (the picker's rule: Copy and Transfer, a Library one by its
+/// everyone rights) or an id
 /// `thumbnail::image_source_allowed` accepts; "Remove image" clears it.
 fn set_thumbnail(args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
     known(args, &["id", "texture_id", "clear"])?;
@@ -406,7 +408,7 @@ fn set_thumbnail(args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
                         .ok_or_else(|| err(ErrorCode::NotFound, "the texture's link is broken"))?;
                     if !crate::ui::inventory::thumbnail::usable(inv, original) {
                         return Err(not_allowed(
-                            "this texture cannot be a picture: it must be a texture that allows copying and transfer (or a Library texture), outside the Trash",
+                            "this texture cannot be a picture: it must be a texture that allows copying and transfer (a Library texture too), outside the Trash",
                         ));
                     }
                     (original.id, original.name.clone())

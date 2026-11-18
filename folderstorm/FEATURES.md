@@ -96,6 +96,7 @@ Needed before shipping any build. They also keep merges simple.
 |---|---|---|---|---|---|---|
 | 6.1 | About: location choice | Choose whether the About report includes your in-world location. | check | branch `codex/about-location-choice` | P3 | ⬜ |
 | 6.2 | First-run notices | Installation notices shown one at a time on first run. | check | branch `codex/first-run-notices` | P3 | ⬜ |
+| 6.3 | Media button and Nearby media | **New**, Legacy Viewer parity; not in Folderstorm (C++). The top bar's media button turns all media off or on; hovering it opens Nearby media (each source with start / stop and mute, Stop all, Start all). | Aurora's nearby media panel under the media button (upstream PR #3544: rows with ticks, Start all / Stop all, Show choice, play / pause / stop, volume, mute, zoom) | Legacy Viewer `LLPanelNearByMedia`, `LLStatusBar` | P3 | ➖ covered by upstream's panel: ours (#83) was dropped in the 2026-11-17 upstream sync (the human's choice). Ours also had a parcel music row, a Media preferences link, a pause face on the button while media plays and notices for media off / plugins missing; upstream has none of these yet. |
 
 ## Not porting (C++-specific or upstream fixes)
 
