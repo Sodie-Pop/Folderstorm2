@@ -1,8 +1,9 @@
-# Deep sleep: a third standby that lets go of all video memory
+# Hibernation: a third standby that lets go of all video memory
 
 Plan, 2026-11-18. FEATURES 5.1 (session host), follow-up of
 [gpu-memory.md](gpu-memory.md) phases 2–4 and "Economy, second pass"
-(PR #111). Not built yet: the maintainer decides first (section 8).
+(PR #111). Decided by the maintainer on 2026-11-18 (section 8); being built
+in phases P0–P4. The working name "Deep sleep" below means **Hibernation**.
 
 Legend: **[code]** read in code, with `file:line` on `main` (M) or on PR #111
 `claude/economy-release-more` (B); **[est]** an estimate to measure on
@@ -93,7 +94,7 @@ Verify with Task Manager per process.
 1. The host's `Minimise` arrives with `memory.sleep == true` (section 5). Run
    Economy's release as today, including #111's wait for the keyboard to
    leave, and minimise.
-2. Grace delay `SLEEP_AFTER` (proposed 20 s) minimised and not active: a quick
+2. Grace delay (20 s by default, the host's setting, section 8.3) minimised and not active: a quick
    flip back costs only an Economy return, and the outgoing teardown does not
    overlap the incoming wake.
 3. Stay in Economy (and log why) when: not in the world or less than 30 s in
@@ -268,12 +269,17 @@ sleep's return proves too slow.
   clean with `gfx = None` for a long time (recovery only holds that state for
   an instant; check in P2).
 
-## 8. Decisions for the maintainer
+## 8. Decisions (the maintainer, 2026-11-18)
 
-1. The approach: drop the whole renderer (floor near 0, return 4–7 s) rather
-   than shrink it in place (floor 350–550 MB, deep upstream change).
-2. The name: "Deep sleep" or "Hibernation".
-3. The grace before sleeping: 20 s?
-4. The cycling monitor does not wake sleeping characters (last picture with
-   an "asleep" badge)?
-5. Do P0 (Economy waits for the texture pages) now, separately?
+1. **Approach:** drop the whole renderer (floor near 0, return 4–7 s), as
+   recommended. The in-place shrink stays a possible upstream proposal (2.5).
+2. **Name:** **Hibernation** (en "Hibernation", fr "Hibernation", ja "休止").
+   Code and settings use `hibernate` / `hibernation`; the help text must say
+   that chat, messages and the assistant keep working.
+3. **Grace before hibernating:** 20 s by default, **a setting in the host**
+   (Characters section, next to the background characters' video memory;
+   proposed range 5 s to 10 min, saved in `session-host.json`, sent to the
+   viewers in `ipc::Memory` as `hibernate_after_s`, an older viewer ignoring it).
+4. **The cycling monitor** does not wake hibernating characters: it shows
+   their last picture with an "asleep" badge.
+5. **P0** (Economy waits for the texture pages) goes ahead now.
