@@ -9,6 +9,7 @@
 
 mod bar;
 mod chat;
+mod gpu_diag;
 mod monitor;
 
 use super::*;
