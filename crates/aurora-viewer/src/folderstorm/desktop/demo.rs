@@ -20,8 +20,14 @@
 //! - `unused`: the same, and two shortcuts on a monitor the window does
 //!   not have; at frame 200 Preferences opens on the desktop's group, with
 //!   its note and *Bring them here*.
+//! - `taskbar`: the same with the taskbar on the third monitor; at frame
+//!   200 the Inventory and a folder's window are opened and collapsed (the
+//!   taskbar holds them) and People is opened (not listed); at frame 300
+//!   the Inventory is restored as a click on its button does.
+//! - `overflow`: the taskbar with twenty collapsed windows (opened at
+//!   frame 200): buttons that are their icon alone, and *More*.
 
-use super::store::{Desktop, Target};
+use super::store::{Desktop, Target, Taskbar};
 use crate::folderstorm::viewport::ViewportSettings;
 use uuid::Uuid;
 
@@ -43,6 +49,10 @@ const DROPPED: u128 = 14;
 pub const FOLDERS_AT: (u16, u16) = (1, 0);
 /// The name and the icon `edit` gives the first folder shortcut.
 pub const EDITED: (&str, &str) = ("Everyday outfits", "hanger-2-filled");
+/// How many windows `overflow` collapses.
+pub const OVERFLOW: usize = 20;
+/// The slot of the taskbar of `taskbar` and `overflow`: the third monitor.
+pub const TASKBAR_SLOT: u8 = 2;
 /// The slot of the shortcuts of `unused`: a monitor no demo window has.
 pub const UNUSED_SLOT: u8 = 7;
 /// The commands of `unused`, kept on that slot.
@@ -91,7 +101,10 @@ const RIGHT: &[&str] = &["preferences", "build"];
 /// world in the middle third of a window of `width` pixels) when it is
 /// off, or off for `single`. False for a mode it does not know.
 pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, width: u32) -> bool {
-    if !matches!(mode, "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused") {
+    if !matches!(
+        mode,
+        "1" | "open" | "drop" | "rlva" | "single" | "edit" | "unused" | "taskbar" | "overflow"
+    ) {
         return false;
     }
     *desktop = Desktop {
@@ -113,6 +126,13 @@ pub fn seed(mode: &str, desktop: &mut Desktop, viewport: &mut ViewportSettings, 
     if let Some(map) = desktop.shortcuts.iter_mut().find(|s| s.target == Target::command("worldmap")) {
         map.name = Some("Where am I?".to_owned());
         map.icon = Some("compass-filled".to_owned());
+    }
+    if matches!(mode, "taskbar" | "overflow") {
+        desktop.taskbar = Taskbar {
+            on: true,
+            slot: Some(TASKBAR_SLOT),
+            all_windows: false,
+        };
     }
     if mode == "single" {
         viewport.enabled = false;

@@ -77,6 +77,46 @@ pub(in crate::ui::options) fn group(cx: &mut Cx) {
                 },
             );
         }
+        taskbar_rows(cx);
+    });
+}
+
+/// The taskbar: its switch and, behind its cog, the monitor it stands on
+/// and what it lists.
+fn taskbar_rows(cx: &mut Cx) {
+    words(cx, &["fs-search-taskbar"]).toggle(
+        tr!("fs-taskbar-switch"),
+        tr!("fs-taskbar-switch-help"),
+        &field!(folderstorm_desktop.taskbar.on),
+    );
+    let off = !cx.s.folderstorm_desktop.taskbar.on;
+    cx.subs(off, |cx| {
+        // the monitors that have room for it now, and the one chosen
+        // even when it has none (it is kept, and said so by its help)
+        let ctx = cx.ui.ctx().clone();
+        let mut slots = desktop::live_slots(&ctx, &cx.s.folderstorm_desktop);
+        slots.extend(cx.s.folderstorm_desktop.taskbar.slot);
+        slots.sort_unstable();
+        slots.dedup();
+        let numbers: Vec<String> = slots.iter().map(|slot| (u32::from(*slot) + 1).to_string()).collect();
+        let mut choices: Vec<(Option<u8>, &str, bool)> = vec![(None, tr!("fs-taskbar-monitor-auto"), false)];
+        choices.extend(
+            slots
+                .iter()
+                .zip(&numbers)
+                .map(|(slot, number)| (Some(*slot), number.as_str(), false)),
+        );
+        words(cx, &["fs-search-taskbar"]).choice(
+            tr!("fs-taskbar-monitor"),
+            tr!("fs-taskbar-monitor-help"),
+            &field!(folderstorm_desktop.taskbar.slot),
+            &choices,
+        );
+        words(cx, &["fs-search-taskbar"]).toggle(
+            tr!("fs-taskbar-all"),
+            tr!("fs-taskbar-all-help"),
+            &field!(folderstorm_desktop.taskbar.all_windows),
+        );
     });
 }
 

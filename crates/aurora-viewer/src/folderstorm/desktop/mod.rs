@@ -14,8 +14,8 @@
 //! profile's. A shortcut can be renamed, given another icon ([`icons`]),
 //! moved to another monitor and arranged by name; a toolbar button is
 //! dropped on a desktop, or sent there from its menu ([`toolbar_menu`]).
-//! The taskbar is the plan's next checkpoint; the record ([`store`])
-//! already has its fields.
+//! A taskbar ([`taskbar`], optional, off by default) along the bottom of
+//! one margin monitor holds the collapsed windows as buttons.
 //!
 //! - [`store`]: what `settings.json` keeps (field `folderstorm_desktop`).
 //! - [`place`]: slots, rooms and cells (pure maths).
@@ -23,6 +23,7 @@
 //! - [`surface`]: the areas, the shortcuts' faces, clicks, drags, menus,
 //!   the rename field and the keyboard.
 //! - [`icons`]: the icons a shortcut can be given.
+//! - [`taskbar`]: the windows seen, those held, the island of buttons.
 //! - [`demo`]: the demo, `AURORA_DEMO_DESKTOP`.
 //!
 //! Drawing order: each desktop is an `egui::Area` of `Order::Background`.
@@ -39,7 +40,10 @@ pub mod place;
 pub mod store;
 pub mod surface;
 pub mod targets;
+pub mod taskbar;
 
+#[cfg(test)]
+mod taskbar_tests;
 #[cfg(test)]
 mod tests;
 
@@ -100,6 +104,8 @@ pub enum Ask {
     AddCommand(String),
     /// The keyboard to the desktop (the key action *Focus the desktop*).
     Focus,
+    /// The keyboard to the taskbar (the key action *Focus the taskbar*).
+    FocusTaskbar,
 }
 
 fn asks_id() -> egui::Id {
@@ -168,14 +174,14 @@ pub fn command_notice(added: surface::CommandAdded, turned_on: bool, shown: bool
 /// None of them counts while no desktop shows at all: they are all kept
 /// for when the window leaves room around the world.
 pub fn unused(ctx: &egui::Context, desktop: &Desktop) -> usize {
-    let live: Vec<u8> = rooms(ctx, desktop.size).iter().map(|room| room.slot).collect();
+    let live: Vec<u8> = rooms(ctx, desktop).iter().map(|room| room.slot).collect();
     if live.is_empty() { 0 } else { desktop.unused(&live) }
 }
 
 /// *Bring them here*: the shortcuts of the monitors not in use go to the
 /// first desktop that shows.
 pub fn bring_here(ctx: &egui::Context, desktop: &mut Desktop) -> surface::Brought {
-    let rooms = rooms(ctx, desktop.size);
+    let rooms = rooms(ctx, desktop);
     surface::bring_here(desktop, &rooms)
 }
 
@@ -190,28 +196,65 @@ fn bars(ctx: &egui::Context) -> place::Bars {
     }
 }
 
-/// The rooms of this frame: one for each slot the world and the bars leave
-/// a cell in. None while the world fills the window or no world is shown
-/// (login, a photo taking the whole window).
-pub fn rooms(ctx: &egui::Context, size: store::Size) -> Vec<surface::Room> {
+/// The rooms of this frame before the taskbar takes its strip: one for
+/// each slot the world and the bars leave a cell in. None while the world
+/// fills the window or no world is shown (login, a photo taking the whole
+/// window).
+fn bare_rooms(ctx: &egui::Context, cell: egui::Vec2) -> Vec<(u8, Rect)> {
     let Some(world) = viewport::world_area(ctx) else {
         return Vec::new();
     };
-    let [w, h] = size.cell();
-    let cell = vec2(w, h);
     let bars = bars(ctx);
     let layout = viewport::monitors(ctx);
     place::slots(ctx.content_rect(), layout.as_ref(), ctx.pixels_per_point())
         .into_iter()
         .enumerate()
+        .filter_map(|(slot, rect)| Some((slot as u8, place::room(rect, world, bars, cell)?)))
+        .collect()
+}
+
+/// Where the taskbar stands this frame: its slot and its strip, along the
+/// bottom of that slot's room. None while it is off, without a margin, or
+/// when the monitor chosen for it has no room.
+pub fn taskbar_strip(ctx: &egui::Context, desktop: &Desktop) -> Option<(u8, Rect)> {
+    if !desktop.taskbar.on {
+        return None;
+    }
+    let [w, h] = desktop.size.cell();
+    let rooms = bare_rooms(ctx, vec2(w, h));
+    let slot = place::taskbar_slot(&rooms, desktop.taskbar.slot)?;
+    let (_, room) = rooms.iter().find(|(s, _)| *s == slot)?;
+    Some((slot, place::taskbar_strip(*room).0))
+}
+
+/// The slots that have a room this frame: the monitors the taskbar can be
+/// put on (Preferences).
+pub fn live_slots(ctx: &egui::Context, desktop: &Desktop) -> Vec<u8> {
+    let [w, h] = desktop.size.cell();
+    bare_rooms(ctx, vec2(w, h)).iter().map(|(slot, _)| *slot).collect()
+}
+
+/// The desktops' rooms of this frame: one for each slot the world, the
+/// bars and the taskbar leave a cell in.
+pub fn rooms(ctx: &egui::Context, desktop: &Desktop) -> Vec<surface::Room> {
+    let [w, h] = desktop.size.cell();
+    let cell = vec2(w, h);
+    let rooms = bare_rooms(ctx, cell);
+    let taskbar = if desktop.taskbar.on {
+        place::taskbar_slot(&rooms, desktop.taskbar.slot)
+    } else {
+        None
+    };
+    rooms
+        .into_iter()
         .filter_map(|(slot, rect)| {
-            let rect = place::room(rect, world, bars, cell)?;
+            let rect = if taskbar == Some(slot) {
+                place::taskbar_strip(rect).1
+            } else {
+                rect
+            };
             let grid = place::Grid::new(rect, cell)?;
-            Some(surface::Room {
-                slot: slot as u8,
-                rect,
-                grid,
-            })
+            Some(surface::Room { slot, rect, grid })
         })
         .collect()
 }
@@ -222,7 +265,7 @@ pub fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env) -> Vec<Reques
     if !desktop.shortcuts_on || env.hidden {
         return Vec::new();
     }
-    let rooms = rooms(ctx, desktop.size);
+    let rooms = rooms(ctx, desktop);
     if rooms.is_empty() {
         return Vec::new();
     }

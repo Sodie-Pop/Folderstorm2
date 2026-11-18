@@ -311,7 +311,7 @@ impl Bench {
     }
 
     fn rooms(&self) -> Vec<Room> {
-        super::rooms(&self.ctx, self.desktop.size)
+        super::rooms(&self.ctx, &self.desktop)
     }
 
     fn room(&self, slot: u8) -> Room {

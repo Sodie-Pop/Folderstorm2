@@ -66,6 +66,37 @@ pub fn room(slot: Rect, world: Rect, bars: Bars, cell: Vec2) -> Option<Rect> {
     best
 }
 
+/// The height of the taskbar: an island of Aurora's bars.
+pub const TASKBAR_H: f32 = crate::ui::bars::islands::HEIGHT;
+
+/// The slot the taskbar stands in, among the rooms `(slot, rect)` of the
+/// frame: the `wanted` one when it has a room (else none: a chosen monitor
+/// is not replaced by another), or the widest room, the first of two as
+/// wide.
+pub fn taskbar_slot(rooms: &[(u8, Rect)], wanted: Option<u8>) -> Option<u8> {
+    match wanted {
+        Some(slot) => rooms.iter().any(|(s, _)| *s == slot).then_some(slot),
+        None => {
+            let mut best: Option<(u8, f32)> = None;
+            for (slot, rect) in rooms {
+                if best.is_none_or(|(_, width)| rect.width() > width + 0.5) {
+                    best = Some((*slot, rect.width()));
+                }
+            }
+            best.map(|(slot, _)| slot)
+        }
+    }
+}
+
+/// The taskbar's strip along the bottom of `room`, and what it leaves the
+/// desktop above it ([`PAD`] between the two; it may hold no cell).
+pub fn taskbar_strip(room: Rect) -> (Rect, Rect) {
+    let top = (room.bottom() - TASKBAR_H).max(room.top());
+    let strip = Rect::from_min_max(egui::pos2(room.left(), top), room.max);
+    let rest = Rect::from_min_max(room.min, egui::pos2(room.right(), (top - PAD).max(room.top())));
+    (strip, rest)
+}
+
 /// The cells of a room: all of one size, from its top-left corner.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Grid {
@@ -420,5 +451,39 @@ mod tests {
         cells.sort();
         cells.dedup();
         assert_eq!(cells.len(), 6, "one shortcut a cell");
+    }
+
+    #[test]
+    fn the_taskbar_stands_in_the_widest_room_or_the_chosen_one() {
+        let room = |left: f32, width: f32| Rect::from_min_size(egui::pos2(left, 8.0), vec2(width, 384.0));
+        let rooms = [(0, room(8.0, 624.0)), (2, room(1288.0, 624.0)), (3, room(2000.0, 900.0))];
+        assert_eq!(taskbar_slot(&rooms, None), Some(3), "the widest");
+        assert_eq!(taskbar_slot(&rooms[..2], None), Some(0), "the first of two as wide");
+        assert_eq!(taskbar_slot(&rooms, Some(2)), Some(2));
+        // a chosen monitor without a room: no taskbar, not another monitor's
+        assert_eq!(taskbar_slot(&rooms, Some(1)), None);
+        assert_eq!(taskbar_slot(&[], None), None);
+    }
+
+    #[test]
+    fn the_taskbar_s_strip_leaves_the_room() {
+        let room = Rect::from_min_size(egui::pos2(8.0, 8.0), vec2(624.0, 384.0));
+        let (strip, rest) = taskbar_strip(room);
+        assert_eq!(strip, Rect::from_min_max(egui::pos2(8.0, 392.0 - TASKBAR_H), room.max));
+        assert_eq!(rest.bottom(), strip.top() - PAD);
+        assert_eq!((rest.min, rest.right()), (room.min, room.right()));
+        assert!(!rest.intersects(strip));
+        // the same columns above it, and the rows that still fit
+        let cell = vec2(92.0, 84.0);
+        let (before, after) = (Grid::new(room, cell).expect("cells"), Grid::new(rest, cell).expect("cells"));
+        assert_eq!(after.cols, before.cols);
+        assert_eq!((before.rows, after.rows), (4, 4));
+        let small = Rect::from_min_size(egui::pos2(8.0, 8.0), vec2(624.0, 100.0));
+        assert!(Grid::new(taskbar_strip(small).1, cell).is_none(), "the strip alone");
+        // a room lower than the strip: nothing above it, never a negative rectangle
+        let low = Rect::from_min_size(egui::pos2(8.0, 8.0), vec2(624.0, 20.0));
+        let (strip, rest) = taskbar_strip(low);
+        assert_eq!(strip, low);
+        assert_eq!(rest.height(), 0.0);
     }
 }

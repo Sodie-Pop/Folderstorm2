@@ -2133,6 +2133,7 @@ fs-keys-next-favorite = Disposition favorite suivante
 fs-keys-previous-favorite = Disposition favorite précédente
 fs-keys-desktop-shortcuts = Afficher ou masquer les raccourcis du bureau
 fs-keys-desktop-focus = Donner le clavier au bureau
+fs-keys-desktop-taskbar = Donner le clavier à la barre des tâches
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Tableau de gestes
@@ -2491,6 +2492,19 @@ fs-desktop-clear-ask =
        *[other] Retirer les { $count } raccourcis de ce compte ?
     }
 fs-desktop-clear-confirm = Tout retirer
+fs-taskbar-switch = Barre des tâches dans une marge
+fs-taskbar-switch-help = Les fenêtres réduites deviennent des boutons sur une barre en bas d’un écran de marge, au lieu de barres de titre : un clic ramène la fenêtre où elle était, un clic droit en propose plus. Désactivée, ou tant que la fenêtre ne laisse pas de place autour du monde, les fenêtres réduites sont des barres de titre comme avant.
+fs-taskbar-monitor = Écran
+fs-taskbar-monitor-help = L’écran où se tient la barre des tâches. Automatique : celui qui a la place libre la plus large. Quand l’écran choisi n’a pas de place, il n’y a pas de barre des tâches.
+fs-taskbar-monitor-auto = Automatique
+fs-taskbar-all = Toutes les fenêtres ouvertes
+fs-taskbar-all-help = Liste toutes les fenêtres ouvertes, pas seulement celles qui sont réduites : un clic met une fenêtre au premier plan, ou réduit celle qui y est déjà.
+fs-taskbar-restore = Restaurer
+fs-taskbar-front = Mettre au premier plan
+fs-taskbar-empty = Aucune fenêtre réduite
+fs-taskbar-empty-all = Aucune fenêtre ouverte
+fs-taskbar-spoken-collapsed = { $title }, réduite
+fs-taskbar-spoken-front = { $title }, au premier plan
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Envoyer une image : son lien va dans votre message
@@ -2621,6 +2635,7 @@ fs-search-mcp = MCP assistant local IA agent pont API automatisation Claude Code
 fs-search-mcp-activity = activité historique journal reçus opérations arrêter
 fs-search-viewport = double écran deux écrans multi-écran plusieurs écrans moniteurs zone du monde marges grand écran ultra-large
 fs-search-desktop = bureau raccourci raccourcis icône icônes lanceur dossier dossiers marge marges écran écrans moniteur
+fs-search-taskbar = barre des tâches tâche fenêtre fenêtres réduite réduites minimisée minimisées dock
 fs-search-photo = mode photo capture image appareil
 fs-search-layouts = disposition dispositions espace de travail profil arrangement fenêtres double écran deux écrans multi-écran
 fs-search-layouts-list = favori favoris étoile appliquer renommer supprimer

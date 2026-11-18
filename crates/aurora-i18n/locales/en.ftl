@@ -2127,6 +2127,7 @@ fs-keys-next-favorite = Next favorite layout
 fs-keys-previous-favorite = Previous favorite layout
 fs-keys-desktop-shortcuts = Show or hide the desktop shortcuts
 fs-keys-desktop-focus = Focus the desktop
+fs-keys-desktop-taskbar = Focus the taskbar
 
 # Folderstorm: gesture boards (folderstorm/gesture_boards, World › Gesture board…)
 fs-gesture-board-title = Gesture board
@@ -2479,6 +2480,19 @@ fs-desktop-clear-ask =
        *[other] Remove this account's { $count } shortcuts?
     }
 fs-desktop-clear-confirm = Remove all
+fs-taskbar-switch = Taskbar in a margin
+fs-taskbar-switch-help = Collapsed windows become buttons on a bar along the bottom of a margin monitor instead of title bars: click one to bring its window back where it was, right-click for more. Off, or while the window leaves no room around the world, collapsed windows are title bars as before.
+fs-taskbar-monitor = Monitor
+fs-taskbar-monitor-help = The monitor the taskbar stands on. Automatic: the one with the widest free room. When the chosen monitor has no room, there is no taskbar.
+fs-taskbar-monitor-auto = Automatic
+fs-taskbar-all = All open windows
+fs-taskbar-all-help = Lists every open window, not only the collapsed ones: a click brings a window to the front, or collapses the one in front.
+fs-taskbar-restore = Restore
+fs-taskbar-front = Bring to front
+fs-taskbar-empty = No collapsed windows
+fs-taskbar-empty-all = No open windows
+fs-taskbar-spoken-collapsed = { $title }, collapsed
+fs-taskbar-spoken-front = { $title }, in front
 
 # Folderstorm: chat image upload (folderstorm/chat_upload, Preferences › Chat › Image uploads)
 fs-chat-upload-button = Upload an image: its link goes into your message
@@ -2609,6 +2623,7 @@ fs-search-mcp = MCP local assistant AI agent bridge API automation Claude Code C
 fs-search-mcp-activity = activity history log receipts operations stop
 fs-search-viewport = dual monitor two monitors multi-monitor multiple monitors screens viewport world area margins wide screen ultrawide span
 fs-search-desktop = desktop shortcut shortcuts icon icons launcher folder folders margin margins monitor monitors
+fs-search-taskbar = taskbar task bar minimized minimised collapsed windows window tray dock
 fs-search-photo = photo mode snapshot picture camera
 fs-search-layouts = layout layouts workspace workspaces profile arrangement windows dual monitor two monitors multi-monitor
 fs-search-layouts-list = favorite favorites star apply rename delete
