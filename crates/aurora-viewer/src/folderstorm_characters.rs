@@ -125,6 +125,9 @@ pub struct State {
     pub bar: Option<::folderstorm_session::bar::State>,
     /// What this window was last made on the taskbar (checkpoint 8).
     pub taskbar: taskbar::Tracker,
+    /// The memory picture of the last minute and the loss written down
+    /// (folderstorm/gpu_diag, app/folderstorm_characters/gpu_diag.rs).
+    pub gpu_diag: crate::folderstorm::gpu_diag::Recorder,
 }
 
 /// What a managed viewer keeps of its monitor (plan section 12): when the

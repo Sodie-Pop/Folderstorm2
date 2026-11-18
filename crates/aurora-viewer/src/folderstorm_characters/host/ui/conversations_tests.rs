@@ -556,3 +556,49 @@ fn who_types_shows_above_the_box_and_ctrl_enter_shouts() {
     assert_eq!(volumes, [Volume::Shout]);
     assert_eq!(app.host.chat.volume(0), Volume::Normal, "the choice stays as it was");
 }
+
+/// What the host handed to the characters' viewers since the last look:
+/// who says what, where.
+fn said_lines(app: &mut Window_) -> Vec<(usize, Conversation, String)> {
+    app.host
+        .chat
+        .take_effects()
+        .into_iter()
+        .filter_map(|effect| match effect {
+            ::folderstorm_session::chat::Effect::Send {
+                slot,
+                message: ToViewer::SendChat { conversation, text, .. },
+                ..
+            } => Some((slot, conversation, text)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_shared_chat_keeps_the_keyboard_after_enter_for_the_next_line() {
+    let mut app = app_with_contacts();
+    let size = (1100, 720);
+    heard(&mut app.host, 0, Conversation::Nearby, 1, LineKind::Said, "Jane Doe", "hello");
+    app.chat.opened(0, Conversation::Nearby);
+    let drawn = frame(&mut app, Which::Main, size, Vec::new());
+    let at = drawn.point_of("Type as Jane Doe", 2);
+    click(&mut app, Which::Main, size, at);
+    app.host.chat.take_effects();
+    let enter = |pressed| egui::Event::Key {
+        key: egui::Key::Enter,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    // three lines, one click: the box keeps the keyboard after each Enter
+    for line in ["first line", "second line", "third line"] {
+        frame(&mut app, Which::Main, size, vec![egui::Event::Text(line.into())]);
+        assert_eq!(app.host.chat.draft(0, Conversation::Nearby), line, "typed without a click");
+        frame(&mut app, Which::Main, size, vec![enter(true)]);
+        frame(&mut app, Which::Main, size, vec![enter(false)]);
+        assert_eq!(said_lines(&mut app), [(0, Conversation::Nearby, line.to_owned())]);
+        assert_eq!(app.host.chat.draft(0, Conversation::Nearby), "");
+    }
+}

@@ -109,7 +109,7 @@ fn the_customize_dialog_lists_and_edits_the_tabs_folders() {
         for label in [
             aurora_i18n::tr!("inventory-folder-tab-add"),
             aurora_i18n::tr!("inventory-folder-tab-replace"),
-            aurora_i18n::tr!("inventory-folder-tab-clear"),
+            aurora_i18n::tr!("inventory-folder-tab-remove-all"),
         ] {
             assert!(has(&texts, label), "classic={classic}: {label}");
         }
@@ -178,16 +178,43 @@ fn the_customize_dialog_lists_and_edits_the_tabs_folders() {
         assert_eq!(saved(&prefs), [id(BODY)], "classic={classic}");
         assert_eq!(items::of(&prefs.custom_tabs[0], account()), [id(SHIRT)], "classic={classic}");
 
-        // Show all folders
-        let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
-        let clear = at(&texts, aurora_i18n::tr!("inventory-folder-tab-clear"));
+        // Remove all… asks first; Cancel keeps the folders and pins
+        let remove_all = aurora_i18n::tr!("inventory-folder-tab-remove-all");
+        let question = aurora_i18n::tr!("inventory-folder-tab-remove-all-question", name = "Wardrobe");
+        let ask = |frames: &mut Frames, inv: &mut Inventory, st: &mut InventoryUi, prefs: &mut InventoryPreferences| {
+            let texts = run(frames, classic, inv, st, prefs, vec![]);
+            let button = at(&texts, remove_all);
+            run(frames, classic, inv, st, prefs, click(button, egui::PointerButton::Primary));
+            run(frames, classic, inv, st, prefs, vec![]);
+            run(frames, classic, inv, st, prefs, vec![])
+        };
+        let texts = ask(&mut frames, &mut inv, &mut st, &mut prefs);
+        assert!(has(&texts, &question), "classic={classic}: the question");
+        assert_eq!(saved(&prefs), [id(BODY)], "classic={classic}: nothing yet");
+        let cancel = at(&texts, aurora_i18n::tr!("common-cancel"));
         run(
             &mut frames,
             classic,
             &mut inv,
             &mut st,
             &mut prefs,
-            click(clear, egui::PointerButton::Primary),
+            click(cancel, egui::PointerButton::Primary),
+        );
+        let texts = run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
+        assert!(!has(&texts, &question), "classic={classic}: closed");
+        assert_eq!(saved(&prefs), [id(BODY)], "classic={classic}: Cancel keeps them");
+        assert_eq!(items::of(&prefs.custom_tabs[0], account()), [id(SHIRT)], "classic={classic}");
+
+        // confirmed: no folders, no pins, the whole inventory
+        let texts = ask(&mut frames, &mut inv, &mut st, &mut prefs);
+        let confirm = at(&texts, aurora_i18n::tr!("inventory-folder-tab-remove-all-confirm"));
+        run(
+            &mut frames,
+            classic,
+            &mut inv,
+            &mut st,
+            &mut prefs,
+            click(confirm, egui::PointerButton::Primary),
         );
         assert!(saved(&prefs).is_empty(), "classic={classic}");
         assert!(prefs.custom_tabs[0].items.is_empty(), "classic={classic}: no pins either");
@@ -237,10 +264,14 @@ fn a_tabs_menu_scopes_it_to_the_selected_folders() {
         for label in [
             aurora_i18n::tr!("inventory-folder-tab-add"),
             aurora_i18n::tr!("inventory-folder-tab-replace"),
-            aurora_i18n::tr!("inventory-folder-tab-clear"),
+            aurora_i18n::tr!("inventory-custom-tab-show-all"),
         ] {
             assert!(has(&texts, label), "classic={classic}: {label}");
         }
+        assert!(
+            !has(&texts, aurora_i18n::tr!("inventory-folder-tab-remove-all")),
+            "classic={classic}: removing them all is in Customize tab… only, behind a question"
+        );
         choose(
             &mut frames,
             &mut inv,
@@ -286,6 +317,10 @@ fn a_tabs_menu_scopes_it_to_the_selected_folders() {
         run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![escape]);
         run(&mut frames, classic, &mut inv, &mut st, &mut prefs, vec![]);
 
+        // Show all items: every item type and no search, in the same folders
+        prefs.custom_tabs[0].filters.types = 1 << 0;
+        prefs.custom_tabs[0].search = "sk".into();
+        prefs.custom_tabs[0].flat = true;
         let texts = open_menu(&mut frames, &mut inv, &mut st, &mut prefs);
         choose(
             &mut frames,
@@ -293,9 +328,41 @@ fn a_tabs_menu_scopes_it_to_the_selected_folders() {
             &mut st,
             &mut prefs,
             &texts,
-            aurora_i18n::tr!("inventory-folder-tab-clear"),
+            aurora_i18n::tr!("inventory-custom-tab-show-all"),
         );
-        assert!(saved(&prefs).is_empty(), "classic={classic}");
+        assert_eq!(
+            saved(&prefs),
+            [id(BODY), id(BOOTS), id(CLOTHING)],
+            "classic={classic}: the folders stay"
+        );
+        assert_eq!(prefs.custom_tabs[0].filters, Filters::default(), "classic={classic}");
+        assert_eq!(prefs.custom_tabs[0].search, "", "classic={classic}");
+        assert!(prefs.custom_tabs[0].flat, "classic={classic}: the flat list stays");
+    }
+}
+
+#[test]
+fn show_all_items_shows_every_type_inside_the_tabs_folders_only() {
+    for classic in [true, false] {
+        let mut prefs = scoped_prefs(&[CLOTHING, BODY]);
+        items::set(&mut prefs.custom_tabs[0], account(), vec![id(130)]);
+        prefs.custom_tabs[0].filters.types = 1 << 0; // textures: Skin
+        let tab = prefs.custom_tabs[0].id;
+        let mut w = Window::new(classic, prefs);
+        w.st.expand_all = Some(true);
+        select(&mut w.st, &w.prefs, SLOT_BASE);
+        let texts = w.settle();
+        assert!(row(&texts, "Skin"), "classic={classic}");
+        assert!(
+            !row(&texts, "Shirt") && !row(&texts, "Unrelated"),
+            "classic={classic}: hidden by type"
+        );
+        show_all(&mut w.st, &mut w.prefs, tab);
+        let texts = w.settle();
+        assert!(row(&texts, "Skin") && row(&texts, "Shirt"), "classic={classic}: every type");
+        assert!(row(&texts, "Unrelated"), "classic={classic}: the pin, whatever its type");
+        assert_eq!(saved(&w.prefs), [id(CLOTHING), id(BODY)], "classic={classic}");
+        assert_eq!(items::of(&w.prefs.custom_tabs[0], account()), [id(130)], "classic={classic}");
     }
 }
 
