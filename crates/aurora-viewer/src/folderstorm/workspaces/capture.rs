@@ -4,7 +4,8 @@
 //! A window's place comes from egui's state for its id (position, and size
 //! once shown in this session) and from Aurora's two entries for a floater
 //! (`ui/widgets.rs`): whether it is minimized, and the size it has when
-//! expanded. Whether it is open is the app's word (`apply::Shell`). Nothing
+//! expanded; for the mini-map, the size we keep of it (`BARE_SIZE`).
+//! Whether it is open is the app's word (`apply::Shell`). Nothing
 //! is read from the windows' contents or from the world.
 
 use super::monitors;
@@ -23,6 +24,11 @@ const MIN_FRAME: Vec2 = Vec2::new(320.0, 240.0);
 /// Aurora's entry for the size a floater has when it is not minimized
 /// (`window_id.with("expanded_size")`, persisted with the layout).
 const EXPANDED_SIZE: &str = "expanded_size";
+
+/// Our entry for the size a window without a title bar (the mini-map) was
+/// last shown at, persisted with the layout: egui keeps no window size from
+/// one session to the next, and such a window has no `expanded_size`.
+const BARE_SIZE: &str = "folderstorm_bare_size";
 
 /// The interface of now: its frame and where its top-left corner is in
 /// egui's coordinates (under the session host's bar when it has one).
@@ -91,6 +97,25 @@ fn expanded_size(ctx: &egui::Context, id: egui::Id) -> Option<Vec2> {
     ctx.data_mut(|d| d.get_persisted::<Vec2>(id.with(EXPANDED_SIZE)))
 }
 
+fn bare_size(ctx: &egui::Context, id: egui::Id) -> Option<Vec2> {
+    ctx.data_mut(|d| d.get_persisted::<Vec2>(id.with(BARE_SIZE)))
+}
+
+/// Keeps the size the window without a title bar `id` had in the last
+/// frame (`apply::take_bare`, before it is shown again), so that a layout
+/// saved while it is closed, and not shown since the viewer started, still
+/// has its size.
+pub(super) fn remember_bare_size(ctx: &egui::Context, id: egui::Id) {
+    let Some(size) = egui::AreaState::load(ctx, id).and_then(|state| state.size).and_then(sized) else {
+        return;
+    };
+    ctx.data_mut(|d| {
+        if d.get_persisted::<Vec2>(id.with(BARE_SIZE)) != Some(size) {
+            d.insert_persisted(id.with(BARE_SIZE), size);
+        }
+    });
+}
+
 fn sized(size: Vec2) -> Option<Vec2> {
     (size.is_finite() && size.x > 0.0 && size.y > 0.0).then_some(size)
 }
@@ -110,7 +135,9 @@ fn place(ctx: &egui::Context, name: &str, floater: bool, origin: Pos2, open: boo
     let minimized = floater && crate::ui::widgets::floater_minimized(ctx, name);
     // minimized, the window's own size is its title bar's
     let shown = state.size.and_then(sized).filter(|_| !minimized);
-    let size = shown.or_else(|| expanded_size(ctx, id).and_then(sized))?;
+    // not shown since the start: the size it was last shown at
+    let known = if floater { expanded_size(ctx, id) } else { bare_size(ctx, id) };
+    let size = shown.or_else(|| known.and_then(sized))?;
     // (Aurora's windows are pivoted at their top-left corner, so this holds
     // for one egui has no size for yet)
     let pos = state.left_top_pos();

@@ -418,6 +418,111 @@ impl App {
         }
     }
 
+    /// `AURORA_DEMO_LAYOUTS=minimap`: two layouts of the mini-map alone,
+    /// "Margin" (the world on the right half, the mini-map wide in the left
+    /// margin) and "Tall" (no viewport, the mini-map narrow in the middle),
+    /// applied in turn: at frame 180 "Margin", 360 "Tall", the mini-map
+    /// closed at 540 and "Margin" at 600 (it opens there), "Saved" saved at
+    /// 800, "Tall" at 820, "Saved" at 1000, the workspace "Map" (with
+    /// "Saved") saved at 1200, "Tall" at 1220, "Map" at 1400. Where the
+    /// mini-map stands before each step, and where it was asked to be, is
+    /// written to the log.
+    fn minimap_layouts_demo(&mut self) {
+        use crate::folderstorm::workspaces::capture;
+        use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store};
+        static SEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        let ctx = self.egui_ctx.clone();
+        let Some(room) = capture::room(&ctx) else { return };
+        let margin = Placement {
+            x: 40.0,
+            y: (room.frame.height - 300.0).round(),
+            width: 280.0,
+            height: 240.0,
+            minimized: false,
+            open: true,
+        };
+        let tall = Placement {
+            x: (room.frame.width * 0.5).round(),
+            y: 120.0,
+            width: 160.0,
+            height: 340.0,
+            ..margin
+        };
+        if !SEEDED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            let layout = |name: &str, place: Placement, world: viewport::ViewportSettings| {
+                let windows = Placements {
+                    frame: room.frame,
+                    windows: [("minimap".to_owned(), place)].into(),
+                };
+                Layout::new(name, Some(world), Some(windows), Vec::new())
+            };
+            let wide = viewport::ViewportSettings {
+                enabled: true,
+                left: (room.frame.width * room.frame.pixels_per_point / 2.0) as u32,
+                bars_around: true,
+                ..Default::default()
+            };
+            let store = &mut self.settings.folderstorm_workspaces;
+            *store = Store::default();
+            for seeded in [layout("Margin", margin, wide), layout("Tall", tall, Default::default())] {
+                if let Err(error) = store.add(seeded) {
+                    log::warn!("AURORA_DEMO_LAYOUTS=minimap: layout not seeded: {error:?}");
+                }
+            }
+            self.panels.minimap = true;
+        }
+        let frame = self.frame_count;
+        // (the place each step asks, written before the next one)
+        let asked = match frame {
+            350 | 780 | 1180 | 1580 => Some(margin),
+            530 | 590 | 990 | 1390 => Some(tall),
+            _ => None,
+        };
+        if let Some(asked) = asked {
+            let at = ctx.memory(|m| m.area_rect(egui::Id::unique("minimap")));
+            log::info!(
+                "AURORA_DEMO_LAYOUTS=minimap: frame {frame}: the mini-map is at {at:?}, asked at {:?} ({} x {})",
+                room.origin + egui::vec2(asked.x, asked.y),
+                asked.width,
+                asked.height
+            );
+        }
+        let mut live = apply::Live::of(&mut self.settings);
+        let index = |live: &apply::Live, name: &str| live.store.find(name).map(|(index, _)| index);
+        let done = match frame {
+            180 | 600 => index(&live, "Margin").map(|at| apply::apply(&ctx, &mut live, at).map(drop)),
+            360 | 820 | 1220 => index(&live, "Tall").map(|at| apply::apply(&ctx, &mut live, at).map(drop)),
+            540 => {
+                self.panels.minimap = false;
+                return;
+            }
+            800 => {
+                let parts = apply::Parts {
+                    window: false,
+                    ..Default::default()
+                };
+                Some(apply::save_new(&ctx, &mut live, "Saved", parts).map(drop))
+            }
+            1000 => index(&live, "Saved").map(|at| apply::apply(&ctx, &mut live, at).map(drop)),
+            1200 => {
+                let keep = apply::Keep {
+                    layout: true,
+                    folders: false,
+                };
+                Some(apply::save_new_workspace(&ctx, &mut live, "Map", keep).map(drop))
+            }
+            1400 => live
+                .store
+                .find_workspace("Map")
+                .map(|(at, _)| at)
+                .map(|at| apply::apply_workspace(&ctx, &mut live, at).map(drop)),
+            _ => return,
+        };
+        if !matches!(done, Some(Ok(()))) {
+            log::warn!("AURORA_DEMO_LAYOUTS=minimap: frame {frame}: not done ({done:?})");
+        }
+    }
+
     fn layouts_demo(&mut self, seen: Option<&Seen>) {
         use crate::folderstorm::workspaces::store::{Layout, Placement, Placements, Store, WindowFrame};
         use crate::folderstorm::workspaces::{capture, windows};
@@ -443,6 +548,10 @@ impl App {
             (_, _, _, Ok(_)) => "switcher-workspaces-strip".to_owned(),
             _ => return,
         };
+        if mode == "minimap" {
+            self.minimap_layouts_demo();
+            return;
+        }
         let workspaces = mode.starts_with("switcher-workspaces");
         let strip = mode.starts_with("switcher-workspaces-strip");
         let switcher = mode.starts_with("switcher");

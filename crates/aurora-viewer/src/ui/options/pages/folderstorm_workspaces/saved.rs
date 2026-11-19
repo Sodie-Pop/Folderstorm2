@@ -78,6 +78,8 @@ pub(super) struct State {
     /// The name being typed for the selected entry.
     rename: Option<String>,
     ask: Option<Ask>,
+    /// The question of a workspace's *Update* also updates its layout.
+    also_layout: bool,
     refused: Option<Refused>,
     /// *Previous arrangement* was the last thing done (Switching).
     pub went_back: bool,
@@ -96,6 +98,7 @@ impl Default for State {
             new_form: false,
             rename: None,
             ask: None,
+            also_layout: false,
             refused: None,
             went_back: false,
             save_kind: Kind::Workspace,
@@ -600,6 +603,18 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pic
             Ask::Delete => (ICON_DELETE, tr!("common-delete"), ActionKind::Danger),
         };
         ui.add(egui::Label::new(egui::RichText::new(question).size(12.5).color(p.ink)).wrap());
+        let offer = match (ask, pick.kind) {
+            (Ask::Update, Kind::Workspace) => apply::layout_offer(&s.folderstorm_workspaces, &s.folderstorm_viewport, pick.index),
+            _ => None,
+        };
+        if let Some((layout, _)) = &offer {
+            widgets::checkbox(
+                ui,
+                p,
+                &mut st.also_layout,
+                tr!("fs-workspaces-update-layout", name = layout.as_str()),
+            );
+        }
         let mut answer = None;
         ui.horizontal(|ui| {
             if widgets::action_button(ui, p, icon, label, kind, size).clicked() {
@@ -615,7 +630,10 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pic
                 Ask::Update => {
                     let updated = match pick.kind {
                         Kind::Layout => apply::update(&ctx, &mut Live::of(s), pick.index),
-                        Kind::Workspace => apply::update_workspace(&ctx, &mut Live::of(s), pick.index),
+                        Kind::Workspace => {
+                            let also_layout = offer.is_some() && st.also_layout;
+                            apply::update_workspace_with_layout(&ctx, &mut Live::of(s), pick.index, also_layout)
+                        }
                     };
                     match updated {
                         Ok(()) => {
@@ -656,6 +674,8 @@ fn actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, st: &mut State, pic
             .clicked()
         {
             st.ask = Some(Ask::Update);
+            st.also_layout = pick.kind == Kind::Workspace
+                && apply::layout_offer(&s.folderstorm_workspaces, &s.folderstorm_viewport, pick.index).is_some_and(|(_, ticked)| ticked);
         }
         if widgets::action_button_if(ui, p, ICON_RENAME, tr!("fs-layouts-rename"), ActionKind::Flat, size, usable).clicked() {
             start_rename(&ctx, name);

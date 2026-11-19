@@ -2330,6 +2330,7 @@ fs-workspaces-with-no-layout = Always use the layout in use with it (none is in 
 fs-workspaces-save-help = Saves which windows are open now under a new name. Applying the workspace opens them and closes the others, wherever the layout in use puts them; tick the box to make it also apply the layout in use now. It never holds what a window shows.
 fs-workspaces-ask-update = Replace the windows of the workspace “{ $name }” with the ones open now?
 fs-workspaces-ask-delete = Delete the workspace “{ $name }”?
+fs-workspaces-update-layout = Also update its layout “{ $name }”
 fs-workspaces-update-help = Saves the windows open now in the workspace. Its layout choice is kept. Asks first.
 fs-workspaces-error-empty = Give the workspace a name.
 fs-workspaces-error-taken = Another workspace already has this name.

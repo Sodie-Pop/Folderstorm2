@@ -358,26 +358,75 @@ fn session<R>(ctx: &egui::Context, change: impl FnOnce(&mut Session) -> R) -> R 
     ctx.data_mut(|d| change(d.get_temp_mut_or_default::<Session>(session_id())))
 }
 
-/// A place asked of a window without a title bar: its corner and size.
-type BareRequest = (egui::Pos2, egui::Vec2);
+/// A place asked of a window without a title bar: its corner and size,
+/// and how it was given so far.
+#[derive(Clone, Copy, Debug)]
+struct BareRequest {
+    pos: egui::Pos2,
+    size: egui::Vec2,
+    /// The window has been shown with it once at least.
+    taken: bool,
+    /// The frames it was given to the window egui knew the size of, and
+    /// the last one.
+    sized_frames: u8,
+    last_frame: u64,
+}
+
+/// How many frames a request is given to a window egui knows the size of.
+/// A window egui has no size for (closed since the start: egui keeps no
+/// size from one session to the next) is only measured on its first frame,
+/// and Aurora's `layout::Slot` then puts it back where it was recorded;
+/// and egui keeps a window inside the screen with the size it had the
+/// frame before. So the request holds until the window has been shown
+/// twice at its size: the second time it is where it was asked, at that
+/// size, and recorded there (the human's report: the mini-map opened by a
+/// layout stayed where it was before).
+const BARE_HOLD: u8 = 2;
 
 fn bare_id(window: egui::Id) -> egui::Id {
     window.with("folderstorm_place")
 }
 
-/// The place a layout asked for the window without a title bar `window`,
-/// once: the hook of `ui::widgets::bare_window`, which then shows it there
-/// at that size, as `Floater::show` does with `place_floater`'s request.
+/// The place a layout asked for the window without a title bar `window`:
+/// the hook of `ui::widgets::bare_window`, before it is shown, which then
+/// shows it there at that size, as `Floater::show` does with
+/// `place_floater`'s request. Given until the window has been shown at its
+/// size ([`BARE_HOLD`]). Also keeps the window's size for a layout saved
+/// while it is closed ([`capture::remember_bare_size`]).
 pub fn take_bare(ctx: &egui::Context, window: egui::Id) -> Option<egui::Rect> {
-    ctx.data_mut(|d| d.remove_temp::<BareRequest>(bare_id(window)))
-        .map(|(pos, size)| egui::Rect::from_min_size(pos, size))
+    capture::remember_bare_size(ctx, window);
+    let sized = egui::AreaState::load(ctx, window).is_some_and(|state| state.size.is_some());
+    let now = ctx.cumulative_frame_nr();
+    let id = bare_id(window);
+    ctx.data_mut(|d| {
+        let mut request = d.get_temp::<BareRequest>(id)?;
+        request.taken = true;
+        // (once a frame: egui may lay a frame out twice)
+        if sized && (request.sized_frames == 0 || request.last_frame != now) {
+            request.sized_frames = request.sized_frames.saturating_add(1);
+            request.last_frame = now;
+        }
+        if request.sized_frames >= BARE_HOLD {
+            d.remove::<BareRequest>(id);
+        } else {
+            d.insert_temp(id, request);
+        }
+        Some(egui::Rect::from_min_size(request.pos, request.size))
+    })
 }
 
 fn request_bare(ctx: &egui::Context, window: &Window, pos: egui::Pos2, size: egui::Vec2) {
     let id = egui::Id::unique(window.id);
     // as `place_floater`: the place becomes the window's anchor
     crate::ui::layout::reanchor(ctx, id);
-    ctx.data_mut(|d| d.insert_temp::<BareRequest>(bare_id(id), (pos, size)));
+    let request = BareRequest {
+        pos,
+        size,
+        taken: false,
+        sized_frames: 0,
+        last_frame: 0,
+    };
+    ctx.data_mut(|d| d.insert_temp(bare_id(id), request));
 }
 
 /// Asks `window` to take the place `fitted` in `room` when it is next
@@ -439,7 +488,9 @@ fn waiting(ctx: &egui::Context, window: &Window) -> bool {
     let id = egui::Id::unique(window.id);
     match window.kind {
         Kind::Floater => ctx.data(|d| d.get_temp::<egui::Pos2>(id.with(PLACE_POS)).is_some()),
-        Kind::Bare => ctx.data(|d| d.get_temp::<BareRequest>(bare_id(id)).is_some()),
+        Kind::Bare => ctx
+            .data(|d| d.get_temp::<BareRequest>(bare_id(id)))
+            .is_some_and(|request| !request.taken),
     }
 }
 
@@ -719,6 +770,44 @@ pub fn update_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> R
     }
     session(ctx, |s| s.report = None);
     Ok(())
+}
+
+/// *Update* of a workspace that also updates its layout: with `also_layout`,
+/// the layout the workspace names first takes the arrangement of now
+/// ([`update`]), then the workspace takes the windows open now
+/// ([`update_workspace`]). When the layout cannot be updated, the error is
+/// returned and the workspace is left as it was: one *Update*, one result.
+pub fn update_workspace_with_layout(ctx: &egui::Context, live: &mut Live, index: usize, also_layout: bool) -> Result<(), StoreError> {
+    if also_layout {
+        let name = live.store.workspace(index).and_then(|workspace| workspace.layout.clone());
+        let at = name.and_then(|name| live.store.find(&name).map(|(at, _)| at));
+        update(ctx, live, at.ok_or(StoreError::Missing)?)?;
+    }
+    update_workspace(ctx, live, index)
+}
+
+/// The extra box of a workspace's *Update*, as a pure decision: None when it
+/// is not offered (the workspace keeps the layout in use, or the layout it
+/// names is gone or cannot be used); else whether it starts ticked, which is
+/// when that layout is the one in use and modified, so its places differ
+/// from what is on screen. Any other layout is not compared and starts
+/// unticked.
+pub fn layout_offer_default(names_layout: bool, usable: bool, in_use: bool, modified: bool) -> Option<bool> {
+    (names_layout && usable).then_some(in_use && modified)
+}
+
+/// [`layout_offer_default`] for the workspace at `index`: the layout it
+/// names, and whether the box starts ticked.
+pub fn layout_offer(store: &Store, world: &ViewportSettings, index: usize) -> Option<(String, bool)> {
+    let name = store.workspace(index)?.layout.as_deref();
+    let found = name.and_then(|name| store.find(name));
+    let ticked = layout_offer_default(
+        name.is_some(),
+        found.is_some(),
+        found.is_some_and(|(at, _)| store.is_active(at)),
+        modified(store, world),
+    )?;
+    found.map(|(_, layout)| (layout.name.clone(), ticked))
 }
 
 /// Whether the workspace in use no longer describes what is open: the
@@ -1034,9 +1123,9 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
                 outcome.save |= index.is_some_and(|index| apply_workspace(ctx, live, index).is_ok());
             }
             Request::StarWorkspace(name, on) => outcome.save |= live.store.set_favorite_workspace(&name, on),
-            Request::UpdateWorkspace(name) => {
+            Request::UpdateWorkspace(name, also_layout) => {
                 let done = match workspace_at(live.store, &name) {
-                    Some(index) => update_workspace(ctx, live, index),
+                    Some(index) => update_workspace_with_layout(ctx, live, index, also_layout),
                     None => Err(StoreError::Missing),
                 };
                 outcome.save |= done.is_ok();

@@ -706,7 +706,24 @@ rewritten by a fit.
    layout: `place_floater` for floaters (then `minimize_floater` if it was
    minimized), our own request for the mini-map (`bare_window` hook). A
    closed window takes its place when it next opens; its id stays in
-   `pending` until then, so a restart issues the request again;
+   `pending` until then, so a restart issues the request again. The
+   mini-map's request is held until the window has been shown twice at
+   a size egui knows (`BARE_HOLD`): one closed since the viewer started
+   has no size (egui keeps none in `ui_layout.ron`), is only measured on
+   its first frame, and `layout::Slot` put it back at its recorded place
+   on the next (the human's report of 2026-11-17: opened by a layout, it
+   stayed where it was). The same hook keeps the mini-map's last size
+   (`folderstorm_bare_size`), so a layout saved while it is closed and
+   not shown since the start still captures it. Checked in the viewer
+   itself by `AURORA_DEMO_LAYOUTS=minimap` (open, closed, saved, in the
+   margin of a world viewport, through a workspace) and by the frame tests,
+   which run `layout::frame` as the app does and move and resize the
+   mini-map by hand. A workspace keeps no place of its own: the mini-map,
+   like every window, goes where the workspace's layout has it, so a place
+   changed after that layout was saved needs the layout's *Update* (a
+   workspace's *Update* records only which windows are open, unless its
+   question's box *Also update its layout* is ticked: it then updates the
+   layout too, so the mini-map comes back where it was put);
 4. mark the layout active and not modified, save the settings.
 
 A new apply replaces one still waiting for its frame. *Previous
@@ -1576,7 +1593,15 @@ what to save: a **layout** (as before) or a **workspace**: its name, and
 *Use the layout in use* (ticked: the workspace names the active layout;
 greyed without one). It records the windows open now. *Update* on a
 workspace replaces its list with the windows open now (its layout choice
-is kept), after the question.
+is kept), after the question. When the workspace names a layout that can
+be used, the question has a box under it, *Also update its layout
+“name”*: ticked, the layout takes the arrangement of now first (as its own
+*Update*), then the workspace takes its windows. The box starts ticked when
+that layout is the one in use and is modified, unticked otherwise; it is
+not offered when the workspace keeps the layout in use. If the layout
+cannot be updated, the refusal is said and the workspace is left as it
+was. The switcher and the Preferences group ask the same question; the
+menu has no *Update*.
 
 **7. The switcher** is titled *Layouts & workspaces*. Its list: Favorites
 (both kinds, in their order), then the other Workspaces, then the other
