@@ -5,6 +5,7 @@
 //! into it.
 
 use super::{BUTTON, Window_};
+use crate::folderstorm_characters::launch::{self, Surface, Target};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::copy::Source;
@@ -157,14 +158,27 @@ impl Window_ {
                 } else {
                     ActionKind::Flat
                 };
-                let label = format!("{} · {short}", slot + 1);
+                // a character without a viewer: the first click asks "Launch?"
+                let starts = launch::starts_viewer(quick);
+                let target = Target {
+                    surface: Surface::Strip,
+                    slot,
+                };
+                let asking = starts && launch::armed(ui.ctx(), target);
+                let (kind, label) = if asking {
+                    help = launch::confirm_help(super::shown_name(state));
+                    (ActionKind::Caution, launch::confirm_label().to_owned())
+                } else {
+                    (kind, format!("{} · {short}", slot + 1))
+                };
                 let enabled = quick != Quick::Nothing;
                 let button = widgets::action_button_if(ui, p, icon, &label, kind, BUTTON, enabled);
                 // (checkpoint 7: the character's colour under its button)
                 if let Some(tint) = super::super::faces::tint(p, state.colour) {
                     super::super::faces::underline(ui, button.rect, tint);
                 }
-                if button.on_hover_text(help).clicked() && enabled {
+                let button = button.on_hover_text(help);
+                if launch::settle(ui.ctx(), &button, target, starts) && enabled {
                     acts.push(super::Act::Comfort(Act::Quick(slot)));
                 }
             }

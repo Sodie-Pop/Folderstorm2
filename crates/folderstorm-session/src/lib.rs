@@ -87,6 +87,12 @@
 //! - [`chat`]: a conversation opened from the host, who types, and the
 //!   volume of a line of the nearby chat.
 //!
+//! Launch UX of the bar and the host's quick actions:
+//! - [`launch`]: a button that would start a new viewer asks "Launch?"
+//!   and starts it at the second click; a character not logged in is
+//!   chosen in the bar's list and started by the login button, which
+//!   names it and pulses.
+//!
 //! Video memory with several characters (folderstorm/plans/gpu-memory.md):
 //! - [`memory`]: each character's share of the graphics card, Economy that
 //!   gives its memory back before the window is minimised, a monitor's
@@ -106,6 +112,7 @@ pub mod hotkeys;
 pub mod identity;
 pub mod inbox;
 pub mod ipc;
+pub mod launch;
 pub mod links;
 pub mod managed;
 pub mod memory;

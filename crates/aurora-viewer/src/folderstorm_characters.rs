@@ -60,6 +60,7 @@ pub mod chat_export;
 pub mod economy_render;
 pub mod foreground;
 pub mod host;
+pub mod launch;
 pub mod managed;
 pub mod profile;
 pub mod profile_copy;
