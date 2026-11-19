@@ -220,6 +220,7 @@ pub fn avatars(world: &World) -> Vec<(Uuid, Vec3, bool)> {
     let mut out: Vec<(Uuid, Vec3, bool)> = Vec::new();
     for (idx, o) in world.objects.avatars() {
         if o.full_id != world.agent_id
+            && !world.is_mirror(&o.full_id)
             && let Some((p, _, _)) = Scene::object_transform(world, idx, now, 0)
         {
             out.push((o.full_id, p, true));
@@ -286,11 +287,16 @@ fn names_allowed(world: &World, id: &Uuid) -> bool {
     world.rlva_can_name(*id) && world.social.avatar_names.shows(crate::world::names::NameScope::World, id)
 }
 
-/// A saved mark, even its presence in a menu, can identify an anonymous dot.
-pub(super) fn can_mark(world: &World, id: &Uuid) -> bool {
+/// The mini-map's "Markers" menu of a dot: for an avatar that is visible
+/// (not one a parcel hides), their name hidden by RLVa or not.
+/// LLNetMap::handleRightMouseDown (indra/newview/llnetmap.cpp) shows
+/// "MarkAvatar" for any agent under the pointer and leaves it out of the
+/// entries `@shownames` greys.
+pub(super) fn can_mark(_world: &World, _id: &Uuid) -> bool {
     // Folderstorm: a dot out of draw distance or on a private parcel is markable too:
     // SL's "Managing your parcel": "The world map and mini-map are unaffected."
-    names_allowed(world, id)
+    // With upstream's rule above (a name hidden by RLVa changes nothing), every dot is.
+    true
 }
 
 fn avatar_name(world: &World, id: &Uuid, format: MiniAvatarNameFormat) -> String {
@@ -462,7 +468,8 @@ mod name_format_tests {
         }
         world.social.avatar_names.set_rlva_privacy(true, Default::default());
         for id in [first, second] {
-            assert!(!can_mark(&world, &id));
+            // a hidden name keeps its "Markers" menu, as in the Legacy Viewer
+            assert!(can_mark(&world, &id));
             assert_eq!(
                 avatar_name(&world, &id, format),
                 world.social.avatar_names.anonymous(&id).display_name

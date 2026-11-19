@@ -59,6 +59,8 @@ pub const KEYRING_LOGIN: &str = "Folderstorm2";
 pub const KEYRING_MFA: &str = "Folderstorm2 MFA";
 pub const KEYRING_CACHE: &str = "Folderstorm2 cache";
 pub const KEYRING_GITHUB: &str = "Folderstorm2 GitHub";
+/// The SOCKS 5 proxy's user name and password (Preferences › Network).
+pub const KEYRING_PROXY: &str = "Folderstorm2 Proxy";
 /// The user's own token for the chat image host (FEATURES.md 3.3). The
 /// entry's account is the host's address: a token is only ever sent to the
 /// host it was saved for.
@@ -137,6 +139,7 @@ mod tests {
             "Aurora Viewer MFA",
             "Aurora Viewer cache",
             "Aurora Viewer GitHub",
+            "Aurora Viewer Proxy",
             "Aurora.Viewer",
             "aurora-viewer-slurl-",
             "Aurora.SLurl.Receiver.2.",
@@ -150,6 +153,7 @@ mod tests {
             KEYRING_MFA,
             KEYRING_CACHE,
             KEYRING_GITHUB,
+            KEYRING_PROXY,
             GRID_CHANNEL,
             WINDOWS_AUMID,
             SLURL_PIPE_PREFIX,
