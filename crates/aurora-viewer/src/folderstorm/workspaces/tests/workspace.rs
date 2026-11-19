@@ -248,7 +248,7 @@ fn the_requests_apply_star_update_and_save_a_workspace() {
     v.ask(Request::StarWorkspace("Exploring".to_owned(), true));
     assert!(v.store.is_favorite_workspace("Exploring") && !v.store.is_favorite("Exploring"));
     v.set_open(&[MAP]);
-    v.ask(Request::UpdateWorkspace("Exploring".to_owned()));
+    v.ask(Request::UpdateWorkspace("Exploring".to_owned(), false));
     assert_eq!(v.store.find_workspace("Exploring").expect("saved").1.open.len(), 1);
     let keep = |layout: bool| apply::Keep { layout, folders: false };
     v.ask(Request::SaveWorkspace("Map only".to_owned(), keep(true)));
@@ -348,4 +348,75 @@ fn world_layouts_lists_the_workspaces_too() {
     v.ask(Request::StarWorkspace("Sorting".to_owned(), true));
     assert!(v.shows("Sorting") && !v.shows("Exploring") && !v.shows("Wide"));
     let _ = menu::view(&v.ctx);
+}
+
+#[test]
+fn the_layout_box_of_a_workspace_update_is_offered_and_ticked_by_a_pure_rule() {
+    let offer = apply::layout_offer_default;
+    // not offered: the workspace keeps the layout in use, or its layout is gone
+    assert_eq!(offer(false, false, false, false), None);
+    assert_eq!(offer(false, true, true, true), None);
+    assert_eq!(offer(true, false, true, true), None);
+    // offered, unticked unless the layout in use is modified
+    assert_eq!(offer(true, true, true, true), Some(true));
+    assert_eq!(offer(true, true, true, false), Some(false));
+    assert_eq!(offer(true, true, false, true), Some(false), "another layout is not compared");
+    assert_eq!(offer(true, true, false, false), Some(false));
+}
+
+#[test]
+fn a_workspace_update_offers_its_layout_and_updates_both_when_asked() {
+    let mut v = two_workspaces();
+    let ctx = v.ctx.clone();
+    let (sorting, _) = v.store.find_workspace("Sorting").expect("saved");
+    let single_x = |v: &Viewer| {
+        let (_, layout) = v.store.find("Single").expect("usable");
+        layout.windows.as_ref().expect("has windows").windows[INVENTORY].x
+    };
+    // "Exploring" names no layout: nothing is offered
+    let (exploring, _) = v.store.find_workspace("Exploring").expect("saved");
+    assert_eq!(apply::layout_offer(&v.store, &v.world, exploring), None);
+    // "Sorting" in use with its layout, unmoved: offered, unticked
+    v.apply_workspace("Sorting");
+    v.settle();
+    assert_eq!(apply::layout_offer(&v.store, &v.world, sorting), Some(("Single".to_owned(), false)));
+    // the user moves Inventory: the layout is modified, the box starts ticked
+    let before = single_x(&v);
+    v.put(INVENTORY, before + 120.0, 70.0, 480.0, 500.0);
+    v.settle();
+    assert_eq!(apply::layout_offer(&v.store, &v.world, sorting), Some(("Single".to_owned(), true)));
+    // unticked: the workspace is updated, the layout is not
+    v.set_open(&[INVENTORY, PEOPLE, MAP]);
+    apply::update_workspace_with_layout(&ctx, &mut v.live(), sorting, false).expect("updated");
+    assert!(v.store.workspace(sorting).expect("saved").open.contains(MAP));
+    assert_eq!(single_x(&v), before, "the layout kept its places");
+    // ticked: both
+    v.set_open(&[INVENTORY, PEOPLE, MAP, PLACES]);
+    apply::update_workspace_with_layout(&ctx, &mut v.live(), sorting, true).expect("updated");
+    assert!(v.store.workspace(sorting).expect("saved").open.contains(PLACES));
+    assert!(
+        (single_x(&v) - before).abs() > 50.0,
+        "the layout took the new place ({before} -> {})",
+        single_x(&v)
+    );
+}
+
+#[test]
+fn a_workspace_update_whose_layout_cannot_be_updated_changes_nothing() {
+    let mut v = two_workspaces();
+    let ctx = v.ctx.clone();
+    let (sorting, _) = v.store.find_workspace("Sorting").expect("saved");
+    let (single, _) = v.store.find("Single").expect("usable");
+    assert!(v.store.remove(single));
+    assert_eq!(apply::layout_offer(&v.store, &v.world, sorting), None, "its layout is gone");
+    v.set_open(&[INVENTORY, PEOPLE, MAP]);
+    let done = apply::update_workspace_with_layout(&ctx, &mut v.live(), sorting, true);
+    assert!(matches!(done, Err(StoreError::Missing)));
+    assert!(
+        !v.store.workspace(sorting).expect("saved").open.contains(MAP),
+        "the workspace is as it was"
+    );
+    // through the request: the refusal is said, as for any other
+    v.ask(Request::UpdateWorkspace("Sorting".to_owned(), true));
+    assert!(apply::refused(&v.ctx).is_some());
 }

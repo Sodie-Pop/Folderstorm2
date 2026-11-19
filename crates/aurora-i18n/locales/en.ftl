@@ -2245,6 +2245,7 @@ fs-workspaces-save-new = Save as a new workspace
 fs-workspaces-save = Save workspace
 fs-workspaces-ask-update = Replace the windows of the workspace “{ $name }” with the ones open now?
 fs-workspaces-ask-delete = Delete the workspace “{ $name }”?
+fs-workspaces-update-layout = Also update its layout “{ $name }”
 fs-workspaces-update-help = Saves the windows open now in the workspace. Its layout choice is kept. Asks first.
 fs-workspaces-error-empty = Give the workspace a name.
 fs-workspaces-error-taken = Another workspace already has this name.

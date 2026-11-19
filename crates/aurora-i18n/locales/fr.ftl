@@ -2257,6 +2257,7 @@ fs-workspaces-save-new = Enregistrer comme nouvel espace de travail
 fs-workspaces-save = Enregistrer l'espace
 fs-workspaces-ask-update = Remplacer les fenêtres de l'espace de travail « { $name } » par celles ouvertes maintenant ?
 fs-workspaces-ask-delete = Supprimer l'espace de travail « { $name } » ?
+fs-workspaces-update-layout = Mettre aussi à jour sa disposition « { $name } »
 fs-workspaces-update-help = Enregistre dans l'espace de travail les fenêtres ouvertes maintenant. Son choix de disposition est gardé. Demande d'abord.
 fs-workspaces-error-empty = Donnez un nom à l'espace de travail.
 fs-workspaces-error-taken = Un autre espace de travail porte déjà ce nom.

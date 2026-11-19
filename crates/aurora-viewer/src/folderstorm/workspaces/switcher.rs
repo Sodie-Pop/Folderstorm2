@@ -99,6 +99,9 @@ struct State {
     /// *Update* has asked its question, for the layout or the workspace of
     /// this name.
     ask_update: Option<(Kind, String)>,
+    /// The workspace's *Update* also updates its layout: the box under the
+    /// question, when it is offered.
+    also_layout: bool,
 }
 
 fn state_id() -> egui::Id {
@@ -567,6 +570,18 @@ fn save_form(ui: &mut egui::Ui, p: &Palette, shown: &Shown, form: &mut SaveForm,
     close
 }
 
+/// The layout a workspace's *Update* offers to update with it, and whether
+/// the box starts ticked ([`apply::layout_offer`]); None for a layout.
+fn layout_offer_of(shown: &Shown, kind: Kind, name: &str) -> Option<(String, bool)> {
+    match kind {
+        Kind::Workspace => {
+            let (index, _) = shown.store.find_workspace(name)?;
+            apply::layout_offer(&shown.store, &shown.world, index)
+        }
+        Kind::Layout => None,
+    }
+}
+
 /// The window's footer: the question of *Update*, or *Save new…*, or the
 /// buttons; and one line for what was last done.
 fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selected: Option<Selected>, out: &mut Vec<Request>) {
@@ -575,16 +590,29 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
     ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
     widgets::divider(ui, p);
     if let Some((kind, name)) = st.ask_update.clone() {
+        let offer = layout_offer_of(shown, kind, &name);
+        let question = match kind {
+            Kind::Layout => tr!("fs-layouts-ask-update", name = name.as_str()),
+            Kind::Workspace => tr!("fs-workspaces-ask-update", name = name.as_str()),
+        };
+        if let Some((layout, _)) = &offer {
+            // the question, then the box under it, then the buttons
+            ui.add(egui::Label::new(egui::RichText::new(question.clone()).size(12.5).color(p.ink)).wrap());
+            widgets::checkbox(
+                ui,
+                p,
+                &mut st.also_layout,
+                tr!("fs-workspaces-update-layout", name = layout.as_str()),
+            );
+        }
         ui.horizontal_wrapped(|ui| {
-            let question = match kind {
-                Kind::Layout => tr!("fs-layouts-ask-update", name = name.as_str()),
-                Kind::Workspace => tr!("fs-workspaces-ask-update", name = name.as_str()),
-            };
-            ui.label(egui::RichText::new(question).size(12.5).color(p.ink));
+            if offer.is_none() {
+                ui.label(egui::RichText::new(question).size(12.5).color(p.ink));
+            }
             if widgets::action_button(ui, p, ICON_UPDATE, tr!("fs-layouts-update"), ActionKind::Primary, size).clicked() {
                 out.push(match kind {
                     Kind::Layout => Request::Update(name.clone()),
-                    Kind::Workspace => Request::UpdateWorkspace(name.clone()),
+                    Kind::Workspace => Request::UpdateWorkspace(name.clone(), offer.is_some() && st.also_layout),
                 });
                 st.ask_update = None;
             }
@@ -639,6 +667,10 @@ fn footer(ui: &mut egui::Ui, p: &Palette, shown: &Shown, st: &mut State, selecte
             .clicked();
         if asked {
             st.ask_update = active.clone();
+            st.also_layout = active
+                .as_ref()
+                .and_then(|(kind, name)| layout_offer_of(shown, *kind, name))
+                .is_some_and(|(_, ticked)| ticked);
         }
         if widgets::action_button(ui, p, ICON_SAVE, tr!("fs-switcher-save-new"), ActionKind::Flat, size)
             .on_hover_text(tr!("fs-layouts-save-new-help"))

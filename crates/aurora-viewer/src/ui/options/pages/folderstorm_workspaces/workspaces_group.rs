@@ -49,6 +49,8 @@ struct Tab {
     /// The name being typed for the selected workspace.
     rename: Option<String>,
     ask: Option<Ask>,
+    /// The question of *Update* also updates the workspace's layout.
+    also_layout: bool,
     refused: Option<Refused>,
 }
 
@@ -337,6 +339,18 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             ),
         };
         ui.add(egui::Label::new(egui::RichText::new(question).size(12.5).color(p.ink)).wrap());
+        let offer = match ask {
+            Ask::Update => apply::layout_offer(&s.folderstorm_workspaces, &s.folderstorm_viewport, index),
+            Ask::Delete => None,
+        };
+        if let Some((layout, _)) = &offer {
+            widgets::checkbox(
+                ui,
+                p,
+                &mut tab.also_layout,
+                tr!("fs-workspaces-update-layout", name = layout.as_str()),
+            );
+        }
         let mut answer = None;
         ui.horizontal(|ui| {
             if widgets::action_button(ui, p, icon, label, kind, size).clicked() {
@@ -350,13 +364,15 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
             tab.ask = None;
             if yes {
                 match ask {
-                    Ask::Update => match apply::update_workspace(&ctx, &mut Live::of(s), index) {
-                        Ok(()) => {
-                            tab.refused = None;
-                            changed = true;
+                    Ask::Update => {
+                        match apply::update_workspace_with_layout(&ctx, &mut Live::of(s), index, offer.is_some() && tab.also_layout) {
+                            Ok(()) => {
+                                tab.refused = None;
+                                changed = true;
+                            }
+                            Err(error) => tab.refused = Some(Refused::Selected(error)),
                         }
-                        Err(error) => tab.refused = Some(Refused::Selected(error)),
-                    },
+                    }
                     Ask::Delete => {
                         changed |= s.folderstorm_workspaces.remove_workspace(index);
                         tab.selected = None;
@@ -375,6 +391,8 @@ fn selected_actions(ui: &mut egui::Ui, p: &Palette, s: &mut Settings, tab: &mut 
                 .clicked()
             {
                 tab.ask = Some(Ask::Update);
+                tab.also_layout =
+                    apply::layout_offer(&s.folderstorm_workspaces, &s.folderstorm_viewport, index).is_some_and(|(_, ticked)| ticked);
             }
             if widgets::action_button_if(ui, p, ICON_RENAME, tr!("fs-layouts-rename"), ActionKind::Flat, size, usable).clicked() {
                 use egui::text::{CCursor, CCursorRange};

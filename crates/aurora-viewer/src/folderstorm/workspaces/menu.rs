@@ -58,8 +58,9 @@ pub enum Request {
     ApplyWorkspace(String),
     /// The star of the workspace of this name, given or taken away.
     StarWorkspace(String, bool),
-    /// *Update*: the workspace of this name takes the windows open now.
-    UpdateWorkspace(String),
+    /// *Update*: the workspace of this name takes the windows open now; with
+    /// the flag, the layout it names takes the arrangement of now too.
+    UpdateWorkspace(String, bool),
     /// *Save new* as a workspace: the windows open now under a name, with
     /// the layout in use and the Inventory folder windows when asked.
     SaveWorkspace(String, super::apply::Keep),

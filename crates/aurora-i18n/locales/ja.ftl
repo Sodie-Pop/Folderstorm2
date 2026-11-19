@@ -2125,6 +2125,7 @@ fs-workspaces-save-new = 新しいワークスペースとして保存
 fs-workspaces-save = ワークスペースを保存
 fs-workspaces-ask-update = ワークスペース「{ $name }」のウィンドウを、今開いているウィンドウで置き換えますか？
 fs-workspaces-ask-delete = ワークスペース「{ $name }」を削除しますか？
+fs-workspaces-update-layout = レイアウト「{ $name }」も更新する
 fs-workspaces-update-help = 今開いているウィンドウをワークスペースに保存します。レイアウトの指定はそのままです。実行前に確認します。
 fs-workspaces-error-empty = ワークスペースに名前を付けてください。
 fs-workspaces-error-taken = 同じ名前のワークスペースがすでにあります。
