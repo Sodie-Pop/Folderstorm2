@@ -232,7 +232,7 @@ folderstorm_desktop: {
   shortcuts_on: bool,          # absent = off
   size: "small" | "medium" | "large",
   single_click: bool,
-  taskbar: { on: bool, slot: null | u8, all_windows: bool },  # absent = collapsed windows only
+  taskbar: { on: bool, slot: null | u8, all_windows: bool },  # absent = every open window
   accounts: {                  # one desktop for each account
     "<account uuid>": {
       next_id: u32,
@@ -633,8 +633,9 @@ What the build changed against the sections above, and what it found.
   Aurora's work area, less the world. So "a cell under a bar" never
   exists; a blocked cell is one outside the grid (the window got smaller,
   or the world moved), and the shortcut is shown in the nearest free cell.
-- **The record's taskbar field** is `all_windows` (absent: the collapsed
-  windows only), after the main session's change of the default.
+- **The record's taskbar field** is `all_windows` (absent: every open
+  window, the default since 2026-11-19 at the human's request; only
+  `false`, collapsed windows only, is written).
 - **In the record but without a control yet**: `single_click` (honoured by
   the surface, its switch comes with checkpoint 3), `name` and `icon`
   (shown when set; the demo sets them; edited with checkpoint 3), a folder
