@@ -12,7 +12,7 @@ use std::time::Duration;
 // Folderstorm2 with Aurora Viewer.
 pub const RELEASES: &str = folderstorm_brand::RELEASES_API;
 pub const RELEASE_PAGE: &str = folderstorm_brand::RELEASES_PAGE;
-const DOWNLOADS: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases/download";
+const DOWNLOADS: &str = folderstorm_brand::RELEASES_DOWNLOAD;
 pub const POLICY: &str = "aurora-update-policy.json";
 pub const MAX_ARCHIVE: u64 = 2 * 1024 * 1024 * 1024;
 /// How long an installation below a new minimum may still sign in, when
@@ -278,10 +278,11 @@ pub fn version(value: &str) -> Option<Version> {
 /// the Windows ZIP, or the Linux tar.gz. macOS installs its application by
 /// hand, so a release offers it no package to install.
 fn package_name(tag: &str) -> Option<String> {
+    let prefix = folderstorm_brand::RELEASE_PREFIX; // Folderstorm: the fork's asset names
     if cfg!(windows) {
-        Some(format!("Aurora-Viewer-{tag}-windows-x64.zip"))
+        Some(format!("{prefix}-{tag}-windows-x64.zip"))
     } else if cfg!(target_os = "linux") {
-        Some(format!("Aurora-Viewer-{tag}-linux-x64.tar.gz"))
+        Some(format!("{prefix}-{tag}-linux-x64.tar.gz"))
     } else {
         None
     }
@@ -395,10 +396,11 @@ mod tests {
     #[test]
     fn the_package_of_this_system_is_the_one_the_release_publishes() {
         let name = package_name("v0.9.0");
+        let prefix = folderstorm_brand::RELEASE_PREFIX; // Folderstorm: the fork's asset names
         if cfg!(windows) {
-            assert_eq!(name.as_deref(), Some("Aurora-Viewer-v0.9.0-windows-x64.zip"));
+            assert_eq!(name, Some(format!("{prefix}-v0.9.0-windows-x64.zip")));
         } else if cfg!(target_os = "linux") {
-            assert_eq!(name.as_deref(), Some("Aurora-Viewer-v0.9.0-linux-x64.tar.gz"));
+            assert_eq!(name, Some(format!("{prefix}-v0.9.0-linux-x64.tar.gz")));
         } else {
             // macOS: installed by hand, no package to install
             assert_eq!(name, None);

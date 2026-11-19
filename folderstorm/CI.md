@@ -57,7 +57,8 @@ Inputs: an optional version label (used in file names only; the version inside
 the viewer stays the one Git describes) and the platforms (Windows only by
 default; "windows and linux" adds a Linux job). The artifact
 `<slug>-<label>-<commit>-windows-x64` holds a zip and its `.sha256`: the two
-executables, `aurora-install.json`, `LICENSE`, `NOTICE.md`, `README.md` and the
+executables (the viewer renamed `Folderstorm2.exe`, see BRANDING.md, and
+`folderstorm-mcp.exe`), `aurora-install.json`, `LICENSE`, `NOTICE.md`, `README.md` and the
 licences of the bundled emoji font and spelling dictionaries (the files of
 upstream's `scripts/package.ps1`, through `folderstorm/scripts/package-release.ps1`,
 which accepts Folderstorm2's `--version` output). The slug comes from
