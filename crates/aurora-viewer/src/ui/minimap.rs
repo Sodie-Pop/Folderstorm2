@@ -552,8 +552,8 @@ mod name_format_tests {
         }
 
         // The simulator no longer draws this resident. Folderstorm: their coarse
-        // dot is named by the cached display name, as in the Legacy Viewer,
-        // but the map never marks them.
+        // dot is named by the cached display name and can be marked, as in
+        // the Legacy Viewer, unless RLVa hides names.
         world.objects.remove_idx(known_index);
         world.social.names.insert(known, "John Smith".into());
         world.coarse.insert(1, vec![(known, Vec3::new(1.0, 2.0, 3.0))]);
