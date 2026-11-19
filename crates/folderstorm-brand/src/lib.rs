@@ -112,6 +112,16 @@ pub const SESSION_HOST_LOCK: &str = "session-host.lock";
 pub const REPOSITORY: &str = "Sodie-Pop/Folderstorm2";
 pub const GITHUB: &str = "https://github.com/Sodie-Pop/Folderstorm2";
 pub const NEW_ISSUE: &str = "https://github.com/Sodie-Pop/Folderstorm2/issues/new";
+/// Where "Report a bug" leads (login screen, top bar, Help menu): the bug
+/// tracker on the maintainer's own server, as Folderstorm (C++) had. Not a
+/// GitHub link: the crash window still files its reports as GitHub issues.
+pub const BUG_REPORTS: &str = "https://folderstorm.com/bugs/";
+/// The maintainer's website (About window, login screen).
+pub const WEBSITE: &str = "https://folderstorm.com";
+/// The help pages: Help menu, first entry.
+pub const HELP: &str = "https://folderstorm.com/help/";
+/// The privacy policy: Preferences › Privacy › Your data.
+pub const PRIVACY: &str = "https://folderstorm.com/privacy";
 pub const RELEASES_PAGE: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases";
 pub const RELEASES_API: &str = "https://api.github.com/repos/Sodie-Pop/Folderstorm2/releases?per_page=100";
 /// Where the media plugins pack (CEF, LibVLC or GStreamer) is downloaded
@@ -162,6 +172,22 @@ mod tests {
         }
         // a link never reaches the session host's pipes, nor the reverse
         assert!(!SESSION_PIPE_PREFIX.starts_with(SLURL_PIPE_PREFIX) && !SLURL_PIPE_PREFIX.starts_with(SESSION_PIPE_PREFIX));
+    }
+
+    #[test]
+    fn bug_reports_go_to_the_maintainers_server() {
+        assert_eq!(BUG_REPORTS, "https://folderstorm.com/bugs/");
+        assert!(BUG_REPORTS.starts_with("https://") && !BUG_REPORTS.contains("github.com"));
+    }
+
+    #[test]
+    fn website_help_and_privacy_are_on_the_maintainers_site() {
+        assert_eq!(WEBSITE, "https://folderstorm.com");
+        assert_eq!(HELP, "https://folderstorm.com/help/");
+        assert_eq!(PRIVACY, "https://folderstorm.com/privacy");
+        for link in [WEBSITE, HELP, PRIVACY, BUG_REPORTS] {
+            assert!(link.starts_with(WEBSITE), "{link}");
+        }
     }
 
     #[test]

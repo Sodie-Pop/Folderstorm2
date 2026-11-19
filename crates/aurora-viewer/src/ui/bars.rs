@@ -1629,7 +1629,13 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         // The grid's help shows only when the grid info gives a help page
         // (update_grid_help, llviewermenu.cpp).
         use super::context::{CtxAction, request};
-        if menu::item(ui, p, "book-filled", aurora_i18n::tr!("ui-bars-wiki")) {
+        // Folderstorm: "{ product } Help", opening the maintainer's help pages
+        if menu::item(
+            ui,
+            p,
+            "book-filled",
+            &aurora_i18n::tr!("folderstorm-help-menu", product = folderstorm_brand::PRODUCT),
+        ) {
             request(ui.ctx(), CtxAction::OpenUrl(crate::links::WIKI.into()));
         }
         if let Some(help) = &st.grid_help

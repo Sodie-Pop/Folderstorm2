@@ -6488,6 +6488,8 @@ folderstorm-settings-updates-where = ビューアーの環境設定で
 folderstorm-settings-updates-line = 新しいバージョンとそのチャンネル：「{ $page }」ページ。
 folderstorm-settings-crash-line = クラッシュレポート：「{ $page }」ページ。
 folderstorm-settings-bug-line = バグを報告するには：ビューアーのヘルプメニューまたはログイン画面の「{ $item }」。
+folderstorm-help-menu = { $product } ヘルプ
+folderstorm-privacy-policy-hint = { $product } が何を誰に送信し、このコンピュータに何を保存するか。
 folderstorm-settings-updates-note = ホストとキャラクターは一つのプログラムです。ビューアーで選んだ設定はホストにも適用されます。
 
 ## Folderstorm: the session host's MCP controller (folderstorm/plans/mcp-routing.md)

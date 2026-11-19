@@ -5,19 +5,21 @@
 /// Source code repository (GitHub page).
 // Folderstorm: the fork's repository
 pub const GITHUB: &str = folderstorm_brand::GITHUB;
-/// Issue template chooser, opened in the browser by "Report a bug" (login
-/// screen, top bar, Help menu) and by the crash window.
-// Folderstorm: the fork's issues
-pub const NEW_ISSUE: &str = folderstorm_brand::NEW_ISSUE;
-/// The project's wiki, generated from the guides of `docs/`
-/// (`scripts/build-wiki.ps1`): Help › Aurora Viewer wiki.
-pub const WIKI: &str = "https://github.com/Aurora-Viewer/Aurora-Viewer/wiki";
+/// Bug tracker, opened in the browser by "Report a bug" (login screen, top
+/// bar, Help menu). The crash window has its own GitHub route.
+// Folderstorm: the maintainer's bug tracker, not GitHub issues
+pub const NEW_ISSUE: &str = folderstorm_brand::BUG_REPORTS;
+/// The help pages: Help › first entry.
+// Folderstorm: the maintainer's help pages, not Aurora's wiki
+pub const WIKI: &str = folderstorm_brand::HELP;
 /// Community Discord invite.
 pub const DISCORD: &str = "https://discord.gg/TK4nbMGmKt";
 /// Project website.
-pub const WEBSITE: &str = "https://aurora-viewer.org";
+// Folderstorm: the maintainer's website
+pub const WEBSITE: &str = folderstorm_brand::WEBSITE;
 /// The privacy policy on the website (Preferences › Privacy › Your data).
-pub const PRIVACY_POLICY: &str = "https://aurora-viewer.org/privacy/";
+// Folderstorm: the maintainer's privacy policy
+pub const PRIVACY_POLICY: &str = folderstorm_brand::PRIVACY;
 /// News feed: this folder of `main`, hand-edited Markdown files, one
 /// `<language>.md` per UI language (`news/` at the repository root). The
 /// viewer keeps what it read in its cache as a JSON array of
@@ -26,3 +28,20 @@ pub const NEWS_FEED: &str = "https://raw.githubusercontent.com/Aurora-Viewer/Aur
 /// Files of the source repository as GitHub serves them unrendered; a branch
 /// name and a path follow.
 pub const RAW_FILES: &str = "https://raw.githubusercontent.com/Aurora-Viewer/Aurora-Viewer/";
+
+#[cfg(test)]
+mod tests {
+    // Folderstorm: "Report a bug" opens the brand's bug tracker address.
+    #[test]
+    fn report_a_bug_opens_the_bug_tracker() {
+        assert_eq!(super::NEW_ISSUE, folderstorm_brand::BUG_REPORTS);
+    }
+
+    // Folderstorm: website, help and privacy policy are the brand's.
+    #[test]
+    fn website_help_and_privacy_come_from_the_brand() {
+        assert_eq!(super::WEBSITE, folderstorm_brand::WEBSITE);
+        assert_eq!(super::WIKI, folderstorm_brand::HELP);
+        assert_eq!(super::PRIVACY_POLICY, folderstorm_brand::PRIVACY);
+    }
+}
