@@ -19,15 +19,30 @@
 //!   [`RELEASE_WAIT`]), and while it waits the viewer draws a frame itself
 //!   when none came for [`DRAW_AFTER`], and draws at [`RELEASE_FPS`] at
 //!   least: the texture pages are emptied and destroyed a few per frame.
+//!   It is done once the textures and the texture table say so **and** the
+//!   texture pages have not dropped for [`PLATEAU`] ([`Plateau`]): the
+//!   table can look settled between two of its eager compaction passes
+//!   while spare pages and the compaction still free memory. The pages are
+//!   never required to reach the textures' target: fixed-size textures
+//!   (HUDs, sculpts, terrain) are never lowered.
 //!   A window that still has the keyboard is not minimised: the host's
 //!   switch through the bar or a hotkey reaches it before the character
 //!   brought forward has taken the keyboard, and it waits for that.
+//! - **Hibernation** ([`Waiting`], [`hibernation`]): a third way to wait,
+//!   after Economy (`folderstorm/plans/deep-sleep.md`). Once minimised by
+//!   Economy's release, and after the host's grace
+//!   ([`DEFAULT_HIBERNATE_AFTER_S`]), the viewer lets go of its whole
+//!   renderer; chat, messages and the local assistant go on. On the wire
+//!   and in the settings file it is Economy plus a `hibernate` word, so an
+//!   older peer reads Economy. Only an Economy character fully released
+//!   hibernates (behind, no monitor on screen); one that holds the voice
+//!   or is heard in the background stays in Economy ([`Fallback`]).
 //! - **A monitor's picture** ([`monitor_viewport`]): a watched window
 //!   draws its world at the picture's size, so that a picture never makes
 //!   the window's full-size render targets again (twice per picture
 //!   before, plan section 3.5).
 
-use crate::ipc::{MAX_SLOTS, Memory, Release};
+use crate::ipc::{MAX_SLOTS, Memory, Release, Standby};
 use crate::monitor;
 use std::time::{Duration, Instant};
 
@@ -49,9 +64,106 @@ pub const WATCHED_ECONOMY_MB: u32 = 512;
 /// each change would be an assignment sent again.
 pub const RESERVE_STEP_MB: u32 = 256;
 
+/// Hibernation's grace: seconds a character waits minimised before its
+/// viewer lets go of its renderer (the host's setting, "Hibernate after").
+/// A quick flip back costs only an Economy return, and the outgoing
+/// character's teardown does not overlap the incoming one's wake.
+pub const DEFAULT_HIBERNATE_AFTER_S: u32 = 20;
+pub const MIN_HIBERNATE_AFTER_S: u32 = 5;
+pub const MAX_HIBERNATE_AFTER_S: u32 = 600;
+
+/// The grace as the host keeps it: within its choices.
+pub fn clamp_hibernate_after(seconds: u32) -> u32 {
+    seconds.clamp(MIN_HIBERNATE_AFTER_S, MAX_HIBERNATE_AFTER_S)
+}
+
+/// How a character waits while another one is active, as the host's
+/// interface offers it. Hibernation travels and is saved as Economy plus a
+/// word ([`Waiting::standby`], [`Waiting::hibernate`]): no new
+/// [`Standby`] variant, which an older peer would refuse.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Waiting {
+    /// Behind the active window: the quickest switch.
+    #[default]
+    Warm,
+    /// Minimised once its video memory is given back.
+    Economy,
+    /// As Economy, then after the grace its viewer lets go of its renderer
+    /// and all its video memory; coming back is like a short teleport.
+    Hibernation,
+}
+
+impl Waiting {
+    pub const ALL: [Waiting; 3] = [Waiting::Warm, Waiting::Economy, Waiting::Hibernation];
+
+    /// From what the settings file or an assignment holds: `hibernate`
+    /// means something only with Economy.
+    pub fn from_parts(standby: Standby, hibernate: bool) -> Self {
+        match standby {
+            Standby::Warm => Self::Warm,
+            Standby::Economy if hibernate => Self::Hibernation,
+            Standby::Economy => Self::Economy,
+        }
+    }
+
+    /// The standby an older peer reads.
+    pub fn standby(self) -> Standby {
+        match self {
+            Self::Warm => Standby::Warm,
+            Self::Economy | Self::Hibernation => Standby::Economy,
+        }
+    }
+
+    pub fn hibernate(self) -> bool {
+        self == Self::Hibernation
+    }
+}
+
+/// Why a character that chose Hibernation stays in Economy for now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fallback {
+    /// It holds the voice (the voice stays with it while behind): its
+    /// viewer must keep its session's voice and sound going.
+    Voice,
+    /// It is heard in the background ("Heard in the background" and the
+    /// background not cut): its sounds come with the world.
+    Heard,
+}
+
+/// The fallbacks the host can see, in order (None: it may hibernate).
+pub fn hibernation_fallback(holds_voice: bool, heard: bool) -> Option<Fallback> {
+    if holds_voice {
+        Some(Fallback::Voice)
+    } else if heard {
+        Some(Fallback::Heard)
+    } else {
+        None
+    }
+}
+
+/// Hibernation's word on a background character's memory: only an
+/// Economy character fully released (behind, no monitor on screen) that
+/// may hibernate (`hibernate`: chosen, and no [`Fallback`]); `after_s`
+/// the host's grace.
+pub fn hibernation(memory: Memory, hibernate: bool, after_s: u32) -> Memory {
+    let hibernate = hibernate && memory.release == Release::Full;
+    Memory {
+        hibernate,
+        hibernate_after_s: if hibernate { clamp_hibernate_after(after_s) } else { 0 },
+        ..memory
+    }
+}
+
 /// Longest wait for Economy's release before the window is minimised
-/// anyway.
-pub const RELEASE_WAIT: Duration = Duration::from_secs(5);
+/// anyway: the texture pages go back over several seconds (a spare page
+/// after 2 s, a compaction pass a second), and [`Plateau`] waits for them.
+pub const RELEASE_WAIT: Duration = Duration::from_secs(10);
+/// Economy's release is done only once the texture pages have not dropped
+/// for this long.
+pub const PLATEAU: Duration = Duration::from_secs(1);
+/// The texture pages are logged again this long after the minimise, to see
+/// what went back after it.
+pub const PAGES_AFTER_MINIMISE: Duration = Duration::from_secs(10);
 /// During the release, a frame is drawn by the viewer itself when the
 /// window got none for this long.
 pub const DRAW_AFTER: Duration = Duration::from_millis(500);
@@ -85,6 +197,8 @@ pub struct Character {
     /// Megabytes of video memory its viewer last said it holds (0: not
     /// said yet).
     pub held_mb: u32,
+    /// It chose Hibernation and no [`Fallback`] keeps it in Economy.
+    pub hibernate: bool,
 }
 
 /// A background character's share and release: `setting` is the user's
@@ -94,18 +208,18 @@ pub fn background(setting: u32, economy: bool, watched: bool) -> Memory {
     match (economy, watched) {
         (false, _) => Memory {
             share_mb: setting,
-            reserved_mb: 0,
             release: Release::Keep,
+            ..Memory::default()
         },
         (true, true) => Memory {
             share_mb: setting.min(WATCHED_ECONOMY_MB),
-            reserved_mb: 0,
             release: Release::Lowered,
+            ..Memory::default()
         },
         (true, false) => Memory {
             share_mb: setting,
-            reserved_mb: 0,
             release: Release::Full,
+            ..Memory::default()
         },
     }
 }
@@ -122,15 +236,16 @@ fn room(memory: Memory, held_mb: u32) -> u32 {
 }
 
 /// Each running character's memory (None: no character, or not running):
-/// the active one keeps what the others leave, they hold their share.
-pub fn shares(setting: u32, characters: &[Option<Character>; MAX_SLOTS]) -> [Option<Memory>; MAX_SLOTS] {
+/// the active one keeps what the others leave, they hold their share;
+/// `hibernate_after_s`: the grace said to those that hibernate.
+pub fn shares(setting: u32, hibernate_after_s: u32, characters: &[Option<Character>; MAX_SLOTS]) -> [Option<Memory>; MAX_SLOTS] {
     let mut memories = [None; MAX_SLOTS];
     let mut room_mb: u64 = 0;
     for (memory, c) in memories.iter_mut().zip(characters) {
         let Some(c) = c.filter(|c| !c.active) else {
             continue;
         };
-        let m = background(setting, c.economy, c.watched);
+        let m = hibernation(background(setting, c.economy, c.watched), c.hibernate, hibernate_after_s);
         room_mb += u64::from(room(m, c.held_mb));
         *memory = Some(m);
     }
@@ -142,6 +257,7 @@ pub fn shares(setting: u32, characters: &[Option<Character>; MAX_SLOTS]) -> [Opt
                 share_mb: 0,
                 reserved_mb: u32::try_from(reserved).unwrap_or(u32::MAX),
                 release: Release::Keep,
+                ..Memory::default()
             });
         }
     }
@@ -228,6 +344,34 @@ impl Releasing {
     }
 }
 
+/// Whether a figure that only goes down (the texture pages during
+/// Economy's release) has stopped going down: no drop for [`PLATEAU`].
+/// A rise is not a drop, but the next fall from it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Plateau {
+    /// The last figure seen, and when it last dropped (or was first seen).
+    last: Option<(u64, Instant)>,
+}
+
+impl Plateau {
+    /// Start over (a new release, or the release starting again once the
+    /// keyboard left).
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    /// At each turn: `bytes` the figure now. True once it has not dropped
+    /// for [`PLATEAU`] (counted from the first figure seen).
+    pub fn observe(&mut self, now: Instant, bytes: u64) -> bool {
+        let since = match self.last {
+            Some((last, since)) if bytes >= last => since,
+            _ => now,
+        };
+        self.last = Some((bytes, since));
+        now.saturating_duration_since(since) >= PLATEAU
+    }
+}
+
 /// Where a watched background window draws its world (`base`: the world's
 /// part of the window, `[x, y, width, height]`): a rectangle of the
 /// monitor's picture size in its middle, the picture then drawn at the
@@ -253,6 +397,7 @@ mod tests {
             economy,
             watched,
             held_mb,
+            hibernate: false,
         })
     }
 
@@ -295,7 +440,7 @@ mod tests {
         list[3] = character(false, true, false, 400);
         // watched economy, 100 MB of its 512: 412 left
         list[4] = character(false, true, true, 100);
-        let m = shares(1024, &list);
+        let m = shares(1024, DEFAULT_HIBERNATE_AFTER_S, &list);
         let active = m[0].expect("the active one");
         assert_eq!(active.share_mb, 0, "no share: it keeps the rest");
         // 724 + 412 = 1136, said in steps of 256
@@ -314,18 +459,21 @@ mod tests {
         let mut list = [None; MAX_SLOTS];
         list[1] = character(true, false, false, 0);
         list[3] = character(false, false, false, 0);
-        let m = shares(768, &list);
+        let m = shares(768, DEFAULT_HIBERNATE_AFTER_S, &list);
         assert_eq!(m[1].map(|m| m.reserved_mb), Some(768));
         assert_eq!(m[0], None);
         assert_eq!(m[2], None);
         // alone, nothing is left aside
         let mut alone = [None; MAX_SLOTS];
         alone[0] = character(true, true, false, 100);
-        assert_eq!(shares(1024, &alone)[0].map(|m| m.reserved_mb), Some(0));
+        assert_eq!(shares(1024, DEFAULT_HIBERNATE_AFTER_S, &alone)[0].map(|m| m.reserved_mb), Some(0));
         // no active character: the others still get their share
         let mut none = [None; MAX_SLOTS];
         none[2] = character(false, true, false, 0);
-        assert_eq!(shares(1024, &none)[2].map(|m| m.release), Some(Release::Full));
+        assert_eq!(
+            shares(1024, DEFAULT_HIBERNATE_AFTER_S, &none)[2].map(|m| m.release),
+            Some(Release::Full)
+        );
     }
 
     #[test]
@@ -333,9 +481,79 @@ mod tests {
         let mut list = [None; MAX_SLOTS];
         list[0] = character(true, false, false, 4000);
         list[1] = character(false, false, false, 600);
-        let first = shares(1024, &list)[0];
+        let first = shares(1024, DEFAULT_HIBERNATE_AFTER_S, &list)[0];
         list[1] = character(false, false, false, 630);
-        assert_eq!(shares(1024, &list)[0], first, "30 MB more held: the same room said");
+        assert_eq!(
+            shares(1024, DEFAULT_HIBERNATE_AFTER_S, &list)[0],
+            first,
+            "30 MB more held: the same room said"
+        );
+    }
+
+    #[test]
+    fn hibernation_is_economy_with_a_word_both_ways() {
+        for waiting in Waiting::ALL {
+            assert_eq!(Waiting::from_parts(waiting.standby(), waiting.hibernate()), waiting);
+        }
+        assert_eq!(Waiting::Hibernation.standby(), Standby::Economy, "an older peer reads Economy");
+        assert_eq!(Waiting::from_parts(Standby::Economy, false), Waiting::Economy);
+        // the word means nothing with Warm
+        assert_eq!(Waiting::from_parts(Standby::Warm, true), Waiting::Warm);
+        assert_eq!(Waiting::default(), Waiting::Warm);
+    }
+
+    #[test]
+    fn the_grace_keeps_to_its_choices() {
+        assert_eq!(clamp_hibernate_after(0), MIN_HIBERNATE_AFTER_S);
+        assert_eq!(clamp_hibernate_after(20), 20);
+        assert_eq!(clamp_hibernate_after(100_000), MAX_HIBERNATE_AFTER_S);
+        assert!((MIN_HIBERNATE_AFTER_S..=MAX_HIBERNATE_AFTER_S).contains(&DEFAULT_HIBERNATE_AFTER_S));
+        assert_eq!((MIN_HIBERNATE_AFTER_S, MAX_HIBERNATE_AFTER_S), (5, 600), "5 s to 10 min");
+    }
+
+    #[test]
+    fn only_a_released_economy_character_without_a_fallback_hibernates() {
+        let full = background(1024, true, false);
+        let h = hibernation(full, true, 30);
+        assert!(h.hibernate);
+        assert_eq!(h.hibernate_after_s, 30);
+        assert_eq!((h.share_mb, h.release), (full.share_mb, full.release), "otherwise Economy");
+        // the grace within its choices
+        assert_eq!(hibernation(full, true, 1).hibernate_after_s, MIN_HIBERNATE_AFTER_S);
+        // not chosen, or kept by a fallback: Economy, nothing said
+        assert_eq!(hibernation(full, false, 30), full);
+        // watched (its window stays behind for the pictures), or Warm
+        let watched = background(1024, true, true);
+        assert_eq!(hibernation(watched, true, 30), watched);
+        let warm = background(1024, false, false);
+        assert_eq!(hibernation(warm, true, 30), warm);
+        // the fallbacks the host sees
+        assert_eq!(hibernation_fallback(false, false), None);
+        assert_eq!(hibernation_fallback(true, false), Some(Fallback::Voice));
+        assert_eq!(hibernation_fallback(false, true), Some(Fallback::Heard));
+        assert_eq!(hibernation_fallback(true, true), Some(Fallback::Voice));
+        // through the shares: the active character never hibernates
+        let mut list = [None; MAX_SLOTS];
+        list[0] = Some(Character {
+            active: true,
+            hibernate: true,
+            ..Character::default()
+        });
+        list[1] = Some(Character {
+            economy: true,
+            hibernate: true,
+            ..Character::default()
+        });
+        list[2] = Some(Character {
+            economy: true,
+            watched: true,
+            hibernate: true,
+            ..Character::default()
+        });
+        let m = shares(1024, 45, &list);
+        assert_eq!(m[0].map(|m| m.hibernate), Some(false));
+        assert_eq!(m[1].map(|m| (m.hibernate, m.hibernate_after_s)), Some((true, 45)));
+        assert_eq!(m[2].map(|m| m.hibernate), Some(false));
     }
 
     #[test]
@@ -402,6 +620,43 @@ mod tests {
         r.start(t0, 0);
         r.cancel();
         assert_eq!(r.poll(t0 + RELEASE_WAIT, 7, true, false), Step::Idle);
+    }
+
+    #[test]
+    fn the_pages_are_settled_once_they_stopped_dropping_for_a_second() {
+        let t0 = Instant::now();
+        let ms = Duration::from_millis;
+        let mut p = Plateau::default();
+        // the first figure starts the count
+        assert!(!p.observe(t0, 900));
+        assert!(!p.observe(t0 + ms(500), 900));
+        // still dropping: the count starts again from each drop
+        assert!(!p.observe(t0 + ms(900), 800));
+        assert!(!p.observe(t0 + ms(1500), 800));
+        assert!(!p.observe(t0 + ms(1800), 700));
+        assert!(!p.observe(t0 + ms(2700), 700));
+        assert!(p.observe(t0 + ms(2800), 700), "a second without a drop");
+        assert!(p.observe(t0 + ms(4000), 700));
+        // a rise is no drop, but a fall from it is
+        assert!(p.observe(t0 + ms(4100), 750));
+        assert!(!p.observe(t0 + ms(4200), 720));
+        assert!(p.observe(t0 + ms(5200), 720));
+        // pages that never reach the target (fixed-size textures) still
+        // settle: nothing asks them to go under anything
+        let mut fixed = Plateau::default();
+        assert!(!fixed.observe(t0, 435));
+        assert!(fixed.observe(t0 + PLATEAU, 435));
+        // started over: the count with it
+        fixed.reset();
+        assert!(!fixed.observe(t0 + PLATEAU * 2, 435));
+        assert!(fixed.observe(t0 + PLATEAU * 3, 435));
+    }
+
+    #[test]
+    fn the_release_waits_longer_than_the_pages_plateau() {
+        // a compaction a second and a spare page after 2 s fit in the wait
+        const { assert!(RELEASE_WAIT.as_millis() >= 4 * PLATEAU.as_millis()) };
+        const { assert!(PAGES_AFTER_MINIMISE.as_millis() >= RELEASE_WAIT.as_millis()) };
     }
 
     #[test]

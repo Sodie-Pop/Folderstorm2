@@ -6,7 +6,9 @@
 //! graphics or closing (R4, R5). The decisions themselves are the
 //! `folderstorm-session` crate's pure functions. The shared chat's side of
 //! a managed viewer is in `folderstorm_characters/chat.rs`, a background
-//! character's alert sounds in `folderstorm_characters/alerts.rs`.
+//! character's alert sounds in `folderstorm_characters/alerts.rs`,
+//! Hibernation (the renderer let go while minimised) in
+//! `folderstorm_characters/sleep.rs`.
 
 mod alerts;
 mod bar;
@@ -14,6 +16,7 @@ mod chat;
 mod gpu_diag;
 mod memory;
 mod monitor;
+mod sleep;
 
 use super::*;
 use crate::folderstorm_characters::managed::Event as HostEvent;
@@ -46,9 +49,19 @@ impl App {
     /// without the keyboard there (the background cap in front, a loss in
     /// front left to wait).
     fn folderstorm_focused(&self) -> bool {
-        let window = self.gfx.as_ref().map(|g| g.window.has_focus());
+        let window = self.folderstorm_window().map(|w| w.has_focus());
         let window = crate::folderstorm_characters::window_focus(&self.folderstorm_characters.window_focus, window);
         gpu::has_keyboard(self.focused, window)
+    }
+
+    /// The window: the renderer's, or the one kept without a renderer while
+    /// hibernating (`folderstorm_characters/sleep.rs`). Every window access
+    /// of the session's glue goes through it.
+    fn folderstorm_window(&self) -> Option<&Arc<Window>> {
+        self.gfx
+            .as_ref()
+            .map(|g| &g.window)
+            .or(self.folderstorm_characters.sleep.asleep.as_ref().map(|a| &a.window))
     }
 
     /// `AURORA_DEMO_SESSION_BEHIND`: another Folderstorm2 window counts as
@@ -139,9 +152,10 @@ impl App {
             return false;
         }
         log::info!("profile: launched again, the window comes forward");
-        if let Some(g) = &self.gfx {
-            g.window.set_minimized(false);
-            crate::folderstorm_characters::foreground::bring_forward(&g.window);
+        // (a hibernating window wakes once restored)
+        if let Some(window) = self.folderstorm_window() {
+            window.set_minimized(false);
+            crate::folderstorm_characters::foreground::bring_forward(window);
         }
         true
     }
@@ -302,6 +316,9 @@ impl App {
             }
         }
         self.folderstorm_memory_pump(event_loop);
+        // (Hibernation: also once the host is gone, a sleeping window wakes
+        // when it is restored)
+        self.folderstorm_sleep_pump(event_loop);
         // (also once the host is gone: the window is as any window again)
         self.folderstorm_taskbar(Instant::now());
         if !self.folderstorm_characters.managed.linked() {
@@ -336,10 +353,10 @@ impl App {
     /// The host brings this character forward: restored, on the stage when
     /// there is one, then focused.
     fn folderstorm_show(&mut self, stage: Option<ipc::Stage>) {
-        let Some(g) = &self.gfx else {
+        let Some(window) = self.folderstorm_window().cloned() else {
             return;
         };
-        let window = &g.window;
+        let window: &Window = &window;
         window.set_minimized(false);
         // (a full-screen window, a capture and a forced size keep their place)
         let placed = window.fullscreen().is_none() && self.capture.is_none() && forced_window_size().is_none();
@@ -379,38 +396,38 @@ impl App {
         }
         let focused = self.folderstorm_focused();
         let state = &self.folderstorm_characters;
-        let (screen, window, gpu) = match &self.gfx {
+        // (hibernating, the window is there without a renderer: not a
+        // viewer starting)
+        let hibernating = self.folderstorm_asleep();
+        let (screen, window, gpu) = match self.folderstorm_window() {
             None => (ipc::Screen::Starting, ipc::WindowState::default(), ipc::Gpu::Ok),
-            Some(g) => {
+            Some(w) => {
                 let screen = match self.screen {
                     Screen::Login => ipc::Screen::Login,
                     Screen::Loading { .. } => ipc::Screen::Loading,
                     Screen::World => ipc::Screen::World,
                 };
-                let minimised = g.window.is_minimized().unwrap_or(false);
-                let rect = (!minimised).then(|| g.window.outer_position().ok()).flatten().map(|at| {
-                    let size = g.window.outer_size();
+                let minimised = w.is_minimized().unwrap_or(false);
+                let rect = (!minimised).then(|| w.outer_position().ok()).flatten().map(|at| {
+                    let size = w.outer_size();
                     ipc::Stage {
                         x: at.x,
                         y: at.y,
                         width: size.width,
                         height: size.height,
-                        maximised: g.window.is_maximized(),
+                        maximised: w.is_maximized(),
                     }
                 });
                 let window = ipc::WindowState {
                     rect,
                     minimised,
-                    fullscreen: g.window.fullscreen().is_some(),
+                    fullscreen: w.fullscreen().is_some(),
                 };
-                let gpu = if g.renderer.device_lost() {
-                    ipc::Gpu::Lost
-                } else if g.renderer.stalled_for().is_some() {
-                    ipc::Gpu::Stalled
-                } else if self.busy_pause.paused() {
-                    ipc::Gpu::Busy
-                } else {
-                    ipc::Gpu::Ok
+                let gpu = match &self.gfx {
+                    Some(g) if g.renderer.device_lost() => ipc::Gpu::Lost,
+                    Some(g) if g.renderer.stalled_for().is_some() => ipc::Gpu::Stalled,
+                    _ if self.busy_pause.paused() => ipc::Gpu::Busy,
+                    _ => ipc::Gpu::Ok,
                 };
                 (screen, window, gpu)
             }
@@ -451,6 +468,7 @@ impl App {
                 Some(_) => state.monitor.state,
             },
             vram_mb: self.folderstorm_vram_mb(),
+            hibernating,
         }
         .cleaned()
     }

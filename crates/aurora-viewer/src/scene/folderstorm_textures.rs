@@ -135,6 +135,17 @@ impl TextureStreamer {
             && self.wants_passes >= since_passes + 2
             && self.reductions.is_empty()
     }
+
+    /// Hibernation lets the renderer go (`app/folderstorm_characters/sleep.rs`):
+    /// nothing here may hold its device. The uploads waiting are in its
+    /// staging pool, the pool itself goes, and the driver's last reading
+    /// is no longer this viewer's (the host and the instances registry
+    /// read 0). `gpu_reset` gives every texture a slot of the next renderer.
+    pub fn folderstorm_forget_gpu(&mut self) {
+        self.uploads = Default::default();
+        self.staging = None;
+        self.video_usage = 0;
+    }
 }
 
 #[cfg(test)]
@@ -172,6 +183,7 @@ mod tests {
             share_mb: 1024,
             reserved_mb: 0,
             release: Release::Keep,
+            ..Memory::default()
         });
         assert_eq!(warm.share, Some(GB));
         // 600 MB of pages, 1 GB held in all: 424 MB of the rest, 600 left
@@ -190,6 +202,7 @@ mod tests {
             share_mb: 0,
             reserved_mb: 2048,
             release: Release::Keep,
+            ..Memory::default()
         });
         // 10 GB budget less 2 GB left aside: Aurora's target on 8 GB
         // (min(8 - 0.5, 8 * 0.8) = 6.4 GB) less the 1 GB the rest holds
@@ -209,12 +222,14 @@ mod tests {
             share_mb: 1024,
             reserved_mb: 0,
             release: Release::Full,
+            ..Memory::default()
         });
         assert!(full.economy() && !full.held());
         let lowered = Limits::from_host(Memory {
             share_mb: 512,
             reserved_mb: 0,
             release: Release::Lowered,
+            ..Memory::default()
         });
         assert!(lowered.held() && !lowered.economy());
     }
@@ -270,5 +285,16 @@ mod tests {
         assert!(s.drawing_paused(), "left to `press`, which sees the window in front");
         assert!(!s.background.update(t0, true, false, false));
         assert!(!s.drawing_paused());
+    }
+
+    #[test]
+    fn hibernation_leaves_nothing_of_the_renderer_and_no_video_memory_said() {
+        let mut s = TextureStreamer::new(PathBuf::new());
+        s.video_usage = 900 * MB;
+        assert_eq!(s.video_usage(), 900 * MB);
+        s.folderstorm_forget_gpu();
+        assert_eq!(s.video_usage(), 0, "the host and the registry read none");
+        assert!(s.staging.is_none());
+        assert_eq!(s.uploads.len(), 0);
     }
 }

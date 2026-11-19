@@ -41,6 +41,7 @@ impl App {
             }),
             standby: managed.standby().map(|standby| match standby {
                 ipc::Standby::Warm => "warm",
+                ipc::Standby::Economy if managed.memory().hibernate => "hibernation",
                 ipc::Standby::Economy => "economy",
             }),
             in_front: self.folderstorm_in_front(),

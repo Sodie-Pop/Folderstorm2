@@ -269,7 +269,7 @@ mod tests {
         assert!(shows(&drawn, "1 · demo-1") && shows(&drawn, "2 · demo-2"), "{drawn:?}");
         assert!(shows(&drawn, tr!("folderstorm-condensed-off")));
         // what the cards alone hold is not there
-        assert!(!shows(&drawn, tr!("folderstorm-host-intro")) && !shows(&drawn, tr!("folderstorm-host-economy")));
+        assert!(!shows(&drawn, tr!("folderstorm-host-intro")) && !shows(&drawn, tr!("folderstorm-host-waiting")));
         assert!(!shows(&drawn, tr!("folderstorm-host-stage")) && !shows(&drawn, tr!("folderstorm-host-add")));
         // the chat is still beside it
         assert!(shows(&drawn, tr!("folderstorm-chat-all")));

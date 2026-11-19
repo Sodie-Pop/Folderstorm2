@@ -7119,7 +7119,8 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_BACKGROUND_ALERTS=1` (Folderstorm2) | The alert sounds of a background character on for the run (nothing saved), with made-up interface sounds (a short tick, its pitch by sound); outside the session host the window counts as a background character until a click in it and gets a made-up event every 5 s (new conversation, two instant messages of one conversation, two group lines of one group, a conference line, a mention, an inventory offer, a teleport offer), the second line of a conversation held by the quiet time; with `AURORA_DEMO_SESSION_HOST`, the demo viewers inherit it and their background characters sound for the shared chat's demo instant message and teleport offer |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
 | `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
-| `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures, texture pages, 3D targets, GPU culling buffers, reflection probes and shadow atlas back before its window is minimised (also after a switch from the docked bar or a hotkey), a watched Economy character (its monitor's window on screen) stays behind with a small share, each viewer holds the share the host gives it |
+| `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures, texture pages, 3D targets, GPU culling buffers, reflection probes and shadow atlas back before its window is minimised (also after a switch from the docked bar or a hotkey), a watched Economy character (its monitor's window on screen) stays behind with a small share, each viewer holds the share the host gives it; `hibernate,<MB>` puts every demo character in Hibernation instead (Economy plus the renderer let go after the grace, `folderstorm/plans/deep-sleep.md`) |
+| `AURORA_DEMO_HIBERNATE_AFTER=<s>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: the host's "Hibernate after" for the run (5 s to 10 min; 20 s by default), saved in the demo host's settings |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -9250,9 +9251,13 @@ failure. Grid validation and any paid upload are performed by the human.
     the render thread's `GPU culling: N MB of buffers given back …`, and
     `session memory: released after N ms, the window is minimised: A MB
     taken from the driver (was B), texture pages C MB (was D), …, GPU
-    culling G MB back, probes and shadows at their smallest …` (5 s at
+    culling G MB back, probes and shadows at their smallest …` (10 s at
     most; the window draws at 20 frames a second meanwhile, so the texture
-    pages are emptied and destroyed before the minimise). Back to it:
+    pages are emptied and destroyed before the minimise, and the release
+    waits until the texture pages have not dropped for a second), then
+    10 s later `session memory: 10 s after the minimise: texture pages X
+    MB, A MB taken from the driver` (about the pages of the `released
+    after` line: little goes back once minimised). Back to it:
     textures and faces load again within a second or two (`texture memory:
     the window is in front again`), `session memory: the reflection probes
     and the shadows as set again`, and the reflections come back within a
@@ -9279,6 +9284,41 @@ failure. Grid validation and any paid upload are performed by the human.
     again, the window comes back behind`, its window is back behind the
     active one without taking the keyboard, and its pictures come back.
     The same with the cycling monitor's window (`…_MONITORS=cycling`).
+  - **Hibernation** (`folderstorm/plans/deep-sleep.md`, P1):
+    `AURORA_DEMO_SESSION_HOST_MEMORY=hibernate,512` (and
+    `AURORA_DEMO_HIBERNATE_AFTER=<s>`): each card shows "While another is
+    active" with three segments, Warm / Economy / Hibernation (Hibernation
+    picked), its help on hover; the settings' Characters section has the
+    same three segments, Hibernation's help, and "Hibernate after" next to
+    the background characters' video memory (5 s to 10 min, 20 s by
+    default, saved in `session-host.json` as `hibernate_after_s`; the
+    character as `"standby": "Economy", "hibernate": true`). Set "Heard in
+    the background" on a Hibernation character: the section says
+    "Economy for now: this character is heard in the background". On a
+    switch the viewer that leaves logs `session memory: Hibernation asked:
+    Economy's release first, the renderer goes once minimised for the
+    grace`, then Economy's release as above. GPU diagnostics name the
+    standby `hibernation`; the host's MCP controller's
+    `host_background_mode` takes `"mode": "hibernation"` (its Ask window:
+    "Let … hibernate while it waits (Hibernation)").
+  - **Hibernation's sleep and wake** (P2): once minimised for the grace,
+    and at least 30 s in the world, the background viewer logs `session
+    memory: hibernating after N s minimised, renderer dropped in X ms (was
+    A MB taken from the driver)` and its card says "Hibernating"
+    (`session memory: Hibernation waits, Economy for now: <why>` while
+    something keeps it in Economy: just arrived, the voice, heard in the
+    background, VR, `AURORA_GPU_RECOVERY=0`, a photo). While asleep its
+    chat and IMs still reach the host's shared chat. Switch to it (host,
+    bar or hotkey), restore it from the taskbar, Alt-Tab to it, show its
+    monitor, or close it from the taskbar (it wakes to ask): it logs
+    `session memory: waking from Hibernation: <why>`, then `session
+    memory: awake after N s hibernating: renderer X ms`; the interface is
+    back at once, the world loads again as after a short teleport, with
+    no "GPU recovered" notice. Headless on Linux (no GPU): run it under
+    `xvfb-run` with an EWMH window manager (openbox) so that windows
+    really minimise, `VK_ICD_FILENAMES=…/lvp_icd.json`,
+    `AURORA_DEMO_SESSION_HOST=2` and `AURORA_GRAPHICS_PRESET=potato`;
+    software Vulkan takes tens of seconds to make or drop a renderer.
   - **On Windows, with the grid** (the human): Task Manager › Details, add
     the column "Dedicated GPU memory"; log in two or three characters in a
     busy place. Note each viewer's figure with every character in Warm,

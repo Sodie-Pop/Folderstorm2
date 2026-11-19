@@ -57,6 +57,7 @@ fn every_character_behind_holds_the_background_share_and_the_active_one_the_rest
                 share_mb: memory::DEFAULT_BACKGROUND_MB,
                 reserved_mb: 0,
                 release: Release::Keep,
+                ..Memory::default()
             },
             "warm"
         );
@@ -189,4 +190,114 @@ fn the_background_share_is_saved_kept_to_its_choices_and_said_at_once() {
     for word in ["memory", "vram", "video-memory"] {
         assert_eq!(settings::Section::parse(word), Some(settings::Section::Characters));
     }
+}
+
+#[test]
+fn hibernation_is_economy_with_its_word_and_the_grace() {
+    let (mut d, now) = desk(2);
+    start(&mut d, 0, true, now);
+    start(&mut d, 1, false, now);
+    d.take_effects();
+    d.set_waiting(1, memory::Waiting::Hibernation);
+    assert!(d.take_effects().contains(&Effect::Save));
+    let m = memory(&d, 1);
+    assert_eq!((m.release, m.hibernate), (Release::Full, true));
+    assert_eq!(m.hibernate_after_s, memory::DEFAULT_HIBERNATE_AFTER_S);
+    // on the wire it is Economy: an older viewer minimises and releases
+    assert_eq!(d.slot(1).expect("slot").sent.expect("sent").0.standby, Standby::Economy);
+    // the active one never hibernates
+    assert!(!memory(&d, 0).hibernate);
+    // a switch: the one that leaves is minimised as in Economy
+    d.set_waiting(0, memory::Waiting::Hibernation);
+    d.switch(1, now);
+    assert!(minimised(&d.take_effects(), 0));
+    assert!(memory(&d, 0).hibernate);
+    assert!(!memory(&d, 1).hibernate, "now active");
+    // Economy again: the word goes
+    d.set_waiting(0, memory::Waiting::Economy);
+    assert_eq!((memory(&d, 0).release, memory(&d, 0).hibernate), (Release::Full, false));
+    // an older caller's Economy is not Hibernation
+    d.set_waiting(0, memory::Waiting::Hibernation);
+    d.set_standby(0, Standby::Economy);
+    assert_eq!(d.slot(0).expect("slot").waiting(), memory::Waiting::Economy);
+}
+
+#[test]
+fn a_watched_character_or_one_with_a_fallback_stays_in_economy() {
+    let (mut d, now) = desk(2);
+    start(&mut d, 0, true, now);
+    start(&mut d, 1, false, now);
+    d.set_waiting(1, memory::Waiting::Hibernation);
+    // watched by its monitor on screen: behind, never hibernating
+    d.set_monitor(1, Some(Spec::default()));
+    d.monitors_seen([true; MAX_SLOTS], now);
+    assert_eq!((memory(&d, 1).release, memory(&d, 1).hibernate), (Release::Lowered, false));
+    d.set_monitor(1, None);
+    assert!(memory(&d, 1).hibernate);
+    // heard in the background: Economy while it is
+    d.set_sound(1, BackgroundSound::All);
+    assert_eq!(d.hibernation_fallback(1), Some(memory::Fallback::Heard));
+    assert_eq!((memory(&d, 1).release, memory(&d, 1).hibernate), (Release::Full, false));
+    // the background cut: not heard, it may hibernate
+    d.set_mute_background(true);
+    assert_eq!(d.hibernation_fallback(1), None);
+    assert!(memory(&d, 1).hibernate);
+    d.set_mute_background(false);
+    d.set_sound(1, BackgroundSound::Muted);
+    assert!(memory(&d, 1).hibernate);
+    // the voice stays with it behind (the voice does not follow)
+    d.set_voice_follows(false);
+    d.switch(1, now);
+    d.set_waiting(0, memory::Waiting::Hibernation);
+    assert_eq!(d.voice_holder(), Some(0), "the voice stayed with character 1");
+    assert_eq!(d.hibernation_fallback(0), Some(memory::Fallback::Voice));
+    assert_eq!((memory(&d, 0).release, memory(&d, 0).hibernate), (Release::Full, false));
+    // not chosen: no fallback to tell
+    assert_eq!(d.hibernation_fallback(1), None);
+}
+
+#[test]
+fn hibernation_and_its_grace_are_saved_and_an_older_file_reads_economy() {
+    let (mut d, now) = desk(2);
+    start(&mut d, 0, true, now);
+    start(&mut d, 1, false, now);
+    d.set_waiting(1, memory::Waiting::Hibernation);
+    d.take_effects();
+    d.set_hibernate_after_s(45);
+    assert_eq!(d.hibernate_after_s(), 45);
+    let effects = d.take_effects();
+    assert!(effects.contains(&Effect::Save));
+    assert!(effects.iter().any(|e| matches!(e, Effect::Send {
+        slot: 1,
+        message: ToViewer::Assign(a),
+        ..
+    } if a.memory.hibernate_after_s == 45)));
+    d.set_hibernate_after_s(45);
+    assert!(d.take_effects().is_empty(), "the same again: nothing");
+    d.set_hibernate_after_s(1);
+    assert_eq!(d.hibernate_after_s(), memory::MIN_HIBERNATE_AFTER_S);
+    d.set_hibernate_after_s(100_000);
+    assert_eq!(d.hibernate_after_s(), memory::MAX_HIBERNATE_AFTER_S);
+    // the file: Economy and the word, so an older build reads Economy
+    let json = serde_json::to_value(d.config()).expect("json");
+    assert_eq!(json["slots"][1]["standby"], "Economy");
+    assert_eq!(json["slots"][1]["hibernate"], true);
+    assert!(json["slots"][0].get("hibernate").is_none(), "written only when true");
+    assert_eq!(json["hibernate_after_s"], memory::MAX_HIBERNATE_AFTER_S);
+    let read = Desk::new(serde_json::from_value(json.clone()).expect("reads"));
+    assert_eq!(read.slot(1).expect("slot").waiting(), memory::Waiting::Hibernation);
+    assert_eq!(read.hibernate_after_s(), memory::MAX_HIBERNATE_AFTER_S);
+    // a file of before Hibernation: Economy, and the default grace
+    let mut old = json;
+    old["slots"][1].as_object_mut().expect("an object").remove("hibernate");
+    old.as_object_mut().expect("an object").remove("hibernate_after_s");
+    let read = Desk::new(serde_json::from_value(old).expect("reads"));
+    assert_eq!(read.slot(1).expect("slot").waiting(), memory::Waiting::Economy);
+    assert_eq!(read.hibernate_after_s(), memory::DEFAULT_HIBERNATE_AFTER_S);
+    // the word means nothing with Warm
+    let mut warm = serde_json::to_value(Config::demo(1)).expect("json");
+    warm["slots"][0]["hibernate"] = serde_json::json!(true);
+    let read = Desk::new(serde_json::from_value(warm).expect("reads"));
+    assert_eq!(read.slot(0).expect("slot").waiting(), memory::Waiting::Warm);
+    assert!(!read.slot(0).expect("slot").hibernate);
 }

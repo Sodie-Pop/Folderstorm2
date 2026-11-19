@@ -365,7 +365,10 @@ mod tests {
         assert_eq!(done["done"], true);
         assert_eq!(
             asked,
-            Some((Some("Claude Code".to_owned()), rules::Action::Background(Standby::Warm)))
+            Some((
+                Some("Claude Code".to_owned()),
+                rules::Action::Background(::folderstorm_session::memory::Waiting::Warm)
+            ))
         );
         assert_eq!(host.desk.slot(1).expect("demo-2").standby, Standby::Warm);
         // refused in the window

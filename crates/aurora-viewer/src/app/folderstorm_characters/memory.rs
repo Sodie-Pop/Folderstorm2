@@ -11,9 +11,10 @@
 //!   GPU culling buffers go back to their first size and the reflection
 //!   probes and the shadow atlas to their smallest
 //!   (`folderstorm_characters::economy_render`, the settings untouched).
-//!   The window is minimised once the textures are done and the texture
-//!   table has emptied and destroyed its pages, or after
-//!   `memory::RELEASE_WAIT`. While it waits the window draws at
+//!   The window is minimised once the textures are done, the texture
+//!   table has emptied and destroyed its pages and the pages have not
+//!   dropped for `memory::PLATEAU`, or after `memory::RELEASE_WAIT`; the
+//!   pages are logged again `memory::PAGES_AFTER_MINIMISE` later. While it waits the window draws at
 //!   `memory::RELEASE_FPS` at least (`folderstorm_release_cap`), and the
 //!   pump draws a frame itself when the window got none for a while: the
 //!   release never depends on a minimised window's rare frames.
@@ -54,12 +55,13 @@ impl App {
             self.folderstorm_memory_restore();
         }
         // a monitor shows this character again: back behind for its pictures
+        // (a hibernating window wakes once restored, `sleep.rs`)
         if memory.release == Release::Lowered
             && std::mem::take(&mut self.folderstorm_characters.memory.minimised_by_host)
-            && let Some(g) = self.gfx.as_ref().filter(|g| g.window.is_minimized() == Some(true))
+            && let Some(window) = self.folderstorm_window().filter(|w| w.is_minimized() == Some(true))
         {
             log::info!("session memory: a monitor shows this character again, the window comes back behind");
-            crate::folderstorm_characters::foreground::restore_behind(&g.window);
+            crate::folderstorm_characters::foreground::restore_behind(window);
         }
     }
 
@@ -69,6 +71,10 @@ impl App {
     /// once, as before, and never a window with the keyboard.
     pub(super) fn folderstorm_memory_minimise(&mut self) {
         if self.folderstorm_characters.managed.role() == Some(Role::Active) {
+            return;
+        }
+        if self.folderstorm_asleep() {
+            // (hibernating: minimised, its video memory all given back)
             return;
         }
         if self.folderstorm_characters.managed.memory().release != Release::Full {
@@ -83,9 +89,14 @@ impl App {
         let (frame, passes) = (self.frame_count, self.scene.textures.wants_passes());
         let figures = self.folderstorm_release_figures();
         let keyboard = self.folderstorm_focused();
+        let hibernate = self.folderstorm_characters.managed.memory().hibernate;
         let state = &mut self.folderstorm_characters.memory;
         if !state.releasing.under_way() {
+            if hibernate {
+                log::info!("session memory: Hibernation asked: Economy's release first, the renderer goes once minimised for the grace");
+            }
             state.since_passes = passes;
+            state.pages.reset();
             state.began = Some(Instant::now());
             state.before = figures;
             log::info!(
@@ -109,6 +120,7 @@ impl App {
         if keyboard {
             self.folderstorm_characters.memory.minimised_by_host = false;
         }
+        self.folderstorm_memory_pages_later();
         if !self.folderstorm_characters.memory.releasing.under_way() {
             return;
         }
@@ -127,11 +139,16 @@ impl App {
             // (in front for the textures while it has the keyboard: their
             // release, and its count of passes, start once it leaves)
             self.folderstorm_characters.memory.since_passes = self.scene.textures.wants_passes();
+            self.folderstorm_characters.memory.pages.reset();
         }
-        let since = self.folderstorm_characters.memory.since_passes;
-        let settled = self.gfx.as_ref().is_some_and(|g| g.renderer.textures.folderstorm_settled());
-        let released = self.scene.textures.folderstorm_released(since) && settled;
         let now = Instant::now();
+        let since = self.folderstorm_characters.memory.since_passes;
+        let (settled, pages) = self.gfx.as_ref().map_or((false, 0), |g| {
+            (g.renderer.textures.folderstorm_settled(), g.renderer.textures.page_bytes())
+        });
+        // (seen at every turn, so its second runs from the start)
+        let steady = self.folderstorm_characters.memory.pages.observe(now, pages);
+        let released = self.scene.textures.folderstorm_released(since) && settled && steady;
         match self
             .folderstorm_characters
             .memory
@@ -170,7 +187,33 @@ impl App {
                     g.window.set_minimized(true);
                 }
                 self.folderstorm_characters.memory.minimised_by_host = true;
+                self.folderstorm_characters.memory.minimised_at = Some(now);
             }
+        }
+    }
+
+    /// `memory::PAGES_AFTER_MINIMISE` after Economy's minimise, the pages
+    /// and the driver's figure again: what went back once minimised. Not
+    /// said if the character left Economy in between.
+    fn folderstorm_memory_pages_later(&mut self) {
+        let state = &mut self.folderstorm_characters.memory;
+        let Some(at) = state.minimised_at else {
+            return;
+        };
+        if at.elapsed() < memory::PAGES_AFTER_MINIMISE {
+            return;
+        }
+        state.minimised_at = None;
+        if self.folderstorm_characters.managed.memory().release != Release::Full {
+            return;
+        }
+        if let Some(now) = self.folderstorm_release_figures() {
+            log::info!(
+                "session memory: {} s after the minimise: texture pages {} MB, {} MB taken from the driver",
+                memory::PAGES_AFTER_MINIMISE.as_secs(),
+                now.pages_mb,
+                now.driver_mb
+            );
         }
     }
 
@@ -223,7 +266,7 @@ impl App {
 
     /// What the driver counts for this process and the texture pages hold
     /// now, in megabytes (None without a renderer or a driver's figure).
-    fn folderstorm_release_figures(&self) -> Option<ReleaseFigures> {
+    pub(super) fn folderstorm_release_figures(&self) -> Option<ReleaseFigures> {
         let g = self.gfx.as_ref()?;
         let video = g.renderer.video_memory.read(&g.renderer.device)?;
         Some(ReleaseFigures {

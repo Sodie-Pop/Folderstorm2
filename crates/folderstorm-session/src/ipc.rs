@@ -223,6 +223,14 @@ pub struct Memory {
     /// what they hold already (the room up to their shares).
     pub reserved_mb: u32,
     pub release: Release,
+    /// Hibernation (`crate::memory::hibernation`, with [`Release::Full`]
+    /// only): once minimised by Economy's release, and after
+    /// `hibernate_after_s`, the viewer lets go of its renderer. An older
+    /// viewer ignores it and stays in Economy; an older host sends none.
+    pub hibernate: bool,
+    /// Seconds minimised before hibernating (0: not said, the viewer's
+    /// default, `crate::memory::DEFAULT_HIBERNATE_AFTER_S`).
+    pub hibernate_after_s: u32,
 }
 
 /// What a background character gives back while it waits.
@@ -837,6 +845,11 @@ pub struct Status {
     /// the room up to their share (`crate::memory`).
     #[serde(default)]
     pub vram_mb: u32,
+    /// Hibernating: the viewer let go of its renderer (its window
+    /// minimised, no video memory held); chat and messages go on. An older
+    /// viewer says nothing.
+    #[serde(default)]
+    pub hibernating: bool,
 }
 
 /// The longest texts a status may carry, in characters.
@@ -1112,6 +1125,7 @@ mod tests {
                 share_mb: 1024,
                 reserved_mb: 0,
                 release: Release::Full,
+                ..Memory::default()
             },
             ..assignment(4)
         };
@@ -1136,6 +1150,55 @@ mod tests {
         let mut without = status;
         without.as_object_mut().expect("an object").remove("vram_mb");
         assert_eq!(serde_json::from_value::<Status>(without).expect("reads").vram_mb, 0);
+    }
+
+    #[test]
+    fn hibernation_travels_and_an_older_peer_reads_economy() {
+        let hibernate = Assignment {
+            standby: Standby::Economy,
+            memory: Memory {
+                share_mb: 1024,
+                reserved_mb: 0,
+                release: Release::Full,
+                hibernate: true,
+                hibernate_after_s: 45,
+            },
+            ..assignment(5)
+        };
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &ToViewer::Assign(hibernate)).expect("written");
+        assert_eq!(
+            read_frame::<ToViewer>(&mut wire.as_slice()).expect("read"),
+            ToViewer::Assign(hibernate)
+        );
+        // an older host: a memory without the words, no hibernation
+        let old = r#"{"share_mb":1024,"reserved_mb":0,"release":"Full"}"#;
+        let read = serde_json::from_str::<Memory>(old).expect("reads");
+        assert!(!read.hibernate);
+        assert_eq!(read.hibernate_after_s, 0);
+        // an older viewer: its Memory had no such fields, it reads Economy's
+        // release and ignores the rest (no protocol number changes)
+        #[derive(Deserialize)]
+        struct OlderMemory {
+            share_mb: u32,
+            release: Release,
+        }
+        let json = serde_json::to_string(&hibernate.memory).expect("json");
+        let older = serde_json::from_str::<OlderMemory>(&json).expect("an older viewer reads it");
+        assert_eq!((older.share_mb, older.release), (1024, Release::Full));
+        let assignment = serde_json::to_value(hibernate).expect("json");
+        assert_eq!(assignment["standby"], "Economy", "no new standby on the wire");
+        // the status: said, and none from an older viewer
+        let status = serde_json::to_value(Status {
+            hibernating: true,
+            ..Status::default()
+        })
+        .expect("json");
+        assert_eq!(status["hibernating"], true);
+        assert!(serde_json::from_value::<Status>(status.clone()).expect("reads").hibernating);
+        let mut without = status;
+        without.as_object_mut().expect("an object").remove("hibernating");
+        assert!(!serde_json::from_value::<Status>(without).expect("reads").hibernating);
     }
 
     #[test]

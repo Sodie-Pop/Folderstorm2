@@ -37,7 +37,8 @@ use crate::ui::{
     widgets::{self, ActionKind},
 };
 use ::folderstorm_session::host::{AddError, Health, Note, Phase, Slot};
-use ::folderstorm_session::ipc::{Gpu, MAX_SLOTS, Refusal, Screen, Standby};
+use ::folderstorm_session::ipc::{Gpu, MAX_SLOTS, Refusal, Screen};
+use ::folderstorm_session::memory::Waiting;
 use ::folderstorm_session::panels::Panel;
 use ::folderstorm_session::profile::{self, NameError};
 use aurora_i18n::tr;
@@ -205,7 +206,7 @@ enum Act {
     AskEnd(usize),
     End(usize),
     Remove(usize),
-    Standby(usize, Standby),
+    Standby(usize, Waiting),
     Stage(bool),
     ChatSound(bool),
     Add,
@@ -606,12 +607,16 @@ impl Window_ {
                     acts.push(Act::Remove(slot));
                 }
             }
-            let mut economy = state.standby == Standby::Economy;
-            if widgets::checkbox(ui, p, &mut economy, tr!("folderstorm-host-economy"))
-                .on_hover_text(tr!("folderstorm-host-economy-help"))
-                .changed()
-            {
-                acts.push(Act::Standby(slot, if economy { Standby::Economy } else { Standby::Warm }));
+            // Warm, Economy or Hibernation (was Economy's checkbox)
+            let help = format!(
+                "{}\n\n{}",
+                tr!("folderstorm-host-economy-help"),
+                tr!("folderstorm-host-hibernation-help")
+            );
+            ui.label(RichText::new(tr!("folderstorm-host-waiting")).color(p.muted))
+                .on_hover_text(&help);
+            if let Some(waiting) = waiting_choice(ui, p, state.waiting()) {
+                acts.push(Act::Standby(slot, waiting));
             }
             self.sound_choice(ui, p, slot, state, acts);
             self.monitor_choice(ui, p, slot, state, acts);
@@ -706,7 +711,7 @@ impl Window_ {
                         self.identity.close_for(slot);
                     }
                 }
-                Act::Standby(slot, standby) => self.host.desk.set_standby(slot, standby),
+                Act::Standby(slot, waiting) => self.host.desk.set_waiting(slot, waiting),
                 Act::Stage(stage) => self.host.desk.set_stage(stage),
                 Act::ChatSound(on) => self.host.desk.set_chat_sound(on),
                 Act::Add => match self.host.desk.add(&self.new_profile) {
@@ -928,7 +933,11 @@ fn status_line(slot: &Slot) -> String {
                         line.push_str(" · ");
                         line.push_str(&tr!("folderstorm-host-unread", count = status.unread));
                     }
-                    if status.window.minimised {
+                    if status.hibernating {
+                        // (Hibernation: its renderer let go, minimised)
+                        line.push_str(" · ");
+                        line.push_str(tr!("folderstorm-host-hibernating"));
+                    } else if status.window.minimised {
                         line.push_str(" · ");
                         line.push_str(tr!("folderstorm-host-minimised"));
                     }
@@ -1215,6 +1224,19 @@ impl ApplicationHandler for Window_ {
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_tick));
     }
+}
+
+/// Warm, Economy or Hibernation, as three segments: the card's choice and
+/// the settings window's. The one picked, when it changed.
+pub(super) fn waiting_choice(ui: &mut egui::Ui, p: &Palette, now: Waiting) -> Option<Waiting> {
+    let labels = [
+        tr!("folderstorm-settings-warm"),
+        tr!("folderstorm-settings-economy"),
+        tr!("folderstorm-settings-hibernation"),
+    ];
+    let options = labels.map(|label| (label, true));
+    let mut chosen = Waiting::ALL.iter().position(|w| *w == now).unwrap_or(0);
+    widgets::segmented(ui, p, &mut chosen, &options).then(|| Waiting::ALL[chosen.min(Waiting::ALL.len() - 1)])
 }
 
 #[cfg(test)]

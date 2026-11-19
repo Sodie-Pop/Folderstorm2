@@ -98,7 +98,7 @@ impl App {
     /// forward or minimised by the same turn.
     pub(super) fn folderstorm_taskbar(&mut self, now: Instant) {
         let focused = self.folderstorm_focused();
-        let Some(g) = &self.gfx else {
+        let Some(window) = self.folderstorm_window().cloned() else {
             return;
         };
         let state = &mut self.folderstorm_characters;
@@ -107,9 +107,9 @@ impl App {
             asked: state.managed.off_taskbar(),
             active: state.managed.role() == Some(ipc::Role::Active),
             focused,
-            minimised: g.window.is_minimized().unwrap_or(false),
+            minimised: window.is_minimized().unwrap_or(false),
             economy: state.managed.standby() == Some(ipc::Standby::Economy),
         });
-        taskbar::keep(&g.window, &mut state.taskbar, wanted, now);
+        taskbar::keep(&window, &mut state.taskbar, wanted, now);
     }
 }
