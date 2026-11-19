@@ -7,7 +7,7 @@
 //! A separate authority from each viewer's local assistant: nothing here
 //! reads or changes a viewer's settings, logs anyone in or touches a
 //! credential. Every action is the click the host's own window already has
-//! (Switch, Warm / Economy, a monitor, "Open a login", Close), plus restart
+//! (Switch, Warm / Economy / Hibernation, a monitor, "Open a login", Close), plus restart
 //! (Close, then start again) and stop managing (let the viewer go).
 //!
 //! The listener (`folderstorm_mcp_bridge::controller`) only refuses a class
@@ -15,7 +15,8 @@
 //! it ([`admit`]), and while it waits in the dialog ([`Questions::review`]).
 
 use crate::host::{Desk, Phase, Quick, Slot};
-use crate::ipc::{Screen, Standby};
+use crate::ipc::Screen;
+use crate::memory::Waiting;
 use crate::profile::ProfileName;
 use folderstorm_mcp_bridge::controller::{HostClass, HostLevels};
 use folderstorm_mcp_bridge::policy::Level;
@@ -50,7 +51,7 @@ pub enum Action {
     /// `host_characters`.
     List,
     Activate,
-    Background(Standby),
+    Background(Waiting),
     /// A character's monitor opens (true) or closes.
     Monitor(bool),
     /// The cycling monitor opens or closes.
@@ -155,9 +156,10 @@ fn action_of(tool: &str, args: &Map<String, Value>) -> Result<Action, Refusal> {
         "host_characters" => Action::List,
         "host_activate" => Action::Activate,
         "host_background_mode" => match args.get("mode").and_then(Value::as_str) {
-            Some("warm") => Action::Background(Standby::Warm),
-            Some("economy") => Action::Background(Standby::Economy),
-            _ => return Err(Refusal::Invalid("`mode` must be \"warm\" or \"economy\"")),
+            Some("warm") => Action::Background(Waiting::Warm),
+            Some("economy") => Action::Background(Waiting::Economy),
+            Some("hibernation") => Action::Background(Waiting::Hibernation),
+            _ => return Err(Refusal::Invalid("`mode` must be \"warm\", \"economy\" or \"hibernation\"")),
         },
         "host_monitor" => match args.get("cycling") {
             None | Some(Value::Bool(false)) => Action::Monitor(open()?),
@@ -319,7 +321,7 @@ pub fn apply(desk: &mut Desk, slot: Option<usize>, action: Action, now: Instant)
         (Action::Cycling(open), _) => desk.set_cycling(open),
         (Action::List, _) | (_, None) => {}
         (Action::Activate, Some(slot)) => desk.switch(slot, now),
-        (Action::Background(standby), Some(slot)) => desk.set_standby(slot, standby),
+        (Action::Background(waiting), Some(slot)) => desk.set_waiting(slot, waiting),
         (Action::Monitor(true), Some(slot)) => desk.open_monitor(slot),
         (Action::Monitor(false), Some(slot)) => desk.set_monitor(slot, None),
         (Action::OpenLogin, Some(slot)) => {
@@ -359,9 +361,10 @@ pub fn row(desk: &Desk, slot: usize, metadata: bool) -> Option<Value> {
         "state": state(s),
         "active": desk.active() == Some(slot),
         "closing": s.closing,
-        "background_mode": match s.standby {
-            Standby::Warm => "warm",
-            Standby::Economy => "economy",
+        "background_mode": match s.waiting() {
+            Waiting::Warm => "warm",
+            Waiting::Economy => "economy",
+            Waiting::Hibernation => "hibernation",
         },
     });
     if s.launch() > 0 {

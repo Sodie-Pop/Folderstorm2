@@ -1,6 +1,6 @@
 use super::*;
 use crate::host::{Config, Effect};
-use crate::ipc::{Screen, Status, ToViewer};
+use crate::ipc::{Screen, Standby, Status, ToViewer};
 
 /// A desk of three characters: `Home` (with access), `Alt1` (with access)
 /// and `Alt2` (without).
@@ -77,10 +77,18 @@ fn arguments_are_read_strictly() {
     assert_eq!(
         r,
         Request {
-            action: Action::Background(Standby::Economy),
+            action: Action::Background(Waiting::Economy),
             profile: Some("Alt1".into()),
             launch: Some(2)
         }
+    );
+    assert_eq!(
+        request("host_background_mode", json!({"profile": "Alt1", "mode": "hibernation"})).action,
+        Action::Background(Waiting::Hibernation)
+    );
+    assert_eq!(
+        request("host_background_mode", json!({"profile": "Alt1", "mode": "warm"})).action,
+        Action::Background(Waiting::Warm)
     );
     assert_eq!(
         request("host_monitor", json!({"cycling": true, "open": true})).action,
@@ -98,6 +106,8 @@ fn arguments_are_read_strictly() {
         ("host_activate", json!({"profile": "Alt1", "launch": 0})),
         ("host_activate", json!({"profile": "Alt1", "launch": "x"})),
         ("host_background_mode", json!({"profile": "Alt1", "mode": "hot"})),
+        ("host_background_mode", json!({"profile": "Alt1", "mode": "deep_sleep"})),
+        ("host_background_mode", json!({"profile": "Alt1", "mode": "Hibernation"})),
         ("host_monitor", json!({"profile": "Alt1"})),
         ("host_monitor", json!({"profile": "Alt1", "cycling": true, "open": true})),
         ("host_monitor", json!({"cycling": true})),
@@ -155,7 +165,7 @@ fn each_action_is_offered_only_when_the_card_would_offer_it() {
     assert_eq!(check(&d, 1, Action::Logout), Err(Refusal::NotReady(Why::NoViewer)));
     assert_eq!(check(&d, 1, Action::Restart), Err(Refusal::NotReady(Why::NoViewer)));
     assert_eq!(check(&d, 1, Action::StopManaging), Err(Refusal::NotReady(Why::NoViewer)));
-    assert_eq!(check(&d, 1, Action::Background(Standby::Economy)), Ok(()));
+    assert_eq!(check(&d, 1, Action::Background(Waiting::Economy)), Ok(()));
     // starting
     d.launch(1, false);
     assert_eq!(check(&d, 1, Action::OpenLogin), Err(Refusal::NotReady(Why::Starting)));
@@ -222,8 +232,12 @@ fn the_actions_are_the_host_s_own_clicks() {
     apply(&mut d, Some(1), Action::Activate, now);
     assert_eq!(d.active(), Some(1));
     // background mode, monitors, the cycling monitor
-    apply(&mut d, Some(0), Action::Background(Standby::Economy), now);
+    apply(&mut d, Some(0), Action::Background(Waiting::Economy), now);
     assert_eq!(d.slot(0).expect("home").standby, Standby::Economy);
+    apply(&mut d, Some(0), Action::Background(Waiting::Hibernation), now);
+    assert_eq!(d.slot(0).expect("home").waiting(), Waiting::Hibernation);
+    assert_eq!(row(&d, 0, false).expect("a row")["background_mode"], "hibernation");
+    apply(&mut d, Some(0), Action::Background(Waiting::Economy), now);
     apply(&mut d, Some(0), Action::Monitor(true), now);
     assert!(d.slot(0).expect("home").monitor.is_some());
     apply(&mut d, Some(0), Action::Monitor(false), now);

@@ -21,7 +21,8 @@ use crate::ui::{
     menu,
     widgets::{self, ActionKind},
 };
-use ::folderstorm_session::ipc::{MAX_SLOTS, Standby};
+use ::folderstorm_session::ipc::MAX_SLOTS;
+use ::folderstorm_session::memory::Fallback;
 use ::folderstorm_session::panels::{Place, on_screen};
 use ::folderstorm_session::settings::{
     AUTO_READ_MAX_S, AUTO_READ_MIN_S, Alerts, Attention, ChatShown, Reading, Section, WINDOW_MIN_SIZE, WINDOW_SIZE,
@@ -72,6 +73,8 @@ pub(super) enum Act {
     /// "Background characters' video memory", in megabytes
     /// (`folderstorm_session::memory`).
     BackgroundMemory(u32),
+    /// "Hibernate after", in seconds.
+    HibernateAfter(u32),
 }
 
 /// The width of the sections' list, and from which width of the window it
@@ -244,6 +247,7 @@ impl Window_ {
             Act::Diagnostics(on) => self.settings.diagnostics = on,
             Act::Credits(on) => self.settings.credits = on,
             Act::BackgroundMemory(mb) => self.host.desk.set_background_memory_mb(mb),
+            Act::HibernateAfter(seconds) => self.host.desk.set_hibernate_after_s(seconds),
         }
     }
 
@@ -480,21 +484,22 @@ impl Window_ {
             },
             |ui, (this, acts)| {
                 heading(ui, p, tr!("folderstorm-settings-background"));
-                let mut mode = usize::from(state.standby == Standby::Economy);
                 row(ui, p, tr!("folderstorm-settings-background-mode"), |ui| {
-                    let modes = [
-                        (tr!("folderstorm-settings-warm"), true),
-                        (tr!("folderstorm-settings-economy"), true),
-                    ];
-                    if widgets::segmented(ui, p, &mut mode, &modes) {
-                        let standby = if mode == 1 { Standby::Economy } else { Standby::Warm };
-                        acts.push(HostAct::Standby(slot, standby));
+                    if let Some(waiting) = super::waiting_choice(ui, p, state.waiting()) {
+                        acts.push(HostAct::Standby(slot, waiting));
                     }
                 });
                 note(ui, p, tr!("folderstorm-host-economy-help"));
+                note(ui, p, tr!("folderstorm-host-hibernation-help"));
+                match this.host.desk.hibernation_fallback(slot) {
+                    Some(Fallback::Voice) => note(ui, p, tr!("folderstorm-settings-hibernation-fallback-voice")),
+                    Some(Fallback::Heard) => note(ui, p, tr!("folderstorm-settings-hibernation-fallback-heard")),
+                    None => {}
+                }
                 ui.add_space(4.0);
                 // (every character behind the active one: one setting for all)
                 this.background_memory(ui, p, acts);
+                this.hibernate_after(ui, p, acts);
                 ui.add_space(4.0);
                 this.sound_choice(ui, p, slot, &state, acts);
                 let mut included = state.attention;
@@ -586,6 +591,23 @@ impl Window_ {
             acts.push(HostAct::Settings(Act::BackgroundMemory(mb)));
         }
         note(ui, p, tr!("folderstorm-settings-background-memory-note"));
+    }
+
+    /// "Hibernate after": how long a Hibernation character waits minimised
+    /// before its viewer lets go of its renderer (one setting for all).
+    fn hibernate_after(&self, ui: &mut egui::Ui, p: &Palette, acts: &mut Vec<HostAct>) {
+        use ::folderstorm_session::memory::{MAX_HIBERNATE_AFTER_S, MIN_HIBERNATE_AFTER_S};
+        let shown = self.host.desk.hibernate_after_s();
+        let mut seconds = shown;
+        row(ui, p, tr!("folderstorm-settings-hibernate-after"), |ui| {
+            let slider = egui::Slider::new(&mut seconds, MIN_HIBERNATE_AFTER_S..=MAX_HIBERNATE_AFTER_S)
+                .logarithmic(true)
+                .suffix(tr!("folderstorm-settings-seconds-suffix"));
+            ui.add(slider).on_hover_text(tr!("folderstorm-settings-hibernate-after-help"));
+        });
+        if seconds != shown {
+            acts.push(HostAct::Settings(Act::HibernateAfter(seconds)));
+        }
     }
 
     /// What the chats show, what Attention lists, reading.

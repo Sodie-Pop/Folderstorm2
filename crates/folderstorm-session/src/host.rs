@@ -98,6 +98,10 @@ pub struct SlotConfig {
     pub profile: String,
     #[serde(default)]
     pub standby: Standby,
+    /// Hibernation (`memory::Waiting`): with `standby: Economy` beside it,
+    /// so that an older build reads Economy. Written only when true.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hibernate: bool,
     /// Checkpoint 4: heard in the background or not.
     #[serde(default)]
     pub sound: BackgroundSound,
@@ -172,6 +176,9 @@ pub struct Config {
     /// Megabytes of video memory each character behind the active one may
     /// hold ("Background characters' video memory", `crate::memory`).
     pub background_memory_mb: u32,
+    /// Seconds a Hibernation character waits minimised before its viewer
+    /// lets go of its renderer ("Hibernate after", `crate::memory`).
+    pub hibernate_after_s: u32,
 }
 
 impl Default for Config {
@@ -194,6 +201,7 @@ impl Default for Config {
             settings_window: settings::Window::default(),
             controller: controller::Settings::default(),
             background_memory_mb: memory::DEFAULT_BACKGROUND_MB,
+            hibernate_after_s: memory::DEFAULT_HIBERNATE_AFTER_S,
         }
     }
 }
@@ -229,6 +237,7 @@ impl Config {
         self.reading = self.reading.cleaned();
         self.settings_window = self.settings_window.cleaned();
         self.background_memory_mb = memory::clamp_background(self.background_memory_mb);
+        self.hibernate_after_s = memory::clamp_hibernate_after(self.hibernate_after_s);
         self
     }
 
@@ -241,6 +250,7 @@ impl Config {
                     slot: i as u8,
                     profile: format!("demo-{}", i + 1),
                     standby: Standby::Warm,
+                    hibernate: false,
                     sound: BackgroundSound::Muted,
                     monitor: None,
                     colour: Colour::None,
@@ -302,6 +312,8 @@ pub enum Note {
 pub struct Slot {
     pub profile: ProfileName,
     pub standby: Standby,
+    /// Hibernation, with `standby` Economy ([`Slot::waiting`]).
+    pub hibernate: bool,
     /// What is heard of it while another character is active.
     pub sound: BackgroundSound,
     /// Its monitor is open, with that size and rate.
@@ -350,6 +362,7 @@ impl Slot {
         Self {
             profile,
             standby,
+            hibernate: false,
             sound: BackgroundSound::Muted,
             monitor: None,
             colour: Colour::None,
@@ -400,6 +413,11 @@ impl Slot {
     /// Its process is there and managed (or on its way to be).
     pub fn live(&self) -> bool {
         matches!(self.phase, Phase::Starting | Phase::Running)
+    }
+
+    /// How it waits while another character is active, as chosen.
+    pub fn waiting(&self) -> memory::Waiting {
+        memory::Waiting::from_parts(self.standby, self.hibernate)
     }
 
     /// Its process is there, managed or not.
@@ -480,6 +498,9 @@ pub struct Desk {
     controller: controller::Settings,
     /// Megabytes of video memory each background character may hold.
     background_memory_mb: u32,
+    /// Seconds a Hibernation character waits minimised before it
+    /// hibernates.
+    hibernate_after_s: u32,
     /// The character the cycling monitor shows on screen now.
     cycling_seen: Option<usize>,
     /// Monitors that moved from one character to another since the
@@ -579,6 +600,7 @@ impl Desk {
                     attention: s.attention,
                     alerts: s.alerts,
                     controller: s.controller,
+                    hibernate: memory::Waiting::from_parts(s.standby, s.hibernate).hibernate(),
                     ..Slot::new(name, s.standby)
                 });
             }
@@ -603,6 +625,7 @@ impl Desk {
             settings_window: config.settings_window,
             controller: config.controller,
             background_memory_mb: config.background_memory_mb,
+            hibernate_after_s: config.hibernate_after_s,
             cycling_seen: None,
             monitor_moves: Vec::new(),
             quitting: None,
@@ -619,6 +642,7 @@ impl Desk {
                     slot: i as u8,
                     profile: s.profile.shown().to_owned(),
                     standby: s.standby,
+                    hibernate: s.waiting().hibernate(),
                     sound: s.sound,
                     monitor: s.monitor,
                     colour: s.colour,
@@ -645,6 +669,7 @@ impl Desk {
             settings_window: self.settings_window,
             controller: self.controller,
             background_memory_mb: self.background_memory_mb,
+            hibernate_after_s: self.hibernate_after_s,
         }
     }
 
@@ -854,11 +879,19 @@ impl Desk {
         true
     }
 
+    /// Warm or Economy (an older caller's two choices: Economy is not
+    /// Hibernation).
     pub fn set_standby(&mut self, slot: usize, standby: Standby) {
-        let Some(s) = self.slot_mut(slot).filter(|s| s.standby != standby) else {
+        self.set_waiting(slot, memory::Waiting::from_parts(standby, false));
+    }
+
+    /// Warm, Economy or Hibernation: saved as a standby and a word.
+    pub fn set_waiting(&mut self, slot: usize, waiting: memory::Waiting) {
+        let Some(s) = self.slot_mut(slot).filter(|s| s.waiting() != waiting) else {
             return;
         };
-        s.standby = standby;
+        s.standby = waiting.standby();
+        s.hibernate = waiting.hibernate();
         self.effects.push(Effect::Save);
         self.sync(None);
         // (a window already behind is left where it is: the choice applies
@@ -869,6 +902,32 @@ impl Desk {
     /// hold.
     pub fn background_memory_mb(&self) -> u32 {
         self.background_memory_mb
+    }
+
+    /// Seconds a Hibernation character waits minimised before it
+    /// hibernates.
+    pub fn hibernate_after_s(&self) -> u32 {
+        self.hibernate_after_s
+    }
+
+    /// The grace before hibernating, within its choices; the viewers that
+    /// hibernate are told at once.
+    pub fn set_hibernate_after_s(&mut self, seconds: u32) {
+        let seconds = memory::clamp_hibernate_after(seconds);
+        if self.hibernate_after_s != seconds {
+            self.hibernate_after_s = seconds;
+            self.effects.push(Effect::Save);
+            self.sync(None);
+        }
+    }
+
+    /// Why a character that chose Hibernation stays in Economy now (None:
+    /// it may hibernate, or did not choose it): it holds the voice, or it
+    /// is heard in the background.
+    pub fn hibernation_fallback(&self, slot: usize) -> Option<memory::Fallback> {
+        let s = self.slot(slot).filter(|s| s.waiting() == memory::Waiting::Hibernation)?;
+        let heard = s.sound == BackgroundSound::All && !self.mute_background;
+        memory::hibernation_fallback(self.voice_holder() == Some(slot), heard)
     }
 
     /// The background characters' share, within its choices; every viewer
@@ -1877,6 +1936,7 @@ impl Desk {
                 // (its window stays behind instead of minimised)
                 watched: economy && self.watching(slot),
                 held_mb: s.status.as_ref().map_or(0, |status| status.vram_mb),
+                hibernate: s.waiting().hibernate() && self.hibernation_fallback(slot).is_none(),
             })
         })
     }
@@ -1977,7 +2037,7 @@ impl Desk {
         // one taskbar button: only behind a character that is in front
         let someone_in_front = active.is_some_and(|a| self.slot(a).is_some_and(|s| s.phase == Phase::Running));
         let one_button = self.bar.one_taskbar_button && self.bar.placement == bar::Placement::Docked && someone_in_front;
-        let memories = memory::shares(self.background_memory_mb, &self.memory_characters());
+        let memories = memory::shares(self.background_memory_mb, self.hibernate_after_s, &self.memory_characters());
         for (slot, order) in self.orders().into_iter().enumerate() {
             let voice_held_elsewhere = self.slots().any(|(i, s)| i != slot && s.voice_out);
             let Some(s) = self.slot_mut(slot).filter(|s| s.phase == Phase::Running) else {
@@ -2068,6 +2128,7 @@ mod tests {
             slot,
             profile: profile.into(),
             standby: Standby::Warm,
+            hibernate: false,
             sound: BackgroundSound::Muted,
             monitor: None,
             colour: Colour::None,

@@ -171,8 +171,8 @@ fn character() -> Value {
 
 fn background_mode() -> Value {
     let mut schema = character();
-    schema["properties"]["mode"] = json!({"type": "string", "enum": ["warm", "economy"],
-        "description": "warm: its window waits behind the active one; economy: minimised, the least memory and processor."});
+    schema["properties"]["mode"] = json!({"type": "string", "enum": ["warm", "economy", "hibernation"],
+        "description": "warm: its window waits behind the active one; economy: minimised, the least memory and processor; hibernation: as economy, then after a short while it also lets go of its 3D world and all of its video memory (chat and messages go on; coming back takes a few seconds, like a short teleport)."});
     schema["required"] = json!(["profile", "mode"]);
     schema
 }
@@ -207,7 +207,7 @@ pub const HOST_TOOLS: &[HostTool] = &[
     },
     HostTool {
         name: "host_background_mode",
-        description: "Set how a character waits while another one is active: warm (behind) or economy (minimised). The user may be asked first.",
+        description: "Set how a character waits while another one is active: warm (behind), economy (minimised) or hibernation (minimised, its 3D world let go). The user may be asked first.",
         class: Some(HostClass::BackgroundMode),
         schema: background_mode,
     },

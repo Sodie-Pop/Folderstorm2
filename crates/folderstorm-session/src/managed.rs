@@ -324,6 +324,7 @@ mod tests {
             share_mb: 1024,
             reserved_mb: 0,
             release: Release::Full,
+            ..Memory::default()
         };
         assert!(m.assign(Assignment {
             memory: economy,
