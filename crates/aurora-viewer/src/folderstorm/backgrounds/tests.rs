@@ -30,12 +30,19 @@ struct Viewer {
     /// after the world's labels (`super::mark`); false: as before that
     /// hook, the background first.
     marked: bool,
+    /// A HUD attachment the renderer draws, in pixels (x, y, width,
+    /// height): over the whole window, between the world's labels with
+    /// what goes under the HUDs and the rest of the interface.
+    hud: Option<[u32; 4]>,
     time: f64,
 }
 
 /// What the renderer leaves where egui draws nothing: the world's
 /// pixels in these tests, and black margins.
 const WORLD: Color32 = Color32::from_rgb(1, 2, 3);
+
+/// The colour of the HUD attachment of these tests.
+const HUD: Color32 = Color32::from_rgb(250, 200, 0);
 
 impl Viewer {
     fn new(name: &str, width: u32, height: u32) -> Self {
@@ -52,6 +59,7 @@ impl Viewer {
             pixels: vec![0; (width * height) as usize],
             added: 0,
             marked: true,
+            hud: None,
             time: 0.0,
         }
     }
@@ -91,26 +99,44 @@ impl Viewer {
                     });
             },
         );
-        let before = output.shapes.len();
-        paint::underlay_in(&self.ctx, super::in_effect(&self.store), &self.folder, &mut output.shapes);
-        // the mark taken out again: only the end of the world's labels is
-        // left among the callbacks
-        let callbacks = output.shapes.iter().filter(|s| matches!(s.shape, egui::Shape::Callback(_))).count();
-        assert_eq!(callbacks, 1, "the background's mark is never left for the renderer");
-        self.added = output.shapes.len() + usize::from(self.marked) - before;
+        let callback = |s: &egui::epaint::ClippedShape| matches!(s.shape, egui::Shape::Callback(_));
+        let before = output.shapes.iter().filter(|s| !callback(s)).count();
+        let huds_over = !self.store.background_over_huds;
+        paint::underlay_in(
+            &self.ctx,
+            super::in_effect(&self.store),
+            huds_over,
+            &self.folder,
+            &mut output.shapes,
+        );
+        self.added = output.shapes.iter().filter(|s| !callback(s)).count() - before;
+        // the mark taken out again: the end of the world's labels is left
+        // among the callbacks, and the end of what goes under the HUDs
+        // after a background under them
+        let callbacks = output.shapes.iter().filter(|s| callback(s)).count();
+        let under = huds_over && self.added > 0;
+        assert_eq!(
+            callbacks,
+            1 + usize::from(under),
+            "the background's mark is never left for the renderer"
+        );
         let mut primitives = self.ctx.tessellate(output.shapes, output.pixels_per_point);
-        world_labels_cut(&mut primitives, self.world, output.pixels_per_point);
+        let (labels, under_huds) = renderer_parts(&mut primitives, self.world, output.pixels_per_point);
         self.painter.update_textures(&output.textures_delta);
         let size = [self.size[0] as usize, self.size[1] as usize];
         // the world drawn by the renderer, black around it
         self.pixels.fill(0);
         let [wx, wy, ww, wh] = self.world.unwrap_or([0, 0, self.size[0], self.size[1]]);
-        for y in wy..wy + wh {
-            for x in wx..wx + ww {
-                self.pixels[(y * self.size[0] + x) as usize] = rgb(WORLD);
-            }
+        self.fill([wx, wy, ww, wh], WORLD);
+        // the renderer's order: the world's labels, what goes under the
+        // HUDs, the HUD attachments, the rest of the interface
+        let ppp = output.pixels_per_point;
+        self.painter.draw(&mut self.pixels, size, &primitives[..labels], ppp);
+        self.painter.draw(&mut self.pixels, size, &primitives[labels..under_huds], ppp);
+        if let Some(hud) = self.hud {
+            self.fill(hud, HUD);
         }
-        self.painter.draw(&mut self.pixels, size, &primitives, output.pixels_per_point);
+        self.painter.draw(&mut self.pixels, size, &primitives[under_huds..], ppp);
         self.painter.free_textures(&output.textures_delta);
         output.textures_delta.clear();
     }
@@ -130,6 +156,17 @@ impl Viewer {
         // the frame after the upload draws it
         self.frame();
         self.frame();
+    }
+
+    /// `rect` (x, y, width, height pixels) filled with `colour`, as the
+    /// renderer draws the world or a HUD.
+    fn fill(&mut self, rect: [u32; 4], colour: Color32) {
+        let [x0, y0, w, h] = rect;
+        for y in y0..(y0 + h).min(self.size[1]) {
+            for x in x0..(x0 + w).min(self.size[0]) {
+                self.pixels[(y * self.size[0] + x) as usize] = rgb(colour);
+            }
+        }
     }
 
     fn at(&self, x: u32, y: u32) -> Color32 {
@@ -177,20 +214,28 @@ impl Drop for Viewer {
     }
 }
 
-/// What the renderer does with the world's labels
-/// (`aurora_render::Renderer::render`, `ui_world::take_end`): the
-/// primitives before the end of the world's labels are cut to the world
-/// viewport, `world` in pixels; the end itself is taken out.
-fn world_labels_cut(primitives: &mut Vec<egui::ClippedPrimitive>, world: Option<[u32; 4]>, pixels_per_point: f32) {
-    let Some(end) = primitives
+/// What the renderer does with the frame (`aurora_render::Renderer::render`):
+/// the end of the world's labels taken out (`ui_world::take_end`) and what
+/// precedes it cut to the world viewport, `world` in pixels; then the end
+/// of what goes under the HUD attachments looked for after it
+/// (`aurora_render::take_hud_underlay_end`, the renderer's own). The
+/// labels' end and the end of what goes under the HUDs.
+fn renderer_parts(primitives: &mut Vec<egui::ClippedPrimitive>, world: Option<[u32; 4]>, pixels_per_point: f32) -> (usize, usize) {
+    // the end of the world's labels: the callback left once the ends of
+    // what goes under the HUDs are emptied (which moves nothing)
+    let mut emptied = primitives.clone();
+    aurora_render::take_hud_underlay_end(&mut emptied, 0);
+    let Some(end) = emptied
         .iter()
         .position(|p| matches!(p.primitive, egui::epaint::Primitive::Callback(_)))
     else {
-        return;
+        let under = aurora_render::take_hud_underlay_end(primitives, 0);
+        return (0, under);
     };
     primitives.remove(end);
+    let under = aurora_render::take_hud_underlay_end(primitives, end);
     let Some([x, y, w, h]) = world else {
-        return;
+        return (end, under);
     };
     let world = Rect::from_min_size(
         egui::pos2(x as f32, y as f32) / pixels_per_point,
@@ -199,6 +244,7 @@ fn world_labels_cut(primitives: &mut Vec<egui::ClippedPrimitive>, world: Option<
     for primitive in &mut primitives[..end] {
         primitive.clip_rect = primitive.clip_rect.intersect(world);
     }
+    (end, under)
 }
 
 fn rgb(c: Color32) -> u32 {
@@ -287,6 +333,109 @@ fn the_background_goes_after_the_world_s_labels_and_is_not_cut_to_the_world() {
     assert_ne!(left, Color32::BLACK);
     assert_ne!(left, Color32::from_rgb(20, 30, 60), "the picture, not only its colour");
     assert!(v.world_untouched());
+}
+
+/// A HUD moved into a margin: the renderer draws the HUD attachments over
+/// the whole window, after the world's labels and before the rest of the
+/// interface. By default the background goes under them (drawn before the
+/// HUD pass) and the HUD shows; *HUDs over the background* unticked, the
+/// background is drawn with the rest and covers it. Windows stay over both.
+#[test]
+fn a_hud_in_a_margin_shows_over_the_background_unless_the_user_chooses_otherwise() {
+    let mut v = Viewer::new("huds-over", 1280, 360);
+    v.world = Some([640, 0, 640, 360]);
+    v.monitors = Some(two_monitors());
+    // in the left margin, under the window's corner (10..50, 10..40)
+    v.hud = Some([30, 20, 200, 100]);
+    let colour = Color32::from_rgb(40, 160, 90);
+    v.store.background = Background {
+        kind: Kind::Colour,
+        colour: [40, 160, 90, 255],
+        ..Default::default()
+    };
+    assert!(!v.store.background_over_huds, "HUDs over the background by default");
+    v.frame();
+    v.frame();
+    assert_eq!(v.at(150, 80), HUD, "the HUD over the background");
+    assert_eq!(v.at(400, 200), colour, "the background around it");
+    assert_eq!(v.at(40, 30), Color32::WHITE, "the window over the HUD");
+    assert!(v.world_untouched());
+    v.picture("background-huds-over");
+    // unticked: the background over the HUD, the window still over both
+    v.store.background_over_huds = true;
+    v.frame();
+    assert_eq!(v.at(150, 80), colour, "the background over the HUD");
+    assert_eq!(v.at(40, 30), Color32::WHITE);
+    assert!(v.world_untouched());
+    v.picture("background-over-huds");
+    // a picture follows the same order
+    v.with_picture(Fit::Fill);
+    v.store.background_over_huds = false;
+    v.settle();
+    assert_eq!(v.at(150, 80), HUD);
+    let around = v.at(400, 200);
+    assert!(around != HUD && around != Color32::BLACK, "{around:?}");
+    v.store.background_over_huds = true;
+    v.frame();
+    assert_ne!(v.at(150, 80), HUD);
+    // a HUD over the world is never under the background, whichever order
+    v.hud = Some([700, 20, 100, 100]);
+    v.frame();
+    assert_eq!(v.at(750, 70), HUD);
+}
+
+/// Where the background hides a HUD, as the pointer and the build tools
+/// read it: in a margin, while the background in effect is painted over the
+/// HUD attachments (`super::hides_huds_at`), as `super::underlay` last
+/// painted it.
+#[test]
+fn the_background_hides_the_huds_only_in_a_margin_and_only_when_over_them() {
+    let ctx = egui::Context::default();
+    let mut store = Store::default();
+    let hides = |store: &Store, world: Option<[u32; 4]>| {
+        let mut shapes = Vec::new();
+        let output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1280.0, 360.0))),
+                ..Default::default()
+            },
+            |ui| {
+                viewport::set_world_area(ui.ctx(), world);
+                super::underlay(ui.ctx(), store, &mut shapes);
+            },
+        );
+        crate::ui::login::test_output(output);
+        let margin = egui::pos2(100.0, 100.0);
+        let in_world = egui::pos2(900.0, 100.0);
+        assert!(!super::hides_huds_at(&ctx, in_world), "never in the world");
+        super::hides_huds_at(&ctx, margin)
+    };
+    let world = Some([640, 0, 640, 360]);
+    assert!(!hides(&store, world), "no background: nothing hides them");
+    store.background = Background {
+        kind: Kind::Colour,
+        colour: [40, 160, 90, 255],
+        ..Default::default()
+    };
+    assert!(!hides(&store, world), "HUDs over the background, by default");
+    store.background_over_huds = true;
+    assert!(hides(&store, world), "the background over the HUDs");
+    assert!(!hides(&store, None), "no margin while the world fills the window");
+}
+
+#[test]
+fn the_store_writes_the_huds_order_only_when_the_background_goes_over_them() {
+    let mut store = Store::default();
+    let text = serde_json::to_value(&store).expect("written");
+    assert!(text.get("background_over_huds").is_none());
+    store.background_over_huds = true;
+    let text = serde_json::to_value(&store).expect("written");
+    assert_eq!(text["background_over_huds"], true);
+    let read: Store = serde_json::from_value(text).expect("read");
+    assert!(read.background_over_huds);
+    // anything but `true` reads as HUDs over the background
+    let read: Store = serde_json::from_value(serde_json::json!({ "background_over_huds": "yes" })).expect("read");
+    assert!(!read.background_over_huds);
 }
 
 #[test]

@@ -34,7 +34,16 @@ pub fn world_cam(cam: Cam, rect: Option<[u32; 4]>) -> Cam {
 /// frame (`super::dialog_area`, the window when the world fills it): a
 /// handle half out of the world is cut at its edge, as the Legacy Viewer's
 /// 3D viewport cuts it, rather than drawn over the margins.
-pub fn clip(ctx: &egui::Context, painter: egui::Painter) -> egui::Painter {
+///
+/// With the HUD camera (`hud`: a HUD attachment selected), the overlay goes
+/// where the HUD attachments are drawn: over the whole window, so a HUD
+/// moved into a margin keeps its outline and its handles there, and can be
+/// moved back; in the world's part only while the margins' background hides
+/// the HUD attachments (`crate::folderstorm::backgrounds::hides_huds`).
+pub fn clip(ctx: &egui::Context, painter: egui::Painter, hud: bool) -> egui::Painter {
+    if hud && !crate::folderstorm::backgrounds::hides_huds(ctx) {
+        return painter;
+    }
     let area = painter.clip_rect().intersect(super::dialog_area(ctx));
     painter.with_clip_rect(area)
 }

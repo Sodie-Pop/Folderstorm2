@@ -32,6 +32,21 @@ pub(super) fn area_id(slot: u8) -> egui::Id {
     egui::Id::unique("folderstorm_desktop_room").with(slot)
 }
 
+fn drawn_id() -> egui::Id {
+    egui::Id::unique("folderstorm_desktop_drawn_shortcuts")
+}
+
+/// The rectangles of the shortcuts drawn by the last [`show`] (none while
+/// no desktop shows: `super::show` clears them).
+pub(super) fn drawn_shortcuts(ctx: &egui::Context) -> Vec<Rect> {
+    ctx.data(|d| d.get_temp::<Vec<Rect>>(drawn_id())).unwrap_or_default()
+}
+
+/// Sets what [`drawn_shortcuts`] gives.
+pub(super) fn set_drawn_shortcuts(ctx: &egui::Context, rects: Vec<Rect>) {
+    ctx.data_mut(|d| d.insert_temp(drawn_id(), rects));
+}
+
 /// What the surface remembers between frames.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) struct State {
@@ -497,6 +512,8 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
     // Inventory textures the shortcuts wear, to be fetched
     let mut fetch = Vec::new();
     let mut dragged = None;
+    // the rectangles of the shortcuts drawn (`drawn_shortcuts`)
+    let mut drawn_rects = Vec::new();
     // a shortcut that went while its name was edited
     if state.rename.is_some_and(|id| desktop.shortcut(id).is_none()) {
         state.rename = None;
@@ -529,8 +546,10 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
             .fade_in(false)
             .show(ctx, |ui| {
                 ui.set_clip_rect(room.rect);
-                // the whole room is the desktop's: a margin has no world to click
-                let back = ui.interact(room.rect, area_id(room.slot).with("room"), Sense::click());
+                // the whole room is the desktop's: a margin has no world to
+                // click, only a HUD moved there (`env.hud_at_pointer`)
+                let sense = if env.hud_at_pointer { Sense::hover() } else { Sense::click() };
+                let back = ui.interact(room.rect, area_id(room.slot).with("room"), sense);
                 ui.expand_to_include_rect(room.rect);
                 if back.clicked() {
                     state.selected = None;
@@ -548,6 +567,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                     let pictured = shortcut.style.picture.is_some();
                     let custom = own_icon.is_some() || !shortcut.style.is_default();
                     let rect = room.grid.rect(cell);
+                    drawn_rects.push(rect.intersect(room.rect));
                     // (a folder's window; a command, and an item as the
                     // Inventory opens its kind, through `Op::Open`)
                     let open = || match face.folder.filter(|_| is_folder) {
@@ -815,6 +835,7 @@ pub(super) fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env, rooms:
                 }
             });
     }
+    set_drawn_shortcuts(ctx, drawn_rects);
     // a drag whose shortcut is no longer drawn (its room went) ends there
     if state.drag.is_some() && !ctx.input(|i| i.pointer.any_down()) {
         state.drag = None;

@@ -90,6 +90,10 @@ pub struct Env<'a> {
     /// The keyboard goes to the desktop now (the key action *Focus the
     /// desktop*): to the selected shortcut, else to the first one.
     pub focus: bool,
+    /// A HUD attachment seen under the pointer takes its presses
+    /// (`crate::folderstorm::margin_pointer`): the room under it does not
+    /// sense them, its shortcuts, drawn over it, still do.
+    pub hud_at_pointer: bool,
 }
 
 /// What the desktops ask the app.
@@ -298,10 +302,12 @@ pub fn rooms(ctx: &egui::Context, desktop: &Desktop) -> Vec<surface::Room> {
 /// called in the interface's pass once the bars are laid out.
 pub fn show(ctx: &egui::Context, desktop: &mut Desktop, env: &Env) -> Vec<Request> {
     if !desktop.shortcuts_on || env.hidden {
+        surface::set_drawn_shortcuts(ctx, Vec::new());
         return Vec::new();
     }
     let rooms = rooms(ctx, desktop);
     if rooms.is_empty() {
+        surface::set_drawn_shortcuts(ctx, Vec::new());
         return Vec::new();
     }
     surface::show(ctx, desktop, env, &rooms)
@@ -344,11 +350,21 @@ pub fn added_notice(added: &Added, left_out: usize, turned_on: bool, shown: bool
 }
 
 /// Whether the pointer at `pos` is a desktop's: the topmost layer under it
-/// is one of our areas (the hook of `App::ui_takes_pointer`). egui does not
+/// is one of our areas (read by the hook of `App::ui_takes_pointer`, which
+/// lets a HUD seen over the room take its press:
+/// `crate::folderstorm::margin_pointer`). egui does not
 /// count an area of its background order as interface, so without this a
 /// press on a shortcut would also press the world. A window over a desktop
 /// is the topmost layer there, and still wins.
 pub fn takes_pointer(ctx: &egui::Context, pos: egui::Pos2) -> bool {
     ctx.layer_id_at(pos)
         .is_some_and(|layer| layer.order == egui::Order::Background && (0..store::MAX_SLOTS).any(|slot| layer.id == surface::area_id(slot)))
+}
+
+/// Whether the pointer at `pos` is over one of the shortcuts a desktop drew
+/// (this frame or the last), the desktop being the topmost layer there: what
+/// is drawn over the HUD attachments, where a HUD under the room does not
+/// take the press (`crate::folderstorm::margin_pointer`).
+pub fn shortcut_at(ctx: &egui::Context, pos: egui::Pos2) -> bool {
+    takes_pointer(ctx, pos) && surface::drawn_shortcuts(ctx).iter().any(|rect| rect.contains(pos))
 }

@@ -86,6 +86,7 @@ mod tests {
         "fs-search-outfit-safety",
         "fs-search-backup",
         "fs-search-background-alerts",
+        "fs-search-background-huds",
     ];
 
     /// What a user types, in each language, and the entry it must find.
@@ -150,6 +151,9 @@ mod tests {
         ("en", "notification sound", "fs-search-background-alerts"),
         ("fr", "son alerte", "fs-search-background-alerts"),
         ("ja", "アラート 通知", "fs-search-background-alerts"),
+        ("en", "hud wallpaper", "fs-search-background-huds"),
+        ("fr", "hud fond d'écran", "fs-search-background-huds"),
+        ("ja", "HUD 壁紙", "fs-search-background-huds"),
     ];
 
     #[test]
@@ -225,6 +229,7 @@ mod tests {
             ("favorites", Page::Workspaces, 2),
             ("quick switch", Page::Workspaces, 2),
             ("undo", Page::Workspaces, 1),
+            ("hud wallpaper", Page::Workspaces, 1),
             // Shortcuts › Other: the layouts' keyboard actions
             ("workspace", Page::Shortcuts, 5),
             ("switcher", Page::Shortcuts, 5),

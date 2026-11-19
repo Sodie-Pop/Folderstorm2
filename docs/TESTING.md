@@ -473,7 +473,10 @@ fitted with `1` / `fill`, `fit`, `stretch`, `centre` or `tile`; `span` puts
 one picture over the whole window, `dim` shows it at 40 %, `colour` shows a
 colour alone, `missing` points at a picture that is not there (its colour is
 shown and Preferences says so), `layout` adds a layout "Wall" with its own
-tiled background, in use. The world viewport is turned on (the world in the
+tiled background, in use; `hud` adds a HUD on the world's left edge, half
+in the left margin, where it shows over the picture (*HUDs over the
+background*, the default), and `hud-over` the same with that switch off
+(the picture covers the HUD's left half, its text stays on top). The world viewport is turned on (the world in the
 middle third) unless `AURORA_DEMO_VIEWPORT` sets it. Pretend monitors show
 the per-monitor fit; Preferences › Workspaces › Margins has the group
 *Background around the world* (`AURORA_DEMO_OPTIONS=workspaces/2`):
@@ -490,6 +493,23 @@ AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=workspaces/0 \
 Check that nothing is ever drawn over the world, that windows, bars, chat
 lines and HUD labels stay over the picture, and that the margins go black
 again when the viewport is turned off.
+
+A HUD in a margin is moved as in the world, there and back. With `hud`,
+and with `AURORA_DEMO_DESKTOP=1` added (a desktop in the same margin),
+hold Ctrl and drag the HUD's part in the margin: it follows, into the world
+and out again; in Build › Edit, a click on it selects it and its outline
+and handles show in the margin too. A shortcut drawn over the HUD still
+opens, and a click or a right-click on the empty desktop beside the HUD is
+the desktop's. With `hud-over` the picture hides the HUD's left half:
+there the press is the margin's (the desktop's, or nothing), never the
+hidden HUD's, and its handles stay in the world. Give the HUD a scale of
+its own (hold Ctrl and turn the wheel over it), leave it in the margin,
+minimize the viewer and bring it back: the HUD stays where it was.
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=hud AURORA_DEMO_DESKTOP=1 \
+  cargo run -p aurora-viewer -- --title "Test backgrounds hud"
+```
 
 **The margins' desktop (Folderstorm2).** `AURORA_DEMO_DESKTOP=<mode>` makes,
 once, a desktop of shortcuts in the margins around the world (row 1.10):
@@ -7076,7 +7096,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_LAYOUTS=1\|apply-wide\|apply-single\|reopen\|toggle\|lock\|unplug` (Folderstorm2) | Layouts: "Wide" (world on the right half, bars around it, windows in the left margin) and "Single" seeded, Preferences › Layout › Layouts open; `apply-…` applies them by itself; `reopen` closes two windows then applies "Wide", which opens them. Without `AURORA_WINDOW_SIZE`: `toggle` flips between them every 5 s with the viewer window (whole, then its left half); `lock` locks the viewer window with "Wide"; `unplug` (with several `AURORA_DEMO_MONITORS`) takes the last monitor away after 10 s, and the card offers "Single". `AURORA_DEMO_VIEWPORT=bars-around`: the bars around the world |
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
-| `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout\|hud\|hud-over` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`), with a HUD in the left margin over it (`hud`) or under it (`hud-over`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single\|edit\|unused\|taskbar\|overflow\|items\|outfit\|icons` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); a name edited in place at frame 200, a folder shortcut given a name and an icon at 300 (`edit`); two shortcuts on a monitor not in use and Preferences on the desktop's group at frame 200 (`unused`); the taskbar on the third monitor, the Inventory and a folder's window collapsed into it at frame 200, the Inventory restored at 300 (`taskbar`); twenty windows collapsed into it at frame 200, icon buttons and *More* (`overflow`); item shortcuts in a third column (a landmark, a notecard, an outfit, a shirt to add, a worn jacket, one whose item is gone), the landmark opened at frame 200 (the question before a teleport), the notecard at 300 (its window) (`items`); the same and the outfit shortcut opened at frame 200: the question of outfit safety (`outfit`); in those two and `icons`, a shortcut in a colour of its own, one wearing a picture copied from a file and one wearing a texture of the inventory, and the window *Shortcut icon* opened on the last at frame 200 (`icons`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
 | `AURORA_DEMO_BACKUP=1\|import\|other\|newer` (Folderstorm2) | Account setup backup: a small setup and two automatic backups in the demo's backups folder (`1`); the import dialog on a backup of this account (`import`), of another account with Inventory entries of its own (`other`), of a newer format with an unknown section (`newer`); open Preferences with `AURORA_DEMO_OPTIONS=system` |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
