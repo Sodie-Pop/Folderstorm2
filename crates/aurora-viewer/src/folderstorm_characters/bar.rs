@@ -16,8 +16,12 @@
 //! keep their height. [`show_strip`] draws the bar in it.
 //!
 //! This file only draws a [`State`] and returns the clicks as
-//! [`Request`]s. It keeps nothing: the names, aliases and colours it
-//! shows live in the state it is handed and go with it.
+//! [`Request`]s. It keeps no state of the host's: the names, aliases and
+//! colours it shows live in the state it is handed and go with it. What it
+//! keeps between two frames is the launch rules' (`launch`, in egui's
+//! memory): a quick action that would start a viewer asks "Launch?" at its
+//! first click, and a character picked in the list although it is not
+//! logged in is named and pulsed by the login button.
 //!
 //! Left to right: the characters' list, "open a login", the shared chat,
 //! the monitors' menu, the settings' menu; the quick actions; then, in a
@@ -26,14 +30,16 @@
 //! name in the characters' list, then lets the quick actions scroll; with
 //! no room even for its two ends, the whole row scrolls.
 
+use super::launch::{self, Memory};
 use crate::theme::Palette;
 use crate::ui::{
     menu,
     widgets::{self, ActionKind},
 };
-use ::folderstorm_session::bar::{Button, Character, LabelMode, Page, Presence, Request, State};
+use ::folderstorm_session::bar::{Button, Character, Entry, LabelMode, Page, Presence, Request, State};
 use ::folderstorm_session::host::Quick;
 use ::folderstorm_session::identity::{Colour, TEXT_CONTRAST};
+use ::folderstorm_session::launch::{self as rules, Surface};
 use aurora_i18n::tr;
 use egui::{Color32, Vec2};
 
@@ -92,6 +98,11 @@ struct Face {
     tint: Option<Color32>,
     /// What a click asks for; None: the button opens a menu.
     ask: Option<Request>,
+    /// A character's quick action that would start a viewer: the slot. Its
+    /// first click only arms it ("Launch?"); see `folderstorm_session::launch`.
+    starts: Option<u8>,
+    /// A glow round the button, 0 to 1: it draws attention to itself.
+    glow: Option<f32>,
 }
 
 impl Face {
@@ -182,18 +193,23 @@ fn quick_face(quick: Quick, name: String) -> (&'static str, String) {
     }
 }
 
-/// Where a character is, in a word; empty when it is not logged in.
+/// Where a character is, in a word.
 fn presence_text(presence: Presence) -> &'static str {
     match presence {
         Presence::Active => tr!("folderstorm-host-active"),
         Presence::Inactive => tr!("folderstorm-bar-inactive"),
-        Presence::Out => "",
+        Presence::Out => tr!("folderstorm-bar-not-logged-in"),
     }
 }
 
+/// The character picked in the list although it is not logged in, with how
+/// much its login button glows now (None: it does not pulse any more).
+type Chosen<'a> = Option<(&'a Character, Option<f32>)>;
+
 /// The toolbar's buttons at the left of the row. `tight`: the row has no
-/// room for the active character's name.
-fn left_faces(state: &State, tight: bool) -> Vec<Face> {
+/// room for the active character's name. `chosen`: the login button names
+/// that character and logs it in, instead of "the next one".
+fn left_faces(state: &State, tight: bool, chosen: Chosen<'_>) -> Vec<Face> {
     let plain = |kind, icon, label: &str, tip: String| Face {
         kind,
         icon,
@@ -204,6 +220,8 @@ fn left_faces(state: &State, tight: bool) -> Vec<Face> {
         enabled: true,
         tint: None,
         ask: None,
+        starts: None,
+        glow: None,
     };
     let active = state.active();
     // (the list always says who is in front, whatever the labels)
@@ -227,18 +245,38 @@ fn left_faces(state: &State, tight: bool) -> Vec<Face> {
         )
     };
     let next = state.next_login();
-    let login = Face {
-        enabled: next.is_some(),
-        ask: next.map(|_| Request::OpenLogin(None)),
-        ..plain(
-            Kind::Login,
-            "login-2",
-            tr!("folderstorm-bar-login"),
-            match next {
-                Some(next) => tr!("folderstorm-bar-login-help", name = full_name(next)),
-                None => tr!("folderstorm-bar-login-none").to_owned(),
-            },
-        )
+    let login = match chosen {
+        // picked in the list: the button names it, in the accent, and
+        // starts exactly that character; with its name whatever the
+        // labels, since the name is the point
+        Some((character, glow)) => {
+            let label = tr!("folderstorm-bar-login-name", name = cut(&character.name, NAME));
+            Face {
+                short: label.clone(),
+                face: ActionKind::Primary,
+                ask: Some(Request::OpenLogin(Some(character.slot))),
+                glow,
+                ..plain(
+                    Kind::Login,
+                    "login-2",
+                    &label,
+                    tr!("folderstorm-bar-login-help", name = full_name(character)),
+                )
+            }
+        }
+        None => Face {
+            enabled: next.is_some(),
+            ask: next.map(|_| Request::OpenLogin(None)),
+            ..plain(
+                Kind::Login,
+                "login-2",
+                tr!("folderstorm-bar-login"),
+                match next {
+                    Some(next) => tr!("folderstorm-bar-login-help", name = full_name(next)),
+                    None => tr!("folderstorm-bar-login-none").to_owned(),
+                },
+            )
+        },
     };
     let unread = state.chat_unread;
     let chat = Face {
@@ -283,7 +321,8 @@ fn count_text(count: u32) -> String {
 }
 
 /// The quick actions in the middle of the row.
-fn quick_faces(p: &Palette, state: &State) -> Vec<Face> {
+/// `armed`: the slot of the quick action that asks "Launch?" now.
+fn quick_faces(p: &Palette, state: &State, armed: Option<u8>) -> Vec<Face> {
     state
         .buttons()
         .into_iter()
@@ -295,7 +334,9 @@ fn quick_faces(p: &Palette, state: &State) -> Vec<Face> {
                     tip.push('\n');
                     tip.push_str(real);
                 }
-                Face {
+                let starts = rules::starts_viewer(character.quick).then_some(character.slot);
+                let asking = starts.is_some() && armed == starts;
+                let mut face = Face {
                     kind: Kind::Quick,
                     icon,
                     label: format!("{} · {}", character.slot + 1, cut(&character.name, NAME)),
@@ -309,7 +350,17 @@ fn quick_faces(p: &Palette, state: &State) -> Vec<Face> {
                     enabled: character.quick != Quick::Nothing,
                     tint: tint(p, character.colour),
                     ask: Some(Request::Pick(character.slot)),
+                    starts,
+                    glow: None,
+                };
+                if asking {
+                    // (the first click came: it asks again, whatever the labels)
+                    face.label = launch::confirm_label().to_owned();
+                    face.short = face.label.clone();
+                    face.tip = launch::confirm_help(character.name.clone());
+                    face.face = ActionKind::Caution;
                 }
+                face
             }
             Button::Attention(count) => Face {
                 kind: Kind::Quick,
@@ -324,6 +375,8 @@ fn quick_faces(p: &Palette, state: &State) -> Vec<Face> {
                 enabled: true,
                 tint: None,
                 ask: Some(Request::Inbox),
+                starts: None,
+                glow: None,
             },
             Button::MuteBackground(on) => Face {
                 kind: Kind::Quick,
@@ -339,6 +392,8 @@ fn quick_faces(p: &Palette, state: &State) -> Vec<Face> {
                 enabled: true,
                 tint: None,
                 ask: Some(Request::MuteBackground(!on)),
+                starts: None,
+                glow: None,
             },
             Button::VoiceFollows(on) => Face {
                 kind: Kind::Quick,
@@ -354,6 +409,8 @@ fn quick_faces(p: &Palette, state: &State) -> Vec<Face> {
                 enabled: true,
                 tint: None,
                 ask: Some(Request::VoiceFollows(!on)),
+                starts: None,
+                glow: None,
             },
         })
         .collect()
@@ -371,6 +428,8 @@ fn right_faces(home: Home) -> Vec<Face> {
         enabled: true,
         tint: None,
         ask: Some(ask),
+        starts: None,
+        glow: None,
     };
     match home {
         Home::Viewer => vec![
@@ -425,22 +484,94 @@ fn row_width(ui: &egui::Ui, faces: &[Face], mode: LabelMode) -> f32 {
     faces.iter().map(|face| face.width(ui, mode) + GAP).sum()
 }
 
-/// The list of the characters: each with where it is; picking one is its
-/// quick action.
-fn characters_menu(ui: &mut egui::Ui, p: &Palette, state: &State, asked: &mut Vec<Request>) {
-    if state.characters.is_empty() {
-        menu::info(ui, p, "users", tr!("folderstorm-bar-characters-none"));
-    }
-    for character in &state.characters {
-        let (icon, tip) = quick_face(character.quick, full_name(character));
-        let label = numbered(character, LIST_NAME);
-        let clicked = if character.quick == Quick::Nothing {
-            menu::item_tip(ui, p, icon, &label, false, &tip)
-        } else {
-            menu::item_detail(ui, p, icon, &label, presence_text(character.presence))
+/// What a line of the characters' list does when it is clicked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Line {
+    /// The character's quick action, at once (it is in the world, or its
+    /// viewer waits at its login screen).
+    Pick(u8),
+    /// The character is chosen: "open a login" names it and pulses; nothing
+    /// starts until that button is clicked.
+    Choose(u8),
+    /// An empty slot: the way to add a character.
+    Add,
+    /// Nothing can be done now (closing, or let go).
+    Nothing,
+}
+
+/// One line of the characters' list, before it is drawn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Row {
+    icon: &'static str,
+    label: String,
+    /// Where the character is, muted at the right end of its line.
+    detail: &'static str,
+    tip: String,
+    line: Line,
+}
+
+/// The lines of the characters' list: one per slot, in slot order, five in
+/// all. A character says where it is ("Not logged in" when it has no
+/// viewer); an empty slot offers "Add new avatar".
+fn rows(state: &State) -> Vec<Row> {
+    state
+        .entries()
+        .into_iter()
+        .map(|entry| match entry {
+            Entry::Empty(_) => Row {
+                icon: "user-plus",
+                label: tr!("folderstorm-bar-add-avatar").to_owned(),
+                detail: "",
+                tip: tr!("folderstorm-bar-add-avatar-help").to_owned(),
+                line: Line::Add,
+            },
+            Entry::Character(character) => {
+                let (icon, tip) = quick_face(character.quick, full_name(character));
+                let line = if character.quick == Quick::Nothing {
+                    Line::Nothing
+                } else if rules::picks_only_select(character, state) {
+                    Line::Choose(character.slot)
+                } else {
+                    Line::Pick(character.slot)
+                };
+                Row {
+                    icon,
+                    label: numbered(character, LIST_NAME),
+                    detail: presence_text(character.presence),
+                    tip,
+                    line,
+                }
+            }
+        })
+        .collect()
+}
+
+/// The list of the characters, a line for each of the five slots. A
+/// character in the world is picked by its quick action; one that is not
+/// logged in is chosen, and the login button next to the list starts it.
+fn characters_menu(ui: &mut egui::Ui, p: &Palette, state: &State, asked: &mut Vec<Request>, memory: &mut Memory, now: f64) {
+    for row in rows(state) {
+        let clicked = match row.line {
+            Line::Nothing => menu::item_tip(ui, p, row.icon, &row.label, false, &row.tip),
+            Line::Add => menu::item_tip(ui, p, row.icon, &row.label, true, &row.tip),
+            _ => menu::item_detail(ui, p, row.icon, &row.label, row.detail),
         };
-        if clicked {
-            asked.push(Request::Pick(character.slot));
+        if !clicked {
+            continue;
+        }
+        // (a menu is another button: whatever asked "Launch?" reverts)
+        memory.arming.disarm();
+        match row.line {
+            Line::Pick(slot) => {
+                memory.choice.clear();
+                asked.push(Request::Pick(slot));
+            }
+            Line::Choose(slot) => memory.choice.pick(slot, now),
+            Line::Add => {
+                memory.choice.clear();
+                asked.push(Request::Show(Page::NewProfile));
+            }
+            Line::Nothing => {}
         }
     }
 }
@@ -527,12 +658,24 @@ fn settings_menu(ui: &mut egui::Ui, p: &Palette, state: &State, asked: &mut Vec<
 }
 
 /// Draws a button and what it opens; its click, if any, is asked.
-fn place(ui: &mut egui::Ui, p: &Palette, state: &State, face: &Face, mode: LabelMode, asked: &mut Vec<Request>) {
+fn place(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    state: &State,
+    face: &Face,
+    mode: LabelMode,
+    asked: &mut Vec<Request>,
+    memory: &mut Memory,
+    now: f64,
+) {
     let response = face.draw(ui, p, mode);
+    if let Some(glow) = face.glow {
+        draw_glow(ui, p, response.rect, glow);
+    }
     let close = egui::PopupCloseBehavior::CloseOnClick;
     match face.kind {
         Kind::Characters => {
-            menu::dropdown(&response, p, close, |ui| characters_menu(ui, p, state, asked));
+            menu::dropdown(&response, p, close, |ui| characters_menu(ui, p, state, asked, memory, now));
         }
         Kind::Monitors => {
             menu::dropdown(&response, p, close, |ui| monitors_menu(ui, p, state, asked));
@@ -549,7 +692,39 @@ fn place(ui: &mut egui::Ui, p: &Palette, state: &State, face: &Face, mode: Label
         && face.enabled
         && response.clicked()
     {
-        asked.push(ask);
+        // any click calms the login button's pulse
+        memory.choice.calm();
+        let run = match face.starts {
+            // a character that has no viewer: the first click only asks
+            Some(slot) => memory.arming.press(launch::bar_button(slot), true, now) == rules::Press::Run,
+            // any other button is used: what asked "Launch?" reverts
+            None => {
+                memory.arming.disarm();
+                true
+            }
+        };
+        if run {
+            if face.kind == Kind::Login {
+                // started: the choice is done
+                memory.choice.clear();
+            }
+            asked.push(ask);
+        }
+    }
+    if let Some(slot) = face.starts {
+        launch::keep_armed(ui.ctx(), memory, response.rect, launch::bar_button(slot), now);
+    }
+}
+
+/// A soft glow in the accent round a button, `glow` 0 to 1: three thin
+/// rings that fade outwards, inside the row's room.
+fn draw_glow(ui: &egui::Ui, p: &Palette, rect: egui::Rect, glow: f32) {
+    let radius = widgets::inner_radius(ui.visuals());
+    for (grow, weight) in [(0.5, 0.9), (1.5, 0.55), (2.5, 0.25)] {
+        let colour = p.violet_light.gamma_multiply((glow * weight).clamp(0.0, 1.0));
+        let ring = egui::Stroke::new(1.5, colour);
+        let rect = rect.expand(grow);
+        ui.painter().rect_stroke(rect, radius, ring, egui::StrokeKind::Outside);
     }
 }
 
@@ -570,14 +745,36 @@ fn handle(ui: &mut egui::Ui, p: &Palette, asked: &mut Vec<Request>) {
 }
 
 /// Draws the bar in `ui`, whose room is the row, and returns what was
-/// clicked. The caller paints the row's background.
+/// clicked. The caller paints the row's background. What the launch rules
+/// keep between two frames (the quick action that asks "Launch?", the
+/// character picked in the list) is in egui's memory, per window.
 pub fn show(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home) -> Vec<Request> {
+    let ctx = ui.ctx().clone();
+    let mut memory = launch::load(&ctx);
+    launch::begin(&ctx, &mut memory, state);
+    let asked = show_row(ui, p, state, home, &mut memory);
+    launch::finish(&ctx, &memory);
+    launch::store(&ctx, memory);
+    asked
+}
+
+fn show_row(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home, memory: &mut Memory) -> Vec<Request> {
     let mut asked = Vec::new();
     if home == Home::Viewer && state.collapsed {
         handle(ui, p, &mut asked);
         return asked;
     }
-    let quick = quick_faces(p, state);
+    let (now, still) = (launch::now(ui.ctx()), launch::still(ui.ctx()));
+    let armed = memory
+        .arming
+        .which(now)
+        .filter(|target| target.surface == Surface::Bar)
+        .and_then(|target| u8::try_from(target.slot).ok());
+    let chosen: Chosen<'_> = memory
+        .choice
+        .target(state)
+        .map(|character| (character, memory.choice.glow(now, still)));
+    let quick = quick_faces(p, state, armed);
     let right = right_faces(home);
     let room = ui.available_width();
     // with too little room: the toolbar's labels go, then the quick
@@ -589,18 +786,18 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home) -> Vec<Re
         (state.toolbar_labels.narrow(), state.quick_labels.narrow(), false),
         (state.toolbar_labels.narrow(), state.quick_labels.narrow(), true),
     ];
-    let mut chosen = choices[choices.len() - 1];
+    let mut chosen_layout = choices[choices.len() - 1];
     for choice in choices {
         let (toolbar, labels, tight) = choice;
-        let left = left_faces(state, tight);
+        let left = left_faces(state, tight, chosen);
         let needed = row_width(ui, &left, toolbar) + row_width(ui, &right, toolbar) + row_width(ui, &quick, labels) + 2.0 * GROUP_GAP;
         if needed <= room {
-            chosen = choice;
+            chosen_layout = choice;
             break;
         }
     }
-    let (toolbar, labels, tight) = chosen;
-    let left = left_faces(state, tight);
+    let (toolbar, labels, tight) = chosen_layout;
+    let left = left_faces(state, tight, chosen);
     ui.spacing_mut().item_spacing = Vec2::new(GAP, 0.0);
     // (the wheel moves a row that only scrolls sideways)
     ui.style_mut().always_scroll_the_only_direction = true;
@@ -617,15 +814,15 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home) -> Vec<Re
         scrolled("folderstorm-bar-row").show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 for face in &left {
-                    place(ui, p, state, face, toolbar, &mut asked);
+                    place(ui, p, state, face, toolbar, &mut asked, memory, now);
                 }
                 ui.add_space(GROUP_GAP - GAP);
                 for face in &quick {
-                    place(ui, p, state, face, labels, &mut asked);
+                    place(ui, p, state, face, labels, &mut asked, memory, now);
                 }
                 ui.add_space(GROUP_GAP - GAP);
                 for face in &right {
-                    place(ui, p, state, face, toolbar, &mut asked);
+                    place(ui, p, state, face, toolbar, &mut asked, memory, now);
                 }
             });
         });
@@ -633,11 +830,11 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home) -> Vec<Re
     }
     ui.horizontal_centered(|ui| {
         for face in &left {
-            place(ui, p, state, face, toolbar, &mut asked);
+            place(ui, p, state, face, toolbar, &mut asked, memory, now);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             for face in right.iter().rev() {
-                place(ui, p, state, face, toolbar, &mut asked);
+                place(ui, p, state, face, toolbar, &mut asked, memory, now);
             }
             ui.add_space(GROUP_GAP - GAP);
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
@@ -645,7 +842,7 @@ pub fn show(ui: &mut egui::Ui, p: &Palette, state: &State, home: Home) -> Vec<Re
                 scrolled("folderstorm-bar-quick").show(ui, |ui| {
                     ui.horizontal_centered(|ui| {
                         for face in &quick {
-                            place(ui, p, state, face, labels, &mut asked);
+                            place(ui, p, state, face, labels, &mut asked, memory, now);
                         }
                     });
                 });
@@ -1214,7 +1411,7 @@ mod tests {
         assert!(short.ends_with('…') && short.starts_with("A very long pro"));
         let state = sample();
         let p = crate::theme::Theme::default().skin_palette();
-        let quick = quick_faces(&p, &state);
+        let quick = quick_faces(&p, &state, None);
         // the character's button: number and cut name; number alone with
         // icons only; the whole name in the hover
         assert_eq!(quick[2].label, format!("3 · {short}"));
@@ -1229,7 +1426,7 @@ mod tests {
     fn the_quick_actions_carry_what_they_ask_and_the_characters_their_colour() {
         let state = sample();
         let p = crate::theme::Theme::default().skin_palette();
-        let quick = quick_faces(&p, &state);
+        let quick = quick_faces(&p, &state, None);
         let asks: Vec<_> = quick.iter().filter_map(|face| face.ask).collect();
         assert_eq!(
             asks,
@@ -1258,7 +1455,7 @@ mod tests {
             inbox: 0,
             ..sample()
         };
-        let quick = quick_faces(&p, &muted);
+        let quick = quick_faces(&p, &muted, None);
         assert_eq!((quick[5].face, quick[5].icon), (ActionKind::Primary, "volume-off"));
         assert_eq!(quick[5].ask, Some(Request::MuteBackground(false)));
         assert_eq!((quick[4].face, quick[4].short.as_str()), (ActionKind::Flat, ""));
@@ -1267,12 +1464,12 @@ mod tests {
     #[test]
     fn the_toolbar_says_who_is_in_front_and_which_login_opens() {
         let state = sample();
-        let left = left_faces(&state, false);
+        let left = left_faces(&state, false, None);
         assert_eq!(left.len(), 5);
         assert_eq!(left[0].label, "1: Main");
         assert!(left[0].tip.contains("Jane Doe"));
         assert_eq!(left[0].short, "1: Main", "with icons only too");
-        assert_eq!(left_faces(&state, true)[0].label, "1");
+        assert_eq!(left_faces(&state, true, None)[0].label, "1");
         // "open a login" is the first character not logged in
         assert_eq!(left[1].ask, Some(Request::OpenLogin(None)));
         assert!(left[1].enabled && left[1].tip.contains("3: A very long profile name"));
@@ -1285,10 +1482,10 @@ mod tests {
             characters: Vec::new(),
             ..sample()
         };
-        let left = left_faces(&open, false);
+        let left = left_faces(&open, false, None);
         assert_eq!((left[2].ask, left[2].face), (Some(Request::Chat(false)), ActionKind::Primary));
         assert_eq!(left[0].label, tr!("folderstorm-bar-characters"));
-        assert_eq!(left_faces(&open, true)[0].short, "");
+        assert_eq!(left_faces(&open, true, None)[0].short, "");
         assert!(!left[1].enabled && left[1].ask.is_none());
         assert_eq!(count_text(100), "99+");
     }
@@ -1306,6 +1503,375 @@ mod tests {
         assert_ne!(plain[0].tip, pinned[0].tip);
     }
 
+    // ----- launch UX: confirmation, choice, five lines ------------------
+
+    /// A bar drawn frame by frame on the processor, with a clock and the
+    /// clicks of the user, and what it drew: the clicks it asked for, its
+    /// texts with where they are, its pixels.
+    struct Rig {
+        ctx: egui::Context,
+        painter: crate::crash::software::Painter,
+        p: Palette,
+        size: (u32, u32),
+    }
+
+    struct Frame {
+        asked: Vec<Request>,
+        texts: Vec<(String, egui::Pos2)>,
+        pixels: Vec<u32>,
+    }
+
+    impl Frame {
+        fn shows(&self, text: &str) -> bool {
+            self.texts.iter().any(|(t, _)| t.contains(text))
+        }
+
+        /// A point inside the button or line whose text starts with `text`.
+        fn at(&self, text: &str) -> egui::Pos2 {
+            let (_, pos) = self
+                .texts
+                .iter()
+                .find(|(t, _)| t.starts_with(text))
+                .unwrap_or_else(|| panic!("{text:?} is not drawn: {:?}", self.texts));
+            *pos + egui::vec2(3.0, 5.0)
+        }
+    }
+
+    impl Rig {
+        fn new(width: u32, height: u32) -> Self {
+            let theme = crate::theme::Theme::default();
+            let ctx = egui::Context::default();
+            theme.apply(&ctx, 1.0);
+            let _icons = crate::ui::icons::Icons::load(&ctx, None);
+            Self {
+                ctx,
+                painter: Default::default(),
+                p: theme.skin_palette(),
+                size: (width, height),
+            }
+        }
+
+        /// One frame at `time` seconds, with these events.
+        fn frame(&mut self, state: &State, time: f64, events: Vec<egui::Event>) -> Frame {
+            fn texts(shape: &egui::Shape, into: &mut Vec<(String, egui::Pos2)>) {
+                match shape {
+                    egui::Shape::Text(text) => into.push((text.galley.text().to_owned(), text.pos)),
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, into)),
+                    _ => {}
+                }
+            }
+            let (width, height) = self.size;
+            let window = egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, height as f32));
+            let raw = egui::RawInput {
+                screen_rect: Some(window),
+                time: Some(time),
+                events,
+                focused: true,
+                ..Default::default()
+            };
+            let mut asked = Vec::new();
+            let p = self.p;
+            let mut output = self.ctx.run_ui(raw, |ui| {
+                let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width as f32, 30.0));
+                asked = show_in(ui, &p, rect, state, Home::Viewer);
+            });
+            let mut drawn = Vec::new();
+            for shape in &output.shapes {
+                texts(&shape.shape, &mut drawn);
+            }
+            let primitives = self.ctx.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
+            let mut pixels = vec![0u32; (width * height) as usize];
+            self.painter.paint(
+                &mut pixels,
+                [width as usize, height as usize],
+                &primitives,
+                &output.textures_delta,
+                output.pixels_per_point,
+                self.p.panel,
+            );
+            output.textures_delta.clear();
+            Frame {
+                asked,
+                texts: drawn,
+                pixels,
+            }
+        }
+
+        /// A click: the pointer comes, presses and lets go.
+        fn click(&mut self, state: &State, time: f64, at: egui::Pos2) -> Frame {
+            let button = |pressed| egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            };
+            let moved = egui::Event::PointerMoved(at);
+            // (a frame for the pointer, one for the click: as a hand does it)
+            self.frame(state, time - 0.02, vec![moved]);
+            self.frame(state, time, vec![button(true), button(false)])
+        }
+
+        fn keep(&self, name: &str, frame: &Frame) {
+            let Some(dir) = std::env::var_os("FOLDERSTORM_TEST_CAPTURE_DIR") else {
+                return;
+            };
+            let (width, height) = self.size;
+            let rgba: Vec<_> = frame
+                .pixels
+                .iter()
+                .flat_map(|p| [(*p >> 16) as u8, (*p >> 8) as u8, *p as u8, 255])
+                .collect();
+            let path = std::path::Path::new(&dir).join(format!("{name}.png"));
+            image::save_buffer(path, &rgba, width, height, image::ColorType::Rgba8).expect("capture written");
+        }
+    }
+
+    #[test]
+    fn the_list_has_five_lines_and_an_empty_slot_adds_an_avatar() {
+        let state = sample();
+        let list = rows(&state);
+        assert_eq!(list.len(), 5, "one line per slot");
+        // in slot order, the empty slot where it is
+        let labels: Vec<&str> = list.iter().map(|row| row.label.as_str()).collect();
+        assert_eq!(labels[0], "1: Main");
+        assert_eq!(labels[1], "2: Shop keeper");
+        assert!(labels[2].starts_with("3: A very long profile name"));
+        assert_eq!(labels[3], "4: demo-4");
+        assert_eq!(labels[4], "Add new avatar");
+        assert_eq!(labels[4], tr!("folderstorm-bar-add-avatar"));
+        assert_eq!((list[4].line, list[4].icon, list[4].detail), (Line::Add, "user-plus", ""));
+        // a character says where it is: in the world, or not logged in
+        assert_eq!(list[0].detail, tr!("folderstorm-host-active"));
+        assert_eq!(list[1].detail, tr!("folderstorm-bar-inactive"));
+        assert_eq!(list[2].detail, "Not logged in");
+        assert_eq!(list[3].detail, tr!("folderstorm-bar-not-logged-in"));
+        // picking: a character in the world is its quick action at once; one
+        // that is not logged in is only chosen; the empty slot adds
+        let lines: Vec<Line> = list.iter().map(|row| row.line).collect();
+        assert_eq!(lines, [Line::Pick(0), Line::Pick(1), Line::Choose(2), Line::Choose(3), Line::Add]);
+        // nobody: five empty lines, the way to a first character
+        let nobody = rows(&State::default());
+        assert_eq!(nobody.len(), 5);
+        assert!(nobody.iter().all(|row| row.line == Line::Add && row.label == "Add new avatar"));
+        // a closing character has nothing to pick
+        let mut closing = sample();
+        closing.characters[3].quick = Quick::Nothing;
+        assert_eq!(rows(&closing)[3].line, Line::Nothing);
+    }
+
+    #[test]
+    fn the_login_button_names_the_character_that_was_picked() {
+        let state = sample();
+        // nothing picked: "Open a login" for the next one, as before
+        let plain = left_faces(&state, false, None);
+        assert_eq!((plain[1].label.as_str(), plain[1].face), ("Open a login", ActionKind::Flat));
+        assert_eq!(plain[1].ask, Some(Request::OpenLogin(None)));
+        assert!(plain[1].glow.is_none());
+        // picked: its name, in the accent, and exactly that character
+        let picked = state.character(3).expect("a character");
+        let chosen = left_faces(&state, false, Some((picked, Some(0.5))));
+        assert_eq!(chosen[1].label, "Log in demo-4");
+        assert_eq!(chosen[1].label, tr!("folderstorm-bar-login-name", name = "demo-4"));
+        assert_eq!(chosen[1].short, "Log in demo-4", "named whatever the labels");
+        assert_eq!((chosen[1].face, chosen[1].glow), (ActionKind::Primary, Some(0.5)));
+        assert_eq!(chosen[1].ask, Some(Request::OpenLogin(Some(3))));
+        assert!(chosen[1].enabled && chosen[1].tip.contains("4: demo-4"));
+        // the pulse is over: still named and lit, without a glow
+        let calm = left_faces(&state, true, Some((picked, None)));
+        assert_eq!(
+            (calm[1].label.as_str(), calm[1].face, calm[1].glow),
+            ("Log in demo-4", ActionKind::Primary, None)
+        );
+        // a long name is cut as the buttons do
+        let long = state.character(2).expect("a character");
+        let chosen = left_faces(&state, false, Some((long, None)));
+        assert_eq!(chosen[1].label, format!("Log in {}", cut(&long.name, NAME)));
+        // nobody left to log in: the plain button is greyed, as before
+        let none = State {
+            characters: state.characters[..2].to_vec(),
+            ..sample()
+        };
+        assert!(!left_faces(&none, false, None)[1].enabled);
+    }
+
+    #[test]
+    fn only_a_character_without_a_viewer_asks_launch() {
+        let p = crate::theme::Theme::default().skin_palette();
+        let state = sample();
+        // the one that would start a viewer (4: Launch), armed
+        let quick = quick_faces(&p, &state, Some(3));
+        assert_eq!(quick[3].starts, Some(3));
+        assert_eq!(quick[3].label, "Launch?");
+        assert_eq!(quick[3].label, tr!("folderstorm-quick-confirm"));
+        assert_eq!(quick[3].short, "Launch?", "with icons only too");
+        assert_eq!(quick[3].face, ActionKind::Caution);
+        assert!(quick[3].tip.contains("demo-4"), "{}", quick[3].tip);
+        assert_eq!(quick[3].ask, Some(Request::Pick(3)));
+        // not armed: as it was, and the others never change
+        let quick = quick_faces(&p, &state, None);
+        assert_eq!((quick[3].label.as_str(), quick[3].face), ("4 · demo-4", ActionKind::Flat));
+        assert_eq!(quick[3].starts, Some(3));
+        // a switch to a character in the world, and one at its login screen
+        // (3: the quick action brings it forward): never armed
+        let quick = quick_faces(&p, &state, Some(1));
+        assert_eq!((quick[0].starts, quick[1].starts, quick[2].starts), (None, None, None));
+        assert_eq!(quick[1].label, "2 · Shop keeper");
+        let quick = quick_faces(&p, &state, Some(2));
+        assert_eq!(quick[2].label, format!("3 · {}", cut(&state.characters[2].name, NAME)));
+        // a character whose viewer ended is restarted: also a new viewer
+        let mut ended = sample();
+        ended.characters[3].quick = Quick::Restart;
+        assert_eq!(quick_faces(&p, &ended, Some(3))[3].label, "Launch?");
+    }
+
+    #[test]
+    fn a_quick_action_that_starts_a_viewer_needs_a_second_click_within_four_seconds() {
+        let state = sample();
+        let mut rig = Rig::new(1400, 60);
+        rig.frame(&state, 1.0, vec![]);
+        let first = rig.frame(&state, 1.1, vec![]);
+        assert!(first.shows("4 · demo-4") && !first.shows("Launch?"));
+        // the first click: nothing is asked, the button asks
+        let clicked = rig.click(&state, 2.0, first.at("4 · demo-4"));
+        assert!(clicked.asked.is_empty(), "{:?}", clicked.asked);
+        let armed = rig.frame(&state, 2.1, vec![]);
+        assert!(armed.shows("Launch?") && !armed.shows("4 · demo-4"), "{:?}", armed.texts);
+        rig.keep("bar-quick-launch-armed", &armed);
+        // the second click, three seconds later: the viewer starts
+        let again = rig.click(&state, 5.0, armed.at("Launch?"));
+        assert_eq!(again.asked, [Request::Pick(3)]);
+        let after = rig.frame(&state, 5.1, vec![]);
+        assert!(after.shows("4 · demo-4") && !after.shows("Launch?"), "used: back to its label");
+        // a click after the time is a first click again
+        let first = rig.click(&state, 10.0, after.at("4 · demo-4"));
+        assert!(first.asked.is_empty());
+        let late = rig.frame(&state, 14.5, vec![]);
+        assert!(
+            late.shows("4 · demo-4") && !late.shows("Launch?"),
+            "four seconds: it reverts by itself"
+        );
+        let again = rig.click(&state, 15.0, late.at("4 · demo-4"));
+        assert!(again.asked.is_empty(), "a click after the time asks again: {:?}", again.asked);
+        // the pointer leaves: it reverts
+        let armed = rig.frame(&state, 15.1, vec![]);
+        assert!(armed.shows("Launch?"));
+        rig.frame(&state, 15.5, vec![egui::Event::PointerMoved(egui::pos2(700.0, 50.0))]);
+        let back = rig.frame(&state, 15.6, vec![]);
+        assert!(back.shows("4 · demo-4") && !back.shows("Launch?"), "{:?}", back.texts);
+        // another button is used: it reverts, and the other does its thing
+        let first = rig.click(&state, 20.0, back.at("4 · demo-4"));
+        assert!(first.asked.is_empty());
+        let armed = rig.frame(&state, 20.1, vec![]);
+        assert!(armed.shows("Launch?"));
+        let other = rig.click(&state, 21.0, armed.at(tr!("folderstorm-bar-mute")));
+        assert_eq!(other.asked, [Request::MuteBackground(true)]);
+        let reverted = rig.frame(&state, 21.1, vec![]);
+        assert!(!reverted.shows("Launch?"), "{:?}", reverted.texts);
+        // switching to a character already in the world is one click
+        let one = rig.click(&state, 30.0, reverted.at("2 · Shop keeper"));
+        assert_eq!(one.asked, [Request::Pick(1)]);
+    }
+
+    #[test]
+    fn a_character_that_is_not_logged_in_is_chosen_in_the_list_and_logged_in_by_its_button() {
+        let state = sample();
+        let mut rig = Rig::new(1400, 230);
+        let idle = rig.frame(&state, 1.0, vec![]);
+        // the list: five lines, and where each character is
+        let opened = rig.click(&state, 2.0, idle.at("1: Main"));
+        assert!(opened.asked.is_empty());
+        let list = rig.frame(&state, 2.1, vec![]);
+        for text in [
+            "2: Shop keeper",
+            "3: A very long profile name",
+            "4: demo-4",
+            "Add new avatar",
+            "Not logged in",
+        ] {
+            assert!(list.shows(text), "{text}: {:?}", list.texts);
+        }
+        assert_eq!(list.texts.iter().filter(|(t, _)| t == "Not logged in").count(), 2);
+        rig.keep("bar-list-five-slots", &list);
+        // picking one that is not logged in starts nothing
+        let chosen = rig.click(&state, 3.0, list.at("4: demo-4"));
+        assert!(chosen.asked.is_empty(), "the list selects, the button launches: {:?}", chosen.asked);
+        // the login button names it, and pulses
+        let button = rig.frame(&state, 3.1, vec![]);
+        assert!(button.shows("Log in demo-4"), "{:?}", button.texts);
+        assert!(!button.shows("Not logged in"), "the list closed");
+        let mem = launch::load(&rig.ctx);
+        assert!(mem.choice.pulsing(3.1) && mem.choice.glow(3.1, false).is_some());
+        let dim = rig.frame(&state, 3.0 + 1.2, vec![]);
+        rig.keep("bar-login-pulse-dim", &dim);
+        let bright = rig.frame(&state, 3.0 + 1.8, vec![]);
+        rig.keep("bar-login-pulse-bright", &bright);
+        // the glow is drawn: the button is not the same lit and unlit
+        assert_ne!(bright.pixels, dim.pixels, "the button glows and fades");
+        // clicking it logs in that character, and only it
+        let login = rig.click(&state, 6.0, button.at("Log in demo-4"));
+        assert_eq!(login.asked, [Request::OpenLogin(Some(3))]);
+        let after = rig.frame(&state, 6.1, vec![]);
+        assert!(!after.shows("Log in demo-4"), "done: back to the plain button");
+        // a pick in the world is the quick action at once, the empty slot adds
+        let opened = rig.click(&state, 10.0, after.at("1: Main"));
+        assert!(opened.asked.is_empty());
+        let list = rig.frame(&state, 10.1, vec![]);
+        let switched = rig.click(&state, 11.0, list.at("2: Shop keeper"));
+        assert_eq!(switched.asked, [Request::Pick(1)]);
+        let opened = rig.click(&state, 20.0, after.at("1: Main"));
+        assert!(opened.asked.is_empty());
+        let list = rig.frame(&state, 20.1, vec![]);
+        let add = rig.click(&state, 21.0, list.at("Add new avatar"));
+        assert_eq!(add.asked, [Request::Show(Page::NewProfile)]);
+    }
+
+    #[test]
+    fn the_pulse_stops_after_six_seconds_or_at_a_click_and_is_still_with_reduced_motion() {
+        let state = sample();
+        let mut rig = Rig::new(1400, 60);
+        let mut memory = launch::load(&rig.ctx);
+        memory.choice.pick(3, 0.5);
+        launch::store(&rig.ctx, memory);
+        rig.frame(&state, 1.0, vec![]);
+        let named = rig.frame(&state, 1.1, vec![]);
+        assert!(named.shows("Log in demo-4"));
+        assert!(launch::load(&rig.ctx).choice.pulsing(1.1));
+        // six seconds on: no glow, the button still names the character
+        let later = rig.frame(&state, 7.0, vec![]);
+        assert!(later.shows("Log in demo-4"));
+        assert!(!launch::load(&rig.ctx).choice.pulsing(7.0));
+        // a click anywhere in the window calms it
+        let mut memory = launch::load(&rig.ctx);
+        memory.choice.pick(3, 8.0);
+        launch::store(&rig.ctx, memory);
+        rig.frame(&state, 8.1, vec![]);
+        assert!(launch::load(&rig.ctx).choice.pulsing(8.1));
+        rig.click(&state, 8.5, egui::pos2(900.0, 50.0));
+        assert!(!launch::load(&rig.ctx).choice.pulsing(8.6), "a click calms the pulse");
+        assert!(rig.frame(&state, 8.7, vec![]).shows("Log in demo-4"));
+        // reduced motion: the glow is one steady value
+        crate::theme::apply_motion(&rig.ctx, true);
+        let mut memory = launch::load(&rig.ctx);
+        memory.choice.pick(3, 10.0);
+        launch::store(&rig.ctx, memory);
+        let glow = |rig: &Rig, t: f64| launch::load(&rig.ctx).choice.glow(t, launch::still(&rig.ctx));
+        let a = rig.frame(&state, 10.1, vec![]);
+        let (ga, gb, gc) = (glow(&rig, 10.1), glow(&rig, 10.7), glow(&rig, 11.3));
+        assert!(ga.is_some_and(|g| g > 0.0), "lit");
+        assert_eq!((ga, gb), (gb, gc), "one steady value, no pulse");
+        rig.frame(&state, 10.7, vec![]);
+        rig.frame(&state, 11.3, vec![]);
+        rig.keep("bar-login-static-highlight", &a);
+        // ... and with motion, the same instants give different values
+        crate::theme::apply_motion(&rig.ctx, false);
+        assert_ne!(glow(&rig, 10.1), glow(&rig, 10.7));
+        // a click calms it
+        let mut memory = launch::load(&rig.ctx);
+        memory.choice.calm();
+        launch::store(&rig.ctx, memory);
+        assert_eq!(glow(&rig, 12.0), None);
+    }
+
     /// Every icon the bar names is one the viewer embeds: an unknown name
     /// draws a button without its icon.
     #[test]
@@ -1319,8 +1885,8 @@ mod tests {
                 ..sample()
             },
         ] {
-            names.extend(left_faces(&state, false).iter().map(|face| face.icon));
-            names.extend(quick_faces(&p, &state).iter().map(|face| face.icon));
+            names.extend(left_faces(&state, false, None).iter().map(|face| face.icon));
+            names.extend(quick_faces(&p, &state, None).iter().map(|face| face.icon));
         }
         for home in [Home::Viewer, Home::Host { pinned: false }, Home::Host { pinned: true }] {
             names.extend(right_faces(home).iter().map(|face| face.icon));

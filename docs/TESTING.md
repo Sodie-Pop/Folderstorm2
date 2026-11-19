@@ -7340,7 +7340,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
 | `AURORA_DEMO_BACKGROUND_ALERTS=1` (Folderstorm2) | The alert sounds of a background character on for the run (nothing saved), with made-up interface sounds (a short tick, its pitch by sound); outside the session host the window counts as a background character until a click in it and gets a made-up event every 5 s (new conversation, two instant messages of one conversation, two group lines of one group, a conference line, a mention, an inventory offer, a teleport offer), the second line of a conversation held by the quiet time; with `AURORA_DEMO_SESSION_HOST`, the demo viewers inherit it and their background characters sound for the shared chat's demo instant message and teleport offer |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
-| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
+| `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped` (`docked-states` / `popped-states`: with the launch rules' states on show, see the docked bar's section below), the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
 | `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures, texture pages, 3D targets, GPU culling buffers, reflection probes and shadow atlas back before its window is minimised (also after a switch from the docked bar or a hotkey), a watched Economy character (its monitor's window on screen) stays behind with a small share, each viewer holds the share the host gives it; `hibernate,<MB>` puts every demo character in Hibernation instead (Economy plus the renderer let go after the grace, `folderstorm/plans/deep-sleep.md`) |
 | `AURORA_DEMO_HIBERNATE_AFTER=<s>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: the host's "Hibernate after" for the run (5 s to 10 min; 20 s by default), saved in the demo host's settings |
 | `AURORA_DEMO_GAMING_MODE=<frame>` | From that frame, gaming mode is on as from its toolbar button: the Render pauses, the loop slows, with its notice and window title, until the window comes back in front |
@@ -9213,15 +9213,44 @@ failure. Grid validation and any paid upload are performed by the human.
     variable also puts "Mute background" and "Voice follows" among the
     quick actions):
     `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_BAR=docked AURORA_DEMO_SESSION_HOST_POLISH=colours cargo run -p aurora-viewer -- --title "Test host"`.
+    - **the launch rules** (the confirmation before a new viewer, the
+      login button after a choice in the list):
+      `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=4 AURORA_DEMO_SESSION_HOST_BAR=docked-states cargo run -p aurora-viewer -- --title "Test host"`
+      (or `popped-states` for the compact window). The first two
+      characters run, the third and fourth have no viewer and the fifth
+      slot is empty. In each bar, the fourth character's quick action
+      already asks **Launch?** (in the attention colour) and the login
+      button already says **Log in demo-3** with a pulsing glow; both
+      stay as they are until something is clicked. Then try it by hand:
+      - a click on a quick action of a character that is not running
+        (the bar, the host's row of quick actions, a card's Start, a
+        condensed line) only changes its label to **Launch?**; a second
+        click within about four seconds starts the viewer; waiting,
+        moving the pointer away or using another button puts the label
+        back; a character in the world switches with one click; the
+        global hotkeys stay immediate;
+      - open the characters' list: five lines, the characters not
+        logged in say "Not logged in", the last one says "Add new
+        avatar". Picking "demo-4" starts nothing: the login button
+        beside the list says **Log in demo-4** and pulses softly (about
+        1.2 s a pulse) for six seconds, or until any click; with
+        Preferences › Accessibility › Reduce motion the highlight is
+        steady. Clicking the button starts that character's viewer;
+      - "Add new avatar" brings the host's window forward on its "New
+        character profile" page.
     What to look at:
     - **docked**: each demo viewer has one row at the top of its window,
       above its own bars, on every screen (login, loading, world); the
       viewer's interface starts under it (the islands or Firestorm's
       bars, the windows' room, the login screen). Left to right: the
-      characters' list ("1: Main": every character with "Active",
-      "Inactive" or nothing; picking one switches to it, brings it forward
-      at its login screen or starts it), **Open a login** (the first
-      character not logged in; right-click to choose), **Chat** (the
+      characters' list (five lines, one per slot, in slot order: "1: Main"
+      with "Active", "Inactive" or "Not logged in" in a muted colour, and
+      "Add new avatar" for a slot with no character; picking a character
+      in the world switches to it at once, picking one that is not logged
+      in only selects it, see the launch rules below; "Add new avatar"
+      opens the host's "New character profile…" page), **Open a login**
+      (the first character not logged in; right-click to choose, or
+      pick it in the list: the button then says "Log in <name>"), **Chat** (the
       shared chat in its own window, shown or hidden; its unread count),
       **Monitors** (each character, greyed when it is not in the world or
       is the active one, ticked when its monitor is open; "Open all
