@@ -257,21 +257,25 @@ pub fn total_timeout(body: usize) -> std::time::Duration {
     std::time::Duration::from_secs((MIN + (body / per_second) as u64).min(MAX))
 }
 
-/// The network, through reqwest: no redirect, no retry, no cookie.
+/// The network, through reqwest: no redirect, no retry, no cookie; the
+/// proxy settings of Preferences › Network apply (`aurora_proxy`), and a
+/// host on this computer is always reached directly.
 pub struct Network;
 
 impl Transport for Network {
     fn send(&self, request: HttpRequest, cancel: &Cancel) -> Result<HttpReply, Failure> {
         let url = reqwest::Url::parse(&request.url).map_err(|_| Failure::Network)?;
         let loopback = url.scheme() == "http" && url.host_str().is_some_and(super::settings::is_loopback);
-        let builder = reqwest::Client::builder()
-            .user_agent(format!("{} (chat image upload)", aurora_version::user_agent()))
-            .connect_timeout(std::time::Duration::from_secs(15))
-            .timeout(total_timeout(request.body.len()))
-            .retry(reqwest::retry::never())
-            .redirect(reqwest::redirect::Policy::none())
-            .https_only(!loopback);
-        let client = if loopback { builder.no_proxy() } else { builder }.build().map_err(|e| {
+        let client = aurora_proxy::http_client(|builder| {
+            builder
+                .user_agent(format!("{} (chat image upload)", aurora_version::user_agent()))
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .timeout(total_timeout(request.body.len()))
+                .retry(reqwest::retry::never())
+                .redirect(reqwest::redirect::Policy::none())
+                .https_only(!loopback)
+        })
+        .map_err(|e| {
             log::warn!("chat upload: no HTTP client: {e}");
             Failure::Network
         })?;

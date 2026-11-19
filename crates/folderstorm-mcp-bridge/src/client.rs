@@ -140,6 +140,7 @@ impl Client {
 
     fn request(&self, method: &str, path: &str, body: Option<&[u8]>, timeout: Duration) -> Result<Value, ClientError> {
         let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.port);
+        // proxy-guard: the viewer's own bridge on 127.0.0.1, never the network
         let mut stream = TcpStream::connect_timeout(&address.into(), Duration::from_secs(2)).map_err(ClientError::Connect)?;
         stream.set_read_timeout(Some(timeout)).map_err(ClientError::Io)?;
         stream.set_write_timeout(Some(self.timeout)).map_err(ClientError::Io)?;
