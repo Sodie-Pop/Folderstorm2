@@ -55,12 +55,13 @@ impl App {
             self.folderstorm_memory_restore();
         }
         // a monitor shows this character again: back behind for its pictures
+        // (a hibernating window wakes once restored, `sleep.rs`)
         if memory.release == Release::Lowered
             && std::mem::take(&mut self.folderstorm_characters.memory.minimised_by_host)
-            && let Some(g) = self.gfx.as_ref().filter(|g| g.window.is_minimized() == Some(true))
+            && let Some(window) = self.folderstorm_window().filter(|w| w.is_minimized() == Some(true))
         {
             log::info!("session memory: a monitor shows this character again, the window comes back behind");
-            crate::folderstorm_characters::foreground::restore_behind(&g.window);
+            crate::folderstorm_characters::foreground::restore_behind(window);
         }
     }
 
@@ -70,6 +71,10 @@ impl App {
     /// once, as before, and never a window with the keyboard.
     pub(super) fn folderstorm_memory_minimise(&mut self) {
         if self.folderstorm_characters.managed.role() == Some(Role::Active) {
+            return;
+        }
+        if self.folderstorm_asleep() {
+            // (hibernating: minimised, its video memory all given back)
             return;
         }
         if self.folderstorm_characters.managed.memory().release != Release::Full {
@@ -88,9 +93,7 @@ impl App {
         let state = &mut self.folderstorm_characters.memory;
         if !state.releasing.under_way() {
             if hibernate {
-                // (P1 of folderstorm/plans/deep-sleep.md: the renderer's
-                // sleep comes with P2)
-                log::info!("session memory: Hibernation asked: Economy until the renderer can sleep");
+                log::info!("session memory: Hibernation asked: Economy's release first, the renderer goes once minimised for the grace");
             }
             state.since_passes = passes;
             state.pages.reset();
@@ -263,7 +266,7 @@ impl App {
 
     /// What the driver counts for this process and the texture pages hold
     /// now, in megabytes (None without a renderer or a driver's figure).
-    fn folderstorm_release_figures(&self) -> Option<ReleaseFigures> {
+    pub(super) fn folderstorm_release_figures(&self) -> Option<ReleaseFigures> {
         let g = self.gfx.as_ref()?;
         let video = g.renderer.video_memory.read(&g.renderer.device)?;
         Some(ReleaseFigures {

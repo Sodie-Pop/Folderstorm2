@@ -114,3 +114,4 @@ pub mod monitor_windows;
 pub mod panels;
 pub mod profile;
 pub mod settings;
+pub mod sleep;

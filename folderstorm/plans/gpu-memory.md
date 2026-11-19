@@ -875,6 +875,8 @@ Windows here.
 | `crates/aurora-render/src/renderer.rs` | 6516 | The render thread does an asked culling release at the start of a frame (second pass) |
 | `crates/aurora-render/src/textures.rs` | 1683–1689 | `TextureTable::folderstorm_settled` (second pass) |
 | `crates/aurora-viewer/src/settings.rs` | 3472–3473, 3522 | `render_settings` handed through `economy_render::apply` (second pass) |
+| `crates/aurora-viewer/src/app/gpu_recovery.rs` | 161–162, 184–185 | `forget_gpu_scene` and `adopt_gpu_scene` made `pub(super)` (Hibernation, [deep-sleep.md](deep-sleep.md) P2) |
+| `crates/aurora-viewer/src/app.rs` | 24467 | `window_event` without a renderer: a hibernating window's close goes to `folderstorm_sleep_event` (Hibernation P2) |
 
 Fork files only: `folderstorm-session/src/memory.rs`, `ipc.rs`, `host.rs`,
 `managed.rs`, `settings.rs`; `app/folderstorm_characters.rs` and

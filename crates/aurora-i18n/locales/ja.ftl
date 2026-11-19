@@ -6041,6 +6041,7 @@ folderstorm-host-in-world = インワールド
 folderstorm-host-in-region = { $region }にいます
 folderstorm-host-unread = 未読の会話 { $count }件
 folderstorm-host-minimised = 最小化
+folderstorm-host-hibernating = 休止中
 folderstorm-host-closing = 終了中…
 folderstorm-host-ended = 終了しました（プロセスを終了）
 folderstorm-host-closed = 終了済み

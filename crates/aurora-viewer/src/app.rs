@@ -24464,6 +24464,7 @@ impl ApplicationHandler for App {
             return;
         }
         let Some(g) = self.gfx.as_mut() else {
+            self.folderstorm_sleep_event(&event); // Folderstorm: a hibernating window is closed (app/folderstorm_characters/sleep.rs)
             return;
         };
         let first_event = g.egui_state.egui_input().events.len();

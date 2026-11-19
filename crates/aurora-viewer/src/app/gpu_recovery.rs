@@ -158,7 +158,8 @@ fn parse_forced(value: Option<&str>) -> Option<bool> {
 
 impl App {
     /// Before the lost renderer goes: what the scene and the app hold on it.
-    fn forget_gpu_scene(&mut self, old: &mut Renderer) {
+    // Folderstorm: pub(super), for Hibernation (app/folderstorm_characters/sleep.rs)
+    pub(super) fn forget_gpu_scene(&mut self, old: &mut Renderer) {
         self.scene.forget_gpu(old);
         self.probes.reset();
         self.forget_gpu_requests();
@@ -180,7 +181,8 @@ impl App {
 
     /// On the new renderer: the textures get its slots, and what `clear`
     /// emptied that the world does not send again comes back.
-    fn adopt_gpu_scene(&mut self, new: &mut Renderer) {
+    // Folderstorm: pub(super), for Hibernation (app/folderstorm_characters/sleep.rs)
+    pub(super) fn adopt_gpu_scene(&mut self, new: &mut Renderer) {
         self.scene.adopt_gpu(new);
         // what `clear` emptied that the world does not send again
         self.world.objects.particles_again();
