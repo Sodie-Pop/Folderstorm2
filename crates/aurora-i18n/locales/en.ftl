@@ -7187,6 +7187,8 @@ folderstorm-settings-updates-where = In the viewer's Preferences
 folderstorm-settings-updates-line = New versions and their channel: the "{ $page }" page.
 folderstorm-settings-crash-line = Crash reports: the "{ $page }" page.
 folderstorm-settings-bug-line = To report a bug: "{ $item }", in the viewer's Help menu or on its login screen.
+folderstorm-help-menu = { $product } Help
+folderstorm-privacy-policy-hint = What { $product } sends, to whom, and what it keeps on this computer.
 folderstorm-settings-updates-note = The host and its characters are one program: what the viewer chooses applies to the host too.
 
 ## Folderstorm: the session host's MCP controller (folderstorm/plans/mcp-routing.md)

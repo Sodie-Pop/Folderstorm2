@@ -294,7 +294,7 @@ pub(super) fn page(cx: &mut Cx) {
         let p = cx.p;
         cx.row(
             tr!("ui-options-privacy-policy"),
-            tr!("ui-options-privacy-policy-hint"),
+            &tr!("folderstorm-privacy-policy-hint", product = folderstorm_brand::PRODUCT), // Folderstorm: no aurora-viewer.org
             &Nothing,
             |ui, _| {
                 let read = tr!("ui-options-privacy-policy-open");
