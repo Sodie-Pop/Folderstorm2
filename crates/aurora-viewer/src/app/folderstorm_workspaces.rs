@@ -246,9 +246,13 @@ impl App {
         // (not in mouselook or with the interface put away, where a key may
         // have asked: no window shows)
         if outcome.preferences && !self.camera.mouselook() && !ui::widgets::interface_hidden(&self.egui_ctx) {
-            // as the Me menu's Preferences does, on our tab
+            // as the Me menu's Preferences does, on our page
             ui::widgets::open_floater(&self.egui_ctx, "options", &mut self.panels.settings);
-            self.options_ui.open(ui::options::Page::Layout, 3);
+            let tab = match outcome.switching {
+                true => ui::options::workspaces_tab::SWITCHING,
+                false => ui::options::workspaces_tab::SAVED,
+            };
+            self.options_ui.open(ui::options::Page::Workspaces, tab);
         }
         if outcome.save {
             self.settings.save();
@@ -271,6 +275,10 @@ impl App {
     /// arm of `on_input`): a request the next frame runs, as the menu's.
     pub(super) fn folderstorm_key(&mut self, key: crate::folderstorm::keys::Key) {
         use crate::folderstorm::workspaces::menu;
+        // (the margins' desktop has its own)
+        if self.folderstorm_desktop_key(key) {
+            return;
+        }
         let hidden = self.camera.mouselook() || ui::widgets::interface_hidden(&self.egui_ctx);
         if let Some(request) = menu::key_request(key, hidden) {
             menu::ask(&self.egui_ctx, request);
@@ -678,7 +686,8 @@ impl App {
                 }
             } else {
                 self.panels.settings = true;
-                self.options_ui.open(ui::options::Page::Layout, 3);
+                self.options_ui
+                    .open(ui::options::Page::Workspaces, ui::options::workspaces_tab::SAVED);
             }
             if mode == "switcher-workspaces-context" {
                 self.workspace_context_demo_seed();

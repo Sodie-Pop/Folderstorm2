@@ -183,6 +183,24 @@ pub fn picture(layout: &Layout, now: &Now) -> Picture {
     }
 }
 
+/// `layout` applied on the desktop of now, the world viewport being
+/// `world`: what the switcher and Preferences show.
+pub fn of_now(ctx: &egui::Context, layout: &Layout, world: &ViewportSettings) -> Picture {
+    let desktop = diagram::desktop(ctx);
+    let monitors = super::capture::monitors(ctx);
+    picture(
+        layout,
+        &Now {
+            monitors: &monitors,
+            seen: super::apply::seen(ctx),
+            window: desktop.window,
+            position: desktop.position,
+            pixels_per_point: ctx.pixels_per_point(),
+            world,
+        },
+    )
+}
+
 /// The picture's height, in points.
 pub const HEIGHT: f32 = 132.0;
 

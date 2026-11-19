@@ -189,7 +189,7 @@ bars over the whole window; `mouselook-full` lets mouselook fill the window.
 Check that the world, its HUDs and its name tags stay in the rectangle, the
 margins are dark, the bars sit inside it (except with `bars-window`), a click
 in a margin selects nothing, windows can be dragged into the margins, and the
-settings are under Preferences › Layout › Bars and windows › World viewport.
+settings are under Preferences › Workspaces › World viewport.
 `inventory` keeps the right 40 % for the world and opens Inventory in the left
 margin, half the window wide: wider than the world, it keeps its size (it is
 no longer shrunk to the world's width). Make the viewer window narrower and
@@ -275,9 +275,10 @@ changed meanwhile. With no variable, check the menu entry itself on an
 inventory folder's **+** menu (greyed in the Trash, the Library and Current
 Outfit), Cancel in the folder dialog, and Cancel in the confirmation.
 
-**Viewport diagram (Folderstorm2).** Preferences › Layout › Bars and windows ›
-World viewport, behind the cog of "Use a custom world viewport", starts with a
-diagram of the viewer window, the world and the monitors.
+**Viewport diagram (Folderstorm2).** Preferences › Workspaces › World
+viewport shows, as soon as "Use a custom world viewport" is on, a diagram of
+the viewer window, the world and the monitors; the margins as numbers and the
+monitors' buttons are behind its cog.
 `AURORA_DEMO_MONITORS` pretends a monitor layout: monitors separated by commas
 or semicolons, each `WxH[+X+Y][@scale]` (X11 geometry: `-1920+0` puts one left
 of the main monitor; `@1.5` or `@150%` gives its scale). A monitor without a
@@ -286,10 +287,10 @@ position goes right of the previous one, tops aligned. An optional
 top-left corner of all the monitors); `wayland` pretends the window's position
 is unknown. The window keeps its real size: choose it with
 `AURORA_WINDOW_SIZE`. Add `AURORA_DEMO_VIEWPORT=1` to turn the viewport on and
-`AURORA_DEMO_OPTIONS=layout/0:cogs` to open the group:
+`AURORA_DEMO_OPTIONS=workspaces/1:cogs` to open the tab with its cog open:
 
 ```bash
-AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_OPTIONS=layout/0:cogs \
+AURORA_DEMO=1 AURORA_DEMO_VIEWPORT=1 AURORA_DEMO_OPTIONS=workspaces/1:cogs \
   AURORA_WINDOW_SIZE=3840,1080 AURORA_DEMO_MONITORS=1920x1080,1920x1080 \
   cargo run -p aurora-viewer -- --title "Test viewport diagram"
 ```
@@ -361,7 +362,7 @@ that Options creates, renames, duplicates, moves and deletes boards.
 
 **Layouts (Folderstorm2).** `AURORA_DEMO_LAYOUTS=1` seeds two layouts in the
 demo's own settings, opens Inventory, the world map and People, and opens
-Preferences › Layout › Layouts. "Wide" has the world on the right half of the
+Preferences › Workspaces › Saved. "Wide" has the world on the right half of the
 window with the bars around it and the three windows in the left margin;
 "Single" has no viewport and the windows over the world. `apply-wide` applies
 "Wide" by itself at frame 180; `apply-single` applies "Wide" then, at frame
@@ -381,13 +382,13 @@ world, the bars and the three windows, and says how many windows it placed;
 that the layout in use shows "In use", then "In use · modified" within a
 second of moving one of its windows or changing the viewport, until Update
 (which asks first) or another Apply; that "Previous arrangement" goes back and
-forth; that "Save as a new layout" refuses an empty or taken name and saves
-only the ticked parts; that Rename, Delete (asks first) and the arrows work;
+forth (Workspaces › Switching); that *New from current…* on *Layout*
+refuses an empty or taken name and saves only the ticked parts; that Rename, Delete (asks first) and the arrows work;
 that a window closed when a layout is applied is opened at its place if the
 layout was saved with it open, and otherwise takes its place when opened; and
-that "Reset bars and world" turns the viewport off without moving a window.
-Preferences itself is never moved. The bars' three places are under
-Preferences › Layout › Bars and windows › World viewport › Bars;
+that "Reset bars and world" (Switching) turns the viewport off without moving
+a window. Preferences itself is never moved. The bars' three places are under
+Preferences › Workspaces › World viewport › Bars around the world;
 `AURORA_DEMO_VIEWPORT=bars-around` shows "Around the world" alone: the world
 on the right two thirds with an eighth of the height free above and below, the
 top bars above the world, the bottom bar below it, both as wide as the world,
@@ -484,15 +485,15 @@ colour alone, `missing` points at a picture that is not there (its colour is
 shown and Preferences says so), `layout` adds a layout "Wall" with its own
 tiled background, in use. The world viewport is turned on (the world in the
 middle third) unless `AURORA_DEMO_VIEWPORT` sets it. Pretend monitors show
-the per-monitor fit; Preferences › Layout › Bars and windows has the group
-*Background around the world*:
+the per-monitor fit; Preferences › Workspaces › Margins has the group
+*Background around the world* (`AURORA_DEMO_OPTIONS=workspaces/2`):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=1 AURORA_WINDOW_SIZE=3840,1080 \
   AURORA_DEMO_MONITORS=1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test backgrounds"
-AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=tile AURORA_DEMO_VIEWPORT=right-half AURORA_DEMO_OPTIONS=layout/0 \
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=tile AURORA_DEMO_VIEWPORT=right-half AURORA_DEMO_OPTIONS=workspaces/2 \
   cargo run -p aurora-viewer -- --title "Test backgrounds tile"
-AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=layout/3 \
+AURORA_DEMO=1 AURORA_DEMO_BACKGROUND=layout AURORA_DEMO_OPTIONS=workspaces/0 \
   cargo run -p aurora-viewer -- --title "Test backgrounds layout"
 ```
 
@@ -516,13 +517,55 @@ a drop from the Inventory would put it (third column) and moves it to the
 third monitor at frame 300; `rlva` puts `@showinv` in force: the folder
 shortcuts are locked and unnamed, and the one opened at frame 200 is
 refused with RLVa's notice; `single` seeds the same shortcuts with the
-world filling the window, so nothing shows. The
+world filling the window, so nothing shows; `edit` opens the name field of
+the People shortcut at frame 200, as *Rename* or F2 does (type, Enter keeps,
+Esc cancels), and gives the first folder shortcut a name and an icon of its
+own at frame 300 ("Everyday outfits", a hanger); `unused` adds two
+shortcuts on a monitor the window does not have and opens Preferences on
+the desktop's group at frame 200, with its note "2 shortcuts are on a
+monitor that is not in use" and *Bring them here*; `taskbar` turns on the
+taskbar of the margins on the third monitor (an island along its bottom,
+"No collapsed windows" at first), opens and collapses the Inventory and a
+folder's window at frame 200 (no title bar: each is a button of the
+taskbar) and opens People (open, so not listed), then restores the
+Inventory at frame 300 as a click on its button does (where it was);
+`overflow` collapses twenty folder windows at frame 200: more than the
+taskbar has room for, so the buttons are their icon alone and, on a
+monitor too narrow for twenty of them (the second command below), the
+rest are in *More* at its right end; `items` adds a third column of item
+shortcuts on the first monitor, their items made up in the demo's
+inventory (a landmark, "Aurora Welcome Area", a notecard, "Shopping
+list", an outfit of the demo's My Outfits under a hanger, a spare shirt
+that is not worn (a double click adds it to what is worn), the jacket the
+demo's outfit wears (greyed: "You are wearing it already", with an "X" at
+its icon's corner, *Take off* in its menu and Shift+Delete, that take it
+off) and a greyed
+one whose item is gone), opens the landmark at frame
+200 as a double click does (Aurora's question before a teleport, "Do you
+really want to teleport to…", nothing being sent before the answer) and
+the notecard at frame 300 (Aurora's notecard window, empty: the demo's
+notecard has no content); `outfit` has the same shortcuts and opens the
+outfit at frame 200: the question of outfit safety ("Replace current
+outfit", Cancel first), nothing being worn before the answer. In `items`,
+`outfit` and `icons`, three command shortcuts of the first monitor wear an
+icon style of their own: Conversations a green colour, Photo a picture
+copied from a file (a sun over the sea, made by the demo into the
+account's `folderstorm_desktop_icons` folder) and Home a texture of the
+demo's inventory ("Blue stripes", full permissions, its pixels put where
+its fetch would leave them); `icons` also opens the window *Shortcut
+icon* on Home at frame 200 (its colours, its picture, the textures of the
+inventory one may use). Right-click a shortcut › *Icon ›* for *Colour…*,
+*Picture from a file…*, *Inventory texture…* and *Reset icon*. The taskbar needs the third
+monitor: without pretend monitors there is none, and collapsed windows
+are title bars. The
 world viewport is turned on (the world in the middle third) unless
 `AURORA_DEMO_VIEWPORT` sets it; `AURORA_DEMO_BACKGROUND` may add a
 wallpaper under the shortcuts. Without pretend monitors the window is one
 monitor, and only the first one's shortcuts show, in the left margin.
-Preferences › Layout › Bars and windows has the group *Desktop in the
-margins*:
+Each account has its own desktop: the demo's is made for the demo's
+account. Preferences › Workspaces › Margins has the group *Desktop in the
+margins* (its icon size, single click and *Remove all shortcuts…* behind the
+switch's cog):
 
 ```bash
 AURORA_DEMO=1 AURORA_DEMO_DESKTOP=1 AURORA_WINDOW_SIZE=5760,1080 \
@@ -536,6 +579,20 @@ AURORA_DEMO=1 AURORA_DEMO_DESKTOP=rlva AURORA_WINDOW_SIZE=3840,1080 \
   AURORA_DEMO_MONITORS=1920x1080,1920x1080 AURORA_DEMO_VIEWPORT=right-half \
   cargo run -p aurora-viewer -- --title "Test desktop rlva"
 AURORA_DEMO=1 AURORA_DEMO_DESKTOP=single cargo run -p aurora-viewer -- --title "Test desktop single"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=edit AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop edit"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=unused AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop unused"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=taskbar AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop taskbar"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=overflow AURORA_WINDOW_SIZE=1920,720 \
+  AURORA_DEMO_MONITORS=640x720,640x720,640x720 cargo run -p aurora-viewer -- --title "Test desktop overflow"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=items AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop items"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=outfit AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop outfit"
+AURORA_DEMO=1 AURORA_DEMO_DESKTOP=icons AURORA_WINDOW_SIZE=5760,1080 \
+  AURORA_DEMO_MONITORS=1920x1080,1920x1080,1920x1080 cargo run -p aurora-viewer -- --title "Test desktop icons"
 ```
 
 Check that a shortcut is never drawn over the world nor cut at its edge,
@@ -557,6 +614,62 @@ counted in a notice, nothing is rezzed or moved). A double click on a
 folder shortcut opens that folder's own window beside it; a second one
 brings the same window to the front. Its menu has *Show in inventory*.
 Delete the folder: its shortcut turns grey and can only be removed.
+
+For editing and the toolbar, by hand (the pointer and the keyboard cannot
+be played): right-click a shortcut › *Rename* (the name is edited under the
+icon; Enter or a click elsewhere keeps it, Esc cancels, an empty name or
+the target's own gives its own name back; the folder itself is never
+renamed), › *Icon* (a grid of 40 icons, *Default* gives the target's own
+back), › *Move to* › a monitor (only monitors that show a desktop; refused
+with a notice when that desktop has the same shortcut or is full).
+Right-click a free cell › *Arrange by name* (the desktop is filled again
+from its first cell, down then right) and › *Toolbar buttons…* (Aurora's
+window opens). With the toolbars unlocked, drag a button from a toolbar or
+from that window onto a desktop: the desktop is outlined, the cursor says
+copy, the shortcut lands in the cell under the pointer and the button stays
+on its toolbar; Favorites, VR view and Speak are refused (red outline, a
+notice). Right-click a toolbar button › *Add to desktop* (greyed, with the
+reason, for those three and for a command Aurora does not run yet): the
+shortcut goes to the first free cell of the first desktop, the shortcuts
+are turned on when they were off, and a notice says so. In Preferences ›
+Layout › Bars and windows › *Desktop in the margins*, behind the cog of
+*Shortcuts in the margins*: *Open with a single click* (a click then
+opens, as a toolbar button) and *Remove all shortcuts…* (asks first; only
+this account's go); under the icon size, with `unused`, the note and
+*Bring them here* (the two shortcuts go to the first desktop). Keyboard:
+give *Focus the desktop* a key in Preferences › Shortcuts (it has none by
+default, as *Show or hide the desktop shortcuts*), press it: the selected
+shortcut, else the first, takes the keyboard (outlined); the arrows go to
+the neighbour shortcut, Enter or Space opens, F2 renames, Delete removes. A
+click on a shortcut selects it and gives it the keyboard too, so F2 and
+Delete work at once; a click in the world gives the keyboard back to the
+avatar's keys.
+
+**Account setup backup (Folderstorm2).** `AURORA_DEMO_BACKUP=<mode>` makes,
+once (at frame 90, after the demo's login), a small setup (a layout "Desk",
+a People shortcut on the desktop, a custom Inventory tab "Outfits to try", a
+gesture board "Greetings") and writes two automatic backups (a daily one and
+one made before an import) into the demo's own backups folder, so that
+Preferences › Language and updates › *Folderstorm setup backup* lists them
+with *Restore…*. `import` then opens the import dialog on a backup of this
+account holding one more layout ("Couch") and tab ("Hair"); `other` on the
+same backup made by another account ("Demo Alt"), with a folder shortcut and
+a tab folder of that account (the warning and *Leave out…*, ticked);
+`newer` on a backup of a newer format with a section this version does not
+know (both notes shown, the section not offered):
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=1 AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup"
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=import AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup import"
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=other AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup other"
+AURORA_DEMO=1 AURORA_DEMO_BACKUP=newer AURORA_DEMO_OPTIONS=system cargo run -p aurora-viewer -- --title "Test backup newer"
+```
+
+Check that Import makes a new "before an import" line in the list first,
+that Merge adds "Couch" and "Hair" to what is there and Replace leaves only
+the file's, and that *Restore…* on the line made before the import puts
+the setup back. Export… and Import… open the system's file dialog (by
+hand, on Windows).
 
 **The favorites strip (Folderstorm2).** `AURORA_DEMO_STRIP=1` seeds the same
 as `AURORA_DEMO_WORKSPACES=1` with the favorites strip on and the switcher
@@ -585,9 +698,42 @@ refuses a taken name; and that the arrows walk nobody while the field has the
 keyboard. In the Toolbar buttons window, add *Layouts* and *Switch layout* to a
 bar: the first is lit while the switcher is open, the second names the layout
 it goes to (dimmed, and opening Preferences, until its two layouts are chosen
-under Preferences › Layout › Layouts › Quick switch). In Preferences ›
+under Preferences › Workspaces › Switching). In Preferences ›
 Shortcuts › Other, give the five *Layouts* actions a key each: none has one by
 default.
+
+**Preferences › Workspaces (Folderstorm2).** The layouts, the workspaces,
+the world viewport and the margins have their own page under Interface, after
+Layout, with four tabs: `AURORA_DEMO_OPTIONS=workspaces/<tab>` opens one, 0
+*Saved*, 1 *World viewport*, 2 *Margins*, 3 *Switching*. Seed entries with
+`AURORA_DEMO_LAYOUTS=1` or `AURORA_DEMO_WORKSPACES=1`:
+
+```bash
+AURORA_DEMO=1 AURORA_DEMO_WORKSPACES=1 AURORA_DEMO_OPTIONS=workspaces/0 \
+  cargo run -p aurora-viewer -- --title "Test workspaces page"
+AURORA_DEMO=1 AURORA_DEMO_OPTIONS=workspaces/2 cargo run -p aurora-viewer -- --title "Test margins tab"
+AURORA_DEMO=1 AURORA_DEMO_LAYOUTS=1 AURORA_DEMO_OPTIONS=workspaces/3 \
+  cargo run -p aurora-viewer -- --title "Test switching tab"
+```
+
+Check that *Saved* lists the workspaces, then the layouts, each line with its
+kind's icon and its star, then *New from current…*; that the selected
+entry's editor is on the right (under the list when the window is at its
+narrowest): a workspace's ticked windows first, the others under *More
+windows*, Inventory 2 to 17 as one entry, and beside its layout's choice a
+card of that layout with its picture and *Open this layout*; a layout's
+viewer window, the picture of what it gives on the monitors of now, *Edit
+the current viewport* (World viewport tab), its background, and *Used by*
+(the workspaces that apply it, which select them, and the *Switch layout*
+button); that the last apply is one line under the buttons with the rest on
+hover; and that *New from current…* saves a workspace or a layout in the
+right pane. *Margins* shows one notice with *Turn
+the world viewport on* while the viewport is off, the rows greyed; the
+background shows only the rows of its kind. *Switching* holds the favorites
+strip, the two layouts of *Switch layout*, *When the monitors change* and the
+HUD rule, each with its modified dot (listed under *Modified settings*, put
+back by *Reset Workspaces…*, which never deletes a saved entry), and the three
+ways back in one row. Layout › Bars and windows has upstream's groups only.
 
 **Settings search keywords (Folderstorm2).** The Preferences search finds the
 Folderstorm rows by words that are not in their labels
@@ -595,12 +741,13 @@ Folderstorm rows by words that are not in their labels
 window with a search typed.
 
 ```bash
-AURORA_DEMO=1 AURORA_DEMO_OPTIONS="layout:search=dual monitor" cargo run -p aurora-viewer -- --title "Test search keywords"
+AURORA_DEMO=1 AURORA_DEMO_OPTIONS="workspaces:search=dual monitor" cargo run -p aurora-viewer -- --title "Test search keywords"
 ```
 
-Check that "dual monitor" lists the world viewport's and the layouts' rows;
-that "MCP" lists the local assistant's rows, "workspace" the layouts and the
-five *Layouts* shortcuts, "undo" *Previous arrangement*, "photo mode" *Photo
+Check that "dual monitor" lists the world viewport's rows and the saved list;
+that "MCP" lists the local assistant's rows, "workspace" the saved list, the
+HUD rule and the five *Layouts* shortcuts (not *Reset bars and world* nor
+*Previous arrangement*), "undo" *Previous arrangement*, "photo mode" *Photo
 mode uses the whole window*, "alts" the *Other Folderstorm2 windows* rows,
 "screenshot" the image uploads and "outfit safety" the *Wear* switch of
 Inventory. In French and Japanese the same English words still find them, and
@@ -6380,7 +6527,7 @@ both open states and the selection count. Capture at frame 620.
 | `AURORA_DEMO_AREA_SEARCH=1\|filters\|ranges\|scope\|fields\|columns\|all-columns\|link\|parcel\|sale\|search\|menu` | Open Area Search with named objects and sale entries; `menu` opens its right-click menu. |
 | `AURORA_DEMO_TEXTURE_LIBRARY=<mode>` | Compact inventory library with synthetic folders, eight types and thumbnails. |
 | `AURORA_DEMO_UNINSTALL=confirm\|running\|result\|left` | "Remove Aurora from this computer" as a dry run: its confirmation, or the result window. |
-| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing\|building\|gestures` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=privacy:local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (asked: Allow once, Allow for this object this session, Refuse), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). `building`: Ask before changes, the cut box read, moved up 0.5 m (asked), a cube rezzed 2 m east of the avatar (asked: the answer gives a candidate, never a confirmed id), then the demo notecard's permissions read and its next owner set to copy and modify (asked: "Set what next owners may do" is on Ask). `gestures` (with `AURORA_DEMO_GESTURES=mcp`, which seeds the demo gesture): Ask before changes, the demo gesture inspected then played (always asked: it says two lines, listed in the dialog), then a pose session of the avatar started (asked), its head turned (asked), the presets listed, the "Pointing" hand preset loaded (asked), the pose saved as a new file (always asked), and `pose_status` in the log. |
+| `AURORA_DEMO_MCP=1\|ask\|camera\|plan\|navigation\|content\|objects\|task-scripts\|script-testing\|building\|gestures` (Folderstorm2) | Turn on the local assistant bridge for this session only; with `AURORA_DEMO_OPTIONS=local-assistant`, open Preferences › Privacy › Local assistant. `ask`: Ask before changes, and a demo request that opens the Ask dialog. `camera`: the same, with two demo requests: frame the avatar (full body), then a 512 × 512 picture saved in the photo folder. `plan`: Ask before changes, and a 3-entry move plan previewed then executed, so that the dialog lists its rows. `navigation`: Ask before changes, a demo walk 8 m east, then a teleport back near the start (always asked), then `navigation_status` in the log. `content`: Ask before changes, a folder of demo notecards and scripts, and a notecard and a script read then saved, so that the dialog shows the item, the line counts and the changed lines, and the script answers a compile error. `objects`: Ask before changes, the plaza's cut box listed, then a copy of the demo script put into it ("… not running"). `task-scripts`: Ask before changes, the cut box listed, its door script read, an edit saved and compiled (asked), then the script reset (asked). `script-testing`: Ask before changes, the cut box listed, touched (asked: Allow once, Allow for this object this session, Refuse), its demo dialog listed and answered "Open" (asked), then a test recipe run after one approval that lists its steps (a channel step only within 20 m: `AURORA_DEMO_POS=150,124`). `building`: Ask before changes, the cut box read, moved up 0.5 m (asked), a cube rezzed 2 m east of the avatar (asked: the answer gives a candidate, never a confirmed id), then the demo notecard's permissions read and its next owner set to copy and modify (asked: "Set what next owners may do" is on Ask). `gestures` (with `AURORA_DEMO_GESTURES=mcp`, which seeds the demo gesture): Ask before changes, the demo gesture inspected then played (always asked: it says two lines, listed in the dialog), then a pose session of the avatar started (asked), its head turned (asked), the presets listed, the "Pointing" hand preset loaded (asked), the pose saved as a new file (always asked), and `pose_status` in the log. |
 
 `AURORA_DEMO_UNINSTALL` opens Preferences › Language and updates on the
 action. `confirm` shows the confirmation and its list (the demo's made-up
@@ -6398,9 +6545,9 @@ frame 700 in English, French and Japanese.
 `AURORA_DEMO_MCP=1` (Folderstorm2, `src/mcp_bridge.rs`): the bridge starts
 as `--mcp-api` would, for this session only, and writes
 `folderstorm2-mcp-<pid>.json` into the demo's settings folder.
-`AURORA_DEMO_OPTIONS=privacy:local-assistant` scrolls to the group: the
-switches, the presets, "Ready on 127.0.0.1, port …", recent activity and the
-Setup rows. With both, `folderstorm-mcp --diagnose --discovery <demo settings
+`AURORA_DEMO_OPTIONS=local-assistant` opens its page (System section): the
+switches with the status pill, the presets, recent activity and the Setup
+rows, each note under its button; Privacy keeps one row that leads there. With both, `folderstorm-mcp --diagnose --discovery <demo settings
 folder>` (or "Check connection", once `cargo build --workspace` has put the
 sidecar beside the viewer) reaches the demo inventory and reports
 `"session":"demo"`. Check that the access key appears nowhere on the page nor
@@ -6416,7 +6563,7 @@ program's name, the change in plain words, the countdown, Allow and Refuse.
 Allow creates the folder (open the inventory: it is at the root, not
 selected nor being renamed); Refuse, Escape, a click outside or 60 s
 without an answer leave the inventory as it was. Enter alone does nothing.
-With `AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the Edit,
+With `AURORA_DEMO_OPTIONS=local-assistant`, Custom shows the Edit,
 Move, Wear and Trash rows with Allow / Ask / Never, and Recent activity
 lists the call. A real client (`folderstorm-mcp` set up with the copied
 configuration and `--discovery <demo settings folder>`) can then move,
@@ -6434,7 +6581,7 @@ once the camera has stopped, an `assistant-<date>-<time>.jpg` of 512 × 512
 appears in the Photo window's folder, without the interface or the HUDs, and
 the log reads `local assistant demo: camera_snapshot answered {…"saved_to"…}`
 (never the picture's bytes). Refuse either: nothing moves, nothing is saved.
-With `AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the "Camera
+With `AURORA_DEMO_OPTIONS=local-assistant`, Custom shows the "Camera
 and pictures" row, and Recent activity lists one entry per line across the
 page. A real client can then call `camera_preset` (portrait, full body,
 front, back, left, right), `camera_shot`, `camera_reset`, `camera_snapshot`
@@ -6455,7 +6602,7 @@ The log reads `local assistant demo: plan previewed: …` with the rows.
 Allow: the three entries move in one change (the inventory window shows them
 in the subfolder), and the log reads `inventory_execute_plan answered {…
 "state":"done"…}`. Refuse: nothing moves (`… "permission_denied" …
-(operation_id op-…)`). With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+(operation_id op-…)`). With `AURORA_DEMO_OPTIONS=local-assistant`,
 Recent activity shows the plan's line as its sentence and its state ("…
 · done", "… · refused"), the program's name in the line's tooltip, and a
 Stop button on a line still waiting (in the dialog or for its turn): Stop
@@ -6485,7 +6632,7 @@ to …"); the dialog shows even though the demo asked on its own (a teleport
 always asks). Allow: the avatar teleports locally and the log reads
 `navigation_teleport answered {"arrived":true,"at_target":true,…}`, then
 `navigation_status answered {…,"last":{"reason":"arrived",…}}`. Refuse:
-`… permission_denied …`. With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+`… permission_denied …`. With `AURORA_DEMO_OPTIONS=local-assistant`,
 the Custom levels show the new row "Move my avatar", and Recent activity
 shows the walk and the teleport with their sentences. Capture the dialogs
 and the row in English, French and Japanese.
@@ -6509,7 +6656,7 @@ added line. Allow the script: `inventory_save_compile_script answered {…
 "source_saved":true,"compiled":false,"errors":[{"line":6,"column":10,…
 "Syntax error"…}]…}`; the script editor opened on it shows the saved source.
 Refuse: nothing is saved (`permission_denied`). With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, Custom shows the row "Edit
+`AURORA_DEMO_OPTIONS=local-assistant`, Custom shows the row "Edit
 notecards and scripts" (Allow / Ask / Never), and Recent activity the two
 saves' sentences. A real client can then read the other items: "Notes (no
 copy)" and "Greeter script (no modify)" are refused (`not_allowed`), "Notes
@@ -6534,7 +6681,7 @@ running". Allow: the box's Contents tab (Build › Edit, Contents) lists the
 copy, not running, and the log reads `object_contents_put answered {…
 "done":true … "asset_identity_verified":true …}`; the script stays in the
 inventory. Refuse: nothing is added. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the
 two new rows, "My objects' contents" and "Take my objects". A real client
 can then call `object_contents_rename`, `object_contents_remove` (it asks
 even on Allow), `object_take_copy` and `object_take` (it asks even on
@@ -6558,7 +6705,7 @@ again, then the demo asks to reset the script ("Reset the script “…” in th
 object “…” (it starts over from the beginning)"); Allow: `step 4 answered
 {… "reset_confirmed":false …}`. Opening the script from the box's Contents
 tab shows the added line. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 row "Run my objects' scripts". A real client can then call
 `object_script_status`, `object_script_set_running` and `script_debug_poll`
 (`start=now`, then its cursor). Capture the dialogs and the row in English,
@@ -6582,7 +6729,7 @@ the door script, check that it runs); with `AURORA_DEMO_POS=150,124` (within
 20 m of the box) it has 7, with a line said on channel 7, whose sentence says
 every listener hears it. Allow once: the steps run with no other dialog (a
 second "Door menu" opens), and the log reads `script testing step 6 answered
-{… "state":"passed" …}`. With `AURORA_DEMO_OPTIONS=privacy:local-assistant`,
+{… "state":"passed" …}`. With `AURORA_DEMO_OPTIONS=local-assistant`,
 the Custom levels show the new row "Touch and talk to my objects". Capture the
 dialogs and the row in English, French and Japanese.
 
@@ -6599,7 +6746,7 @@ new object is a candidate, never a guessed id. Last, the demo reads the demo
 notecard's permissions and asks (its own row, "Set what next owners may do",
 is on Ask; on Allow it would not ask) to "Change what the next owner of “…”
 may do: copy ✓, modify ✓, transfer ✗". With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 rows "Build with my objects" and "Set what next owners may do". Capture the dialogs and the row in English,
 French and Japanese.
 
@@ -6621,7 +6768,7 @@ pose as a new pose file “Demo-assistant-…”" (the file appears in the poser
 Library), and logs `pose_status`. Open the poser (the toolbar's Poser): the
 assistant's session ends (`superseded_by_viewer_poser` in the next
 `pose_status`) and the poser's own pose shows. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 rows "Play gestures on my avatar" and "Pose my avatar". Capture the dialogs and
 the rows in English, French and Japanese.
 
@@ -6641,7 +6788,7 @@ items, the demo balance drops by L$30, and the log reads
 `uploads step 2 answered {… "done":true,"spent":30 …}`, then the status
 (`uploads step 3`). Refuse instead: nothing is created or spent.
 `AURORA_DEMO_MCP=camera-get` only logs `camera_get`. With
-`AURORA_DEMO_OPTIONS=privacy:local-assistant`, the Custom levels show the new
+`AURORA_DEMO_OPTIONS=local-assistant`, the Custom levels show the new
 row "Upload local files". Capture the dialog and the row in English, French
 and Japanese.
 
@@ -6919,6 +7066,7 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_GPU_STALL=<frame>[:<seconds>]` | The render thread holds a frame as a graphics card that stopped answering would |
 | `AURORA_DEMO_GPU_LOST=<frame>` | The GPU device is taken as lost at that frame, as after a driver reset |
 | `AURORA_DEMO_GPU_HANG=<frame>` | A real GPU hang at that frame: the driver resets the GPU (affects other GPU programs) |
+| `AURORA_DEMO_GPU_REASON=memory\|hang\|fault` (Folderstorm2) | With `AURORA_DEMO_GPU_LOST`: the reason the recovery notice gives for the loss; every loss is written to `<log name>.gpu-losses.txt` |
 | `AURORA_GPU_RECOVERY=1` / `=0` | Recover from a GPU device loss on a new window and device, or close, whatever Preferences › Graphics says (on by default) |
 | `AURORA_DEMO_OVERLAY_HOOK=<file>` | An overlay hook DLL counts as loaded in the viewer (Discord, Steam…) |
 | `AURORA_DEMO_SAFE_GRAPHICS=offer\|active` | The safe graphics card on the login screen |
@@ -6939,7 +7087,8 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_SWITCHER=1\|toggle` (Folderstorm2) | The layouts' switcher open on "Wide" and "Single", both favorites and the two layouts of the toolbar's toggle; `toggle` flips between them every 5 s as the *Switch layout* button would (with the viewer window, without `AURORA_WINDOW_SIZE`) |
 | `AURORA_DEMO_WORKSPACES=1\|apply\|folders\|context` (Folderstorm2) | Workspaces: the layouts of `AURORA_DEMO_SWITCHER` and the workspaces "Sorting" (Inventory, the additional Inventory window, People; with "Single") and "Exploring" (mini-map, world map, Places), both favorites, in the switcher; `apply` applies "Sorting" then "Exploring"; `folders` saves two Inventory folder windows in a workspace "Folders", closes them and applies it; `context` applies a workspace "Photos" with a graphics profile, the Front view and two HUDs, then *Previous arrangement* |
 | `AURORA_DEMO_BACKGROUND=1\|fill\|fit\|stretch\|centre\|tile\|span\|dim\|colour\|missing\|layout` (Folderstorm2) | Workspace backgrounds: a picture made by the demo (or a colour) in the margins around the world, with that fit, over the whole window (`span`), dimmed (`dim`), missing (its colour shown, `missing`), or as the own background of a layout "Wall" in use (`layout`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
-| `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_DESKTOP=1\|open\|drop\|rlva\|single\|edit\|unused\|taskbar\|overflow\|items\|outfit\|icons` (Folderstorm2) | The margins' desktop: command and folder shortcuts on the first and third monitors of the window, three of them greyed (`1`); a folder shortcut opened at frame 200 and the People shortcut at frame 300 (`open`); a folder added as a drop from the Inventory would at frame 200, moved to the third monitor at 300 (`drop`); `@showinv` in force, the folder shortcuts locked and unnamed (`rlva`); the same shortcuts with the world filling the window, nothing shown (`single`); a name edited in place at frame 200, a folder shortcut given a name and an icon at 300 (`edit`); two shortcuts on a monitor not in use and Preferences on the desktop's group at frame 200 (`unused`); the taskbar on the third monitor, the Inventory and a folder's window collapsed into it at frame 200, the Inventory restored at 300 (`taskbar`); twenty windows collapsed into it at frame 200, icon buttons and *More* (`overflow`); item shortcuts in a third column (a landmark, a notecard, an outfit, a shirt to add, a worn jacket, one whose item is gone), the landmark opened at frame 200 (the question before a teleport), the notecard at 300 (its window) (`items`); the same and the outfit shortcut opened at frame 200: the question of outfit safety (`outfit`); in those two and `icons`, a shortcut in a colour of its own, one wearing a picture copied from a file and one wearing a texture of the inventory, and the window *Shortcut icon* opened on the last at frame 200 (`icons`); the viewport turned on (the world in the middle third) unless `AURORA_DEMO_VIEWPORT` sets it |
+| `AURORA_DEMO_BACKUP=1\|import\|other\|newer` (Folderstorm2) | Account setup backup: a small setup and two automatic backups in the demo's backups folder (`1`); the import dialog on a backup of this account (`import`), of another account with Inventory entries of its own (`other`), of a newer format with an unknown section (`newer`); open Preferences with `AURORA_DEMO_OPTIONS=system` |
 | `AURORA_DEMO_STRIP=1\|row\|many` (Folderstorm2) | The favorites strip on, with the seed of `AURORA_DEMO_WORKSPACES=1` and the switcher closed; `row` also shows the favourites' row under the top bar (the strip at its right end); `many` adds five favorite layouts, some of them in *More…* |
 | `AURORA_DEMO_TOASTS=1\|bell\|click\|minimized\|emote` | Friend online/offline and IM toasts, unread pill, Conversations button flash, click on an IM card, emotes |
 | `AURORA_DEMO_CONV_BUTTON=1\|mute\|still\|menu` | The Conversations button flashing for nearby chat and an IM, nearby chat left out, Reduce motion, its right-click menu |
@@ -6947,8 +7096,10 @@ before (`amis`, `groupes`, `repere`, `historique`…) are still accepted.
 | `AURORA_DEMO_OIIA=<seconds>` | The spinning cat's show, started without its warning from that second of its music, without the video |
 | `AURORA_DEMO_ATTENTION=1\|front\|capture` | Taskbar flashes and system notifications for messages, mentions and offers arriving in the background |
 | `AURORA_DEMO_BUSY_PAUSE=<frame>` | From that frame, the window counts as behind on a busy card: the Render pauses, with its notice and window title, until a click |
+| `AURORA_DEMO_BACKGROUND_ALERTS=1` (Folderstorm2) | The alert sounds of a background character on for the run (nothing saved), with made-up interface sounds (a short tick, its pitch by sound); outside the session host the window counts as a background character until a click in it and gets a made-up event every 5 s (new conversation, two instant messages of one conversation, two group lines of one group, a conference line, a mention, an inventory offer, a teleport offer), the second line of a conversation held by the quiet time; with `AURORA_DEMO_SESSION_HOST`, the demo viewers inherit it and their background characters sound for the shared chat's demo instant message and teleport offer |
 | `AURORA_DEMO_SESSION_BEHIND=1\|off\|limited\|normal` (Folderstorm2) | As if another Folderstorm2 window were in front, until a click: the "3D while another Folderstorm2 window is in front" policy, its notice and its frame rate; with `AURORA_DEMO_GPU_STALL` / `AURORA_DEMO_GPU_LOST`, no box and no close behind |
 | `AURORA_DEMO_SESSION_HOST=<1-5>` (Folderstorm2) | The characters' host (`--session-host`) with that many demo characters, `demo-1`…: it starts their viewers in demo mode, switches between them, restarts one that closed, quits all; its shared chat shows what each demo character hears (a neighbour, an instant message, a teleport offer) and says what is typed for one of them; quick-action buttons, global hotkeys (Windows; a "Try" button per hotkey in the demo) and "New character profile…"; with `AURORA_DEMO_SESSION_HOST_MONITORS=windows` and/or `cycling`, a monitor per background character (a small picture of its own view, each in a window of its own with a chat part) and the cycling monitor; with `AURORA_DEMO_SESSION_HOST_PANELS=chat,controls,inbox` (or `all`), those panels start in windows of their own; with `AURORA_DEMO_SESSION_HOST_POLISH=colours,condensed,inbox` (or `all`), the characters have colours and aliases, the host starts condensed, and its attention inbox lists sample questions; with `AURORA_DEMO_SESSION_HOST_BAR=docked` or `popped`, the bar that drives the characters starts at the top of each demo viewer's window or in the host's compact "Character controls" window, with the two toggles among its quick actions (add `AURORA_DEMO_VIEWPORT=1`, inherited by the demo viewers, to see the docked bar over the world viewport only; "Span the whole window" in the settings' Toolbar section puts it across the window); with `AURORA_DEMO_SESSION_HOST_SETTINGS=<section>` (`toolbar`, `characters`, `chat`, `sound`, `monitors`, `hotkeys`, `advanced`, `controller`, `updates`), the host's settings window opens on that section; with `AURORA_DEMO_SESSION_HOST_CONTROLLER=ask` or `allow`, the host's MCP controller is on for the demo (every class Ask or Allow, every character with access, metadata on), and `ask` opens its Ask window with a request of its own; with `AURORA_DEMO_MCP=1` too, every demo viewer starts its local assistant bridge and a sidecar sees them all (session routing); with `AURORA_DEMO_SESSION_HOST_CONTACTS=friends` or `new-im`, the shared chat opens on the first character's "Friends" or "New IM" sheet (the demo viewers' own friends and groups) |
+| `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (Folderstorm2) | With `AURORA_DEMO_SESSION_HOST`: every demo character waits in Economy and/or the background characters' video memory is that many megabytes: Economy gives its textures and 3D targets back before its window is minimised, a watched Economy character stays behind with a small share, each viewer holds the share the host gives it |
 | `AURORA_DEMO_IM_ANNOUNCE=1\|prefs` | Residents start typing IMs to us, then send them: the conversation announced before the message, and the unread count in the window title |
 | `AURORA_DEMO_MENTION=list\|names` | The chat bar's `@` list of residents to mention, or the prediction of a nearby resident's name |
 | `AURORA_DEMO_KEYWORDS=1\|prefs` | Keyword alerts on for the run: nearby chat, IM, group chat and object lines holding a keyword, coloured and with their sound; or the preferences' settings, the lines sent again and again |
@@ -7918,7 +8069,12 @@ failure. Grid validation and any paid upload are performed by the human.
   names are refused), Clone (the copy is shown), Delete… (asks first, Cancel
   focused). Right-click All, Recent, Worn or Favorites: only Clone, which makes
   a custom tab with that tab's finder and search. The `aurora-` mode starts with
-  the narrow window; widen it to see the shortcuts column.
+  the narrow window; widen it to see the shortcuts column. Tab icons:
+  "Textures and sounds" shows the picture icon (Aurora's tab icons and
+  shortcuts column; before the name in the Legacy strip), "Demo items" the
+  bookmark (Legacy: text only). Right-click a custom tab › "Icon ›": "Default"
+  and a grid of 40 icons; "Customize tab…" has the same grid in its "Icon"
+  row. The choice survives a restart and Clone copies it.
 - **`AURORA_DEMO_INVENTORY=folder-tabs|aurora-folder-tabs`** (Folderstorm2):
   a custom tab "Clothing and body" scoped to the demo's Clothing and Body
   folders and to a deleted one, shown with its "Customize tab…" dialog open.
@@ -7929,7 +8085,10 @@ failure. Grid validation and any paid upload are performed by the human.
   path (the deleted one marked), with a remove button. Select folders in the
   list (from the Inventory tab), then right-click the custom tab: "Add
   the selection", "Use only the selection" (greyed while the selection
-  holds something in the Trash or the Library), "Show everything". On the
+  holds something in the Trash or the Library), and "Show all items", which
+  clears the tab's item types, other hiding filters and search but keeps its
+  folders and pins (greyed when nothing is hidden). The dialog's "Remove
+  all…" asks, then empties the folders and pins (the whole inventory). On the
   Inventory tab, select folders (Ctrl+click, Shift+click for a range) and
   right-click them: "Create tab" makes a new tab named after the first, its
   Rename dialog open; "Add to ›" lists every custom tab (a check mark on one
@@ -8419,6 +8578,33 @@ failure. Grid validation and any paid upload are performed by the human.
   Render when the card is overloaded" off, nothing pauses. A capture run
   pauses too (a real one never does): `AURORA_FPS_LIMIT=60`,
   `AURORA_DEMO_BUSY_PAUSE=900` and `AURORA_CAPTURE_FRAMES=1000`.
+- **`AURORA_DEMO_BACKGROUND_ALERTS=1`** (Folderstorm2, alert sounds of
+  background characters, FEATURES.md 5.2): the alerts are on for the run
+  whatever Preferences › Sound › Interface sounds › "Alerts for characters
+  in the background" says (nothing saved), and the interface sounds are
+  made up (a short tick whose pitch depends on the sound).
+  `AURORA_DEMO=1 AURORA_DEMO_BACKGROUND_ALERTS=1 cargo run -p aurora-viewer -- --title "Test alerts"`.
+  What to look at:
+  - outside the session host, the window counts as a background character
+    whose sound the host cut, until a click in it. Every 5 s the log says
+    `background alerts demo: a made-up …` (new conversation, instant
+    message twice, group chat twice, conference, mention, inventory offer,
+    teleport offer) followed by `background alert: …` and a tick, except
+    for the second instant message and the second group line, held by the
+    quiet time (10 s by default; `RUST_LOG=info,fs_alerts=debug` shows
+    `Cooling`). After a click in the window nothing plays (`Front`).
+  - the Test button of each sound in Preferences plays it now, at the
+    alerts' volume, wherever the window is; "Choose a file…" copies a WAV
+    or OGG file (at most 4 MB and 10 s) into
+    `config\demo\background-alert-sounds` and selects it; a larger,
+    longer or broken file is refused with its reason.
+  - with `AURORA_DEMO_SESSION_HOST=3` too, the demo viewers inherit the
+    switch: a background character ticks for the shared chat's demo
+    instant message and teleport offer, the active one does not, nor one
+    whose "Heard in the background" is on. The host's own "Sound when a
+    background character gets a message" switches off by itself while the
+    alerts are on (greyed in the host's settings, Sound and voice), so only
+    the tick is heard.
 - **`AURORA_DEMO_SESSION_BEHIND=1|off|limited|normal`** (Folderstorm2,
   session host checkpoint 1): the window counts as behind another
   Folderstorm2 window (the instances registry is off in demo mode) until a
@@ -8527,6 +8713,12 @@ failure. Grid validation and any paid upload are performed by the human.
     on Windows the system's notification sound plays when a character that
     is not the active one gets an instant message; the taskbar button of
     the host flashes either way while its window has not the keyboard.
+    While the alert sounds of background characters are on (Preferences ›
+    Sound › Interface sounds, `AURORA_DEMO_BACKGROUND_ALERTS=1`), the host's
+    beep switches off by itself, so the two are never heard together: in the
+    host's settings (Sound and voice) the row is greyed with "Replaced by the
+    alert sounds in Preferences › Sound", and the setting is kept. Turn the
+    alerts off and the beep plays again as it was set.
   - RLVa is covered by unit tests (`folderstorm_characters/chat_export.rs`):
     what the viewer's own chat hides (a name under `@shownames`, a line
     refused by `@recvchat` / `@recvim`) is hidden or absent in what the
@@ -9012,6 +9204,49 @@ failure. Grid validation and any paid upload are performed by the human.
   `<file>-settings.png`, each monitor's window to
   `<file>-monitor-<n>.png` (its picture included: demo viewers have no
   grid) and the cycling monitor's to `<file>-cycling.png`.
+- **Video memory with several characters** (Folderstorm2, session host,
+  `folderstorm/plans/gpu-memory.md` phases 2 to 4).
+  `AURORA_DEMO_SESSION_HOST_MEMORY=economy,<MB>` (with
+  `AURORA_DEMO_SESSION_HOST`; either word alone works) puts every demo
+  character in Economy and sets the background characters' share:
+  `AURORA_DEMO=1 AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_MEMORY=economy,512 cargo run -p aurora-viewer -- --title "Test host"`.
+  What to look at:
+  - the host's settings › Characters: "Background characters' video
+    memory" (256 MB to 4 GB, 1 GB by default), with its note; a change is
+    saved and said to every viewer at once. Advanced › diagnostics lists the
+    share and each viewer's video memory (`… · 812 MB`).
+  - each background viewer's log: `session memory: a background character,
+    512 MB of video memory in all` (Warm) or `session memory: Economy, every
+    texture goes to its last level …`; the active one's `session memory: the
+    active character, … MB left to the characters behind`.
+  - **Economy**: on a switch the viewer that leaves logs `session memory:
+    Economy, giving the video memory back before the window is minimised`,
+    Aurora's `texture memory: … freeing up video memory; the 3D drawing
+    pauses` (its 3D targets are at a sixteenth of the window, as the Off
+    policy already had them), then
+    `session memory: released after N ms (… MB of video memory …), the
+    window is minimised` (5 s at most). Back to it: textures and faces load
+    again within a second or two (`texture memory: the window is in front
+    again`).
+  - **a watched Economy character**: with
+    `AURORA_DEMO_SESSION_HOST_MONITORS=windows` too, the characters behind
+    are not minimised; their logs say `session memory: Economy watched by a
+    monitor, … 512 MB`, the monitors' pictures are blurrier than with Warm,
+    and switching still moves the active character's monitor to the one
+    that left. Each picture's `world resolution:` lines are at the
+    picture's size (640 × 360 at most) or a sixteenth of it, never at the
+    window's size (`snapshot …` lines as before).
+  - **On Windows, with the grid** (the human): Task Manager › Details, add
+    the column "Dedicated GPU memory"; log in two or three characters in a
+    busy place. Note each viewer's figure with every character in Warm,
+    then set the background ones to Economy and switch once: each Economy
+    viewer falls to its geometry and little else (hundreds of MB rather
+    than gigabytes) within a few seconds of the switch, and its log has the
+    `released after` line. With a monitor open on an Economy character, its
+    viewer stays near its 512 MB share plus its geometry; with the share at
+    256 MB and Warm characters, each Warm viewer's textures shrink within
+    about ten seconds of the switch. Compare the active viewer's figure and
+    `GPU load:` lines with and without the others.
 - **`AURORA_DEMO_ATTENTION=1|front|capture`**: the window goes to the
   taskbar at frame 700, then an IM (760), a mention in nearby chat (820), a
   mention in a group chat (880), an object's message (940), a teleport offer
@@ -10025,6 +10260,27 @@ Human grid validation: remember MFA for account A and B, restart the viewer, the
   (a GPU-drawn terminal, a browser, another viewer) may lose their work or
   close. With the recovery off (`AURORA_GPU_RECOVERY=0`, or Preferences ›
   Graphics) the viewer then closes as after any loss. Once a run.
+- **GPU loss diagnostics** (Folderstorm2, `folderstorm/gpu_diag`): every
+  loss, simulated or real, in front or behind, is written at once to the
+  log (`GPU loss: likely reason …; vram …/… MB, textures …, card …,
+  step …, viewers …, front|behind|minimised`) and to
+  `<log name>.gpu-losses.txt` next to the log (Help › Show the log folder):
+  the time, the outcome (`recovered in … ms, settings unchanged` once the
+  recovery made its window, `waiting: …` behind, `not recovered yet` when
+  the viewer closed), the likely reason, the driver's words, hang or fault,
+  the window and its session-host role, the memory picture at the loss and
+  the minute before it in 5 s steps. The file keeps the last 20 losses. The
+  recovery notice starts with the likely reason; with
+  `AURORA_DEMO_GPU_REASON=memory` (`hang`, `fault`) and
+  `AURORA_DEMO_GPU_LOST=600`, the window in front: "Video memory was full
+  (3 viewer windows open, 11.6 of 12 GB in use). The viewer reopened its
+  window on the card…", then "The details are in the log folder…". Without
+  the variable the demo's loss reads as a driver error (the renderer's
+  verdict on the simulated loss); a loss with no known reason keeps
+  Aurora's text. Debug builds (`cargo run`, `--profile ci`) may end at the
+  simulated loss on an egui assertion (`Dropped TexturesDelta with …
+  unapplied deltas`, aurora-render's lost-device path): use a release build
+  to test the recovery.
 - **`AURORA_GPU_RECOVERY=1` / `=0`**: forces the recovery on or off for the
   launch, whatever Preferences › Graphics › "Reopen after a graphics card
   reset" says (`gpu_recovery`, on by default; `=0` also stops egui's CPU
@@ -12512,7 +12768,9 @@ separate searches enabled and disabled; that preference controls only the text.
   one with its cross and click again: that one comes back, afresh, where it
   was. Right click the button: *New Inventory window*, *Close all additional
   windows* (closes the numbered windows only, not a folder or tab window).
-  Ctrl+Shift+I does the same as the button. `extra-windows-full`: all 16
+  Folder windows and custom-tab windows have the same button (beside "+" in
+  the Legacy style, in the tools row in the Aurora style), except in quiet
+  mode where their toolbar is hidden. Ctrl+Shift+I does the same as the button. `extra-windows-full`: all 16
   open in a cascade, the status line says that all 16 are open (again at
   about frame 400), the button greyed with the same tooltip, and its menu
   open at about frame 40 with *New Inventory window* greyed. Under RLVa's

@@ -371,23 +371,11 @@ impl<'a> Selected<'a> {
 
 /// The desktop of now, for the picture.
 fn picture(ctx: &egui::Context, shown: &Shown, layout: &Layout) -> preview::Picture {
-    let desktop = crate::folderstorm::diagram::desktop(ctx);
-    let monitors = super::capture::monitors(ctx);
-    preview::picture(
-        layout,
-        &preview::Now {
-            monitors: &monitors,
-            seen: apply::seen(ctx),
-            window: desktop.window,
-            position: desktop.position,
-            pixels_per_point: ctx.pixels_per_point(),
-            world: &shown.world,
-        },
-    )
+    preview::of_now(ctx, layout, &shown.world)
 }
 
 /// What will not be as the layout has it, a line each.
-pub(super) fn notes(notes: &preview::Notes) -> Vec<String> {
+pub(crate) fn notes(notes: &preview::Notes) -> Vec<String> {
     let mut lines = Vec::new();
     if notes.missing > 0 {
         lines.push(tr!("fs-switcher-note-missing", count = notes.missing));

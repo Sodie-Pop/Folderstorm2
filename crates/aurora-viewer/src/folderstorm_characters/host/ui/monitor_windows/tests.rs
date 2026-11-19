@@ -767,6 +767,68 @@ fn the_cycling_monitor_says_so_when_nobody_is_behind() {
 }
 
 #[test]
+fn a_monitor_s_box_keeps_the_keyboard_after_enter_for_the_next_line() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, 2, now);
+    let seat = Seat::Slot(1);
+    open(&mut app, seat);
+    act(&mut app, Act::Chat(seat, true), now);
+    nearby(&mut app, 1, 1, "hello neighbours");
+    focus(&mut app, seat, true);
+    let (which, size) = (Which::Monitor(1), (480, 490));
+    draw_in(&mut app, which, size.0, size.1);
+    app.host.chat.take_effects();
+    // one click, then three lines with Enter after each
+    click_field(&mut app, which, size);
+    for line in ["first line", "second line", "third line"] {
+        type_text(&mut app, which, size, line);
+        assert_eq!(app.host.chat.draft(1, Conversation::Nearby), line, "typed without a click");
+        press_enter(&mut app, which, size);
+        assert_eq!(sent(&mut app), [(1, Conversation::Nearby, line.to_owned())]);
+        assert_eq!(app.host.chat.draft(1, Conversation::Nearby), "");
+    }
+}
+
+#[test]
+fn after_a_line_the_cycling_monitor_s_box_keeps_the_keyboard_without_holding_the_turn() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, 3, now);
+    let seat = Seat::Cycling;
+    open(&mut app, seat);
+    act(&mut app, Act::Chat(seat, true), now);
+    for slot in 0..3 {
+        nearby(&mut app, slot, 1, "hello");
+    }
+    focus(&mut app, seat, true);
+    let (which, size) = (Which::Cycling, (480, 490));
+    app.monitors_watch(now);
+    assert_eq!(app.monitors.cycle.shown(), Some(1));
+    draw_in(&mut app, which, size.0, size.1);
+    app.host.chat.take_effects();
+    click_field(&mut app, which, size);
+    type_text(&mut app, which, size, "one");
+    press_enter(&mut app, which, size);
+    assert_eq!(sent(&mut app), [(1, Conversation::Nearby, "one".to_owned())]);
+    // the next line, without a click: typing holds the turn again
+    type_text(&mut app, which, size, "two");
+    assert_eq!(app.host.chat.draft(1, Conversation::Nearby), "two", "typed without a click");
+    for seconds in 1..20 {
+        app.monitors_watch(now + Duration::from_secs(seconds));
+        assert_eq!(app.monitors.cycle.shown(), Some(1), "{seconds} s");
+    }
+    let sending = now + Duration::from_secs(20);
+    app.monitors_watch(sending);
+    press_enter(&mut app, which, size);
+    assert_eq!(sent(&mut app), [(1, Conversation::Nearby, "two".to_owned())]);
+    // sent: the box keeps the keyboard, but the turn goes on
+    draw_in(&mut app, which, size.0, size.1);
+    app.monitors_watch(sending + Duration::from_secs(7));
+    assert_eq!(app.monitors.cycle.shown(), Some(2));
+}
+
+#[test]
 fn the_cycling_monitor_waits_while_the_user_types_in_its_chat() {
     let now = Instant::now();
     let mut app = window(host());

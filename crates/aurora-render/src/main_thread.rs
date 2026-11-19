@@ -1498,6 +1498,11 @@ impl Renderer {
             }
             self.snapshot_sent = false;
             self.snapshot_dropped = false;
+            // Folderstorm: the interface's texture changes too (the recovery replays them from
+            // the CPU shadow); egui's debug builds panic on dropping a delta not applied
+            if let Some(ui) = ui.as_mut() {
+                ui.textures_delta.clear();
+            }
             return RenderStats {
                 render_thread: self.host.threaded(),
                 ..Default::default()

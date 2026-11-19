@@ -17,7 +17,7 @@ GitHub turns Actions off on a fork until its owner enables them.
 | Workflow (file) | Keep? | Why |
 |---|---|---|
 | CI (`ci.yml`) | **Keep** | fmt, clippy (Windows and Linux), secret scan. Tests run on pushes to `main`. Without Aurora's private runners and token, it uses GitHub's runners. |
-| macOS (`macos.yml`) | **Keep** | clippy and tests on macOS, only when a change touches macOS code (it ends in seconds otherwise). Uses GitHub's runners here too. |
+| macOS (`macos.yml`) | Disable | clippy and tests on macOS when a change touches macOS code. Since 2026-11-16 GitHub's `macos-15` runners never start for the fork (jobs wait 15 minutes, then are cancelled without a log), and no Mac build ships, so the human disabled it in the Actions tab. The file stays as upstream's; enable it again there if a Mac build is ever wanted. |
 | Folderstorm tests (`folderstorm-tests.yml`) | **Keep** | Ours: Windows tests on every pull request (see below). |
 | Nightly (`nightly.yml`) | Disable | Tags and publishes Aurora nightly builds twice a day. |
 | Fuzz (`fuzz.yml`) | Disable | Nightly fuzzing of upstream's parsers. Upstream already runs it. |

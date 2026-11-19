@@ -1,33 +1,43 @@
-//! The *Saved workspaces* group of the tab (checkpoint 6), found by the
-//! window's search (a word of its own, "exploring": "workspace" also finds
-//! the layouts) so that it is drawn alone, above the fold.
+//! The workspaces of the Saved tab (checkpoint 6): their lines in the
+//! list, the selected one's editor beside it, *New from current…* on
+//! "Workspace".
 
 use super::*;
 use crate::folderstorm::workspaces::words::workspace_holds;
+use crate::folderstorm::workspaces::workspace;
 
-/// The tab with the layout "Wide" saved and in use, searched for its
-/// workspaces.
+/// The tab with the layout "Wide" saved and in use.
 fn searched() -> Window {
     let mut w = Window::new();
     w.save_as("Wide");
-    w.st.query = "exploring".into();
-    w.settle();
     w
 }
 
+/// *New from current…*, on "Workspace".
+fn workspace_form(w: &mut Window) {
+    w.scroll_top();
+    w.click(tr!("fs-saved-new"));
+    w.click_last(tr!("fs-workspaces-save-workspace"));
+}
+
 fn save_workspace(w: &mut Window, name: &str) {
-    // (under a selected workspace's settings: the page is scrolled to it)
-    w.reveal(tr!("fs-workspaces-name-hint"));
+    workspace_form(w);
     w.click(tr!("fs-workspaces-name-hint"));
     w.type_text(name);
-    w.click(tr!("fs-workspaces-save"));
+    w.click(tr!("fs-layouts-save"));
     w.settle();
+}
+
+/// The title of the fold of the windows the workspace at 0 does not open.
+fn more_windows(w: &Window) -> String {
+    let open = w.store().workspace(0).expect("saved").open.len();
+    tr!("fs-workspaces-more-windows", count = workspace::switchable().count() - open)
 }
 
 #[test]
 fn the_tab_saves_a_workspace_and_edits_its_layout_and_its_windows() {
     let mut w = searched();
-    assert!(w.shows(tr!("fs-workspaces-empty")));
+    assert!(w.store().workspaces.is_empty());
     w.changed = false;
     save_workspace(&mut w, "Sorting");
     assert!(w.changed, "the settings are saved");
@@ -35,7 +45,8 @@ fn the_tab_saves_a_workspace_and_edits_its_layout_and_its_windows() {
     assert_eq!((saved.name.as_str(), saved.layout.as_deref()), ("Sorting", None));
     assert!(w.shows("Sorting") && w.shows(tr!("fs-layouts-active")));
     assert!(w.shows(&workspace_holds(&saved)), "what it does");
-    assert!(!w.shows(tr!("fs-workspaces-empty")));
+    // it opens none here: said so, and the fold of the others is open
+    assert!(w.shows(tr!("fs-workspaces-holds-none")) && w.shows(&more_windows(&w)));
     // a window ticked: in its list, and the workspace no longer describes
     // what is open
     w.click(tr!("common-places"));
@@ -44,6 +55,7 @@ fn the_tab_saves_a_workspace_and_edits_its_layout_and_its_windows() {
     w.click(tr!("common-places"));
     assert!(w.store().workspace(0).expect("saved").open.is_empty());
     // its layout: the one in use is kept, or a layout of the list
+    w.reveal(tr!("fs-workspaces-layout-keep"));
     w.click(tr!("fs-workspaces-layout-keep"));
     let wide = w
         .run(Vec::new())
@@ -59,6 +71,7 @@ fn the_tab_saves_a_workspace_and_edits_its_layout_and_its_windows() {
 #[test]
 fn a_workspace_is_saved_with_the_layout_in_use_when_asked() {
     let mut w = searched();
+    workspace_form(&mut w);
     w.click(&tr!("fs-workspaces-with-layout", name = "Wide"));
     save_workspace(&mut w, "Photos");
     assert_eq!(w.store().workspace(0).expect("saved").layout.as_deref(), Some("Wide"));
@@ -126,9 +139,10 @@ fn the_workspaces_group_is_drawn() {
         ..Default::default()
     };
     let sorting = s.folderstorm_workspaces.workspace(0).expect("read").clone();
-    let texts = drawn_found("preferences-workspaces", 3, s, false, "exploring");
+    let texts = drawn_found("preferences-workspaces", tab::SAVED, s, false, "exploring");
+    let inventory_3 = crate::ui::inventory::extra_windows::slot_title(2);
     for expected in [
-        tr!("fs-workspaces-list").to_owned(),
+        tr!("fs-saved-list").to_owned(),
         "Sorting".to_owned(),
         "Exploring".to_owned(),
         "From a later version".to_owned(),
@@ -136,13 +150,15 @@ fn the_workspaces_group_is_drawn() {
         workspace_holds(&sorting),
         tr!("fs-workspaces-layout").to_owned(),
         "1 monitor".to_owned(),
-        tr!("fs-workspaces-windows").to_owned(),
+        tr!("fs-workspaces-closes").to_owned(),
         tr!("common-inventory").to_owned(),
-        tr!("fs-workspaces-save-new").to_owned(),
-        tr!("fs-workspaces-save").to_owned(),
+        crate::ui::inventory::extra_windows::slot_title(1),
+        tr!("common-people").to_owned(),
+        tr!("fs-workspaces-more-windows", count = workspace::switchable().count() - 3),
     ] {
-        assert!(texts.contains(&expected), "“{expected}” is drawn");
+        assert!(texts.contains(&expected), "“{expected}” is drawn: {texts:?}");
     }
+    assert!(!texts.contains(&inventory_3), "the windows it does not open are folded");
     assert!(!texts.iter().any(|text| text == tr!("common-conversations")), "never Conversations");
 }
 
@@ -227,6 +243,7 @@ mod context {
             })
         );
         // what it holds is said under its name
+        w.scroll_top();
         assert!(w.shows(&workspace_holds(&photos_workspace(&w))));
         // taken off: still listed by its name, ticked; unticked, gone
         w.shell.huds.clear();
@@ -300,7 +317,15 @@ mod context {
             )],
             names: [(radar().item, "Radar".to_owned())].into_iter().collect(),
         };
-        let texts = drawn_scrolled("preferences-workspace-context", 3, s, false, "exploring", Some(huds), 420.0);
+        let texts = drawn_scrolled(
+            "preferences-workspace-context",
+            tab::SAVED,
+            s,
+            false,
+            "exploring",
+            Some(huds),
+            420.0,
+        );
         for expected in [
             tr!("fs-context-section-set").to_owned(),
             tr!("fs-context-graphics").to_owned(),

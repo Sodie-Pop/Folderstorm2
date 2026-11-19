@@ -271,8 +271,11 @@ pub struct Outcome {
     pub save: bool,
     /// What to ask of the viewer window, in order.
     pub commands: Vec<Command>,
-    /// *Layouts…* was chosen: Preferences on the Layouts tab.
+    /// *Layouts…* was chosen: Preferences on the Workspaces page.
     pub preferences: bool,
+    /// The toolbar's toggle has no two layouts yet: that page's Switching
+    /// tab, where they are chosen.
+    pub switching: bool,
     /// A workspace's context to apply, or the graphics and the camera to
     /// put back (row 1.7): the app does it, then says what it did
     /// ([`context_done`]).
@@ -1092,7 +1095,10 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
             Request::Toggle => match pick::toggle_target(live.store) {
                 Ok(index) => outcome.save |= apply_asked(ctx, live, Some(index)),
                 // its two layouts are chosen in Preferences
-                Err(_) => outcome.preferences = true,
+                Err(_) => {
+                    outcome.preferences = true;
+                    outcome.switching = true;
+                }
             },
             Request::Favorite(forward) => {
                 let index = pick::next_favorite(live.store, forward);
