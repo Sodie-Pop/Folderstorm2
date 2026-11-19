@@ -19,6 +19,12 @@
 //!   [`RELEASE_WAIT`]), and while it waits the viewer draws a frame itself
 //!   when none came for [`DRAW_AFTER`], and draws at [`RELEASE_FPS`] at
 //!   least: the texture pages are emptied and destroyed a few per frame.
+//!   It is done once the textures and the texture table say so **and** the
+//!   texture pages have not dropped for [`PLATEAU`] ([`Plateau`]): the
+//!   table can look settled between two of its eager compaction passes
+//!   while spare pages and the compaction still free memory. The pages are
+//!   never required to reach the textures' target: fixed-size textures
+//!   (HUDs, sculpts, terrain) are never lowered.
 //!   A window that still has the keyboard is not minimised: the host's
 //!   switch through the bar or a hotkey reaches it before the character
 //!   brought forward has taken the keyboard, and it waits for that.
@@ -50,8 +56,15 @@ pub const WATCHED_ECONOMY_MB: u32 = 512;
 pub const RESERVE_STEP_MB: u32 = 256;
 
 /// Longest wait for Economy's release before the window is minimised
-/// anyway.
-pub const RELEASE_WAIT: Duration = Duration::from_secs(5);
+/// anyway: the texture pages go back over several seconds (a spare page
+/// after 2 s, a compaction pass a second), and [`Plateau`] waits for them.
+pub const RELEASE_WAIT: Duration = Duration::from_secs(10);
+/// Economy's release is done only once the texture pages have not dropped
+/// for this long.
+pub const PLATEAU: Duration = Duration::from_secs(1);
+/// The texture pages are logged again this long after the minimise, to see
+/// what went back after it.
+pub const PAGES_AFTER_MINIMISE: Duration = Duration::from_secs(10);
 /// During the release, a frame is drawn by the viewer itself when the
 /// window got none for this long.
 pub const DRAW_AFTER: Duration = Duration::from_millis(500);
@@ -225,6 +238,34 @@ impl Releasing {
             self.seen = Some((frame, now));
         }
         Step::Wait { draw }
+    }
+}
+
+/// Whether a figure that only goes down (the texture pages during
+/// Economy's release) has stopped going down: no drop for [`PLATEAU`].
+/// A rise is not a drop, but the next fall from it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Plateau {
+    /// The last figure seen, and when it last dropped (or was first seen).
+    last: Option<(u64, Instant)>,
+}
+
+impl Plateau {
+    /// Start over (a new release, or the release starting again once the
+    /// keyboard left).
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    /// At each turn: `bytes` the figure now. True once it has not dropped
+    /// for [`PLATEAU`] (counted from the first figure seen).
+    pub fn observe(&mut self, now: Instant, bytes: u64) -> bool {
+        let since = match self.last {
+            Some((last, since)) if bytes >= last => since,
+            _ => now,
+        };
+        self.last = Some((bytes, since));
+        now.saturating_duration_since(since) >= PLATEAU
     }
 }
 
@@ -402,6 +443,43 @@ mod tests {
         r.start(t0, 0);
         r.cancel();
         assert_eq!(r.poll(t0 + RELEASE_WAIT, 7, true, false), Step::Idle);
+    }
+
+    #[test]
+    fn the_pages_are_settled_once_they_stopped_dropping_for_a_second() {
+        let t0 = Instant::now();
+        let ms = Duration::from_millis;
+        let mut p = Plateau::default();
+        // the first figure starts the count
+        assert!(!p.observe(t0, 900));
+        assert!(!p.observe(t0 + ms(500), 900));
+        // still dropping: the count starts again from each drop
+        assert!(!p.observe(t0 + ms(900), 800));
+        assert!(!p.observe(t0 + ms(1500), 800));
+        assert!(!p.observe(t0 + ms(1800), 700));
+        assert!(!p.observe(t0 + ms(2700), 700));
+        assert!(p.observe(t0 + ms(2800), 700), "a second without a drop");
+        assert!(p.observe(t0 + ms(4000), 700));
+        // a rise is no drop, but a fall from it is
+        assert!(p.observe(t0 + ms(4100), 750));
+        assert!(!p.observe(t0 + ms(4200), 720));
+        assert!(p.observe(t0 + ms(5200), 720));
+        // pages that never reach the target (fixed-size textures) still
+        // settle: nothing asks them to go under anything
+        let mut fixed = Plateau::default();
+        assert!(!fixed.observe(t0, 435));
+        assert!(fixed.observe(t0 + PLATEAU, 435));
+        // started over: the count with it
+        fixed.reset();
+        assert!(!fixed.observe(t0 + PLATEAU * 2, 435));
+        assert!(fixed.observe(t0 + PLATEAU * 3, 435));
+    }
+
+    #[test]
+    fn the_release_waits_longer_than_the_pages_plateau() {
+        // a compaction a second and a spare page after 2 s fit in the wait
+        const { assert!(RELEASE_WAIT.as_millis() >= 4 * PLATEAU.as_millis()) };
+        const { assert!(PAGES_AFTER_MINIMISE.as_millis() >= RELEASE_WAIT.as_millis()) };
     }
 
     #[test]

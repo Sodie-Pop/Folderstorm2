@@ -9250,9 +9250,13 @@ failure. Grid validation and any paid upload are performed by the human.
     the render thread's `GPU culling: N MB of buffers given back …`, and
     `session memory: released after N ms, the window is minimised: A MB
     taken from the driver (was B), texture pages C MB (was D), …, GPU
-    culling G MB back, probes and shadows at their smallest …` (5 s at
+    culling G MB back, probes and shadows at their smallest …` (10 s at
     most; the window draws at 20 frames a second meanwhile, so the texture
-    pages are emptied and destroyed before the minimise). Back to it:
+    pages are emptied and destroyed before the minimise, and the release
+    waits until the texture pages have not dropped for a second), then
+    10 s later `session memory: 10 s after the minimise: texture pages X
+    MB, A MB taken from the driver` (about the pages of the `released
+    after` line: little goes back once minimised). Back to it:
     textures and faces load again within a second or two (`texture memory:
     the window is in front again`), `session memory: the reflection probes
     and the shadows as set again`, and the reflections come back within a
