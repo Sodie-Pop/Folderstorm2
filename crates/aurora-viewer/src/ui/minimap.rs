@@ -288,12 +288,17 @@ fn names_allowed(world: &World, id: &Uuid) -> bool {
 
 /// A saved mark, even its presence in a menu, can identify an anonymous dot.
 pub(super) fn can_mark(world: &World, id: &Uuid) -> bool {
-    names_allowed(world, id) && visible_avatar(world, id).is_some()
+    // Folderstorm: a dot out of draw distance or on a private parcel is markable too:
+    // SL's "Managing your parcel": "The world map and mini-map are unaffected."
+    names_allowed(world, id)
 }
 
 fn avatar_name(world: &World, id: &Uuid, format: MiniAvatarNameFormat) -> String {
     let Some(object) = visible_avatar(world, id) else {
-        return "…".into();
+        // Folderstorm: a resident beyond draw distance has a name, as in the Legacy Viewer.
+        return crate::folderstorm::minimap_names::unseen_avatar_name(world, id, |name, options| {
+            formatted_avatar_name(name, options, format)
+        });
     };
     let names = &world.social.avatar_names;
     if !names_allowed(world, id) {
@@ -442,8 +447,10 @@ mod name_format_tests {
         };
         let format = MiniAvatarNameFormat::DisplayAndLegacy;
         world.social.avatar_names.on_display_names(&[name(first)], &[], Some(3600));
-        assert_eq!(avatar_name(&world, &first, format), "…");
-        assert!(!can_mark(&world, &first));
+        // Folderstorm: beyond draw distance (no object yet), the cached name shows.
+        assert_eq!(avatar_name(&world, &first, format), "Captain Jack (John Smith)");
+        // Folderstorm: markable too, as the SL documentation says the mini-map is unaffected.
+        assert!(can_mark(&world, &first));
         visible_resident(&mut world, first, 1, "", "");
         visible_resident(&mut world, second, 2, "", "");
         assert_eq!(avatar_name(&world, &second, format), "…");
@@ -544,23 +551,47 @@ mod name_format_tests {
             );
         }
 
-        // The simulator no longer draws this resident. Neither an earlier
-        // display name nor a UUIDNameReply may identify their coarse dot.
+        // The simulator no longer draws this resident. Folderstorm: their coarse
+        // dot is named by the cached display name, as in the Legacy Viewer,
+        // but the map never marks them.
         world.objects.remove_idx(known_index);
         world.social.names.insert(known, "John Smith".into());
         world.coarse.insert(1, vec![(known, Vec3::new(1.0, 2.0, 3.0))]);
+        // Still under @shownames=n: the anonymous name, never the real one.
         for format in FORMATS {
-            assert_eq!(avatar_name(&world, &known, format), "…");
+            assert_eq!(
+                avatar_name(&world, &known, format),
+                world.social.avatar_names.anonymous(&known).display_name
+            );
+        }
+        assert!(world.rlva.receive(&aurora_net::ChatMessage {
+            from_name: "Name fixture".into(),
+            source_id: Uuid::from_u128(4),
+            owner_id: world.agent_id,
+            source_type: aurora_net::ChatSourceType::Object,
+            chat_type: aurora_net::ChatType::OwnerSay,
+            region: None,
+            position: Vec3::ZERO,
+            message: "@shownames=y".into(),
+        }));
+        world.social.avatar_names.set_rlva_privacy(false, Default::default());
+        for (format, name) in FORMATS.into_iter().zip(expected) {
+            assert_eq!(avatar_name(&world, &known, format), name);
         }
         assert!(visible_avatar(&world, &known).is_none());
-        // An unseen resident with no cached name must not start a lookup.
+        // Folderstorm: SL, "Managing your parcel": "The world map and mini-map are unaffected."
+        assert!(can_mark(&world, &known));
+        // Folderstorm: an unseen resident with only a legacy name shows it, and an
+        // unseen one with none shows "…" and starts a lookup.
         let unseen = Uuid::from_u128(44);
         let _ = world.social.avatar_names.take_asks();
         world.social.names.insert(unseen, "Earlier acquaintance".into());
         for format in FORMATS {
-            assert_eq!(avatar_name(&world, &unseen, format), "…");
+            assert_eq!(avatar_name(&world, &unseen, format), "Earlier acquaintance");
         }
-        assert!(world.social.avatar_names.take_asks().is_empty());
+        let stranger = Uuid::from_u128(45);
+        assert_eq!(avatar_name(&world, &stranger, MiniAvatarNameFormat::Display), "…");
+        assert!(world.social.avatar_names.take_asks().contains(&stranger));
     }
 }
 
@@ -953,6 +984,10 @@ impl MiniMap {
                 Some(object) if names_allowed(world, &id) => {
                     super::colors::map_color(world, &id, &fallback_name(world, object).unwrap_or_default())
                 }
+                // Folderstorm: the dot of a resident the scene does not show keeps its marks and colours.
+                None if names_allowed(world, &id) => {
+                    super::colors::map_color(world, &id, world.social.names.get(&id).map(String::as_str).unwrap_or_default())
+                }
                 _ => super::colors::c(k.map_other),
             };
             // unknown height: shown above while the camera is under 1020 m
@@ -967,9 +1002,8 @@ impl MiniMap {
             if let Some(m) = pointer {
                 let d = sp.distance(m);
                 if d < dot_r * PICK_SCALE {
-                    if visible.is_some() {
-                        under.push(id);
-                    }
+                    // Folderstorm: every dot is listed, as the parcel privacy spares the mini-map.
+                    under.push(id);
                     if closest.as_ref().is_none_or(|c| d < c.0) {
                         closest = Some((d, id, pos, known));
                     }
@@ -1099,12 +1133,12 @@ impl MiniMap {
             self.popup = Some((view.to_global(m), under.clone()));
         }
         menu::context_menu(&resp, p, |ui| {
-            let Some(((px, py), mut avs)) = self.popup.clone() else {
+            let Some(((px, py), avs)) = self.popup.clone() else {
                 ui.close();
                 return;
             };
             // Recheck the picked avatars while their menu is open: visibility can change.
-            avs.retain(|id| visible_avatar(world, id).is_some());
+            // Folderstorm: no filter on visibility; parcel privacy does not apply to the mini-map.
             // LLNetMap::handleRightMouseDown greys identity actions for everyone
             // under @shownames, including its exceptions.
             let can_show_names = !world.rlva.has("shownames") && avs.iter().all(|id| names_allowed(world, id));

@@ -242,8 +242,9 @@ mod tests {
         w.avatar_marks.set(&[luna], blue);
         let source = AvatarList::MiniMap;
         assert!(can_edit(&w, &[luna], source));
-        assert!(!can_edit(&w, &[distant], source));
-        assert!(!can_edit(&w, &[luna, distant], source));
+        // Folderstorm: a dot beyond draw distance is markable (SL: "The world map and mini-map are unaffected.").
+        assert!(can_edit(&w, &[distant], source));
+        assert!(can_edit(&w, &[luna, distant], source));
 
         let p = crate::theme::Theme::default().palette();
         let mut frames = Frames::new();
@@ -281,9 +282,11 @@ mod tests {
         w.parcel = Some(crate::demo::parcel_visibility::parcel_at(center.x, center.y));
         let _ = w.update_parcel_visibility(&settings.parcel_visibility, Instant::now());
         assert!(w.objects.index_of_uuid(&luna).is_some());
-        assert!(!can_edit(&w, &[luna], source));
+        // Folderstorm: a private parcel does not hide the mini-map's dots (SL, "Managing
+        // your parcel": "The world map and mini-map are unaffected"): the picker stays.
+        assert!(can_edit(&w, &[luna], source));
         frames.run(Vec::new(), |ui| show(ui.ctx(), &p, &mut w, &mut picker));
-        assert!(picker.is_none());
+        assert!(picker.is_some());
         assert_eq!(w.avatar_marks.get(&luna), Some(blue));
     }
 
