@@ -2609,6 +2609,7 @@ pub fn show(
     // Folderstorm: the pin and quiet mode buttons (window_mode.rs)
     let mut mode_clicks = window_mode::Clicks::default();
     floater = window_mode::decorate(floater, st, prefs, Some(window_mode::Key::Main), &mut mode_clicks);
+    window_mode::share(st, dual.as_deref_mut()); // Folderstorm: quiet mode covers both panes
     let mut widen = false;
     if !classic {
         // The title bar follows the width the window had last frame.
