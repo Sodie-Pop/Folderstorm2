@@ -15,6 +15,7 @@ pub mod gpu_diag;
 pub mod keys;
 pub mod login_screen;
 pub mod margin_pointer;
+pub mod minimap_names;
 pub mod photo_viewport;
 pub mod rez_overrides;
 pub mod viewport;
