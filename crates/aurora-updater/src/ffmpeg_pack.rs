@@ -242,8 +242,9 @@ pub async fn install(
     fs::create_dir(&stage).map_err(|e| failure(Failure::Filesystem, e.into()))?;
     let stage = Stage(stage);
     let folder = pack.folder();
+    // Folderstorm: from Aurora Viewer's releases, as the media plugins pack (the fork publishes none)
     let url = source
-        .asset_url(&pack.tag(), &format!("{folder}.zip"))
+        .media_pack_url(&pack.tag(), &format!("{folder}.zip"))
         .map_err(|e| failure(Failure::Network, e))?;
     let client = source.client().map_err(|e| failure(Failure::Network, e))?;
     let archive = stage.0.join("download.zip");
