@@ -176,6 +176,8 @@ fontconfig-parser = { version = "0.5.8", default-features = false }
 # the bundled dictionaries, compressed into the exe (build.rs)
 flate2 = "1.1.10"
 winresource = { version = "0.1.34", default-features = false }
+# Folderstorm: the names of the version block (build.rs)
+folderstorm-brand = { path = "../folderstorm-brand" }
 
 [features]
 # The Khronos OpenXR loader built into the exe (needs CMake): the published

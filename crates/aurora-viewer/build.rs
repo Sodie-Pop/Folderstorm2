@@ -89,9 +89,9 @@ fn windows_resources() {
 
     let mut res = winresource::WindowsResource::new();
     res.set_icon(&icon.to_string_lossy())
-        .set("ProductName", "Folderstorm2") // Folderstorm: product name
-        .set("FileDescription", "Folderstorm2")
-        .set("OriginalFilename", "aurora-viewer.exe")
+        .set("ProductName", folderstorm_brand::PRODUCT) // Folderstorm: names from the brand
+        .set("FileDescription", folderstorm_brand::PRODUCT)
+        .set("OriginalFilename", folderstorm_brand::EXE)
         .set("ProductVersion", &display)
         .set("FileVersion", &display)
         .set_version_info(winresource::VersionInfo::PRODUCTVERSION, packed)

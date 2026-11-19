@@ -51,16 +51,17 @@ impl Format {
     }
     /// The folder the package's entries sit under.
     fn root(self, tag: &str) -> String {
+        let prefix = folderstorm_brand::RELEASE_PREFIX; // Folderstorm: the fork's asset names
         match self {
-            Self::Zip => format!("Aurora-Viewer-{tag}-windows-x64"),
-            Self::TarGz => format!("Aurora-Viewer-{tag}-linux-x64"),
+            Self::Zip => format!("{prefix}-{tag}-windows-x64"),
+            Self::TarGz => format!("{prefix}-{tag}-linux-x64"),
         }
     }
     /// The viewer's executable inside the package, which is not this
     /// system's: the tests extract the packages of both on any system.
     fn exe(self) -> &'static str {
         match self {
-            Self::Zip => "aurora-viewer.exe",
+            Self::Zip => folderstorm_brand::EXE, // Folderstorm: shipped name
             Self::TarGz => "aurora-viewer",
         }
     }
@@ -411,9 +412,11 @@ mod tests {
 
     #[test]
     fn each_format_names_its_own_package_layout() {
-        assert_eq!(Format::Zip.root("v1.2.3"), "Aurora-Viewer-v1.2.3-windows-x64");
-        assert_eq!(Format::TarGz.root("v1.2.3"), "Aurora-Viewer-v1.2.3-linux-x64");
-        assert_eq!(Format::Zip.exe(), "aurora-viewer.exe");
+        // Folderstorm: the fork's names
+        let prefix = folderstorm_brand::RELEASE_PREFIX;
+        assert_eq!(Format::Zip.root("v1.2.3"), format!("{prefix}-v1.2.3-windows-x64"));
+        assert_eq!(Format::TarGz.root("v1.2.3"), format!("{prefix}-v1.2.3-linux-x64"));
+        assert_eq!(Format::Zip.exe(), folderstorm_brand::EXE);
         assert_eq!(Format::TarGz.exe(), "aurora-viewer");
         assert_eq!(Format::Zip.file(), "download.zip");
         assert_eq!(Format::TarGz.file(), "download.tar.gz");

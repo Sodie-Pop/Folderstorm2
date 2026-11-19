@@ -113,11 +113,17 @@ fn run<T>(future: impl std::future::Future<Output = T>) -> T {
         .expect("runtime")
         .block_on(future)
 }
+/// Folderstorm: the fixtures keep upstream's package names; the fork's
+/// packages are named after the brand (`folderstorm-brand`).
+fn branded(name: &str) -> String {
+    name.replace("Aurora-Viewer-", &format!("{}-", folderstorm_brand::RELEASE_PREFIX))
+        .replace("aurora-viewer.exe", folderstorm_brand::EXE)
+}
 fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
     let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     for (name, value) in entries {
         writer
-            .start_file(*name, zip::write::SimpleFileOptions::default())
+            .start_file(branded(name), zip::write::SimpleFileOptions::default()) // Folderstorm: branded
             .expect("ZIP member");
         writer.write_all(value).expect("ZIP data");
     }
@@ -197,9 +203,10 @@ fn tar_gz(members: &[Member]) -> Vec<u8> {
         }
         // tar-rs refuses to write `..` or an absolute name: write them as a
         // hostile archive would, then seal the header
-        assert!(member.name.len() <= 100, "test member name");
+        let name = branded(&member.name); // Folderstorm: branded
+        assert!(name.len() <= 100, "test member name");
         header.as_mut_bytes()[..100].fill(0);
-        header.as_mut_bytes()[..member.name.len()].copy_from_slice(member.name.as_bytes());
+        header.as_mut_bytes()[..name.len()].copy_from_slice(name.as_bytes());
         header.set_cksum();
         builder.append(&header, member.data.as_slice()).expect("tar member");
     }
@@ -266,7 +273,7 @@ fn verifies_and_extracts_real_download() {
         |_| {},
     ))
     .expect("verified download");
-    assert_eq!(fs::read(root.join("aurora-viewer.exe")).expect("viewer"), b"new viewer");
+    assert_eq!(fs::read(root.join(folderstorm_brand::EXE)).expect("viewer"), b"new viewer"); // Folderstorm: shipped name
 }
 
 #[test]
@@ -512,7 +519,7 @@ fn a_folder_without_the_viewer_or_an_update_with_foreign_files_is_refused() {
 
 /// The viewer's executable, as this system's package names it.
 fn exe() -> &'static str {
-    if cfg!(windows) { "aurora-viewer.exe" } else { "aurora-viewer" }
+    if cfg!(windows) { folderstorm_brand::EXE } else { "aurora-viewer" } // Folderstorm: shipped name
 }
 
 #[test]
