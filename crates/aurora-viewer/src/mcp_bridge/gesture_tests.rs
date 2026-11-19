@@ -28,7 +28,7 @@ use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::{Class, ErrorCode, Level, Permissions, Preset, ToolError};
 use glam::{Quat, Vec3};
 use serde_json::{Value, json};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
@@ -115,7 +115,7 @@ fn definition(lines: &[&str]) -> Gesture {
 /// pose library folder.
 struct Fixture {
     manager: Manager,
-    failures: BTreeSet<(Uuid, Uuid)>,
+    failures: BTreeMap<(Uuid, Uuid), String>,
     commands: crate::cmdline::ChatCommandSettings,
     poses: tempfile::TempDir,
 }
@@ -134,7 +134,7 @@ impl Fixture {
         manager.active.insert(GESTURE);
         Self {
             manager,
-            failures: BTreeSet::new(),
+            failures: BTreeMap::new(),
             commands: Default::default(),
             poses: tempfile::tempdir().expect("temp dir"),
         }
@@ -361,7 +361,7 @@ fn a_status_loads_the_gesture_without_activating_it_then_answers_or_fails() {
     let (c, answer) = call(STATUS, json!({"item_id": GESTURE.to_string()}));
     desk.take(c, &ctx(&world, &f), now);
     let _ = desk.gestures().take_loads();
-    f.failures.insert((GESTURE, asset));
+    f.failures.insert((GESTURE, asset), "not found".into());
     desk.tick_avatar(&ctx(&world, &f), now);
     assert_eq!(code(answered(&answer)), ErrorCode::Failed);
     // and one that never comes

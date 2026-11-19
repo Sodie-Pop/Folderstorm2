@@ -136,6 +136,7 @@ impl Viewer {
                 icons,
                 world,
                 st,
+                None,
                 prefs,
                 &mut open,
                 false,

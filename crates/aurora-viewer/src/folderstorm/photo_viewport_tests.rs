@@ -189,6 +189,9 @@ fn viewfinder_layout(area: Option<Rect>, pointer: Pos2) -> (Vec<(&'static str, R
             profile_posted: false,
             email: None,
             exposure: 1.0,
+            shadow_quality: 0,
+            ambient_occlusion: 0,
+            quality_boost: false,
             hdr: true,
             env: crate::ui::snapshot::EnvView {
                 catalog: &catalog,
