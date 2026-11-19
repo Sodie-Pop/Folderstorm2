@@ -3,6 +3,7 @@
 Plan for FEATURES.md 0.3 (release checks and update feed) and 0.4 (crash
 reports), with the Windows installer. **No code changes yet: the human
 decides from this.** Written 2026-11-19 against `main` at `a624004f`.
+**Decided 2026-11-19: see [section 8](#8-decided).**
 
 Line numbers point at that commit. "Upstream file" means a file of Aurora
 Viewer, where we only add small `// Folderstorm:` hooks.
@@ -16,6 +17,7 @@ Contents:
 5. [Bug-report links](#5-bug-report-links)
 6. [Phases and PRs](#6-phases-and-prs)
 7. [Questions for the human](#7-questions-for-the-human)
+8. [Decided](#8-decided)
 
 ---
 
@@ -575,3 +577,43 @@ is done after PR 2 (and 3); 0.4 after PR 5 (phase 1) or PR 8 (phase 2).
     window's "Open in the browser" go there too, or stay on GitHub issues?
     *Recommended: the Help menu link moves first; crash reports stay on
     GitHub until phase 2 is decided.*
+
+---
+
+## 8. Decided
+
+2026-11-19, by the human: the recommended answer to all ten questions of
+section 7, with these notes.
+
+- **Bug reports** go to **https://folderstorm.com/bugs/** (a
+  `folderstorm-brand` constant). The Help menu, bars and login screen links
+  move there with PR 7; the crash window stays on GitHub issues until phase
+  2 of crash reports is decided (question 10).
+- **The privacy policy and support contact** will be pages on the same
+  server (question 9); their addresses are still to come and the release
+  notes header waits for them.
+- **Releases are built and uploaded by the human's own local agent**, on
+  the Windows PC, following the human's build skill. So PR 2 also gives a
+  local path, with the same result as the workflow:
+  - `folderstorm/scripts/package-release.ps1` makes the exact release
+    assets (archive named as the updater expects, its `.sha256`, the
+    symbols) from a local `cargo build --release` with
+    `AURORA_VERSION_TAG` set and the tag created first;
+  - a new `folderstorm/RELEASING.md` gives the steps, written so that an
+    agent can follow them: check the version, tag, build, package, verify
+    `--version` and the checksum, `gh release create <tag> --draft` with
+    the assets and notes, then the human reviews and publishes. Agents
+    never handle the human's GitHub credentials: `gh` is already signed in
+    on that PC by the human.
+  - The `workflow_dispatch` workflow stays as the second way, sharing the
+    same packaging script.
+- **MCP configuration and spaces in paths.** Folderstorm (C++) had trouble
+  configuring MCP clients when the folder of the `.exe` had a space in it
+  (worked around with a link). The per-user installer puts the program
+  under `%LOCALAPPDATA%\Programs\Folderstorm2`, and a Windows user name
+  can hold spaces (`C:\Users\First Last\...`), so the configuration the
+  viewer copies for MCP clients must quote and escape the path correctly in
+  every format it offers (JSON with escaped backslashes, `claude mcp add`
+  and other command lines with quotes, TOML for Codex). A separate small
+  PR checks each format with a path holding spaces, with tests; see
+  FEATURES.md 4.x.
