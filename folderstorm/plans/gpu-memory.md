@@ -640,11 +640,14 @@ What Economy does now (`folderstorm_session::memory`,
 
 Logged: `session memory: Economy, giving the video memory back before the
 window is minimised`, then `session memory: released after N ms (… MB of
-video memory, texture target … MB), the window is minimised`.
+video memory, texture target … MB), the window is minimised` (its second
+pass form is in "Economy, second pass" below).
 
 Not given back (out of scope, as the plan said): geometry (the mesh cache
 and arena are entangled with the scene, `scene/mod.rs`), the shadow atlas
-(fixed by the shadow setting), probes, wgpu's free block room. Bakes go
+(fixed by the shadow setting), probes, wgpu's free block room (the atlas,
+the probes and the culling buffers are given back since the second pass,
+below). Bakes go
 through the same GPU lowering as the "crowded" path Aurora already uses
 (#1808); if the garbled faces turn out to come from that lowering (plan
 section 6, candidate 1), Economy makes it happen more often: watch for it.
@@ -652,7 +655,8 @@ section 6, candidate 1), Economy makes it happen more often: watch for it.
 ### A watched Economy character
 
 A character in Economy whose monitor is open (or while the cycling monitor
-is open) stays behind, as before, for its pictures, but no longer as Warm:
+is open) — since the second pass: whose monitor's window is **on screen** —
+stays behind, as before, for its pictures, but no longer as Warm:
 `Release::Lowered`, a share of at most `WATCHED_ECONOMY_MB` (512 MB), and
 the highest pressure step at once (hook: `minimized || held()`,
 `scene/textures.rs:3693`). Its pictures are drawn with lowered textures
@@ -718,6 +722,128 @@ paused world in that small rectangle; clicked, it is the full window again
 - The host's diagnostics (Advanced) list the share and each viewer's video
   memory.
 
+## Economy, second pass (2026-11-18)
+
+Built on `claude/economy-release-more`, stacked on `claude/gpu-memory-share`,
+after the first Windows test (RTX 3060 12 GB, background characters in
+Economy, share 256 MB): the background viewers still held 1.5–2 GB, and
+their logs never had the `giving the video memory back` line on a switch.
+
+### Why the minimise never came (root cause)
+
+The host did send it: the viewer's log shows the assignment as
+`Background, Economy standby` with Economy's textures release, so the
+host's rule (`Desk::waits`) said Economy. The viewer dropped it:
+`folderstorm_memory_minimise` returned at once when
+`folderstorm_in_front()`, which is true while the window **has the
+keyboard**. With the docked bar on, a switch is a click in the bar **of the
+active viewer's own window** (or a global hotkey while it has the
+keyboard): the host's assignment and `Minimise` reach that viewer before
+the character brought forward has taken the keyboard, so the old active
+window still had it and ignored the minimise, silently. A switch made from
+the host's own window worked (the keyboard was the host's), which is why
+the first build looked right. Only the release at startup (a character
+started behind, never with the keyboard) was logged.
+
+Fixed: only the **active character** ignores the minimise now
+(`managed.role() == Active`). A window that still has the keyboard starts
+the release and waits, however long, for the keyboard to leave before it
+is minimised (`Releasing::poll`'s `keyboard`); the release and its 5 s wait
+start over from the moment it leaves (until then the window counts as in
+front for its textures, so nothing would be released anyway). A window the
+user is in is never minimised under them.
+
+### A monitor keeps a character behind only while it is on screen
+
+`Desk::waits` kept an Economy character Warm (behind, never minimised) as
+soon as its monitor was **open** (`Slot::monitor`, saved in
+`session-host.json`) or the cycling monitor was, whether or not their
+windows were on screen. Now (`Desk::watching`): its own monitor's window is
+on screen (`monitors_seen`), or the cycling monitor's window is on screen
+(`cycling_seen`, any character shown: it goes round all of them). A
+monitor minimised, covered or hidden watches nobody: the character waits as
+it chose, and Economy minimises it. When that changes while it is behind
+(`monitors_seen`, `cycling_seen`, `set_monitor`, `edit_monitors`), the
+characters no monitor keeps any more get their `Minimise` at once
+(`minimise_unwatched`); a standby chosen while behind still waits for the
+next switch, as before. The monitor swap carries whether the window was on
+screen instead of assuming it.
+
+Shown again: the host's assignment becomes `Release::Lowered` with
+`Role::Monitor`, and the viewer, minimised at the host's word and not shown
+since (`MemoryState::minimised_by_host`, cleared once the user goes to the
+window), comes back behind **without the keyboard**
+(`foreground::restore_behind`: `ShowWindow(SW_SHOWNOACTIVATE)` on Windows,
+winit's restore elsewhere). A window the user minimised is never brought
+back.
+
+### More given back while the 3D is paused
+
+Once Economy's release has paused the 3D (`drawing_paused`), once per
+release:
+
+- **GPU culling buffers** (`aurora-render/src/folderstorm_cull.rs`, a child
+  of `gpu_cull.rs`): the indirect arguments (39 regions × 20 bytes per slot)
+  and the masks follow the largest scene seen in powers of two and never
+  shrank (51 MB at 65k slots, 204 MB at 262k, 409 MB at 524k). The main
+  thread asks (`gpu_cull::folderstorm_release`), the render thread puts the
+  first sizes back at the start of its next frame, before `prepare`. A
+  paused frame has empty lists (no `prepare`, no `encode`); the first frame
+  that draws the world grows them again through `prepare`'s own growth. The
+  bind groups are made at each `encode` and the draws read `args()`/`cap()`
+  of their frame: nothing holds the old buffers past the frames in flight.
+- **Reflection probes and shadow atlas**
+  (`folderstorm_characters::economy_render`): the renderer is handed 8 probe
+  slots instead of up to 256 (six 128² RGBA16F faces each, about 275 MB at
+  256) and 512 px shadow maps with no projector shadows (about 84 MB at
+  quality 3 before). One hook at the end of `Settings::render_settings`:
+  the user's settings are not touched or saved, Preferences shows them as
+  they are, and every place that applies the settings (settings changed,
+  resize, GPU recovery, demo) hands the lowered ones while Economy holds, so
+  nothing fights it frame by frame. The renderer rebuilds the probes and the
+  atlas as for any change of those settings. Out of Economy (in front,
+  another standby, watched again, no host) the settings are applied again
+  and the probe manager starts over (`ProbeManager::reset`): a few seconds
+  of probe captures.
+
+### The textures' release waits for the pages
+
+The release was declared done on the textures' side only (no reduction
+left, two passes): the render texture table empties pages at most one per
+50 ms and destroys the emptied ones a few per frame, so most of the pages'
+memory was still held when the window was minimised, and a minimised
+window draws few frames (the test's log: 593 MB in pages for 472 MB of
+textures, 226 MB two minutes later). Now the release also waits for
+`TextureTable::folderstorm_settled` (no reduction or compaction under way,
+no page waiting for its bind group or its destruction), still bounded by
+`RELEASE_WAIT` (5 s), and the window draws at `RELEASE_FPS` (20) at least
+during the release (`folderstorm_release_cap`, in the fork's frame cap; a
+paused frame is the interface and a sky at a sixteenth of the size).
+
+### Logged
+
+One line per release, when the window is minimised:
+
+```
+session memory: released after <N> ms, the window is minimised: <A> MB taken from the driver (was <B>), texture pages <C> MB (was <D>), texture target <T> MB, GPU culling <G> MB back, probes and shadows at their smallest (8 probes, shadow maps of 512 px)
+```
+
+(`not all released` when the 5 s ran out), with, before it, `session
+memory: the 3D is paused, the GPU culling buffers, the reflection probes …
+go to their smallest` and the render thread's `GPU culling: N MB of buffers
+given back …`; coming back, `session memory: the reflection probes and the
+shadows as set again`.
+
+### Expected
+
+From the test's figures, per Economy viewer: the textures' pages down to
+what its live textures need before the minimise rather than two minutes
+later (hundreds of MB), the culling buffers (tens to hundreds of MB in a
+busy region), about 270 MB of probes and up to about 80 MB of shadow atlas.
+Geometry (the mesh arena and records) stays: it is entangled with the scene
+(`arena.rs`) and is the bulk of what remains. Not measured: no GPU or
+Windows here.
+
 ## Upstream hooks (all marked `// Folderstorm:`)
 
 | File | Line | What |
@@ -729,11 +855,16 @@ paused world in that small rectangle; clicked, it is the full window again
 | same | 3692 | Economy counts as crowded |
 | same | 3693 | A watched Economy character held at the highest step |
 | `crates/aurora-viewer/src/app.rs` | 22817 | The pump gets the event loop (existing hook) |
+| `crates/aurora-render/src/gpu_cull.rs` | 1424–1427 | `#[path] mod folderstorm_cull` (our `folderstorm_cull.rs`) and its two functions re-exported (second pass) |
+| `crates/aurora-render/src/renderer.rs` | 6516 | The render thread does an asked culling release at the start of a frame (second pass) |
+| `crates/aurora-render/src/textures.rs` | 1683–1689 | `TextureTable::folderstorm_settled` (second pass) |
+| `crates/aurora-viewer/src/settings.rs` | 3472–3473, 3522 | `render_settings` handed through `economy_render::apply` (second pass) |
 
 Fork files only: `folderstorm-session/src/memory.rs`, `ipc.rs`, `host.rs`,
 `managed.rs`, `settings.rs`; `app/folderstorm_characters.rs` and
 `memory.rs`, `app/folderstorm_viewport.rs`, `folderstorm_characters/host`
-and its settings page.
+and its settings page; second pass: `aurora-render/src/folderstorm_cull.rs`,
+`folderstorm_characters/economy_render.rs`, `foreground.rs`.
 
 ## Tests and demo
 
@@ -750,8 +881,16 @@ and its settings page.
   release and its end while behind.
 - The host's settings window drawn with the new row; the diagnostics show
   the share and the viewers' video memory.
+- Second pass: `host::tests` (Economy minimised with no monitor on screen,
+  kept behind by one on screen and minimised once it goes, the cycling
+  monitor open but not on screen keeps nobody), the updated
+  `memory_tests` and `monitor_window_tests`;
+  `memory::tests::a_window_with_the_keyboard_is_minimised_once_it_lost_it`;
+  `economy_render::tests`; `folderstorm_cull::tests` (ignored, needs a GPU:
+  the release, then the growth again, no validation error).
 - Demo: `AURORA_DEMO_SESSION_HOST=3 AURORA_DEMO_SESSION_HOST_MEMORY=economy,512`
-  (`docs/TESTING.md`).
+  (`docs/TESTING.md`); with `AURORA_DEMO_SESSION_HOST_BAR=docked` for a
+  switch from the bar of the active viewer (the keyboard case).
 
 ## Decided
 
@@ -763,9 +902,14 @@ loading on return; it remains a per-character choice.
 
 - Measure on Windows (Task Manager, dedicated GPU memory per process) Warm
   vs Economy and with a monitor open; see the test steps in
-  `docs/TESTING.md`.
-- Geometry and the shadow atlas behind (deep upstream changes, propose
-  first).
+  `docs/TESTING.md`. Second pass: check that a bar or hotkey switch now
+  logs the release, that a monitor window brought back on screen brings
+  its Economy character back behind without taking the keyboard
+  (`SW_SHOWNOACTIVATE` is untested), and the figures of the release line.
+- Geometry behind (deep upstream changes, propose first). The shadow atlas
+  and the probes are lowered in Economy since the second pass.
+- If the bar's switches keep the old window's keyboard for long (the new
+  one failing to come forward), the release waits with it: say so if seen.
 - c1-ii upstream (a photo frame that does not rebuild the window's targets).
 - The registry (`instances.rs`) still counts a window behind as needing
   nothing for viewers the host does not manage: an upstream issue at most.

@@ -124,7 +124,10 @@ impl TextureStreamer {
 
     /// Economy has given back what it can: the 3D is paused, the textures
     /// are held at the highest step and none waits to be lowered, at least
-    /// two passes after `since_passes` (`wants_passes` when it began).
+    /// two passes after `since_passes` (`wants_passes` when it began). The
+    /// pages these textures leave are emptied and destroyed by the render
+    /// texture table a few per frame: the release also waits for
+    /// `TextureTable::folderstorm_settled` (`app/folderstorm_characters/memory.rs`).
     pub fn folderstorm_released(&self, since_passes: u64) -> bool {
         self.folderstorm.economy()
             && self.background.paused()
