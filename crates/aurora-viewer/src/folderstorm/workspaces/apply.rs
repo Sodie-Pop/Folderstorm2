@@ -772,6 +772,44 @@ pub fn update_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> R
     Ok(())
 }
 
+/// *Update* of a workspace that also updates its layout: with `also_layout`,
+/// the layout the workspace names first takes the arrangement of now
+/// ([`update`]), then the workspace takes the windows open now
+/// ([`update_workspace`]). When the layout cannot be updated, the error is
+/// returned and the workspace is left as it was: one *Update*, one result.
+pub fn update_workspace_with_layout(ctx: &egui::Context, live: &mut Live, index: usize, also_layout: bool) -> Result<(), StoreError> {
+    if also_layout {
+        let name = live.store.workspace(index).and_then(|workspace| workspace.layout.clone());
+        let at = name.and_then(|name| live.store.find(&name).map(|(at, _)| at));
+        update(ctx, live, at.ok_or(StoreError::Missing)?)?;
+    }
+    update_workspace(ctx, live, index)
+}
+
+/// The extra box of a workspace's *Update*, as a pure decision: None when it
+/// is not offered (the workspace keeps the layout in use, or the layout it
+/// names is gone or cannot be used); else whether it starts ticked, which is
+/// when that layout is the one in use and modified, so its places differ
+/// from what is on screen. Any other layout is not compared and starts
+/// unticked.
+pub fn layout_offer_default(names_layout: bool, usable: bool, in_use: bool, modified: bool) -> Option<bool> {
+    (names_layout && usable).then_some(in_use && modified)
+}
+
+/// [`layout_offer_default`] for the workspace at `index`: the layout it
+/// names, and whether the box starts ticked.
+pub fn layout_offer(store: &Store, world: &ViewportSettings, index: usize) -> Option<(String, bool)> {
+    let name = store.workspace(index)?.layout.as_deref();
+    let found = name.and_then(|name| store.find(name));
+    let ticked = layout_offer_default(
+        name.is_some(),
+        found.is_some(),
+        found.is_some_and(|(at, _)| store.is_active(at)),
+        modified(store, world),
+    )?;
+    found.map(|(_, layout)| (layout.name.clone(), ticked))
+}
+
 /// Whether the workspace in use no longer describes what is open: the
 /// windows open now (`open`, as [`capture::open`] gives them) are not its
 /// list. Worked out when asked; nothing is stored.
@@ -1085,9 +1123,9 @@ fn run_requests(ctx: &egui::Context, live: &mut Live, outcome: &mut Outcome) {
                 outcome.save |= index.is_some_and(|index| apply_workspace(ctx, live, index).is_ok());
             }
             Request::StarWorkspace(name, on) => outcome.save |= live.store.set_favorite_workspace(&name, on),
-            Request::UpdateWorkspace(name) => {
+            Request::UpdateWorkspace(name, also_layout) => {
                 let done = match workspace_at(live.store, &name) {
-                    Some(index) => update_workspace(ctx, live, index),
+                    Some(index) => update_workspace_with_layout(ctx, live, index, also_layout),
                     None => Err(StoreError::Missing),
                 };
                 outcome.save |= done.is_ok();

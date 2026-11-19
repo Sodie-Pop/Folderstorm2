@@ -721,7 +721,9 @@ rewritten by a fit.
    mini-map by hand. A workspace keeps no place of its own: the mini-map,
    like every window, goes where the workspace's layout has it, so a place
    changed after that layout was saved needs the layout's *Update* (a
-   workspace's *Update* records only which windows are open);
+   workspace's *Update* records only which windows are open, unless its
+   question's box *Also update its layout* is ticked: it then updates the
+   layout too, so the mini-map comes back where it was put);
 4. mark the layout active and not modified, save the settings.
 
 A new apply replaces one still waiting for its frame. *Previous
@@ -1591,7 +1593,15 @@ what to save: a **layout** (as before) or a **workspace**: its name, and
 *Use the layout in use* (ticked: the workspace names the active layout;
 greyed without one). It records the windows open now. *Update* on a
 workspace replaces its list with the windows open now (its layout choice
-is kept), after the question.
+is kept), after the question. When the workspace names a layout that can
+be used, the question has a box under it, *Also update its layout
+“name”*: ticked, the layout takes the arrangement of now first (as its own
+*Update*), then the workspace takes its windows. The box starts ticked when
+that layout is the one in use and is modified, unticked otherwise; it is
+not offered when the workspace keeps the layout in use. If the layout
+cannot be updated, the refusal is said and the workspace is left as it
+was. The switcher and the Preferences group ask the same question; the
+menu has no *Update*.
 
 **7. The switcher** is titled *Layouts & workspaces*. Its list: Favorites
 (both kinds, in their order), then the other Workspaces, then the other

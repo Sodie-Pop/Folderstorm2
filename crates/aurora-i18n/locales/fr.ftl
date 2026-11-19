@@ -2342,6 +2342,7 @@ fs-workspaces-with-no-layout = Toujours utiliser la disposition en service avec 
 fs-workspaces-save-help = Enregistre sous un nouveau nom quelles fenêtres sont ouvertes maintenant. Appliquer l'espace de travail les ouvre et ferme les autres, là où la disposition en service les place ; cochez la case pour qu'il applique aussi la disposition en service maintenant. Il ne contient jamais ce qu'une fenêtre affiche.
 fs-workspaces-ask-update = Remplacer les fenêtres de l'espace de travail « { $name } » par celles ouvertes maintenant ?
 fs-workspaces-ask-delete = Supprimer l'espace de travail « { $name } » ?
+fs-workspaces-update-layout = Mettre aussi à jour sa disposition « { $name } »
 fs-workspaces-update-help = Enregistre dans l'espace de travail les fenêtres ouvertes maintenant. Son choix de disposition est gardé. Demande d'abord.
 fs-workspaces-error-empty = Donnez un nom à l'espace de travail.
 fs-workspaces-error-taken = Un autre espace de travail porte déjà ce nom.

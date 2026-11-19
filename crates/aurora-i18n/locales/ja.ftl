@@ -2210,6 +2210,7 @@ fs-workspaces-with-no-layout = 常に使用中のレイアウトと一緒に使�
 fs-workspaces-save-help = 今開いているウィンドウの組み合わせを新しい名前で保存します。ワークスペースを適用すると、それらを開いて他を閉じます。位置は使用中のレイアウトに従います。チェックを入れると、今使用中のレイアウトも一緒に適用します。ウィンドウに表示される内容は保存しません。
 fs-workspaces-ask-update = ワークスペース「{ $name }」のウィンドウを、今開いているウィンドウで置き換えますか？
 fs-workspaces-ask-delete = ワークスペース「{ $name }」を削除しますか？
+fs-workspaces-update-layout = レイアウト「{ $name }」も更新する
 fs-workspaces-update-help = 今開いているウィンドウをワークスペースに保存します。レイアウトの指定はそのままです。実行前に確認します。
 fs-workspaces-error-empty = ワークスペースに名前を付けてください。
 fs-workspaces-error-taken = 同じ名前のワークスペースがすでにあります。
