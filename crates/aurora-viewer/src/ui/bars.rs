@@ -1634,7 +1634,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
             ui,
             p,
             "book-filled",
-            &aurora_i18n::tr!("folderstorm-help-menu", product = folderstorm_brand::PRODUCT),
+            &aurora_i18n::tr!("folderstorm-help-menu", product = folderstorm_brand::SITE_NAME),
         ) {
             request(ui.ctx(), CtxAction::OpenUrl(crate::links::WIKI.into()));
         }

@@ -60,7 +60,7 @@ Through `crates/aurora-viewer/src/links.rs`, which reads `folderstorm-brand`:
 | Link | Constant | Address |
 |---|---|---|
 | Website (About window, login screen) | `WEBSITE` | https://folderstorm.com |
-| Help › "Folderstorm2 Help" (message `folderstorm-help-menu`) | `HELP` | https://folderstorm.com/help/ |
+| Help › "Folderstorm Help" (message `folderstorm-help-menu`, `SITE_NAME`) | `HELP` | https://folderstorm.com/help/ |
 | Privacy policy (Preferences › Privacy › Your data; message `folderstorm-privacy-policy-hint`) | `PRIVACY` | https://folderstorm.com/privacy |
 | "Report a bug" (login screen, top bar, Help menu) | `BUG_REPORTS` | https://folderstorm.com/bugs/ |
 

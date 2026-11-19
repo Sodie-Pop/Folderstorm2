@@ -120,6 +120,10 @@ pub const BUG_REPORTS: &str = "https://folderstorm.com/bugs/";
 pub const WEBSITE: &str = "https://folderstorm.com";
 /// The help pages: Help menu, first entry.
 pub const HELP: &str = "https://folderstorm.com/help/";
+/// The website's own name, shared by both Folderstorm viewers: the Help
+/// menu's "Folderstorm Help" (the help pages are the site's, not this
+/// build's alone).
+pub const SITE_NAME: &str = "Folderstorm";
 /// The privacy policy: Preferences › Privacy › Your data.
 pub const PRIVACY: &str = "https://folderstorm.com/privacy";
 pub const RELEASES_PAGE: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases";

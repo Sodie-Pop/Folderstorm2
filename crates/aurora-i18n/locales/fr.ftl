@@ -6811,7 +6811,7 @@ folderstorm-settings-updates-where = Dans les Préférences du viewer
 folderstorm-settings-updates-line = Les nouvelles versions et leur canal : la page « { $page } ».
 folderstorm-settings-crash-line = Les rapports de plantage : la page « { $page } ».
 folderstorm-settings-bug-line = Pour signaler un bug : « { $item } », dans le menu Aide du viewer ou sur son écran de connexion.
-folderstorm-help-menu = Aide de { $product }
+folderstorm-help-menu = Aide { $product }
 folderstorm-privacy-policy-hint = Ce que { $product } envoie, à qui, et ce qu’il garde sur cet ordinateur.
 folderstorm-settings-updates-note = L'hôte et ses personnages sont un seul programme : ce que choisit le viewer vaut aussi pour l'hôte.
 
