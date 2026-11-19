@@ -75,7 +75,7 @@ impl Size {
 
 /// The taskbar's choices (checkpoint 4 of the plan draws it; the record is
 /// here so that the file's shape is settled).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Taskbar {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -83,9 +83,24 @@ pub struct Taskbar {
     /// The slot it stands in; None: the widest room.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slot: Option<u8>,
-    /// Every open window instead of the collapsed ones only.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    /// Every open window instead of the collapsed ones only: the default,
+    /// so only `false` is written (absent: every open window).
+    #[serde(skip_serializing_if = "is_true")]
     pub all_windows: bool,
+}
+
+impl Default for Taskbar {
+    fn default() -> Self {
+        Taskbar {
+            on: false,
+            slot: None,
+            all_windows: true,
+        }
+    }
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 /// What a shortcut opens.
@@ -804,7 +819,7 @@ mod tests {
         d.taskbar = Taskbar {
             on: true,
             slot: Some(2),
-            all_windows: true,
+            all_windows: false,
         };
         let value = written(&d);
         // the shape the plan gives
@@ -815,10 +830,12 @@ mod tests {
         let read: Desktop = serde_json::from_value(value.clone()).expect("read");
         assert_eq!(read, d);
         assert_eq!(written(&read), value);
-        // nothing chosen: off, medium, collapsed windows only
+        assert_eq!(value["taskbar"]["all_windows"], json!(false), "collapsed windows only is written");
+        // nothing chosen: off, medium, every open window
         let empty: Desktop = serde_json::from_value(json!({})).expect("read");
         assert_eq!(empty, Desktop::default());
-        assert!(!empty.shortcuts_on && !empty.taskbar.on && !empty.taskbar.all_windows);
+        assert!(!empty.shortcuts_on && !empty.taskbar.on && empty.taskbar.all_windows);
+        assert!(written(&empty).get("taskbar").and_then(|t| t.get("all_windows")).is_none());
         assert_eq!(empty.size, Size::Medium);
         assert!(written(&empty).get("shortcuts_on").is_none());
     }
