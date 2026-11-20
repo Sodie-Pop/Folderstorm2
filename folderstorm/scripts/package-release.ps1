@@ -163,7 +163,7 @@ Write-Checksum $zip
 # target/release/aurora_viewer.pdb) and stores
 # aurora_viewer.pdb/<debug id>/aurora_viewer.sym. The PDB is not published.
 $symbolsDir = Join-Path $Destination 'symbols'
-& $DumpSyms (Resolve-Path -LiteralPath $Exe).Path --store $symbolsDir
+& $DumpSyms (Resolve-Path -LiteralPath $Exe).Path --store $symbolsDir | Out-Host # never part of the returned paths
 if ($LASTEXITCODE -ne 0) { throw "dump_syms failed (install it: cargo install dump_syms --locked --version 2.3.9)" }
 if (-not (Get-ChildItem -LiteralPath $symbolsDir -Recurse -File -Filter '*.sym')) { throw 'dump_syms wrote no symbols' }
 $symbols = Join-Path $Destination "$name-symbols.zip"

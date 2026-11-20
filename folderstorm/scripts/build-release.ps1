@@ -246,7 +246,11 @@ try {
     $installer = & (Join-Path $PSScriptRoot 'build-installer.ps1') -Package (Join-Path $dist $name) -Tag $tag -Destination $dist -Iscc $isccPath
 
     # every asset is there, and every checksum matches its file
-    $made = @($packaged) + @($installer) | ForEach-Object { (Resolve-Path -LiteralPath $_).Path }
+    # only the paths the two scripts return: a stray blank or text line from a
+    # tool's console output is not an asset
+    $made = @($packaged) + @($installer) |
+        Where-Object { $_ -is [string] -and $_.Trim() -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path }
     foreach ($asset in $assets) {
         if ($made -notcontains (Resolve-Path -LiteralPath $asset -ErrorAction SilentlyContinue).Path) { Stop-Release "missing release asset: $asset" }
     }
