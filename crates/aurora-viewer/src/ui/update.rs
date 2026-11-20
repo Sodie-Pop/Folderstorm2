@@ -357,6 +357,7 @@ pub fn show_real(
                             ui.label(RichText::new(notes).size(13.0).color(p.muted));
                         });
                     });
+                    crate::folderstorm_characters::updates::managed_note(ui, p); // Folderstorm: why no "Install"
                 }
                 State::Downloading(progress) => {
                     ui.label(if progress.preparing {
@@ -446,7 +447,9 @@ pub fn show_real(
                                 updater.open = false;
                             }
                         }
-                        if primary_button_sized(ui, p, aurora_i18n::tr!("update-install"), size).clicked() {
+                        // Folderstorm: a session host's character has no "Install" (`folderstorm_characters::updates`)
+                        let held = crate::folderstorm_characters::updates::held();
+                        if !held && primary_button_sized(ui, p, aurora_i18n::tr!("update-install"), size).clicked() {
                             updater.download(runtime);
                         }
                     });

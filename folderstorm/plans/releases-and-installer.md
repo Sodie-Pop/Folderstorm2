@@ -14,6 +14,17 @@ path is [RELEASING.md](../RELEASING.md). The upstream sync also brought
 Linux in-place updates: the Linux package's folder and archive names follow
 `RELEASE_PREFIX` too, its executable keeps cargo's name.
 
+**Status 2026-11-20:** PR 3 built on branch `claude/host-updates` (F6). A
+viewer started with `--managed` still checks and shows a new version, but
+never downloads or installs it (hooks in `updater.rs` `start_download` and
+`restart`, and in `ui/update.rs`: no "Install", a line that says why). It
+tells the host the version in its status (`Status::update`), and the host
+shows "An update is ready. Close all characters to install it." on its
+characters' page and in "Updates and support"
+(`folderstorm_characters/updates.rs`). "Quit all and update" is not built:
+the human dropped it on 2026-11-13 (session-host plan, section 18). To be
+tested on Windows with several characters.
+
 Line numbers point at that commit. "Upstream file" means a file of Aurora
 Viewer, where we only add small `// Folderstorm:` hooks.
 

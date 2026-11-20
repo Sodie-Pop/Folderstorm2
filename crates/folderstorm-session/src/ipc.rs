@@ -850,12 +850,19 @@ pub struct Status {
     /// viewer says nothing.
     #[serde(default)]
     pub hibernating: bool,
+    /// A newer version this viewer's updater found (empty: none, or not
+    /// checked). A character never installs it itself: the host says to
+    /// close all characters first (release plan, finding F6). An older
+    /// viewer says nothing.
+    #[serde(default)]
+    pub update: String,
 }
 
 /// The longest texts a status may carry, in characters.
 pub const MAX_NAME: usize = 64;
 pub const MAX_REGION: usize = 80;
 pub const MAX_ID: usize = 64;
+pub const MAX_VERSION: usize = 64;
 
 impl Status {
     /// The status with every text bounded and without control characters:
@@ -865,6 +872,7 @@ impl Status {
         self.agent = clean(&self.agent, MAX_ID);
         self.grid = clean(&self.grid, MAX_ID);
         self.region = clean(&self.region, MAX_REGION);
+        self.update = clean(&self.update, MAX_VERSION);
         self.window.rect = self.window.rect.filter(Stage::valid);
         self
     }
@@ -1199,6 +1207,26 @@ mod tests {
         let mut without = status;
         without.as_object_mut().expect("an object").remove("hibernating");
         assert!(!serde_json::from_value::<Status>(without).expect("reads").hibernating);
+    }
+
+    #[test]
+    fn a_found_update_travels_bounded_and_an_older_viewer_says_none() {
+        let status = serde_json::to_value(Status {
+            update: "0.4.0".into(),
+            ..Status::default()
+        })
+        .expect("json");
+        assert_eq!(status["update"], "0.4.0");
+        let mut without = status;
+        without.as_object_mut().expect("an object").remove("update");
+        assert_eq!(serde_json::from_value::<Status>(without).expect("reads").update, "");
+        let long = Status {
+            update: format!("0.4.0\n{}", "9".repeat(200)),
+            ..Status::default()
+        }
+        .cleaned();
+        assert_eq!(long.update.chars().count(), MAX_VERSION);
+        assert!(!long.update.contains('\n'));
     }
 
     #[test]

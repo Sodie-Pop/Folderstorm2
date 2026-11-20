@@ -863,8 +863,10 @@ impl Window_ {
             });
     }
 
-    /// Where the viewer's own settings for updates and support are.
+    /// A new version a character found (release plan, PR 3), then where
+    /// the viewer's own settings for updates and support are.
     fn updates_settings(&self, ui: &mut egui::Ui, p: &Palette) {
+        crate::folderstorm_characters::updates::host_section(ui, p, &self.host.desk);
         heading(ui, p, tr!("folderstorm-settings-updates-where"));
         for line in [
             tr!("folderstorm-settings-updates-line", page = tr!("ui-options-page-system").to_owned()),

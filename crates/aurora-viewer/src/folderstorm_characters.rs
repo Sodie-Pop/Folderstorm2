@@ -53,6 +53,10 @@
 //! - [`economy_render`]: the reflection probes and the shadows lowered
 //!   while Economy has given the memory back, the settings untouched.
 //!
+//! Updates (release plan, PR 3):
+//! - [`updates`]: a character of the host never installs an update; the
+//!   host says to close all characters first.
+//!
 //! Aurora's files reach this through small hooks marked `// Folderstorm:`.
 
 pub mod bar;
@@ -67,6 +71,7 @@ pub mod profile_copy;
 pub mod splash;
 pub mod taskbar;
 pub mod transport;
+pub mod updates;
 
 use ::folderstorm_session::behind::{self, Behind3d};
 use serde::{Deserialize, Serialize};

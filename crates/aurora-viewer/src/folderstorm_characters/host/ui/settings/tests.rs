@@ -453,6 +453,42 @@ fn the_diagnostics_and_the_credits_show_when_asked() {
     assert_eq!(app.settings.recovered, Some(0));
 }
 
+/// Release plan, PR 3: a character that found a new version never
+/// installs it; the host says to close all characters, on its page (the
+/// cards and the condensed lines) and in "Updates and support".
+#[test]
+fn the_host_shows_the_update_a_character_found() {
+    let now = Instant::now();
+    let mut app = window(host());
+    running(&mut app, now);
+    let ready = tr!("folderstorm-host-update-ready");
+    let (drawn, _) = draw(&mut app, 1120, 760);
+    assert!(!shows(&drawn, ready), "no update, no notice: {drawn:?}");
+    open(&mut app, Section::Updates, None);
+    let (drawn, _) = draw_in(&mut app, Which::Settings, 1000, 900);
+    assert!(!shows(&drawn, ready) && shows(&drawn, tr!("ui-options-page-system")));
+    // the second character's updater found one
+    let status = Status {
+        screen: Screen::World,
+        name: "Sam Resident".to_owned(),
+        update: "9.9.9".to_owned(),
+        ..Default::default()
+    };
+    app.host.desk.status(1, 1, status, now);
+    let (drawn, _) = draw(&mut app, 1120, 760);
+    assert!(shows(&drawn, ready), "{drawn:?}");
+    draw_in(&mut app, Which::Settings, 1000, 900);
+    let (drawn, pixels) = draw_in(&mut app, Which::Settings, 1000, 900);
+    assert!(shows(&drawn, ready) && shows(&drawn, "9.9.9"), "{drawn:?}");
+    assert!(shows(&drawn, tr!("folderstorm-settings-update-how")));
+    // the viewer's own settings are still pointed at
+    assert!(shows(&drawn, tr!("ui-options-page-system")));
+    keep("settings-updates-ready", &pixels, 1000, 900);
+    app.host.desk.set_condensed(true);
+    let (drawn, _) = draw(&mut app, 420, 300);
+    assert!(shows(&drawn, ready), "condensed: {drawn:?}");
+}
+
 #[test]
 fn the_settings_icons_exist() {
     let mut names: Vec<&str> = Section::ALL.into_iter().map(section_icon).collect();

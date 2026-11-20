@@ -503,6 +503,19 @@ impl Updater {
         if self.busy() {
             return;
         }
+        // Folderstorm: a session host's character never downloads nor installs: its window says why (`folderstorm_characters::updates`)
+        if crate::folderstorm_characters::updates::held() {
+            self.quiet_download = false;
+            if show {
+                self.open = true;
+            } else {
+                self.notice = Some(Notice {
+                    version: release.version,
+                    ready: false,
+                });
+            }
+            return;
+        }
         if !aurora_updater::installs_here() || release.archive.is_none() || release.checksum.is_none() {
             if show {
                 self.state = State::Error(Failure::Unsupported);
@@ -576,6 +589,9 @@ impl Updater {
         self.cancel.cancel();
     }
     pub fn restart(&mut self) {
+        if crate::folderstorm_characters::updates::held() {
+            return; // Folderstorm: never restarts a session host's character to update
+        }
         let Some(work) = self.prepared.take() else { return };
         let Some(release) = &self.release else { return };
         let version = release.version.clone();
