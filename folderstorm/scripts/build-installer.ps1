@@ -119,7 +119,9 @@ $defines = [ordered]@{
     DirsApplication   = Get-BrandConstant 'DIRS_APPLICATION'
 }
 $arguments = @('/Qp') + @($defines.GetEnumerator() | ForEach-Object { "/D$($_.Key)=$($_.Value)" }) + @(Join-Path $Source 'folderstorm/installer/folderstorm2.iss')
-& $compiler @arguments
+# Out-Host: the compiler's console output must not join the paths this
+# script returns (build-release.ps1 reads them as its asset list).
+& $compiler @arguments | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed (exit code $LASTEXITCODE)" }
 if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Inno Setup wrote no $name" }
 
