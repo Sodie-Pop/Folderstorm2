@@ -111,6 +111,7 @@ const RUNS: &[&str] = &[
     "huds",
     "photo_roll",
     "director",
+    "second_camera",
     "gaming_mode",
     "avatar",
     "destinations",
