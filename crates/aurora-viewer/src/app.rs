@@ -16259,11 +16259,12 @@ impl App {
         }
     }
 
-    /// "Report a bug" (login screen, top bar, Help menu): GitHub's issue
-    /// template chooser in the browser, in place of the built-in form
-    /// (disabled, see main.rs).
+    /// "Report a bug" (login screen, top bar, Help menu): the bug tracker
+    /// page in the browser, in place of the built-in form (disabled, see
+    /// main.rs).
     fn open_issue_chooser(&self) {
-        log::info!("bug report: opening the GitHub issue chooser");
+        // Folderstorm: the maintainer's bug tracker (`links::NEW_ISSUE`)
+        log::info!("bug report: opening the bug tracker");
         self.egui_ctx.open_url(egui::OpenUrl::new_tab(crate::links::NEW_ISSUE));
     }
 

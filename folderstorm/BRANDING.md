@@ -43,8 +43,8 @@ A test in `folderstorm-brand` fails if one of these equals Aurora's.
 `crates/aurora-i18n/src/folderstorm.rs`:
 
 - "Aurora Viewer" (Japanese "Auroraビューア") becomes "Folderstorm2" in every
-  message except the few of `KEEP` (the Aurora team badge, links to Aurora's
-  website and wiki);
+  message except the few of `KEEP` (the Aurora team badge, a sample notecard
+  that links to aurora-viewer.org);
 - a bare "Aurora" changes only in the messages listed in `BARE`, where it names
   the viewer. "Aurora" is also the name of the interface style (Aurora /
   Legacy), of grid-side items (`#Aurora` folders, the Aurora bridge, Aurora
@@ -67,6 +67,19 @@ also replaces the MCP sidecar. On Linux the executable keeps cargo's name.
 At an upstream sync, look at new messages that say "Aurora" alone: add their
 key to `BARE` when they name the viewer.
 
+## Links on the maintainer's website
+
+Through `crates/aurora-viewer/src/links.rs`, which reads `folderstorm-brand`:
+
+| Link | Constant | Address |
+|---|---|---|
+| Website (About window, login screen) | `WEBSITE` | https://folderstorm.com |
+| Help › "Folderstorm Help" (message `folderstorm-help-menu`, `SITE_NAME`) | `HELP` | https://folderstorm.com/help/ |
+| Privacy policy (Preferences › Privacy › Your data; message `folderstorm-privacy-policy-hint`) | `PRIVACY` | https://folderstorm.com/privacy |
+| "Report a bug" (login screen, top bar, Help menu) | `BUG_REPORTS` | https://folderstorm.com/bugs/ |
+
+The crash window still files its reports as GitHub issues, below.
+
 ## Deliberately unchanged (for now)
 
 - In-world names: `#Aurora` folders, `#Aurora Bridge`, Aurora AO, Aurora
@@ -77,9 +90,9 @@ key to `BARE` when they name the viewer.
 - Upstream's release packaging (`packaging/`, `scripts/package*.ps1`,
   `release.yml`) stays Aurora's; the fork packages with
   `folderstorm/scripts/package-release.ps1`.
-- The website, wiki, Discord, privacy policy and news links still point at
-  Aurora's until the fork has its own (`crates/aurora-viewer/src/links.rs`).
-- Crash and bug reports open a pre-filled issue on this repository in the
+- The Discord, news feed and source links still point at Aurora's until the
+  fork has its own (`crates/aurora-viewer/src/links.rs`).
+- Crash reports open a pre-filled issue on this repository in the
   browser. Sending them directly needs the fork's own GitHub App
   (FEATURES.md 0.4): put its public client id in `crash/github.rs` and
   `bug_report/github.rs`.

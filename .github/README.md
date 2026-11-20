@@ -38,6 +38,18 @@ official releases yet. A test build can be made by hand from the
 **Folderstorm release build** workflow in the Actions tab
 ([how](../folderstorm/CI.md#manual-release-build)).
 
+## Report a bug
+
+Use **Report a bug** in the viewer (login screen, top bar or Help menu), or go
+to [folderstorm.com/bugs](https://folderstorm.com/bugs/).
+
+## Links
+
+- [Website](https://folderstorm.com)
+- [Help](https://folderstorm.com/help/)
+- [Privacy policy](https://folderstorm.com/privacy)
+- [Report a bug](https://folderstorm.com/bugs/)
+
 ## Building
 
 You need [Rust](https://rustup.rs) (rustup installs the version that

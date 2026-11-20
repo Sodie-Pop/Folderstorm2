@@ -29,9 +29,6 @@ use folderstorm_brand::{EXE, PRODUCT};
 const KEEP: &[&str] = &[
     // The badge of Aurora's own team members: still true of them.
     "nameplate-aurora-staff",
-    // Links to Aurora's website and wiki, until the fork has its own.
-    "ui-options-privacy-policy-hint",
-    "ui-bars-wiki",
     // A sample notecard that links to aurora-viewer.org.
     "notecard-markdown-demo",
 ];
