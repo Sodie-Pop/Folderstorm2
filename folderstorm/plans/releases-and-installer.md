@@ -14,6 +14,20 @@ path is [RELEASING.md](../RELEASING.md). The upstream sync also brought
 Linux in-place updates: the Linux package's folder and archive names follow
 `RELEASE_PREFIX` too, its executable keeps cargo's name.
 
+**Status 2026-11-20:** PRs 1 and 2 merged (#124, #125). PR 4 built on
+branch `claude/installer`: `folderstorm/installer/folderstorm2.iss` (as
+section 3 says, with the link classes written by the installer itself,
+since the viewer has no command line to register them) and
+`folderstorm/scripts/build-installer.ps1`, the installer step and two more
+assets in `folderstorm-release.yml`, and the one-step local release script
+`folderstorm/scripts/build-release.ps1`, now the main path of
+[RELEASING.md](../RELEASING.md). No change to the updater: it swaps the
+package's entries inside the installation folder, which never moves, so the
+shortcuts keep working. Unlike section 3 first said, the uninstaller removes
+this installation's `.aurora-update-*` folders and update lock (the
+installation they could restore is being removed). Waiting for the human's
+Windows test.
+
 Line numbers point at that commit. "Upstream file" means a file of Aurora
 Viewer, where we only add small `// Folderstorm:` hooks.
 
@@ -366,6 +380,10 @@ porting").
   - Leave any `.aurora-update-*` folder beside the installation: one that
     still holds `backup\` **is** the previous version after a failed update
     (`install.rs:359-364`, `docs/UPDATES.md` "Replacement and rollback").
+    *Changed in PR 4:* the uninstaller removes this installation's
+    `.aurora-update-*` folders (their `plan.json` names it) and its
+    `.<folder>.update.lock`: the installation they could restore is being
+    removed. Another program's stay.
 - **Running viewer:** use Inno's `CloseApplications` (Restart Manager) so an
   upgrade or uninstall asks to close the viewers first.
 - **After a self-update**, "Apps & features" still shows the installed
@@ -543,7 +561,7 @@ Small PRs, in order. 🔑 = needs the human's input, account or secret.
 | 1 | `feat(release): ship Folderstorm2.exe and update it` | Brand constants; updater hooks (F1–F3); `url_scheme.rs:226`; `build.rs` names; i18n rewrite of the exe name; `package-release.ps1` renames the exe and names the folder `Folderstorm2-v<V>-windows-x64`; tests. | Test an update between two local packages (fork version of `scripts/test-update.ps1`) |
 | 2 | `ci(release): draft GitHub release from a version` | Workflow of section 2: version input, local tag, `AURORA_VERSION_TAG`, verify, symbols, zip, `.sha256`, draft release, `contents: write` on publish only; `folderstorm/update-policy.json` (F4); `folderstorm/release-notes-header.md`; CI.md and README updates. | 🔑 privacy-policy URL and support link for the header; runs the workflow; publishes a beta pair to test a real update |
 | 3 | `fix(characters): updates with the session host` | Managed viewers do not offer restart-to-update (F6); the host says "close all characters to update", or does "quit all and update". | Tests with several characters |
-| 4 | `feat(installer): per-user Inno Setup installer` | `folderstorm/installer/folderstorm2.iss`, workflow step, shortcuts, link task, uninstaller of section 3. | Installs, updates, uninstalls on Windows |
+| 4 | `feat(installer): per-user Inno Setup installer` | `folderstorm/installer/folderstorm2.iss`, workflow step, shortcuts, link task, uninstaller of section 3; one-step `build-release.ps1`. **Built** (branch `claude/installer`). | Installs, updates, uninstalls on Windows |
 | 5 | `docs(crash): crash reports on the fork` + Actions setting | Re-enable Crash triage in the Actions tab; document it in CI.md. Symbols already come from PR 2. | Clicks "Enable workflow" |
 | 6 | `ci(release): code signing` | SignPath step for the exes and the installer, stable releases only. | 🔑 applies to SignPath Foundation, sets its secrets, approves each signing |
 | 7 | `feat(links): bug reports to the maintainer's server` | `BUG_REPORTS` constant, hooks, session host text, docs (section 5). | 🔑 the address |

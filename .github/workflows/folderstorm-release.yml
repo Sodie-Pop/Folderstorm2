@@ -2,8 +2,9 @@ name: Folderstorm release build
 
 # Manual build of the viewer and the MCP helper. Two modes:
 # - with a version (for example "0.1.0" or "0.2.0-beta.1"), from main: the
-#   assets of that release (folderstorm/scripts/package-release.ps1 -Tag) and
-#   a DRAFT GitHub release holding them. The human reviews and publishes it;
+#   assets of that release (folderstorm/scripts/package-release.ps1 -Tag,
+#   then the installer, folderstorm/scripts/build-installer.ps1) and a DRAFT
+#   GitHub release holding them. The human reviews and publishes it;
 #   viewers never see a draft. Same result as the local steps of
 #   folderstorm/RELEASING.md.
 # - without a version: a test build kept as a workflow artifact (a zip, or a
@@ -117,7 +118,7 @@ jobs:
         if: steps.names.outputs.tag != ''
         run: cargo install dump_syms --locked --version 2.3.9
       # checks --version, then the zip, its .sha256 and the symbols (and their
-      # .sha256), in dist/
+      # .sha256), in dist/, with the package folder the installer is made from
       - name: Release files
         if: steps.names.outputs.tag != ''
         shell: pwsh
@@ -128,8 +129,29 @@ jobs:
           $zip = $assets[0]
           $line = (Get-Content -Raw -LiteralPath "$zip.sha256").Trim()
           "Built for $env:TAG ($([math]::Round((Get-Item $zip).Length / 1MB)) MB): ``$line``. Not signed. Anything compiled into the build can be extracted from it." >> $env:GITHUB_STEP_SUMMARY
+      # The per-user setup (folderstorm/installer/folderstorm2.iss) from that
+      # package folder, and its .sha256. Inno Setup 6 is on GitHub's Windows
+      # image (its software list); Chocolatey installs it if it ever is not.
+      - name: Installer
+        if: steps.names.outputs.tag != ''
+        shell: pwsh
+        env:
+          TAG: ${{ steps.names.outputs.tag }}
+        run: |
+          try {
+            $iscc = ./folderstorm/scripts/build-installer.ps1 -Locate
+          } catch {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'choco install innosetup failed' }
+            $iscc = ./folderstorm/scripts/build-installer.ps1 -Locate
+          }
+          $zip = Get-Item -Path dist/*-windows-x64.zip
+          $package = Join-Path dist $zip.BaseName
+          $setup = (./folderstorm/scripts/build-installer.ps1 -Package $package -Tag $env:TAG -Destination dist -Iscc $iscc)[0]
+          $line = (Get-Content -Raw -LiteralPath "$setup.sha256").Trim()
+          "Installer ($([math]::Round((Get-Item $setup).Length / 1MB)) MB): ``$line``. Not signed." >> $env:GITHUB_STEP_SUMMARY
           # the package folder itself is not a release file
-          Remove-Item -LiteralPath (Join-Path dist ([IO.Path]::GetFileNameWithoutExtension($zip))) -Recurse -Force
+          Remove-Item -LiteralPath $package -Recurse -Force
       - name: Upload release files
         if: steps.names.outputs.tag != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -162,7 +184,7 @@ jobs:
           if-no-files-found: error
 
   # The only job whose token can write: it creates the DRAFT release from the
-  # files the build uploaded. The tag is created by GitHub when the human
+  # six files the build uploaded (zip, symbols, setup, and their .sha256). The tag is created by GitHub when the human
   # publishes the draft, at the built commit. The header (Linden Lab
   # disclaimer, support, privacy: Third-Party Viewer Policy) comes before the
   # generated notes. No update policy file is attached.
@@ -192,8 +214,8 @@ jobs:
           PRODUCT: ${{ needs.windows.outputs.product }}
         run: |
           shopt -s nullglob
-          files=(dist/*.zip dist/*.zip.sha256)
-          [ "${#files[@]}" -eq 4 ] || { echo "::error::expected 4 release files, got: ${files[*]}"; exit 1; }
+          files=(dist/*.zip dist/*.zip.sha256 dist/*-setup.exe dist/*-setup.exe.sha256)
+          [ "${#files[@]}" -eq 6 ] || { echo "::error::expected 6 release files, got: ${files[*]}"; exit 1; }
           args=("$TAG" "${files[@]}" --draft --target "$GITHUB_SHA" --title "$PRODUCT $TAG"
                 --notes-file folderstorm/release-notes-header.md --generate-notes)
           case "$TAG" in *-*) args+=(--prerelease) ;; esac   # v0.2.0-beta.1

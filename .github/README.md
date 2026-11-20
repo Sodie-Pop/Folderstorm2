@@ -33,10 +33,26 @@ Everything else Aurora Viewer offers is still there.
 
 ## Status
 
-In development, and a personal project: expect rough edges. There are no
-official releases yet. A test build can be made by hand from the
-**Folderstorm release build** workflow in the Actions tab
-([how](../folderstorm/CI.md#manual-release-build)).
+In development, and a personal project: expect rough edges.
+
+## Installing
+
+Windows 10 or 11, 64-bit. From the
+[Releases page](https://github.com/Sodie-Pop/Folderstorm2/releases),
+download the setup or the zip:
+
+- **`Folderstorm2-v…-windows-x64-setup.exe`**: installs for your account
+  only, with no administrator rights, in `%LOCALAPPDATA%\Programs\Folderstorm2`.
+  It adds **Folderstorm2** and **Folderstorm2 Session Host** to the Start
+  menu, and optionally desktop shortcuts and `secondlife://` links. Uninstall
+  it from Settings › Apps; it asks whether to keep your settings and saved
+  passwords (kept by default).
+- **`Folderstorm2-v…-windows-x64.zip`**: unzip it in a folder you can write
+  to (not `C:\Program Files`) and start `Folderstorm2.exe`.
+
+Either way, the viewer then updates itself from new releases. Builds are not
+code-signed yet: Windows may show "Windows protected your PC" (More info ›
+Run anyway).
 
 ## Report a bug
 
