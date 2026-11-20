@@ -76,6 +76,7 @@ GPL-3.0-or-later as described above.
 | Pie menu, `newview/piemenu.cpp` — Copyright © 2011 Zi Ree | `aurora-viewer/src/ui/context/pie.rs` | Originally LGPL 2.1 |
 | Nearby chat, `newview/fsnearbychathub.cpp`, `fsfloaternearbychat.cpp` — Copyright © 2012 Zi Ree | `aurora-net/src/message_split.rs`, `session.rs`; `aurora-viewer/src/ui/chat.rs`, `ui/chat/`, `app/gestures.rs`, `world/bridge.rs`, `world/transcripts.rs`, `world/rlva/chat.rs` | Originally LGPL 2.1 |
 | Texture tab, `newview/fspanelface.cpp` — Copyright © 2024 Zi Ree | `aurora-viewer/src/build/ui/texture.rs`, `build/ui/texture_drop.rs`, `build/contents_drop.rs` | Originally LGPL 2.1 |
+| Face selection cycling, `newview/llviewermenu.cpp`, `LLToolsSelectNextPartFace` (`FS:Zi` contributions) — Zi Ree | `aurora-viewer/src/build/ui/mod.rs` | Originally LGPL 2.1 |
 | Omnifilter and object message filter, `newview/omnifilterengine.cpp`, `omnifilterengine.h`, `omnifilter.cpp` — Copyright © 2025 Zi Ree | `aurora-viewer/src/omnifilter.rs`, `omnifilter/file.rs`, `ui/omnifilter.rs`, `world/omnifilter.rs`, `world/object_im_filter.rs` | Originally LGPL 2.1 |
 | Quick preferences, `newview/quickprefs.cpp` — Copyright © 2011 WoLf Loonie, © 2013 Zi Ree, © 2013 Ansariel Hiller, © 2013 Cinder Biscuits | `aurora-viewer/src/ui/quick_prefs.rs`, `ui/environment.rs`, `world/eep_photo.rs`, `world/env_select.rs` | Originally LGPL 2.1 |
 | Radar, `newview/fsradar.cpp`, `fsradarentry.cpp`, `fspanelradar.cpp` — Copyright © 2013 Ansariel Hiller; `fsradarlistctrl.cpp` — Copyright © 2011 Arrehn Oberlander | `aurora-net/src/bridge/query.rs`; `aurora-viewer/src/world/radar.rs`, `ui/people/radar.rs`, `ui/people/nearby.rs`, `world/friend_join.rs`, `app.rs` | Originally LGPL 2.1 |
@@ -106,6 +107,15 @@ GPL-3.0-or-later as described above.
 | Script recovery, `newview/llfloaterscriptrecover.cpp` — Copyright © 2011-2012 Kitty Barnett | `aurora-net/src/session/asset_imports.rs`; `aurora-viewer/src/app/script_recovery.rs`, `ui/scripts/recovery.rs` | Originally LGPL 2.1 |
 | RLVa visual effects, `newview/rlveffects.cpp`, `app_settings/shaders/class1/deferred/rlvF.glsl` — Copyright © 2018-2021 Kitty Barnett | `aurora-render/src/rlva.rs`, `rlva/overlay.rs`, `shaders/rlva.wgsl`; `aurora-viewer/src/world/rlva/effects.rs` | Originally LGPL 2.1 |
 | Pose stand, `newview/fsfloaterposestand.cpp`, `fsfloaterposestand.h`, `fspose.cpp`, `fspose.h` — by Cinder Roxley | `aurora-viewer/src/pose_stand.rs`, `ui/pose_stand.rs`, `app/pose_stand.rs` | Beer-Ware Licence (Revision 42) |
+
+## Ideas from other viewers
+
+Some features of Aurora Viewer follow an idea first shown by another viewer,
+written anew for Aurora, without its code. Their authors are thanked here.
+
+| The idea and its author | In Aurora (`crates/`) |
+|---|---|
+| Second camera, a small window that keeps one's own avatar in view (face or whole body) while the main camera looks elsewhere: SnowPastel's [multi-view-viewer](https://github.com/snowpastel/multi-view-viewer) | `aurora-viewer/src/camera/second.rs`, `ui/second_camera.rs`, `app/second_camera.rs`; `aurora-render/src/second_view.rs` |
 
 ## Bundled assets
 
