@@ -382,6 +382,10 @@ pub struct InventoryPreferences {
     /// Aurora's window shows the selection's details: the card at the
     /// bottom of the narrow and medium widths, the pane of the wide one.
     pub show_details: bool,
+    /// Aurora's dual-panel layout: two panes side by side in the Inventory
+    /// window, each with its own folder, search and selection. Off by
+    /// default (the Legacy Viewer has one pane).
+    pub dual_panel: bool,
     /// Folder icon colors (`folder_colors.rs`): this viewer only, on by default.
     pub folder_colors_enabled: bool,
     // Folderstorm: "Wear" in the item menus (off: greyed, ui/inventory/outfit_safety.rs)
@@ -439,6 +443,7 @@ impl Default for InventoryPreferences {
             confirm_delete: true,
             rights: Default::default(),
             show_details: true,
+            dual_panel: false,
             folder_colors_enabled: true,
             context_wear: false, // Folderstorm: outfit safety
             folder_colors: Default::default(),
@@ -460,6 +465,13 @@ pub struct ExplorerPreferences {
     pub show_kind: bool,
     pub show_rights: bool,
     pub show_date: bool,
+    /// How the explorer shows its folder: rows, tiles, or both.
+    pub view: ExplorerView,
+    /// The side of a tile's picture; 0 is the Legacy Viewer's 128.
+    pub tile_size: u16,
+    /// The height of the tiles above the rows in the combination view; 0
+    /// shares the room between them.
+    pub gallery_height: u16,
 }
 
 impl Default for ExplorerPreferences {
@@ -472,8 +484,26 @@ impl Default for ExplorerPreferences {
             show_kind: true,
             show_rights: true,
             show_date: true,
+            view: ExplorerView::List,
+            tile_size: 0,
+            gallery_height: 0,
         }
     }
+}
+
+/// The views of the Legacy Viewer's single folder mode (LLPanelMainInventory
+/// ::setViewMode, indra/newview/llpanelmaininventory.cpp): the list, the
+/// gallery of every entry, or the combination of a gallery of the entries
+/// that have a picture above a list of the others. Aurora difference: the
+/// choice is kept, and the explorer starts with its list as before (the
+/// Legacy Viewer starts each single folder mode in the combination view).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExplorerView {
+    #[default]
+    List,
+    Gallery,
+    Combination,
 }
 
 impl InventoryPreferences {
@@ -2321,6 +2351,7 @@ mod tests {
                 ..Default::default()
             },
             show_details: false,
+            dual_panel: true,
             ..prefs
         };
         let json = serde_json::to_string(&changed).expect("serialize preferences");

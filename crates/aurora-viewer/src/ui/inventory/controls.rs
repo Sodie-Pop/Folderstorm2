@@ -541,7 +541,11 @@ pub fn dialogs(ctx: &egui::Context, p: &Palette, st: &mut InventoryUi, prefs: &m
                         *f = Filters::default();
                     }
                     // Folderstorm: a custom tab remembers its filters by itself
-                    if !custom_tab && flat_button(ui, p, aurora_i18n::tr!("ui-inventory-controls-keep-by-default")).clicked() {
+                    // Recent keeps its filters on its own (`remember_recent_filters`).
+                    if !custom_tab
+                        && st.tab != super::RECENT_TAB
+                        && flat_button(ui, p, aurora_i18n::tr!("ui-inventory-controls-keep-by-default")).clicked()
+                    {
                         prefs.filters_for_mut(st.tab).clone_from(f);
                     }
                 });

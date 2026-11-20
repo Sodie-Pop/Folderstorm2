@@ -25,9 +25,10 @@ GitHub turns Actions off on a fork until its owner enables them.
 | Review slots (`pr-slots.yml`) | Disable | Upstream's limit on outside contributors' PRs. |
 | Crash triage (`crash-triage.yml`) | Disable | Sorts crash reports filed as issues on Aurora's repository. |
 | Wiki (`wiki.yml`) | Disable | Publishes upstream's guides to the repository wiki. |
-| Release (`release.yml`) | Disable (for now) | Builds and publishes "Aurora-Viewer" zips on a version tag. Re-enable, adapted, with the branding task (FEATURES.md 0.1 / 0.3). |
-| Folderstorm release build (`folderstorm-release.yml`) | **Keep** | Ours: manual build artifact (see below). |
+| Release (`release.yml`) | Disable | Builds and publishes "Aurora-Viewer" zips on a version tag, with Aurora's update policy. The fork releases with `folderstorm-release.yml` or the local steps of [RELEASING.md](RELEASING.md) instead. |
+| Folderstorm release build (`folderstorm-release.yml`) | **Keep** | Ours: a draft GitHub release from a version, or a test build artifact (see below). |
 | Media plugins (`media-plugins.yml`) | Disable | Manual only. Builds the media plugin packs. Aurora's published packs can be used instead. |
+| FFmpeg pack (`ffmpeg-pack.yml`) | Disable | Builds the Director's ffmpeg pack, on a pull request that changes `scripts/ffmpeg-pack.sh` or by hand, with macOS jobs that never start on the fork. The viewer downloads Aurora's published pack instead (see BRANDING.md). |
 
 The repository is public, so GitHub-hosted runners cost nothing.
 
@@ -47,16 +48,32 @@ for `main`** through its check **tests (Windows, PR)**, alongside CI's
 ## Manual release build
 
 `folderstorm-release.yml` builds `aurora-viewer` and `folderstorm-mcp` in
-release mode and keeps the result as a workflow artifact. It runs only when
-started by hand, publishes nothing (no tag, no GitHub release), signs nothing
-and does not touch the update feed: those come later (FEATURES.md 0.3).
+release mode. It runs only when started by hand: Actions tab › **Folderstorm
+release build** › **Run workflow**. It signs nothing. Two modes:
 
-**Run it:** Actions tab › **Folderstorm release build** › **Run workflow**.
-Inputs: an optional version label (used in file names only; the version inside
-the viewer stays the one Git describes) and the platforms (Windows only by
-default; "windows and linux" adds a Linux job). The artifact
+**Draft release** (the `version` input filled in, for example `0.1.0` or
+`0.2.0-beta.1`, run from `main`): the same result as the local steps of
+[RELEASING.md](RELEASING.md), which are the usual way. The build job (read-only
+token) checks the version, tags the commit **locally** so that the build takes
+the version (`AURORA_VERSION_TAG`), builds, installs `dump_syms` and runs
+`folderstorm/scripts/package-release.ps1 -Tag`, which checks `--version` and
+makes the four release files: `Folderstorm2-v<V>-windows-x64.zip`, its
+`.sha256`, `Folderstorm2-v<V>-windows-x64-symbols.zip` and its `.sha256`.
+The **Draft release** job, the only one with `contents: write`, then runs
+`gh release create v<V> --draft --target <commit>` with those files,
+`folderstorm/release-notes-header.md` and GitHub's generated notes, and
+`--prerelease` for a beta. Nothing is visible to viewers until the human
+publishes the draft; GitHub creates the tag then. No update policy file is
+attached (every update is optional), and never upstream's
+`update-policy.json`. Linux is not built in this mode.
+
+**Test build** (no version): the artifact is kept by the workflow, nothing is
+published. Inputs: an optional version label (used in file names only; the
+version inside the viewer stays the one Git describes) and the platforms
+(Windows only by default; "windows and linux" adds a Linux job). The artifact
 `<slug>-<label>-<commit>-windows-x64` holds a zip and its `.sha256`: the two
-executables, `aurora-install.json`, `LICENSE`, `NOTICE.md`, `README.md` and the
+executables (the viewer renamed `Folderstorm2.exe`, see BRANDING.md, and
+`folderstorm-mcp.exe`), `aurora-install.json`, `LICENSE`, `NOTICE.md`, `README.md` and the
 licences of the bundled emoji font and spelling dictionaries (the files of
 upstream's `scripts/package.ps1`, through `folderstorm/scripts/package-release.ps1`,
 which accepts Folderstorm2's `--version` output). The slug comes from

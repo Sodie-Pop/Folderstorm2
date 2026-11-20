@@ -230,21 +230,25 @@ fn the_frame_s_events_are_read_from_what_the_world_recorded() {
             kind: ImKind::Private,
             session: alice,
             new_session: true,
+            mention: false,
         },
         ImMessage {
             kind: ImKind::Private,
             session: alice,
             new_session: false,
+            mention: false,
         },
         ImMessage {
             kind: ImKind::Group,
             session: group,
             new_session: false,
+            mention: false,
         },
         ImMessage {
             kind: ImKind::Conference,
             session: conference,
             new_session: true,
+            mention: false,
         },
     ];
     let sounds = [UiSound::NearbyChat, UiSound::TeleportOffer, UiSound::InventoryOffer];

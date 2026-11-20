@@ -339,6 +339,14 @@ pub struct State {
     pub span_window: bool,
 }
 
+/// One line of the bar's list of characters: every slot, in slot order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Entry<'a> {
+    Character(&'a Character),
+    /// No character in this slot: the line starts the way to add one.
+    Empty(u8),
+}
+
 /// A quick action as the bar shows it now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Button<'a> {
@@ -378,6 +386,15 @@ impl State {
     /// The character in front, if it is in the world.
     pub fn active(&self) -> Option<&Character> {
         self.characters.iter().find(|c| c.presence == Presence::Active)
+    }
+
+    /// The lines of the list of characters: one per slot, [`MAX_SLOTS`] in
+    /// all and in slot order (so the numbers keep matching the hotkeys and
+    /// the quick actions); a slot without a character is an empty line.
+    pub fn entries(&self) -> Vec<Entry<'_>> {
+        (0..MAX_SLOTS as u8)
+            .map(|slot| self.character(slot).map_or(Entry::Empty(slot), Entry::Character))
+            .collect()
     }
 
     /// The quick actions that show, in their positions' order: unused
@@ -443,6 +460,9 @@ pub enum Page {
     Host,
     /// The question that closes the host or every character.
     Quit,
+    /// The host's "New character profile…" page: the way to add a
+    /// character, from an empty line of the list.
+    NewProfile,
 }
 
 /// One click on the bar, for the host to carry out.
@@ -798,6 +818,37 @@ mod tests {
         state.docked = false;
         assert_eq!(state.strip(), 0.0);
         assert_eq!(State::default().strip(), 0.0);
+    }
+
+    #[test]
+    fn the_list_has_one_line_per_slot_and_the_empty_ones_add_a_character() {
+        let state = state();
+        // slots 0, 1, 2 and 4 have a character: slot 3 is empty
+        let entries = state.entries();
+        assert_eq!(entries.len(), MAX_SLOTS);
+        let shown: Vec<_> = entries
+            .iter()
+            .map(|entry| match entry {
+                Entry::Character(c) => Some(c.slot),
+                Entry::Empty(_) => None,
+            })
+            .collect();
+        assert_eq!(shown, [Some(0), Some(1), Some(2), None, Some(4)], "in slot order");
+        assert_eq!(entries[3], Entry::Empty(3));
+        // a desk with nobody: five empty lines
+        let empty = State::default();
+        let nobody = empty.entries();
+        assert_eq!(nobody, (0..MAX_SLOTS as u8).map(Entry::Empty).collect::<Vec<_>>());
+        // a full desk: no empty line
+        let full = State {
+            characters: (0..MAX_SLOTS as u8)
+                .map(|slot| character(slot, Presence::Out, Quick::Launch))
+                .collect(),
+            ..State::default()
+        };
+        assert!(full.entries().iter().all(|entry| matches!(entry, Entry::Character(_))));
+        // the way to add one is a page of the host, which names no slot
+        assert!(Request::Show(Page::NewProfile).valid() && Request::Show(Page::NewProfile).shows_a_window());
     }
 
     #[test]

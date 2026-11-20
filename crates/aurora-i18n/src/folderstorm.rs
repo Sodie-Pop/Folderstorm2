@@ -13,6 +13,9 @@
 //!   (`#Aurora` folders, the Aurora bridge, Aurora Library) and of the demo
 //!   places, which keep it.
 //!
+//! The program's file name follows the shipped one: `aurora-viewer.exe`
+//! becomes `Folderstorm2.exe` (see [`executable`]).
+//!
 //! French elision follows: "d'Aurora Viewer" becomes "de Folderstorm2",
 //! "qu'Aurora" becomes "que Folderstorm2".
 //!
@@ -20,7 +23,7 @@
 //! message that names the viewer with a bare "Aurora" needs its key (or
 //! prefix) added to [`BARE`].
 
-use folderstorm_brand::PRODUCT;
+use folderstorm_brand::{EXE, PRODUCT};
 
 /// Messages left exactly as upstream wrote them.
 const KEEP: &[&str] = &[
@@ -41,7 +44,9 @@ const BARE: &[&str] = &[
     "common-not-available-in-aurora-yet",
     "crash-",
     "dev-toolbox-nothing-sent",
+    "director-library-version",
     "exit-",
+    "gaming-mode-notice",
     "login-driver-old-version",
     "login-photo-quality-off",
     "login-safe-graphics-active",
@@ -60,8 +65,11 @@ const BARE: &[&str] = &[
     "ui-options-backup-",
     "ui-options-browser-behavior-help",
     "ui-options-camera-vr-at-start-help",
+    "ui-options-chat-logs-erase-text",
     "ui-options-chat-logs-import-same",
+    "ui-options-chat-service-history-help",
     "ui-options-flash-on-",
+    "ui-options-gaming-mode-leave-on-focus",
     "ui-options-gpu-recovery-tip",
     "ui-options-pause-when-card-busy-tip",
     "ui-options-remove-aurora",
@@ -130,9 +138,19 @@ pub(crate) fn rebrand(source: &str) -> String {
         if rule == Rule::Bare {
             text = replace(&text, "Aurora", true);
         }
+        text = executable(&text);
         out.push_str(&text);
     }
     out
+}
+
+/// The program's file name: shipped builds are [`EXE`], not cargo's
+/// `aurora-viewer.exe` (the NVIDIA Control Panel hint), and the usage line of
+/// `cli-help` names the program without its extension.
+fn executable(text: &str) -> String {
+    let stem = EXE.strip_suffix(".exe").unwrap_or(EXE);
+    text.replace("aurora-viewer.exe", EXE)
+        .replace("aurora-viewer [", &format!("{stem} ["))
 }
 
 /// Replaces each whole-word `needle` by the product name.
@@ -237,6 +255,28 @@ mod tests {
             one("exit-title = Quitter d'Aurora Viewer ? Qu’Aurora attende.\n"),
             "exit-title = Quitter de Folderstorm2 ? Que Folderstorm2 attende.\n"
         );
+    }
+
+    #[test]
+    fn the_program_is_named_as_shipped() {
+        assert_eq!(
+            one("ui-options-graphics-card-no-discrete = the NVIDIA card for aurora-viewer.exe in the NVIDIA Control Panel\n"),
+            "ui-options-graphics-card-no-discrete = the NVIDIA card for Folderstorm2.exe in the NVIDIA Control Panel\n"
+        );
+        assert_eq!(
+            one("cli-help = { \"Aurora Viewer\\u000A\\u000AUsage: aurora-viewer [--title <text>]\" }\n"),
+            "cli-help = { \"Folderstorm2\\u000A\\u000AUsage: Folderstorm2 [--title <text>]\" }\n"
+        );
+        // the website keeps its address
+        let site = "update-x = aurora-viewer.org\n";
+        assert_eq!(one(site), site);
+        for &(code, source) in crate::SOURCES {
+            let rewritten = rebrand(source);
+            assert!(
+                !rewritten.contains("aurora-viewer.exe") && !rewritten.contains("aurora-viewer ["),
+                "{code}"
+            );
+        }
     }
 
     #[test]

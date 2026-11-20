@@ -136,6 +136,7 @@ impl Viewer {
                 icons,
                 world,
                 st,
+                None,
                 prefs,
                 &mut open,
                 false,
@@ -393,4 +394,17 @@ fn two_windows_on_one_tab_share_its_filters_and_search() {
     tabs::sync(&mut main, &mut prefs);
     tabs::sync(&mut window, &mut prefs);
     assert_eq!((main.search.as_str(), window.search.as_str()), ("boot", "boot"));
+}
+
+#[test]
+fn the_dual_panel_right_pane_follows_the_main_window_quiet_mode() {
+    let mut main = InventoryUi::default();
+    let mut right = InventoryUi::dual_pane();
+    main.window_mode = Mode { pinned: true, quiet: true };
+    share(&main, Some(&mut right));
+    assert!(quiet(&right), "one quiet button shows both lists alone");
+    main.window_mode = Mode::default();
+    share(&main, Some(&mut right));
+    assert!(!quiet(&right), "and full again with it");
+    share(&main, None);
 }

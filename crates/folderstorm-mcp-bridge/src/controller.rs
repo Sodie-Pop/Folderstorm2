@@ -400,6 +400,7 @@ impl Controller {
             log::warn!("session host: the MCP controller's discovery file was not deleted: {e}");
         }
         if let Some(accept) = self.accept.take() {
+            // proxy-guard: wakes our own listener on 127.0.0.1, never the network
             let _ = TcpStream::connect_timeout(
                 &SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.shared.port).into(),
                 Duration::from_secs(1),
