@@ -116,6 +116,21 @@ pub const GITHUB: &str = "https://github.com/Sodie-Pop/Folderstorm2";
 pub const NEW_ISSUE: &str = "https://github.com/Sodie-Pop/Folderstorm2/issues/new";
 pub const RELEASES_PAGE: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases";
 pub const RELEASES_API: &str = "https://api.github.com/repos/Sodie-Pop/Folderstorm2/releases?per_page=100";
+/// Where release assets are downloaded from: `<this>/<tag>/<asset>`.
+pub const RELEASES_DOWNLOAD: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases/download";
+
+/// File name of the viewer in shipped Windows builds: packaging
+/// (`folderstorm/scripts/package-release.ps1`) renames cargo's
+/// `target/release/aurora-viewer.exe` to it, and the updater looks for it in
+/// the installation and in the package. Local cargo builds keep cargo's name.
+pub const EXE: &str = "Folderstorm2.exe";
+/// The MCP sidecar shipped beside the viewer (FEATURES.md 4): an update
+/// replaces it with the viewer.
+pub const MCP_EXE: &str = "folderstorm-mcp.exe";
+/// Release asset names start with it: `<prefix>-<tag>-windows-x64.zip`, the
+/// folder inside it, its `.sha256` and `<prefix>-<tag>-windows-x64-symbols.zip`.
+pub const RELEASE_PREFIX: &str = "Folderstorm2";
+
 /// Where the media plugins pack (CEF, LibVLC or GStreamer) is downloaded
 /// from: Aurora Viewer's releases, `<this>/media-plugins-<n>/<archive>`.
 /// The fork publishes no pack of its own; the viewer pins the archive's size
@@ -144,6 +159,8 @@ mod tests {
             "aurora-viewer-slurl-",
             "Aurora.SLurl.Receiver.2.",
             "aurora-viewer-slurl.desktop",
+            "aurora-viewer.exe",
+            "Aurora-Viewer",
         ];
         for ours in [
             DIRS_ORGANIZATION,
@@ -161,6 +178,8 @@ mod tests {
             LINUX_SLURL_DESKTOP_ID,
             PROFILE_RAISE_REQUEST,
             SESSION_PIPE_PREFIX,
+            EXE,
+            RELEASE_PREFIX,
         ] {
             assert!(!aurora.contains(&ours), "{ours} is Aurora Viewer's");
         }
@@ -170,12 +189,24 @@ mod tests {
 
     #[test]
     fn links_point_at_the_fork() {
-        for link in [GITHUB, NEW_ISSUE, RELEASES_PAGE, RELEASES_API] {
+        for link in [GITHUB, NEW_ISSUE, RELEASES_PAGE, RELEASES_API, RELEASES_DOWNLOAD] {
             assert!(link.contains(REPOSITORY), "{link}");
         }
         assert_eq!(concat!(product!(), "/1"), "Folderstorm2/1");
         // the one exception: the media plugins pack is Aurora Viewer's own
         assert!(!MEDIA_PACK_DOWNLOADS.contains(REPOSITORY));
         assert!(MEDIA_PACK_DOWNLOADS.starts_with("https://github.com/Aurora-Viewer/Aurora-Viewer/releases/download"));
+    }
+
+    /// The shipped file names are this product's, also without case:
+    /// Windows compares file names without it.
+    #[test]
+    fn shipped_files_are_not_auroras() {
+        for ours in [EXE, MCP_EXE] {
+            assert!(ours.ends_with(".exe") && !ours.eq_ignore_ascii_case("aurora-viewer.exe"), "{ours}");
+        }
+        assert!(!EXE.eq_ignore_ascii_case(MCP_EXE));
+        assert!(!RELEASE_PREFIX.to_ascii_lowercase().starts_with("aurora"));
+        assert_eq!(RELEASES_DOWNLOAD, format!("{GITHUB}/releases/download"));
     }
 }
