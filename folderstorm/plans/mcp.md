@@ -46,6 +46,19 @@ aurora-viewer mcp_bridge   (frame thread: polled once per frame, answers
   encoded, new each time the bridge starts. Compared in constant time
   (`subtle`). Never logged, never shown in Preferences, never copied by
   *Copy configuration*, never printed by the sidecar (`--diagnose` included).
+- **Paths with spaces** (a Windows user name such as `First Last`, an
+  install under `%LOCALAPPDATA%\Programs\Folderstorm2`) are supported and
+  tested: *Copy configuration* gives the bare path as one value and no
+  arguments. JSON (Claude Code `.mcp.json`, Cursor `mcp.json`) is built with
+  `serde_json`, so `"command"` holds the path with backslashes doubled and no
+  quotes of its own; Codex's `config.toml` gets a TOML basic string
+  (`command = "C:\\Users\\First Last\\...\\folderstorm-mcp.exe"`, with `args = []`).
+  Tests parse both back and compare with the original path, with spaces,
+  `'`, `&`, `%` and Japanese characters. Folderstorm (C++)'s workaround (an 8.3
+  short path or a link without spaces) is not needed: no format carries the
+  path unquoted. No command line (`claude mcp add ...`) is offered; if one is
+  added, quote the path for the shell it is meant for (double quotes for
+  PowerShell and cmd) and put it after `--`.
 - **Discovery file** `folderstorm2-mcp-<pid>.json` in the user settings
   directory (`settings::config_dir()`, under `folderstorm_brand::project_dirs()`):
   `{schema, product, pid, port, token, started}`. Written to a temporary
