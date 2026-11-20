@@ -166,9 +166,19 @@ fn demo_monitors(list: &str) -> DemoMonitors {
     }
 }
 
+/// `AURORA_DEMO_SESSION_HOST_BAR=docked-states` (or `popped-states`): as
+/// `docked` (or `popped`), with the launch rules' states on show: the demo
+/// leaves the characters from the third on without a viewer, one of them
+/// asks "Launch?", and the first of them is picked in the list (its login
+/// button names it and pulses). Viewers inherit the variable.
+pub fn demo_bar_states(value: &str) -> bool {
+    value.trim().to_ascii_lowercase().ends_with("-states")
+}
+
 /// What [`DEMO_BAR_VARIABLE`] asks for.
 fn demo_bar(value: &str) -> Option<Placement> {
-    match value.trim().to_ascii_lowercase().as_str() {
+    let value = value.trim().to_ascii_lowercase();
+    match value.strip_suffix("-states").unwrap_or(&value) {
         "docked" | "1" => Some(Placement::Docked),
         "popped" | "popped-out" | "out" => Some(Placement::Popped),
         _ => None,
@@ -379,8 +389,12 @@ impl Host {
         };
         if host.demo {
             let slots: Vec<usize> = host.desk.slots().map(|(slot, _)| slot).collect();
+            let states = std::env::var(DEMO_BAR_VARIABLE).is_ok_and(|value| demo_bar_states(&value));
             for slot in slots {
-                host.desk.launch(slot, slot == 0);
+                // (the launch rules' states: some characters have no viewer)
+                if !(states && slot >= 2) {
+                    host.desk.launch(slot, slot == 0);
+                }
             }
             let (waiting, share) = demo_memory(&std::env::var(DEMO_MEMORY_VARIABLE).unwrap_or_default());
             if let Some(waiting) = waiting {
@@ -908,6 +922,11 @@ mod tests {
         assert_eq!(demo_bar("docked"), Some(Placement::Docked));
         assert_eq!(demo_bar(" Popped "), Some(Placement::Popped));
         assert_eq!(demo_bar("out"), Some(Placement::Popped));
+        // the launch rules' states: the same places, and a flag
+        assert_eq!(demo_bar("docked-states"), Some(Placement::Docked));
+        assert_eq!(demo_bar(" Popped-States "), Some(Placement::Popped));
+        assert!(demo_bar_states("docked-states") && demo_bar_states(" popped-STATES"));
+        assert!(!demo_bar_states("docked") && !demo_bar_states("popped") && !demo_bar_states(""));
         for other in ["", "0", "floating"] {
             assert_eq!(demo_bar(other), None, "{other}");
         }

@@ -28,9 +28,13 @@ mod settings;
 // (checkpoint 11: New IM, Friends and links, drawn and clicked)
 #[cfg(test)]
 mod conversations_tests;
+// (the confirmation before a new viewer, and the way to a new profile)
+#[cfg(test)]
+mod launch_tests;
 
 use super::Host;
 use super::chat_ui::ChatPanel;
+use crate::folderstorm_characters::launch::{self, Surface, Target};
 use crate::theme::Palette;
 use crate::ui::{
     fonts,
@@ -596,7 +600,18 @@ impl Window_ {
                 } else {
                     ("player-play-filled", tr!("folderstorm-host-launch"))
                 };
-                if widgets::action_button(ui, p, icon, label, ActionKind::Primary, BUTTON).clicked() {
+                // (it starts a viewer: the first click asks "Launch?")
+                let target = Target {
+                    surface: Surface::Card,
+                    slot,
+                };
+                let (label, kind) = if launch::armed(ui.ctx(), target) {
+                    (launch::confirm_label(), ActionKind::Caution)
+                } else {
+                    (label, ActionKind::Primary)
+                };
+                let button = widgets::action_button(ui, p, icon, label, kind, BUTTON);
+                if launch::settle(ui.ctx(), &button, target, true) {
                     acts.push(Act::Switch(slot));
                 }
                 let remove = tr!("folderstorm-host-remove");

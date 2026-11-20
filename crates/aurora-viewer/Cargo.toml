@@ -188,6 +188,8 @@ xr-static-loader = ["aurora-render/xr-static-loader"]
 [dev-dependencies]
 folderstorm-mcp = { path = "../folderstorm-mcp" }
 tempfile = "3.27.0"
+# Folderstorm: parses the Codex configuration back in the setup tests
+toml_edit = "0.25.16"
 
 # libmimalloc-sys is never named in the sources: it is listed only to hold
 # the version mimalloc builds (see the comment above its line)

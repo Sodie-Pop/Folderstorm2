@@ -233,6 +233,68 @@ mod tests {
         assert_eq!(toml_string("a\tb\u{1}"), "\"a\\tb\\u0001\"");
     }
 
+    const SPACED: &str = "C:\\Users\\First Last\\AppData\\Local\\Programs\\Folderstorm2\\folderstorm-mcp.exe";
+    const ODD: &str = "C:\\Users\\Tom's & Jerry's 100%\\ユーザー\\Folderstorm2\\folderstorm-mcp.exe";
+
+    /// The `command`, the number of `args` and the discovery variable of the
+    /// entry `configuration` gives a client, read back with a real parser.
+    fn parsed_entry(client: Client, sidecar: &str, dir: &str) -> (String, usize, String) {
+        let text = configuration(client, Path::new(sidecar), Path::new(dir));
+        match client {
+            Client::Codex => {
+                let doc: toml_edit::DocumentMut = text.parse().expect("valid TOML");
+                let entry = &doc["mcp_servers"]["folderstorm2"];
+                (
+                    entry["command"].as_str().expect("command").to_owned(),
+                    entry["args"].as_array().expect("args").len(),
+                    entry["env"]["FOLDERSTORM2_MCP_DISCOVERY"].as_str().expect("env").to_owned(),
+                )
+            }
+            _ => {
+                let parsed: Value = serde_json::from_str(&text).expect("valid JSON");
+                let entry = &parsed["mcpServers"]["folderstorm2"];
+                (
+                    entry["command"].as_str().expect("command").to_owned(),
+                    entry["args"].as_array().expect("args").len(),
+                    entry["env"]["FOLDERSTORM2_MCP_DISCOVERY"].as_str().expect("env").to_owned(),
+                )
+            }
+        }
+    }
+
+    #[test]
+    fn paths_with_spaces_and_odd_characters_round_trip_in_every_format() {
+        let dir = "C:\\Users\\First Last\\AppData\\Roaming\\Folderstorm2 & co\\it's";
+        for client in [Client::ClaudeCode, Client::Cursor, Client::Codex] {
+            for sidecar in [SPACED, ODD] {
+                let (command, args, env) = parsed_entry(client, sidecar, dir);
+                // the bare path: no quotes added, nothing appended, no arguments
+                assert_eq!(command, sidecar, "{client:?}");
+                assert_eq!(args, 0, "{client:?}");
+                assert_eq!(env, dir, "{client:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn json_text_doubles_backslashes_without_extra_quotes() {
+        let text = configuration(Client::ClaudeCode, Path::new(SPACED), Path::new("/d"));
+        assert!(
+            text.contains(r#""command": "C:\\Users\\First Last\\AppData\\Local\\Programs\\Folderstorm2\\folderstorm-mcp.exe""#),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn toml_text_keeps_the_space_inside_one_escaped_string() {
+        let text = configuration(Client::Codex, Path::new(SPACED), Path::new("/d"));
+        assert!(
+            text.contains(r#"command = "C:\\Users\\First Last\\AppData\\Local\\Programs\\Folderstorm2\\folderstorm-mcp.exe""#),
+            "{text}"
+        );
+        assert!(text.contains("args = []"), "{text}");
+    }
+
     #[test]
     fn no_entry_carries_a_token() {
         // the entries are built from paths only: nothing else goes in

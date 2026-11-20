@@ -163,7 +163,7 @@ impl Window_ {
         log::info!("session host: bar, {request:?}");
         self.host.desk.bar_request(request, now);
         match request {
-            Request::Show(page) => self.show_host(page),
+            Request::Show(page) => self.show_host(page, now),
             // (their windows open at the next wait, in front: asked for)
             Request::Chat(true) => self.bar.raise = Some(Which::Pane(Panel::Chat)),
             Request::Inbox => self.bar.raise = Some(Which::Pane(Panel::Inbox)),
@@ -178,12 +178,20 @@ impl Window_ {
     /// The host's own window comes forward on that page; the settings'
     /// pages open the settings' window (checkpoint 10) and leave the
     /// host's own window as it is.
-    fn show_host(&mut self, page: bar::Page) {
+    fn show_host(&mut self, page: bar::Page, now: Instant) {
         let section = match page {
             bar::Page::Bar => Section::Toolbar,
             bar::Page::Hotkeys => Section::Hotkeys,
             bar::Page::Monitors => Section::Monitors,
             bar::Page::Host => {
+                self.raise_host();
+                return;
+            }
+            bar::Page::NewProfile => {
+                // (from an empty line of the bar's list: the host's own
+                // "New character profile…" page, in front)
+                self.comfort_apply(super::comfort::Act::Page(Page::NewProfile), now);
+                self.chat_page = false;
                 self.raise_host();
                 return;
             }
