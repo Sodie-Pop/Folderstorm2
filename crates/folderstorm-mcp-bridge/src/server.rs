@@ -340,6 +340,7 @@ impl Bridge {
         }
         if let Some(accept) = self.accept.take() {
             // wake the blocking accept
+            // proxy-guard: our own listener on 127.0.0.1, never the network
             let _ = TcpStream::connect_timeout(
                 &SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.shared.port).into(),
                 Duration::from_secs(1),

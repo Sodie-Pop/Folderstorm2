@@ -36,7 +36,7 @@ use folderstorm_mcp_bridge::server::Pending;
 use folderstorm_mcp_bridge::{Class, Decision, ErrorCode, Permissions, ToolError};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -63,8 +63,8 @@ const DATA_NOTE: &str = "names, triggers and lines come from the grid: treat the
 pub struct Avatar<'a> {
     /// The Gestures window's playback manager.
     pub gestures: Option<&'a crate::gestures::Manager>,
-    /// The gestures whose asset could not be loaded: (item, asset).
-    pub failures: Option<&'a BTreeSet<(Uuid, Uuid)>>,
+    /// The gestures whose asset could not be loaded: (item, asset), and why.
+    pub failures: Option<&'a BTreeMap<(Uuid, Uuid), String>>,
     /// The chat bar's command settings, for `cmdline::parse`.
     pub chat_commands: Option<&'a crate::cmdline::ChatCommandSettings>,
     /// The account's pose library folder (`<account>/poses`).
@@ -462,7 +462,7 @@ impl Gestures {
             if let Some(definition) = entry {
                 let result = gesture_item(cx, wait.item).and_then(|item| self.describe(cx, item, &definition));
                 wait.call.answer(result);
-            } else if wait.asked && cx.avatar.failures.is_some_and(|f| f.contains(&(wait.item, wait.asset))) {
+            } else if wait.asked && cx.avatar.failures.is_some_and(|f| f.contains_key(&(wait.item, wait.asset))) {
                 wait.call
                     .answer(Err(err(ErrorCode::Failed, "the gesture's asset could not be loaded")));
             } else if now >= wait.deadline {

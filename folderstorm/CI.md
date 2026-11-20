@@ -28,6 +28,7 @@ GitHub turns Actions off on a fork until its owner enables them.
 | Release (`release.yml`) | Disable (for now) | Builds and publishes "Aurora-Viewer" zips on a version tag. Re-enable, adapted, with the branding task (FEATURES.md 0.1 / 0.3). |
 | Folderstorm release build (`folderstorm-release.yml`) | **Keep** | Ours: manual build artifact (see below). |
 | Media plugins (`media-plugins.yml`) | Disable | Manual only. Builds the media plugin packs. Aurora's published packs can be used instead. |
+| FFmpeg pack (`ffmpeg-pack.yml`) | Disable | Builds the Director's ffmpeg pack, on a pull request that changes `scripts/ffmpeg-pack.sh` or by hand, with macOS jobs that never start on the fork. The viewer downloads Aurora's published pack instead (see BRANDING.md). |
 
 The repository is public, so GitHub-hosted runners cost nothing.
 

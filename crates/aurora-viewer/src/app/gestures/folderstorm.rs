@@ -8,7 +8,7 @@
 
 use super::super::App;
 use aurora_assets::gesture::Gesture;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 impl App {
@@ -17,9 +17,9 @@ impl App {
         self.gesture_request(item, false, false, None, false);
     }
 
-    /// The gestures whose asset could not be loaded: (item, asset).
-    pub(in crate::app) fn assistant_gesture_failures(&self) -> &BTreeSet<(Uuid, Uuid)> {
-        &self.gesture_state.failed
+    /// The gestures whose asset could not be loaded: (item, asset), and why.
+    pub(in crate::app) fn assistant_gesture_failures(&self) -> &BTreeMap<(Uuid, Uuid), String> {
+        &self.gesture_state.ui.failed
     }
 
     /// Play `definition` once under `key` (never a gesture's item id).

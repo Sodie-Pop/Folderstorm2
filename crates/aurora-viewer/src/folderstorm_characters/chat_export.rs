@@ -8,7 +8,7 @@
 //!
 //! **Only what this viewer's own window shows leaves it.** A line is told
 //! with the name and the text the conversation shows for it now
-//! (`ui::chat::sender_name`, `line_body`, `resolved_text`): the name a
+//! (`ui::chat::sender_name`, `line_body`, `resolved_text_in`): the name a
 //! restriction replaces is replaced, the place it hides is hidden, a line
 //! RLVa refused at reception is not in the list at all. While RLVa is on,
 //! the lines already told are checked again against what the window would
@@ -25,7 +25,7 @@
 //! typing"); and the character's friends and groups are told whole when
 //! they change ([`contacts`]), bounded, online friends first.
 
-use crate::ui::chat::{line_body, resolved_text, sender_name};
+use crate::ui::chat::{conversation_names, line_body, resolved_text_in, sender_name};
 use crate::world::notifications::Kind;
 use crate::world::transcripts::LineClock;
 use crate::world::{ChatKind, ChatLine, Origin, World};
@@ -131,7 +131,8 @@ pub fn wire_line(world: &World, own_name: &str, number: u64, line: &ChatLine, ne
         kind,
         emote,
         from,
-        text: resolved_text(world, &body),
+        // as the conversation draws it: the nearby chat's names, or a session's
+        text: resolved_text_in(world, line.wording(conversation_names((!nearby).then_some(&line.source))), &body),
     })
 }
 
@@ -141,19 +142,25 @@ fn fingerprint(line: &ipc::ChatLine) -> u64 {
     hasher.finish()
 }
 
-/// What a conversation is and the name its tab shows.
+/// What a conversation is and the name its tab shows: as the window's
+/// header (`ui::chat::header`), an IM session names its resident under
+/// `@shownames` (`conversation_names`), and a group or conference keeps its
+/// title.
 fn describe(world: &World, id: &Uuid) -> (SessionKind, String) {
     match world.groups.sessions.get(id) {
         Some(info) => {
             let kind = if info.group { SessionKind::Group } else { SessionKind::Conference };
-            (kind, world.rlva_filter_text(&world.session_title(id)).into_owned())
+            (kind, world.session_title(id))
         }
-        None if world.groups.group(id).is_some() => (SessionKind::Group, world.rlva_filter_text(&world.session_title(id)).into_owned()),
-        None if !world.rlva_can_name(*id) => (
-            SessionKind::Resident,
-            crate::world::rlva::privacy::anonymous(*id).display_name.clone(),
-        ),
-        None => (SessionKind::Resident, world.rlva_filter_text(&world.session_title(id)).into_owned()),
+        None if world.groups.group(id).is_some() => (SessionKind::Group, world.session_title(id)),
+        None => {
+            let names = &world.social.avatar_names;
+            let title = names
+                .get_in(crate::world::names::NameScope::Roster, id)
+                .map(|name| name.display(&names.options))
+                .unwrap_or_else(|| world.session_title(id));
+            (SessionKind::Resident, title)
+        }
     }
 }
 
@@ -257,8 +264,8 @@ fn with_question(world: &World, question: Option<crate::mcp_bridge::desk::Questi
                 Kind::Call => AttentionKind::Call,
                 Kind::Info | Kind::Alert | Kind::Presence | Kind::Message => AttentionKind::Other,
             },
-            title: resolved_text(world, &n.title),
-            text: resolved_text(world, &n.body),
+            title: resolved_text_in(world, n.kind.names(), &n.title),
+            text: resolved_text_in(world, n.kind.text(), &n.body),
         }))
         .collect();
     AttentionList {
@@ -626,6 +633,7 @@ mod tests {
             origin: Origin::Log,
             blocked: false,
             beyond_range: false,
+            speaker: Default::default(),
         });
         w.chat_clock.pushed_back();
         say(&mut w, JANE, "Jane Doe", "two");
@@ -675,23 +683,26 @@ mod tests {
         im(&mut w, "Jane Doe here");
         let told = look(&mut export, &w, now);
         assert_eq!(texts(&told, Conversation::Nearby), ["Jane Doe: it is me, Jane Doe"]);
-        // the restriction comes after the lines were told: the host's copy
-        // is replaced by what the window shows now
+        // the restriction comes after the lines were told: the host holds
+        // what the window shows now. A line heard before it keeps its
+        // name, as in the Legacy Viewer (`mRlvNamesFiltered` is set when a
+        // line arrives), and an IM session names its people
+        // (`conversation_names`)
         restrict(&mut w, "@shownames=n");
         let hidden = crate::world::rlva::privacy::anonymous(JANE).display_name.clone();
         let told = look(&mut export, &w, now);
-        let nearby: Vec<_> = told.iter().filter(|b| b.conversation == Conversation::Nearby).collect();
-        assert!(nearby[0].restart, "told again, to replace");
-        assert_eq!(nearby[0].lines.len(), 1);
-        let line = &nearby[0].lines[0];
-        assert_eq!(line.from, hidden, "the sender is the name the window shows");
-        // (the text is filtered as the window filters it, no more, no less)
-        assert_eq!(line.text, w.rlva_filter_text("it is me, Jane Doe"));
-        let private = told.iter().find(|b| b.conversation == jane()).expect("batch");
-        assert!(private.restart);
-        assert_eq!(private.title, hidden);
-        assert_eq!(private.lines[0].from, hidden);
-        // and new lines come hidden
+        for batch in told.iter().filter(|b| b.conversation == Conversation::Nearby) {
+            assert!(batch.restart, "told again only to replace");
+            assert_eq!(
+                texts(std::slice::from_ref(batch), Conversation::Nearby),
+                ["Jane Doe: it is me, Jane Doe"]
+            );
+        }
+        if let Some(private) = told.iter().find(|b| b.conversation == jane()) {
+            assert_eq!(private.title, "Jane Doe");
+            assert!(private.lines.iter().all(|line| line.from == "Jane Doe"));
+        }
+        // and new lines of the nearby chat come hidden
         say(&mut w, JANE, "Jane Doe", "again");
         let told = look(&mut export, &w, now);
         assert_eq!(texts(&told, Conversation::Nearby), [format!("{hidden}: again")]);

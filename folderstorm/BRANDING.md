@@ -24,16 +24,17 @@ directly:** add it to `folderstorm-brand` and read it from there.
 - settings, cache, data and log folders (`project_dirs()`: `org` /
   `Folderstorm` / `Folderstorm2`), the folder made inside a chosen cache
   location, the snapshots folder;
-- saved passwords, the second-factor entry, the disk cache key and the GitHub
-  authorization in the system's credential store;
+- saved passwords, the second-factor entry, the disk cache key, the GitHub
+  authorization and the proxy's credentials in the system's credential store;
 - the Windows notification identity, the `secondlife://` link handler's
   registration name, the Windows pipe and window names and the Linux bus name
   that hand a link to a running viewer;
 - updates: the updater reads only this repository's releases, so it can never
-  replace Folderstorm2 with Aurora Viewer. The one exception is the media
-  plugins pack (CEF, LibVLC or GStreamer): the fork publishes none, so it is
-  downloaded from Aurora Viewer's releases (`MEDIA_PACK_DOWNLOADS`), and only
-  the exact archive whose size and SHA-256 the viewer pins is installed.
+  replace Folderstorm2 with Aurora Viewer. The two exceptions are the media
+  plugins pack (CEF, LibVLC or GStreamer) and the Director's ffmpeg pack: the
+  fork publishes neither, so they are downloaded from Aurora Viewer's releases
+  (`MEDIA_PACK_DOWNLOADS`), and only the exact archive whose size and SHA-256
+  the viewer pins is installed.
 
 A test in `folderstorm-brand` fails if one of these equals Aurora's.
 

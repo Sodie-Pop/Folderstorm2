@@ -156,6 +156,14 @@ pub(super) fn decorate<'a>(
     floater.action(quiet_icon, quiet_tip, quiet).action(pin_icon, pin_tip, pin)
 }
 
+/// The main window's mode for this frame also holds for the right pane of
+/// its dual-panel layout, so one quiet button shows both lists alone.
+pub(super) fn share(st: &InventoryUi, dual: Option<&mut InventoryUi>) {
+    if let Some(dual) = dual {
+        dual.window_mode = st.window_mode;
+    }
+}
+
 /// After the window `floater` is shown (`open` or not): pinned, it goes in
 /// front of the other windows; a title bar button clicked changes its mode.
 /// (A window brought to the front by a click comes back behind it on the
