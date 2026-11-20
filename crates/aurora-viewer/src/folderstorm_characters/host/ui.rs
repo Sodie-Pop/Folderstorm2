@@ -486,6 +486,11 @@ impl Window_ {
             ui.label(RichText::new(tr!("folderstorm-host-voice-waits", name = name)).color(p.amber));
             ui.add_space(4.0);
         }
+        // (release plan, PR 3) a character found a new version
+        if crate::folderstorm_characters::updates::ready(&self.host.desk).is_some() {
+            crate::folderstorm_characters::updates::notice(ui, &p, &self.host.desk);
+            ui.add_space(4.0);
+        }
         if !quitting && !self.host.desk.full() {
             ui.horizontal(|ui| {
                 let width = (ui.available_width() - 190.0).max(120.0);

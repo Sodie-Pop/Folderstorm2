@@ -97,13 +97,15 @@ impl Window_ {
         let slots: Vec<(usize, Slot)> = self.host.desk.slots().map(|(i, s)| (i, s.clone())).collect();
         // (the room under the lines: what the host asks, when it asks)
         let asking = quitting || self.closing || self.quit_asked || self.host.desk.voice_waits_for().is_some();
+        // (and a line when a character found a new version)
+        let update = crate::folderstorm_characters::updates::ready(&self.host.desk).is_some();
         let under = if self.quit_asked {
             96.0
         } else if asking {
             76.0
         } else {
             34.0
-        };
+        } + if update { 20.0 } else { 0.0 };
         egui::ScrollArea::vertical()
             .id_salt("folderstorm-host-condensed")
             .auto_shrink([false, true])
@@ -130,6 +132,7 @@ impl Window_ {
             let name = self.name(waits);
             ui.label(RichText::new(tr!("folderstorm-host-voice-waits", name = name)).color(p.amber));
         }
+        crate::folderstorm_characters::updates::notice(ui, p, &self.host.desk);
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             self.footer(ui, p, now, acts);
         });

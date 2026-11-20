@@ -7190,6 +7190,10 @@ folderstorm-settings-bug-line = To report a bug: "{ $item }", in the viewer's He
 folderstorm-help-menu = { $product } Help
 folderstorm-privacy-policy-hint = What { $product } sends, to whom, and what it keeps on this computer.
 folderstorm-settings-updates-note = The host and its characters are one program: what the viewer chooses applies to the host too.
+folderstorm-update-managed = This character was started by the session host, and the other characters run from the same program: it does not install updates itself. Close all characters and the session host, then start the viewer on its own to install it.
+folderstorm-host-update-ready = An update is ready. Close all characters to install it.
+folderstorm-settings-update-version = Version { $version } is available (this one: { $current }).
+folderstorm-settings-update-how = A character never installs it itself: the host and every character run from the same program. Quit all characters and close the host, then start the viewer on its own: its update window installs it. Then start the host again.
 
 ## Folderstorm: the session host's MCP controller (folderstorm/plans/mcp-routing.md)
 folderstorm-chat-attention-assistant = Local assistant

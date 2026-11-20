@@ -469,6 +469,8 @@ impl App {
             },
             vram_mb: self.folderstorm_vram_mb(),
             hibernating,
+            // a new version found: the host says to close all characters
+            update: crate::folderstorm_characters::updates::found(&self.updater),
         }
         .cleaned()
     }

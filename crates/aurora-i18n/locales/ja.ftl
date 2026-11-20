@@ -6861,6 +6861,10 @@ folderstorm-settings-bug-line = バグを報告するには：ビューアーの
 folderstorm-help-menu = { $product } ヘルプ
 folderstorm-privacy-policy-hint = { $product } が何を誰に送信し、このコンピュータに何を保存するか。
 folderstorm-settings-updates-note = ホストとキャラクターは一つのプログラムです。ビューアーで選んだ設定はホストにも適用されます。
+folderstorm-update-managed = このキャラクターはセッションホストが起動したもので、ほかのキャラクターも同じプログラムで動いているため、自分ではアップデートをインストールしません。すべてのキャラクターとセッションホストを閉じてから、ビューアーを単独で起動してインストールしてください。
+folderstorm-host-update-ready = アップデートの準備ができました。インストールするには、すべてのキャラクターを閉じてください。
+folderstorm-settings-update-version = バージョン { $version } が利用できます（現在：{ $current }）。
+folderstorm-settings-update-how = ホストとすべてのキャラクターは同じプログラムで動いているため、キャラクターが自分でインストールすることはありません。すべてのキャラクターを終了してホストを閉じ、ビューアーを単独で起動してください。そのアップデートウィンドウがインストールします。その後、ホストを再び起動してください。
 
 ## Folderstorm: the session host's MCP controller (folderstorm/plans/mcp-routing.md)
 folderstorm-chat-attention-assistant = ローカルアシスタント
