@@ -5,6 +5,15 @@ reports), with the Windows installer. **No code changes yet: the human
 decides from this.** Written 2026-11-19 against `main` at `a624004f`.
 **Decided 2026-11-19: see [section 8](#8-decided).**
 
+**Status 2026-11-19:** PR 1 built on branch `claude/release-exe-name`, PR 2
+on `claude/release-draft` (stacked), both on the upstream sync of
+2026-11-19. PR 0 (upstream) skipped: the upstream tests were edited instead,
+through one renaming helper in `tests/updates.rs`. PR 2 attaches no policy
+file (decision 2), so no `folderstorm/update-policy.json` yet; the local
+path is [RELEASING.md](../RELEASING.md). The upstream sync also brought
+Linux in-place updates: the Linux package's folder and archive names follow
+`RELEASE_PREFIX` too, its executable keeps cargo's name.
+
 Line numbers point at that commit. "Upstream file" means a file of Aurora
 Viewer, where we only add small `// Folderstorm:` hooks.
 

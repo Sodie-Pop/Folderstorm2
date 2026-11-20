@@ -1,22 +1,33 @@
 name: Folderstorm release build
 
-# Manual build of the viewer and the MCP helper, kept as a workflow artifact
-# (a zip, or a tar.gz on Linux). Publishes nothing: no GitHub release, no tag,
-# no signing, no update feed (FEATURES.md 0.3 does those later). Ours: upstream's
-# release.yml stays unchanged and disabled. See folderstorm/CI.md.
-# Build steps follow upstream's release.yml (toolchain, cache, --locked
-# release build); packaging is folderstorm/scripts/package-release.ps1.
+# Manual build of the viewer and the MCP helper. Two modes:
+# - with a version (for example "0.1.0" or "0.2.0-beta.1"), from main: the
+#   assets of that release (folderstorm/scripts/package-release.ps1 -Tag) and
+#   a DRAFT GitHub release holding them. The human reviews and publishes it;
+#   viewers never see a draft. Same result as the local steps of
+#   folderstorm/RELEASING.md.
+# - without a version: a test build kept as a workflow artifact (a zip, or a
+#   tar.gz on Linux). Publishes nothing.
+# No signing, no update policy file. Ours: upstream's release.yml stays
+# unchanged and disabled. See folderstorm/CI.md. Build steps follow
+# upstream's release.yml (toolchain, cache, --locked release build, symbols,
+# read-only build job and write-only publish job).
 
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: Release version without "v", for example 0.1.0 or 0.2.0-beta.1 (empty = test build, no release)
+        required: false
+        default: ''
+        type: string
       version_label:
-        description: Label for the file names, for example "test1" (optional; letters, digits, dot, dash)
+        description: Test build only - label for the file names, for example "test1" (optional; letters, digits, dot, dash)
         required: false
         default: ''
         type: string
       platforms:
-        description: Platforms to build
+        description: Test build only - platforms to build (a release is Windows only)
         required: true
         default: windows
         type: choice
@@ -40,22 +51,45 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     env:
+      VERSION_INPUT: ${{ inputs.version }}
       LABEL_INPUT: ${{ inputs.version_label }}
       IMAGE_HOST_FOLDER: ${{ vars.FOLDERSTORM_IMAGE_HOST_FOLDER }}
+    outputs:
+      tag: ${{ steps.names.outputs.tag }}
+      product: ${{ steps.names.outputs.product }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Names
         id: names
         shell: bash
         run: |
-          # the slug comes from folderstorm-brand, not from this file
-          slug=$(sed -n 's/^pub const SLUG: &str = "\(.*\)";/\1/p' crates/folderstorm-brand/src/lib.rs)
-          label=$(printf '%s' "$LABEL_INPUT" | tr -c 'A-Za-z0-9.-' '-' | cut -c1-40)
-          [ -n "$label" ] || label=dev
+          # names come from folderstorm-brand, not from this file
+          brand=crates/folderstorm-brand/src/lib.rs
+          slug=$(sed -n 's/^pub const SLUG: &str = "\(.*\)";/\1/p' "$brand")
+          product=$(sed -n '/macro_rules! product/,/^}/s/^ *"\(.*\)"$/\1/p' "$brand")
           if ! printf '%s' "$slug" | grep -Eq '^[a-z0-9]+$'; then echo "no product slug found"; exit 1; fi
-          echo "name=$slug-$label-${GITHUB_SHA::7}-windows-x64" >> "$GITHUB_OUTPUT"
+          if [ -z "$product" ]; then echo "no product name found"; exit 1; fi
+          echo "product=$product" >> "$GITHUB_OUTPUT"
+          if [ -n "$VERSION_INPUT" ]; then
+            # our own SemVer line: stable, or a Beta channel pre-release (folderstorm/RELEASING.md)
+            if ! printf '%s' "$VERSION_INPUT" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.(0|[1-9][0-9]*))?$'; then
+              echo "::error::Not a release version: '$VERSION_INPUT' (0.1.0 or 0.2.0-beta.1)"; exit 1
+            fi
+            if [ "$GITHUB_REF" != refs/heads/main ]; then echo "::error::A release is built from main, not $GITHUB_REF"; exit 1; fi
+            tag="v$VERSION_INPUT"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "::error::$tag already exists"; exit 1; fi
+            # local only: aurora-version takes AURORA_VERSION_TAG only when the
+            # commit is that tag. GitHub creates the real tag at publish.
+            git tag "$tag"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          else
+            label=$(printf '%s' "$LABEL_INPUT" | tr -c 'A-Za-z0-9.-' '-' | cut -c1-40)
+            [ -n "$label" ] || label=dev
+            echo "name=$slug-$label-${GITHUB_SHA::7}-windows-x64" >> "$GITHUB_OUTPUT"
+          fi
       - name: Image host folder
         shell: bash
         run: |
@@ -72,10 +106,41 @@ jobs:
       - name: Build
         shell: pwsh
         env:
+          TAG: ${{ steps.names.outputs.tag }}
           FOLDERSTORM_IMAGE_HOST_FOLDER: ${{ vars.FOLDERSTORM_IMAGE_HOST_FOLDER }}
           FOLDERSTORM_IMAGE_HOST_TOKEN: ${{ secrets.FOLDERSTORM_IMAGE_HOST_TOKEN }}
-        run: cargo build --release --locked -p aurora-viewer -p folderstorm-mcp --features aurora-viewer/xr-static-loader
+        run: |
+          if ($env:TAG) { $env:AURORA_VERSION_TAG = $env:TAG }
+          cargo build --release --locked -p aurora-viewer -p folderstorm-mcp --features aurora-viewer/xr-static-loader
+      # the version upstream's release.yml pins
+      - name: Install dump_syms
+        if: steps.names.outputs.tag != ''
+        run: cargo install dump_syms --locked --version 2.3.9
+      # checks --version, then the zip, its .sha256 and the symbols (and their
+      # .sha256), in dist/
+      - name: Release files
+        if: steps.names.outputs.tag != ''
+        shell: pwsh
+        env:
+          TAG: ${{ steps.names.outputs.tag }}
+        run: |
+          $assets = ./folderstorm/scripts/package-release.ps1 -Exe target/release/aurora-viewer.exe -Mcp target/release/folderstorm-mcp.exe -Tag $env:TAG -Destination dist
+          $zip = $assets[0]
+          $line = (Get-Content -Raw -LiteralPath "$zip.sha256").Trim()
+          "Built for $env:TAG ($([math]::Round((Get-Item $zip).Length / 1MB)) MB): ``$line``. Not signed. Anything compiled into the build can be extracted from it." >> $env:GITHUB_STEP_SUMMARY
+          # the package folder itself is not a release file
+          Remove-Item -LiteralPath (Join-Path dist ([IO.Path]::GetFileNameWithoutExtension($zip))) -Recurse -Force
+      - name: Upload release files
+        if: steps.names.outputs.tag != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows
+          path: dist/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
       - name: Package
+        if: steps.names.outputs.tag == ''
         shell: pwsh
         env:
           NAME: ${{ steps.names.outputs.name }}
@@ -85,7 +150,9 @@ jobs:
           $hash = (Get-FileHash -LiteralPath "$env:NAME.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $env:NAME.zip" | Set-Content -LiteralPath "$env:NAME.zip.sha256" -Encoding utf8NoBOM
           "Built ``$env:NAME.zip`` ($([math]::Round((Get-Item "$env:NAME.zip").Length / 1MB)) MB), SHA-256 ``$hash``. Not signed. Anything compiled into the build can be extracted from it." >> $env:GITHUB_STEP_SUMMARY
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Upload test build
+        if: steps.names.outputs.tag == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.names.outputs.name }}
           path: |
@@ -94,9 +161,48 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  # The only job whose token can write: it creates the DRAFT release from the
+  # files the build uploaded. The tag is created by GitHub when the human
+  # publishes the draft, at the built commit. The header (Linden Lab
+  # disclaimer, support, privacy: Third-Party Viewer Policy) comes before the
+  # generated notes. No update policy file is attached.
+  publish:
+    name: Draft release
+    needs: windows
+    if: needs.windows.outputs.tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: folderstorm
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-windows
+          path: dist
+      - name: Create the draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.windows.outputs.tag }}
+          PRODUCT: ${{ needs.windows.outputs.product }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.zip dist/*.zip.sha256)
+          [ "${#files[@]}" -eq 4 ] || { echo "::error::expected 4 release files, got: ${files[*]}"; exit 1; }
+          args=("$TAG" "${files[@]}" --draft --target "$GITHUB_SHA" --title "$PRODUCT $TAG"
+                --notes-file folderstorm/release-notes-header.md --generate-notes)
+          case "$TAG" in *-*) args+=(--prerelease) ;; esac   # v0.2.0-beta.1
+          gh release create "${args[@]}"
+          echo "Draft release $TAG created: review it on the Releases page, then publish it." >> "$GITHUB_STEP_SUMMARY"
+
   linux:
     name: Linux x64
-    if: ${{ inputs.platforms == 'windows and linux' }}
+    if: ${{ inputs.version == '' && inputs.platforms == 'windows and linux' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
