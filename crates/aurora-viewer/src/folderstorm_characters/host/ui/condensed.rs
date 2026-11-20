@@ -21,6 +21,7 @@
 use super::super::faces;
 use super::comfort::quick_face;
 use super::{Act, Window_, comfort, status_now, warnings};
+use crate::folderstorm_characters::launch::{self, Surface, Target};
 use crate::theme::Palette;
 use crate::ui::widgets::{self, ActionKind};
 use ::folderstorm_session::host::{Phase, Quick, Slot, Voice};
@@ -149,11 +150,23 @@ impl Window_ {
                 let quick = if quitting { Quick::Nothing } else { desk.quick(slot) };
                 let (icon, help) = quick_face(quick, face.name.clone());
                 let enabled = quick != Quick::Nothing;
-                if widgets::action_button_if(ui, p, icon, quick_label(quick), ActionKind::Flat, ROW_BUTTON, enabled)
-                    .on_hover_text(help)
-                    .clicked()
-                    && enabled
-                {
+                // a character without a viewer: the first click asks "Launch?"
+                let starts = launch::starts_viewer(quick);
+                let target = Target {
+                    surface: Surface::Line,
+                    slot,
+                };
+                let (label, kind, help) = if starts && launch::armed(ui.ctx(), target) {
+                    (
+                        launch::confirm_label(),
+                        ActionKind::Caution,
+                        launch::confirm_help(face.name.clone()),
+                    )
+                } else {
+                    (quick_label(quick), ActionKind::Flat, help)
+                };
+                let button = widgets::action_button_if(ui, p, icon, label, kind, ROW_BUTTON, enabled).on_hover_text(help);
+                if launch::settle(ui.ctx(), &button, target, starts) && enabled {
                     acts.push(Act::Comfort(comfort::Act::Quick(slot)));
                 }
                 // what waits for an answer in its own window

@@ -1922,6 +1922,27 @@ May be two small PRs: 1a profiles, 1b behind policy.
     line (decided). No free order of the toolbar's buttons.
   - **Demo:** `AURORA_DEMO_SESSION_HOST_BAR=docked|popped`
     (`docs/TESTING.md`).
+  - **Launch UX follow-up (`claude/host-bar-launch-ux`):** three things
+    the first Windows test asked for. (1) A quick action that would start
+    a viewer (Launch, Restart) is confirmed: the first click arms the
+    button, which says "Launch?" in the attention colour; a second click
+    within 4 s starts it; time, the pointer leaving or another button
+    reverts it. The same in the docked bar, the compact "Character
+    controls" window, the host's row of quick actions, its cards and its
+    condensed lines; switching to a character in the world stays one
+    click and the hotkeys stay immediate. (2) The bar's list only
+    *selects* a character that is not logged in (it used to start it);
+    "Open a login" then says "Log in <name>", is in the accent and
+    pulses softly (1.2 s a pulse, 6 s, or until any click; steady with
+    Reduce motion) and starts exactly that character; the list shows
+    "Not logged in" in a muted colour. (3) The list has five lines, one
+    per slot, in slot order; an empty slot is "Add new avatar", which
+    opens the host's "New character profile…" page (`Page::NewProfile`,
+    so a viewer asks nothing new of the host). The rules are pure, in
+    `folderstorm-session` (`launch`: `Arming`, `Choice`, `bar::State::entries`);
+    their state is in egui's memory (`folderstorm_characters/launch.rs`),
+    so no upstream file changed. Demo `…_BAR=docked-states`
+    (`docs/TESTING.md`).
   - **Checked here:** the rules' tests; the row drawn by the
     processor's painter without a window, in both homes: the compact
     window (wide, narrow, narrower than its two ends, pinned) and a
