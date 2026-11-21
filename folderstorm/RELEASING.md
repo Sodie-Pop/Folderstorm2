@@ -10,7 +10,9 @@ There are three ways, with the same result (a **draft** release with the
 same six assets):
 
 - **One script** (the usual way): `folderstorm/scripts/build-release.ps1` on
-  the human's Windows PC ([below](#the-usual-way-one-script)).
+  the human's Windows PC ([below](#the-usual-way-one-script)). To release
+  the very files tested on a PR branch, without building again on `main`:
+  [Test, then release the same files](#test-then-release-the-same-files).
 - **By hand** (the fallback, if the script cannot be used): the same steps
   one at a time ([below](#by-hand-the-fallback)).
 - **GitHub Actions**: Actions tab › **Folderstorm release build** › Run
@@ -141,6 +143,52 @@ command instead.
 Then give the human the draft's link (`gh release view <tag> --repo
 Sodie-Pop/Folderstorm2 --web` opens it) and stop: see
 [The human reviews and publishes](#the-human-reviews-and-publishes).
+
+## Test, then release the same files
+
+To release exactly the files the human tested on a PR branch, with one
+build instead of two:
+
+1. **On the PR branch** (clean, and up to date with `main`):
+   `./folderstorm/scripts/build-release.ps1 -Version 0.2.0 -Candidate`.
+   The full release build (version stamped, zip, symbols, installer,
+   checksums), plus `release-candidate.json`: version, tag, commit, tree
+   hash, each asset's SHA-256, build date. The local tag only serves the
+   build and is removed right after it; nothing is pushed; no draft.
+2. **The human tests** the files it lists, in the **main checkout's**
+   `target/release-assets/<tag>/` (`$env:CARGO_TARGET_DIR`'s, when set),
+   even when the branch is a task worktree: `end-task.ps1` and
+   `new-task.ps1` delete a worktree's `target/`. Install the setup or unzip
+   the zip elsewhere; never change the files.
+3. **Merge the PR, and let no other PR merge before step 4.**
+4. **On `main`** (`git switch main`, `git pull --ff-only origin main`):
+   `./folderstorm/scripts/build-release.ps1 -Version 0.2.0 -FromExisting -Draft`
+   (`-DryRun` to check only). No cargo, no build. Besides the usual checks
+   (clean, up to date, the tag new and higher than the last release, `gh`),
+   it refuses unless `main`'s tree (`git rev-parse HEAD^{tree}`) is the
+   candidate's tree, which means the merged code is byte for byte what was
+   built, and unless every asset matches the recorded SHA-256 and its
+   `.sha256` file. Then it makes the local tag on `main` and the draft
+   (`--target` is `main`'s HEAD) with those files. The notes are the
+   candidate's, or a new `-NotesFile`'s.
+5. **The human publishes** the draft
+   ([below](#the-human-reviews-and-publishes)).
+
+A merge commit, a squash or a rebase of a PR that was up to date with `main`
+has the PR's tree. If the trees differ (another PR merged in between, the
+branch was behind `main`, or a commit came after the candidate), it lists
+the changed files (`git diff --stat <candidate commit> HEAD`) and releases
+nothing: build and test a new candidate (`-Candidate -Clean`), or release
+from `main` the usual way, which builds again. `-Candidate` warns when the
+branch does not contain `origin/main`. `-Clean` does not go with
+`-FromExisting`: a local tag already at `main`'s HEAD is kept, any other
+one must be removed by hand (`git tag -d <tag>`).
+
+**The built-in commit**: Help › About, bug reports, crash reports and the
+dev toolbox show the commit the binary was built from
+(`aurora_version::commit()`): with a candidate, the PR's commit, not
+`main`'s merge commit. The version itself has no commit in it (`0.2.0`).
+That is expected: the two commits have the same tree.
 
 ## By hand (the fallback)
 
