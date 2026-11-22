@@ -123,6 +123,7 @@ pub enum BarAction {
     AdminStatus(bool),
     Admin(AdminAction),
     ToggleWaterWalk,
+    ToggleAoMini,
     ToggleSwimming,
     MoveLockOptions,
     MovementEnhancer,
@@ -169,6 +170,8 @@ pub enum BarAction {
     /// World › Environment › Use shared environments
     /// (setSharedEnvironment: drops every local choice).
     SharedEnvironment,
+    /// The top bar's "Clouds paused" chip: let the clouds move again.
+    ResumeClouds,
     /// World › Environment › New sky / water / day cycle (World.EnvPreset
     /// new_sky, new_water, new_day_cycle).
     NewEnvironment(crate::world::env_select::SettingsKind),
@@ -279,6 +282,9 @@ pub struct StatusInfo<'a> {
     pub fps: f32,
     pub flying: bool,
     pub seated: bool,
+    /// The clouds are paused (Pause clouds) while the photo window is
+    /// closed: a chip that resumes them.
+    pub clouds_paused: bool,
     pub ping_ms: u32,
     pub balance: Option<i32>,
     /// The balance shown (`show_balance`, #1340).
@@ -566,7 +572,7 @@ pub(super) fn balance_menu(ui: &mut egui::Ui, p: &Palette, st: &StatusInfo, acti
             ..rows
         });
     }
-    if menu::item(ui, p, "coin-filled", aurora_i18n::tr!("currency-menu")) {
+    if menu::command(ui, p, "buy_currency") {
         *action = BarAction::BuyCurrency;
     }
 }
@@ -922,6 +928,16 @@ fn customize_avatar_enabled(seated: bool, sit_locked: bool) -> bool {
     !(seated && sit_locked)
 }
 
+/// Me › Stand up and its toolbar button are enabled only while seated and
+/// allowed to stand (`sit_locked` reads @unsit for a seated avatar):
+/// enable_standup_self (indra/newview/llviewermenu.cpp), Self.EnableStandUp
+/// in menu_viewer.xml, asks isSitting and RlvActions::canStand. The Legacy
+/// Viewer also hides the menu entry while standing; Aurora greys it, so that
+/// it can still be added to a toolbar.
+fn stand_up_enabled(seated: bool, sit_locked: bool) -> bool {
+    seated && !sit_locked
+}
+
 /// Viewer menus: the submenus of the wolf menu button of the navigation bar
 /// (without "Advanced" unless `advanced`). An entry carries the icon its
 /// function has in the bottom toolbar and in the world menus.
@@ -949,12 +965,11 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
             super::appearance::wearable_favorites::WINDOW,
             &mut panels.wearable_favorites,
         );
-        if menu::item(ui, p, "coin-filled", aurora_i18n::tr!("currency-menu")) {
+        if menu::command(ui, p, "buy_currency") {
             *action = BarAction::BuyCurrency;
         }
         // menu_viewer.xml: Avatar › Money Tracker
-        let tracker = aurora_i18n::tr!("money-tracker-title");
-        if menu::check(ui, p, "receipt-filled", tracker, panels.money_tracker, true) {
+        if menu::command_check(ui, p, "money_tracker", panels.money_tracker) {
             super::money_tracker::toggle(ui.ctx(), &mut panels.money_tracker);
         }
         // menu_viewer.xml: Pose Stand... (Floater.Show fs_posestand, enabled
@@ -966,14 +981,9 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         }
         // menu_viewer.xml: Me › Experiences (Picks, before it there, has
         // no entry in this menu)
-        flip_window(
-            ui,
-            p,
-            "flask-filled",
-            aurora_i18n::tr!("ui-experiences-title"),
-            super::experiences::WINDOW,
-            &mut panels.experiences,
-        );
+        if menu::command_check(ui, p, "experiences", panels.experiences) {
+            super::widgets::toggle_floater(ui.ctx(), super::experiences::WINDOW, &mut panels.experiences);
+        }
         // menu_viewer.xml: Avatar Welcome Pack… (Floater.Toggle
         // avatar_welcome_pack), after the attachments, which this menu does
         // not hold; on a grid with the page
@@ -996,7 +1006,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         ) {
             *action = BarAction::SitGround;
         }
-        if menu::item_if(ui, p, "man-filled", aurora_i18n::tr!("common-stand-up"), !st.seated || !sit_locked) {
+        if menu::command_tip(ui, p, "stand_up", stand_up_enabled(st.seated, sit_locked), "") {
             *action = BarAction::StandUp;
         }
         let fly = if st.flying {
@@ -1011,8 +1021,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
             *action = BarAction::ToggleFly;
         }
         // menu_viewer.xml: Fly Override (FSAlwaysFly), beside the flight
-        let fly_override = aurora_i18n::tr!("ui-bars-fly-override");
-        if menu::check(ui, p, "plane-departure-filled", fly_override, st.fly_override, true) {
+        if menu::command_check(ui, p, "fly_override", st.fly_override) {
             *action = BarAction::ToggleFlyOverride;
         }
         // Firestorm keeps its double-click teleport beside its movement
@@ -1023,12 +1032,11 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         if menu::check(ui, p, "lock-filled", aurora_i18n::tr!("movelock-title"), locked, true) {
             *action = BarAction::ToggleMoveLock;
         }
-        if menu::item(ui, p, "settings-filled", aurora_i18n::tr!("movelock-options")) {
+        if menu::command(ui, p, "movelock_options") {
             *action = BarAction::MoveLockOptions;
         }
         // menu_viewer.xml: Avatar › Movement › Quickjump, after Movelock
-        let quickjump = aurora_i18n::tr!("ui-bars-quickjump");
-        if menu::check(ui, p, "arrow-big-up-lines-filled", quickjump, st.quickjump, true) {
+        if menu::command_check(ui, p, "quickjump", st.quickjump) {
             *action = BarAction::ToggleQuickjump;
         }
         // menu_viewer.xml: Avatar › Movement › Face nearest avatar and
@@ -1045,7 +1053,7 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
                 &mut panels.avatar_align,
             );
         }
-        if menu::item(ui, p, "swimming", aurora_i18n::tr!("movement-title")) {
+        if menu::command(ui, p, "movement_enhancer") {
             *action = BarAction::MovementEnhancer;
         }
         // Firestorm keeps its double-click teleport beside its movement
@@ -1419,8 +1427,9 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
             if menu::item_if(ui, p, "adjustments-filled", aurora_i18n::tr!("common-personal-lighting"), free) {
                 panels.personal_lighting = true;
             }
-            // Aurora's own: the weather beside the lighting it rides on
-            if menu::item(ui, p, "umbrella-filled", aurora_i18n::tr!("ui-bars-aurora-weather")) {
+            // Aurora's own: the weather beside the lighting it rides on; it
+            // lights the scene, so @setenv holds it like the rest
+            if menu::item_if(ui, p, "umbrella-filled", aurora_i18n::tr!("ui-bars-aurora-weather"), free) {
                 *action = BarAction::AuroraWeather;
             }
             // Firestorm's Phototools "New preset" buttons (World.EnvPreset)
@@ -1515,6 +1524,11 @@ fn main_menus(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &StatusIn
         let photo = crate::keybinds::chord_label("KeyS", true, false, true);
         if menu::item_keys(ui, p, "photo-filled", aurora_i18n::tr!("photo-title"), &photo) {
             super::widgets::toggle_floater(ui.ctx(), super::snapshot::WINDOW, &mut panels.snapshot);
+        }
+        // Phototools (menu_viewer.xml `phototools_item_call`, alt|P)
+        let phototools = crate::keybinds::chord_label("KeyP", false, true, false);
+        if menu::item_keys(ui, p, "camera-cog", aurora_i18n::tr!("toolbar-command-phototools"), &phototools) {
+            super::widgets::toggle_floater(ui.ctx(), super::phototools::WINDOW, &mut panels.phototools);
         }
         // the Director (camera tracks and films), Aurora's own, beside the
         // photo: it was only on the toolbar
@@ -1813,27 +1827,31 @@ fn build_menu(
     if menu::item(ui, p, "wand", aurora_i18n::tr!("poser-title")) {
         *action = BarAction::Poser;
     }
-    if menu::item_keys(ui, p, "bone-filled", aurora_i18n::tr!("ik-edit-title"), ik_keys) {
+    if menu::command_keys(ui, p, "ik_edit", ik_keys) {
         *action = BarAction::IkEdit;
     }
-    for (mode, icon, label) in [
-        (0, "box", aurora_i18n::tr!("ui-bars-build-ctrl-b")),
-        (1, "pencil-filled", aurora_i18n::tr!("ui-bars-edit-objects-ctrl-3")),
-        (2, "circle-plus-filled", aurora_i18n::tr!("ui-bars-create-prims-ctrl-4")),
-        (3, "mountain-filled", aurora_i18n::tr!("ui-bars-edit-land-ctrl-5")),
+    let locked = ui.ctx().data(|d| d.get_temp::<bool>(rlva_build_locked_id())).unwrap_or(false);
+    if menu::item_if(ui, p, "box", aurora_i18n::tr!("ui-bars-build-ctrl-b"), !locked) {
+        *action = BarAction::Build(0);
+    }
+    // the shortcuts in the keys column, so that the toolbar buttons keep
+    // the short labels (menu_viewer.xml: Ctrl+3, Ctrl+4, Ctrl+5)
+    for (mode, id, key) in [
+        (1, "build_edit", "Digit3"),
+        (2, "build_create", "Digit4"),
+        (3, "build_land", "Digit5"),
     ] {
-        let locked = ui.ctx().data(|d| d.get_temp::<bool>(rlva_build_locked_id())).unwrap_or(false);
-        if menu::item_if(ui, p, icon, label, !locked) {
+        let keys = crate::keybinds::chord_label(key, true, false, false);
+        if menu::command_keys_if(ui, p, id, !locked, &keys) {
             *action = BarAction::Build(mode);
         }
     }
     // menu_viewer.xml: Build › Object › Edit Particles, greyed out until an
     // object we own is selected (LLEnableEditParticleSource)
-    if menu::item_tip(
+    if menu::command_tip(
         ui,
         p,
-        "sparkles-filled",
-        aurora_i18n::tr!("ui-bars-edit-particles"),
+        "edit_particles",
         edit_particles,
         if edit_particles {
             ""
@@ -1863,10 +1881,10 @@ fn build_menu(
         build_options_menu(ui, p, action, options);
     });
     menu::separator(ui, p);
-    if menu::item(ui, p, "file-upload-filled", aurora_i18n::tr!("import-menu")) {
+    if menu::command(ui, p, "import") {
         *action = BarAction::Import;
     }
-    if menu::item(ui, p, "cube-3d-sphere", aurora_i18n::tr!("blender-live-title")) {
+    if menu::command(ui, p, "blender_live") {
         *action = BarAction::BlenderLive;
     }
 }
@@ -2290,10 +2308,11 @@ fn location_field(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &Stat
         return None;
     };
     // the landmarks and places the typed text names: none for the SLURL
-    // the field opens with, nor with the location hidden
+    // the field opens with; @showloc keeps them, as
+    // LLLocationInputCtrl::rebuildLocationHistory has no RLVa test
     let (list_id, picker_key) = (id.with("suggestions"), id.with("picker"));
     let mut picker = location_suggest::Picker::load(ui.ctx(), picker_key);
-    picker.refresh(&st.landmarks, st.tp_session.items, text, !st.location_hidden && *text != slurl);
+    picker.refresh(&st.landmarks, st.tp_session.items, text, *text != slurl);
     // the arrows and Enter go to the list before the field takes them
     let (mut take, moved) = if !panels.nav_edit_new && ui.memory(|m| m.has_focus(id)) {
         picker.keys(ui, id)
@@ -2326,7 +2345,7 @@ fn location_field(ui: &mut egui::Ui, p: &Palette, panels: &mut Panels, st: &Stat
         ui.ctx().request_repaint();
         return None;
     }
-    picker.refresh(&st.landmarks, st.tp_session.items, text, !st.location_hidden && *text != slurl);
+    picker.refresh(&st.landmarks, st.tp_session.items, text, *text != slurl);
     if !picker.list().is_empty()
         && let Some(i) = location_suggest::list_area(ui, p, list_id, resp.rect, picker.list(), picker.chosen(), moved)
     {
@@ -2570,6 +2589,21 @@ pub fn top_bars(
                             state_chip(ui, p, text);
                         }
                     }
+                    // Pause clouds lasts the session: say so, and a click ends it
+                    if st.clouds_paused
+                        && super::widgets::action_button(
+                            ui,
+                            p,
+                            "cloud-filled",
+                            aurora_i18n::tr!("ui-bars-clouds-paused"),
+                            super::widgets::ActionKind::Flat,
+                            Vec2::new(0.0, CHIP_HEIGHT + 4.0),
+                        )
+                        .on_hover_text(aurora_i18n::tr!("ui-bars-clouds-paused-tip"))
+                        .clicked()
+                    {
+                        action = BarAction::ResumeClouds;
+                    }
                     ui.add_space(4.0);
                     egui::Frame::new()
                         .fill(p.field)
@@ -2603,9 +2637,12 @@ pub fn top_bars(
                                 "{} ({:.0}, {:.0}, {:.0})",
                                 st.region, st.position.x, st.position.y, st.position.z
                             ));
+                            // LLAgentUI::buildLocationString (llagentui.cpp): "(Hidden
+                            // parcel), (Hidden region)" under @showloc; the field still
+                            // opens on the SLURL, hidden in its turn
+                            // (LLLocationInputCtrl::changeLocationPresentation)
                             if st.location_hidden {
                                 loc = format!("{}, {}", st.parcel, st.region);
-                                panels.nav_edit = None;
                             }
                             if !st.maturity.is_empty() {
                                 loc.push_str(&format!(" - {}", st.maturity));
@@ -2698,6 +2735,7 @@ pub fn run_command(ctx: &egui::Context, cmd: &str, panels: &mut Panels) -> BarAc
         "appearance" => toggle("appearance", &mut panels.appearance),
         "avatar_studio" => panels.avatar_studio = !panels.avatar_studio,
         "ao" => toggle("ao", &mut panels.ao),
+        "ao_mini" => return BarAction::ToggleAoMini,
         "minimap" => panels.minimap = !panels.minimap,
         "worldmap" => toggle("worldmap", &mut panels.world_map),
         "regiontracker" => toggle(super::region_tracker::WINDOW, &mut panels.region_tracker),
@@ -2735,6 +2773,8 @@ pub fn run_command(ctx: &egui::Context, cmd: &str, panels: &mut Panels) -> BarAc
         "snapshot_to_disk" => return BarAction::PhotoToDisk,
         "photo_roll" => return BarAction::PhotoRoll,
         "beacons" => toggle(super::beacons::WINDOW, &mut panels.beacons),
+        // Floater.Toggle phototools
+        "phototools" => toggle(super::phototools::WINDOW, &mut panels.phototools),
         // Floater.Toggle quickprefs
         "quickprefs" => toggle(super::quick_prefs::WINDOW, &mut panels.quick_prefs),
         // Aurora's own: the Director's window and its timeline
@@ -2794,6 +2834,20 @@ pub fn run_command(ctx: &egui::Context, cmd: &str, panels: &mut Panels) -> BarAc
         }
         "build" => return BarAction::Build(0),
         "ik_edit" => return BarAction::IkEdit,
+        "build_edit" => return BarAction::Build(1),
+        "build_create" => return BarAction::Build(2),
+        "build_land" => return BarAction::Build(3),
+        "edit_particles" => return BarAction::EditParticles,
+        "import" => return BarAction::Import,
+        "blender_live" => return BarAction::BlenderLive,
+        "buy_currency" => return BarAction::BuyCurrency,
+        "money_tracker" => super::money_tracker::toggle(ctx, &mut panels.money_tracker),
+        "experiences" => toggle(super::experiences::WINDOW, &mut panels.experiences),
+        "stand_up" => return BarAction::StandUp,
+        "fly_override" => return BarAction::ToggleFlyOverride,
+        "movelock_options" => return BarAction::MoveLockOptions,
+        "quickjump" => return BarAction::ToggleQuickjump,
+        "movement_enhancer" => return BarAction::MovementEnhancer,
         "poser" => return BarAction::TogglePoser,
         "profile" => return BarAction::ToggleMyProfile,
         "reporter" => return BarAction::ToggleReportAbuse,
@@ -2829,7 +2883,10 @@ fn command_active(cmd: &str, panels: &Panels, flying: bool, seated: bool, mousel
         "texture_library" => panels.texture_library,
         "gestures" => panels.gestures,
         "appearance" => panels.appearance,
+        "money_tracker" => panels.money_tracker,
+        "experiences" => panels.experiences,
         "avatar_studio" => panels.avatar_studio,
+        "ao_mini" => panels.ao_mini,
         "minimap" => panels.minimap,
         "worldmap" => panels.world_map,
         "places" => panels.places,
@@ -2853,6 +2910,7 @@ fn command_active(cmd: &str, panels: &Panels, flying: bool, seated: bool, mousel
         "performance" | "statistics" => panels.perf,
         "snapshot" => panels.snapshot,
         "beacons" => panels.beacons,
+        "phototools" => panels.phototools,
         "quickprefs" => panels.quick_prefs,
         "director" => panels.director,
         "second_camera" => panels.second_camera,
@@ -3142,6 +3200,10 @@ pub struct MicButton<'a> {
     pub open_prefs: bool,
     /// Output: the mode switch changed.
     pub mode_changed: bool,
+    /// Voice output: the device, or empty for the main audio output.
+    pub voice_output_device: String,
+    /// Output: the voice output device was changed.
+    pub voice_output_changed: bool,
     /// Key (or mouse button) of push-to-talk, shown with the hold mode.
     pub key: Option<crate::keybinds::Binding>,
     /// Microphone and audio output in use ("" = the system's default) and
@@ -3421,6 +3483,8 @@ fn mic_panel(ui: &mut egui::Ui, p: &Palette, icons: &Icons, mic: &mut MicButton,
                 "mic_panel_input",
                 &mut mic.input_device,
                 mic.input_devices,
+                None,
+                false,
             ),
             (
                 "headphones-filled",
@@ -3428,9 +3492,21 @@ fn mic_panel(ui: &mut egui::Ui, p: &Palette, icons: &Icons, mic: &mut MicButton,
                 "mic_panel_output",
                 &mut mic.output_device,
                 mic.output_devices,
+                None,
+                false,
+            ),
+            (
+                // voice chat: a headset, apart from the main output's headphones
+                "headset-filled",
+                aurora_i18n::tr!("ui-options-voice-output"),
+                "mic_panel_voice_output",
+                &mut mic.voice_output_device,
+                mic.output_devices,
+                Some(aurora_i18n::tr!("ui-options-same-as-audio-output")),
+                true,
             ),
         ];
-        for (icon, name, id, device, list) in devices {
+        for (icon, name, id, device, list, default_label, voice_output) in devices {
             ui.horizontal(|ui| {
                 // the icons stand in the column of the modes' icons
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -3440,8 +3516,15 @@ fn mic_panel(ui: &mut egui::Ui, p: &Palette, icons: &Icons, mic: &mut MicButton,
                 hover.on_hover_text(name);
                 ui.add_space(9.0);
                 let width = ui.available_width();
-                let (changed, open) = super::options::device_combo(ui, id, device, list, width, mic.devices_listing);
+                let (changed, open) = if let Some(default_label) = default_label {
+                    super::options::named_combo(ui, id, device, list, width, default_label, mic.devices_listing)
+                } else {
+                    super::options::device_combo(ui, id, device, list, width, mic.devices_listing)
+                };
                 mic.devices_changed |= changed;
+                if voice_output {
+                    mic.voice_output_changed |= changed;
+                }
                 *list_open |= open;
             });
         }
@@ -3570,6 +3653,14 @@ pub(crate) fn toolbar_row(
     action: &mut BarAction,
 ) -> Vec<egui::Rect> {
     let mut rects = Vec::with_capacity(buttons.len());
+    // the app's RLVa and flight locks, read once for the row
+    let (sit_locked, build_locked, fly_locked) = ui.ctx().data(|d| {
+        (
+            d.get_temp::<bool>(rlva_sit_locked_id()).unwrap_or(false),
+            d.get_temp::<bool>(rlva_build_locked_id()).unwrap_or(false),
+            d.get_temp::<bool>(fly_locked_id()).unwrap_or(false),
+        )
+    });
     for b in buttons {
         if b.command == "speak" {
             let open_voice = std::mem::take(&mut toolbar.voice_options);
@@ -3581,7 +3672,11 @@ pub(crate) fn toolbar_row(
             }
             continue;
         }
-        let active = if b.command == "ao" {
+        let active = if b.command == "fly_override" {
+            toolbar.fly_override_active
+        } else if b.command == "quickjump" {
+            toolbar.quickjump_active
+        } else if b.command == "ao" {
             row.ao_active || toolbar.ao_quick.open
         } else if matches!(b.command.as_str(), "movelock" | "move_lock") {
             toolbar.movelock_active
@@ -3623,11 +3718,18 @@ pub(crate) fn toolbar_row(
         // the Photo roll's button, dimmed while the session has no photo
         // and the Avatar Welcome Pack's and the Destination Guide's on a grid without one (GridFeatureCheck),
         // and the pose stand's, dimmed while we sit (Agent.IsActionAllowed
-        // fs_when_not_sitting), its own ground lock included
+        // fs_when_not_sitting), its own ground lock included; Edit
+        // particles' without an object of ours selected
+        // (LLEnableEditParticleSource), and Stand up's while standing
+        // (enable_standup_self)
         let no_pack = b.command == "avatar" && !toolbar.avatar_welcome;
         let no_guide = b.command == "destinations" && !toolbar.destinations;
-        let usable =
-            !(b.command == "photo_roll" && toolbar.photo_roll_empty) && !no_pack && !no_guide && !(b.command == "pose_stand" && row.seated);
+        let usable = !(b.command == "photo_roll" && toolbar.photo_roll_empty)
+            && !no_pack
+            && !no_guide
+            && !(b.command == "pose_stand" && row.seated)
+            && !(b.command == "edit_particles" && !toolbar.edit_particles)
+            && !(b.command == "stand_up" && !row.seated);
         let tip = if badge {
             aurora_i18n::tr!(
                 "ui-bars-unread",
@@ -3662,7 +3764,11 @@ pub(crate) fn toolbar_row(
         } else if no_guide {
             format!("{}\n{}", super::toolbar::label(b), aurora_i18n::tr!("destinations-unavailable"))
         } else if !usable {
-            format!("{}\n{}", super::toolbar::label(b), aurora_i18n::tr!("photo-reel-none"))
+            match b.command.as_str() {
+                "edit_particles" => format!("{}\n{}", super::toolbar::label(b), aurora_i18n::tr!("particle-editor-menu-tip")),
+                "photo_roll" => format!("{}\n{}", super::toolbar::label(b), aurora_i18n::tr!("photo-reel-none")),
+                _ => super::toolbar::label(b).to_owned(),
+            }
         } else {
             super::toolbar::label(b).to_owned()
         };
@@ -3677,9 +3783,9 @@ pub(crate) fn toolbar_row(
         // the Favorites button: its grid of favourites opens upwards
         let grid_id = egui::Id::unique("bars_favorites_grid_open");
         let active = active || (b.command == "favorites" && ui.ctx().data(|d| d.get_temp::<bool>(grid_id)).unwrap_or(false));
-        let rlva_locked = b.command == "sit" && ui.ctx().data(|d| d.get_temp::<bool>(rlva_sit_locked_id())).unwrap_or(false)
-            || b.command == "build" && ui.ctx().data(|d| d.get_temp::<bool>(rlva_build_locked_id())).unwrap_or(false)
-            || b.command == "fly" && ui.ctx().data(|d| d.get_temp::<bool>(fly_locked_id())).unwrap_or(false);
+        let rlva_locked = (b.command == "sit" || b.command == "stand_up" && row.seated) && sit_locked
+            || matches!(b.command.as_str(), "build" | "build_edit" | "build_create" | "build_land") && build_locked
+            || b.command == "fly" && fly_locked;
         let response = tool_button(
             ui,
             p,
@@ -4063,6 +4169,24 @@ mod tests {
         }
     }
 
+    /// enable_standup_self (indra/newview/llviewermenu.cpp): Me › Stand up
+    /// is greyed while standing, and while seated with RLVa's @unsit.
+    #[test]
+    fn me_stand_up_is_enabled_only_while_seated_and_free_to_stand() {
+        for (seated, sit_locked, enabled) in [
+            (false, false, false),
+            (false, true, false),
+            (true, false, true),
+            (true, true, false),
+        ] {
+            assert_eq!(
+                stand_up_enabled(seated, sit_locked),
+                enabled,
+                "seated {seated}, locked {sit_locked}"
+            );
+        }
+    }
+
     #[test]
     fn legacy_chat_bar_bounds_paragraphs_and_releases_space_when_cleared() {
         let ctx = egui::Context::default();
@@ -4152,8 +4276,10 @@ mod tests {
         ctx: egui::Context,
         input: String,
         output: String,
+        voice_output: String,
         /// Outputs of the last frame.
         changed: bool,
+        voice_output_changed: bool,
         listed: bool,
         open_prefs: bool,
         /// The microphone's state, kept from frame to frame.
@@ -4175,6 +4301,7 @@ mod tests {
                 denied: self.denied.clone(),
                 input_device: self.input.clone(),
                 output_device: self.output.clone(),
+                voice_output_device: self.voice_output.clone(),
                 input_devices: &devices,
                 output_devices: &devices,
                 ..Default::default()
@@ -4195,7 +4322,9 @@ mod tests {
             output.textures_delta.clear();
             self.input = mic.input_device.clone();
             self.output = mic.output_device.clone();
+            self.voice_output = mic.voice_output_device.clone();
             self.changed = mic.devices_changed;
+            self.voice_output_changed = mic.voice_output_changed;
             self.listed = mic.list_devices;
             self.open_prefs = mic.open_prefs;
             self.on = mic.on;
@@ -4375,6 +4504,7 @@ mod tests {
     #[test]
     fn microphone_panel_stays_open_while_its_device_lists_are_used() {
         let default = aurora_i18n::tr!("ui-options-system-default");
+        let same_as_audio = aurora_i18n::tr!("ui-options-same-as-audio-output");
         let mut bench = Bench::default();
         bench.frame(vec![]);
         assert!(!bench.panel_shown());
@@ -4385,6 +4515,7 @@ mod tests {
         // the microphone: its list unfolds over the panel, which stays
         let combos = bench.texts(default);
         assert_eq!(combos.len(), 2, "one combo per device, both on the system's default");
+        assert_eq!(bench.texts(same_as_audio).len(), 1, "voice initially follows the audio output");
         bench.click(combos[0]);
         for _ in 0..3 {
             assert!(bench.panel_shown(), "unfolding a device list must not close the panel");
@@ -4400,6 +4531,7 @@ mod tests {
         // then the audio output, in the same visit of the panel
         let combos = bench.texts(default);
         assert_eq!(combos.len(), 1, "only the output is still on the system's default");
+        assert_eq!(bench.texts(same_as_audio).len(), 1);
         bench.click(combos[0]);
         assert!(bench.panel_shown());
         let entry = *bench.texts("Device A").first().expect("the list of outputs is unfolded");
@@ -4409,6 +4541,24 @@ mod tests {
         for _ in 0..3 {
             assert!(bench.panel_shown());
         }
+
+        // Voice output has its own choice and an explicit follow-main option.
+        let combo = bench.texts(same_as_audio)[0];
+        bench.click(combo);
+        assert!(bench.panel_shown());
+        let entry = *bench.texts("Device B").last().expect("the voice output list is unfolded");
+        bench.click(entry);
+        assert!(bench.changed, "voice output changes are included in the device action");
+        assert!(bench.voice_output_changed, "the voice output change is exposed separately");
+        assert_eq!(bench.voice_output, "Device B");
+        assert!(bench.panel_shown());
+
+        let combo = *bench.texts("Device B").last().expect("the voice output is selected");
+        bench.click(combo);
+        let follow = *bench.texts(same_as_audio).first().expect("the follow-main option is in the list");
+        bench.click(follow);
+        assert!(bench.voice_output_changed);
+        assert!(bench.voice_output.is_empty(), "empty voice output follows the audio output");
 
         // a click away from the panel and its button closes it
         bench.click(egui::pos2(50.0, 50.0));
@@ -4476,6 +4626,7 @@ mod tests {
             ("avatar", super::super::avatar_welcome::WINDOW, |p| p.avatar_welcome),
             ("destinations", super::super::destinations::WINDOW, |p| p.destinations),
             ("beacons", super::super::beacons::WINDOW, |p| p.beacons),
+            ("phototools", super::super::phototools::WINDOW, |p| p.phototools),
             ("quickprefs", super::super::quick_prefs::WINDOW, |p| p.quick_prefs),
             ("director", super::super::director::WINDOW, |p| p.director),
             ("second_camera", super::super::second_camera::WINDOW, |p| p.second_camera),
@@ -4540,6 +4691,16 @@ mod tests {
             assert_eq!(command_active(command.id, &panels, false, false, false), active);
             assert_eq!((panels.appearance, panels.inventory, panels.snapshot), before);
         }
+    }
+
+    #[test]
+    fn mini_ao_toolbar_command_is_account_action_and_lights_when_open() {
+        let ctx = egui::Context::default();
+        let mut panels = Panels::from_settings(&crate::settings::Settings::default());
+        assert!(matches!(run_command(&ctx, "ao_mini", &mut panels), BarAction::ToggleAoMini));
+        assert!(!command_active("ao_mini", &panels, false, false, false));
+        panels.ao_mini = true;
+        assert!(command_active("ao_mini", &panels, false, false, false));
     }
 
     #[test]
@@ -4687,6 +4848,21 @@ mod tests {
         assert!(command_active("quickprefs", &panels, false, false, false));
         run_command(&ctx, "quickprefs", &mut panels);
         assert!(!panels.quick_prefs);
+    }
+
+    /// The toolbar's Phototools button toggles its window and lights while
+    /// it is open.
+    #[test]
+    fn the_phototools_toolbar_command_toggles_its_window() {
+        let ctx = egui::Context::default();
+        let mut panels = Panels::from_settings(&crate::settings::Settings::default());
+        assert!(super::super::toolbar::ready("phototools"));
+        assert!(!command_active("phototools", &panels, false, false, false));
+        run_command(&ctx, "phototools", &mut panels);
+        assert!(panels.phototools);
+        assert!(command_active("phototools", &panels, false, false, false));
+        run_command(&ctx, "phototools", &mut panels);
+        assert!(!panels.phototools);
     }
 
     #[test]

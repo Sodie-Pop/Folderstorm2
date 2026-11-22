@@ -26,6 +26,7 @@ GitHub turns Actions off on a fork until its owner enables them.
 | Crash triage (`crash-triage.yml`) | Disable | Sorts crash reports filed as issues on Aurora's repository. |
 | Wiki (`wiki.yml`) | Disable | Publishes upstream's guides to the repository wiki. |
 | Release (`release.yml`) | Disable | Builds and publishes "Aurora-Viewer" zips on a version tag, with Aurora's update policy. The fork releases with the local script of [RELEASING.md](RELEASING.md) or `folderstorm-release.yml` instead. |
+| Sign test (`sign-test.yml`) | Disable | Manual only. Tries upstream's SignPath code signing with Aurora's SignPath project; it fails without the `SIGNPATH_*` variable and secret, which the fork does not have. Release and Nightly (already disabled) also sign through SignPath now (`.github/actions/signpath-sign`). |
 | Folderstorm release build (`folderstorm-release.yml`) | **Keep** | Ours: a draft GitHub release from a version, or a test build artifact (see below). |
 | Media plugins (`media-plugins.yml`) | Disable | Manual only. Builds the media plugin packs. Aurora's published packs can be used instead. |
 | FFmpeg pack (`ffmpeg-pack.yml`) | Disable | Builds the Director's ffmpeg pack, on a pull request that changes `scripts/ffmpeg-pack.sh` or by hand, with macOS jobs that never start on the fork. The viewer downloads Aurora's published pack instead (see BRANDING.md). |

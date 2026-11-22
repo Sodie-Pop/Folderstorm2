@@ -619,6 +619,12 @@ pub(super) fn legacy_strip(
     }
     let mut visible = slots.iter().position(|slot| selected(st, prefs, *slot)).unwrap_or(0);
     let (_, responses) = widgets::tabs_with_responses(ui, p, &mut visible, &all);
+    // inventory held over a tab opens it, as upstream's strip does (open_tabs_on_drag_and_drop)
+    for (index, response) in responses.iter().enumerate() {
+        if super::drag::navigation::tab_held_over(ui, response.rect, egui::Id::unique(("legacy-inventory-drag-open", st.ui_id, index))) {
+            visible = index;
+        }
+    }
     for (n, (tab, name)) in prefs.custom_tabs.iter().zip(&names).enumerate() {
         let at = tab_ids.len() + n;
         if let Some(response) = responses.get(at) {

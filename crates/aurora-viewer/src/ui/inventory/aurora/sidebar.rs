@@ -374,7 +374,10 @@ pub(super) fn show(
         }
         let waiting = if tab == RECEIVED_TAB { unseen } else { 0 };
         let response = entry(ui, p, icon, label, Some(count), waiting, st.tab == tab, 8.0);
-        if response.clicked() {
+        // inventory held over a tab opens it (panel_main_inventory.xml's
+        // open_tabs_on_drag_and_drop)
+        let held = crate::ui::inventory::drag::navigation::tab_held_over(ui, response.rect, response.id);
+        if response.clicked() || (held && st.tab != tab) {
             set_tab(st, prefs, tab);
         }
         if custom_tabs::has_menu(tab) {
