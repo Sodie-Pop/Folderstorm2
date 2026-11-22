@@ -137,7 +137,7 @@ Phase 1 (read):
 | `viewer_status` | health | product, version, session state (logged out / logged in / demo), inventory usable, folders fetched / total, items known; `viewer_session` and `capabilities` (see "Login binding") |
 | `inventory_search` | read | items and folders whose name contains `query` (case-insensitive), filters `folder_id` / `path` (subtree), `type`, `include_library`, `include_trash`; `limit` ≤ 200, `truncated` flag |
 | `inventory_list_folder` | read | a folder by `folder_id` or `path` (root when neither): its subfolders and items (≤ 500), whether it is fetched |
-| `inventory_item` | read | one item: name, description, type, folder and path, creator, creation date, permissions, worn, link target; `asset_id` only per the rule above |
+| `inventory_item` | read | one item: name, description, type, folder and path, creator, creation date, permissions, worn, link target, `flags` decoded by type (an object: `coalesced`, `slam_perm`, `slam_sale`, `perm_overwrite`; a landmark: `visited`; settings: `settings_type`) and `flags_raw`; `asset_id` only per the rule above |
 | `outfits_list` | read | outfits under My Outfits, with the current base outfit marked |
 | `worn_items` | read | the Current Outfit's clothing and body parts and the attached objects |
 

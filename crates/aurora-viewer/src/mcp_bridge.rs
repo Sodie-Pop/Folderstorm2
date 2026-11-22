@@ -53,6 +53,7 @@ mod gesture_tests;
 pub mod gestures; // Folderstorm: gestures and own posing (mcp-gestures.md)
 pub mod inventory_edits;
 pub mod inventory_reads;
+mod item_flags; // the flags of inventory_item (coalesced, rez overrides)
 pub mod journal;
 pub mod landmark;
 pub mod login;
