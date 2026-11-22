@@ -13,7 +13,7 @@
 //!   bar; About Land refused unless the user owns or manages the parcel
 //!   (`World::rlva_can_view_parcel`);
 //! - @shownearby: the nearby avatars refused, as People › Nearby is empty;
-//! - @shownames: avatar names anonymous (`rlva::privacy::anonymous`), as
+//! - @shownames: avatar names anonymous (`World::rlva_anonymous`), as
 //!   the People list and the Sound Explorer show them, without their ids;
 //!   object names and descriptions go through the viewer's text filter;
 //! - @shownametags: an avatar whose tag is hidden comes anonymous too
@@ -25,7 +25,6 @@
 
 use crate::scene::sounds::history::History;
 use crate::world::World;
-use crate::world::rlva::privacy;
 use aurora_net::build::ObjectProps;
 use aurora_net::parcel_flags as pf;
 use folderstorm_mcp_bridge::protocol::world::{LIMIT_DEFAULT, LIMIT_MAX, RADIUS_DEFAULT, RADIUS_MAX, RADIUS_MIN, WORLD_TOOLS};
@@ -169,7 +168,7 @@ fn shown_text(world: &World, text: &str) -> String {
 /// (`anonymous` true, and no id is given), None while the name is unknown.
 fn resident(world: &World, id: Uuid, tag_hidden: bool) -> (Option<String>, bool) {
     if !world.rlva_can_name(id) || tag_hidden {
-        return (Some(privacy::anonymous(id).display_name.clone()), true);
+        return (Some(world.rlva_anonymous(id).display_name.clone()), true);
     }
     (world.person_name(&id).filter(|n| !n.is_empty()), false)
 }

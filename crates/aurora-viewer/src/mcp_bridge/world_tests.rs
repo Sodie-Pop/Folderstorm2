@@ -300,11 +300,7 @@ fn shownames_and_shownametags_make_the_avatars_anonymous() {
         assert_eq!(rows.len(), 1, "{restriction}");
         let wolf = &rows[0];
         assert_eq!(wolf["anonymous"], true, "{restriction}");
-        assert_eq!(
-            wolf["name"],
-            json!(crate::world::rlva::privacy::anonymous(DEMO_LOUP).display_name),
-            "{restriction}"
-        );
+        assert_eq!(wolf["name"], json!(world.rlva_anonymous(DEMO_LOUP).display_name), "{restriction}");
         assert!(wolf.get("id").is_none() && wolf.get("friend").is_none(), "{restriction}");
         let text = out.to_string();
         assert!(
@@ -354,13 +350,29 @@ fn nearby_objects_are_whole_linksets_without_avatars_or_attachments() {
 #[test]
 fn nearby_objects_name_what_the_viewer_already_knows() {
     let (mut world, _) = plaza();
+    // RLVa hides the names in the name cache only, like the Legacy Viewer
+    // (`World::rlva_name_filter`): the wolf's is there, as for anyone near
+    let name = wolf_name(&world);
+    let (first, last) = name.split_once(' ').unwrap_or((name.as_str(), "Resident"));
+    world.social.avatar_names.on_display_names(
+        &[aurora_net::AvatarNameData {
+            id: DEMO_LOUP,
+            username: format!("{}.{}", first.to_lowercase(), last.to_lowercase()),
+            display_name: name.clone(),
+            legacy_first: first.into(),
+            legacy_last: last.into(),
+            ..Default::default()
+        }],
+        &[],
+        Some(3600),
+    );
     let near = ok(&world, "world_nearby_objects", json!({"limit": 1}));
     let id: Uuid = serde_json::from_value(near["rows"][0]["id"].clone()).expect("an object");
     let props: HashMap<Uuid, ObjectProps> = [(
         id,
         ObjectProps {
             object_id: id,
-            name: format!("{}'s bench", wolf_name(&world)),
+            name: format!("{name}'s bench"),
             description: "Sit here".into(),
             owner_id: DEMO_LOUP,
             ..Default::default()
@@ -369,11 +381,10 @@ fn nearby_objects_name_what_the_viewer_already_knows() {
     .into();
     let out = observe_with(&world, "world_nearby_objects", json!({"limit": 1}), &[&props], None).expect("objects");
     let r = &out["rows"][0];
-    assert_eq!(r["name"], json!(format!("{}'s bench", wolf_name(&world))));
+    assert_eq!(r["name"], json!(format!("{name}'s bench")));
     assert_eq!(r["description"], "Sit here");
     assert_eq!(r["owner"]["id"], json!(DEMO_LOUP));
     // @shownames: the owner and the name in the object's name are hidden
-    let name = wolf_name(&world);
     restrict(&mut world, "shownames=n");
     let out = observe_with(&world, "world_nearby_objects", json!({"limit": 1}), &[&props], None).expect("objects");
     let r = &out["rows"][0];

@@ -170,7 +170,7 @@ fn friend_name(world: &World, id: Uuid) -> String {
     if world.rlva_can_name(id) {
         world.social.name_of(&id)
     } else {
-        crate::world::rlva::privacy::anonymous(id).display_name.clone()
+        world.rlva_anonymous(id).display_name.clone()
     }
 }
 
@@ -689,7 +689,7 @@ mod tests {
         // line arrives), and an IM session names its people
         // (`conversation_names`)
         restrict(&mut w, "@shownames=n");
-        let hidden = crate::world::rlva::privacy::anonymous(JANE).display_name.clone();
+        let hidden = w.rlva_anonymous(JANE).display_name.clone();
         let told = look(&mut export, &w, now);
         for batch in told.iter().filter(|b| b.conversation == Conversation::Nearby) {
             assert!(batch.restart, "told again only to replace");
