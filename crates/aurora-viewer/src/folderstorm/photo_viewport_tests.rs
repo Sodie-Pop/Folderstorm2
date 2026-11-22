@@ -193,6 +193,11 @@ fn viewfinder_layout(area: Option<Rect>, pointer: Pos2) -> (Vec<(&'static str, R
             ambient_occlusion: 0,
             quality_boost: false,
             hdr: true,
+            shadows: crate::ui::snapshot::ShadowView {
+                softness: 0.25,
+                intensity: 1.0,
+                soft: false,
+            },
             env: crate::ui::snapshot::EnvView {
                 catalog: &catalog,
                 own: crate::world::eep_env::LocalView::SHARED,
@@ -201,6 +206,7 @@ fn viewfinder_layout(area: Option<Rect>, pointer: Pos2) -> (Vec<(&'static str, R
                 loading: false,
             },
             back_key: None,
+            free_refused: false,
             quality_reduced: false,
             pano: None,
         };
