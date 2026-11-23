@@ -148,6 +148,24 @@ const RUNS: &[&str] = &[
     "workspaces",
     "layout_toggle",
     "gesture_board",
+    // upstream's Build and Me menu commands (2026-11-22 sync); those that
+    // need a selection or an RLVa permission check it themselves
+    "ao_mini",
+    "ik_edit",
+    "build_edit",
+    "build_create",
+    "build_land",
+    "edit_particles",
+    "import",
+    "blender_live",
+    "buy_currency",
+    "money_tracker",
+    "experiences",
+    "stand_up",
+    "fly_override",
+    "movelock_options",
+    "quickjump",
+    "movement_enhancer",
 ];
 
 /// The class of the command `id`; None for one this table does not know
@@ -767,8 +785,8 @@ pub fn command_gate(id: &str, facts: &Facts) -> Result<(), Greyed> {
         "photo_roll" if facts.photo_roll_empty => Err(Greyed::NoPhoto),
         "destinations" if facts.no_guide => Err(Greyed::NoGuide),
         "layout_toggle" if facts.toggle_unset => Err(Greyed::ToggleUnset),
-        "sit" if facts.sit_locked => Err(Greyed::Rlva),
-        "build" if facts.build_locked => Err(Greyed::Rlva),
+        "sit" | "stand_up" if facts.sit_locked => Err(Greyed::Rlva),
+        "build" | "build_edit" | "build_create" | "build_land" if facts.build_locked => Err(Greyed::Rlva),
         "fly" if facts.fly_locked => Err(Greyed::Rlva),
         _ => Ok(()),
     }

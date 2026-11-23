@@ -314,7 +314,7 @@ fn plan_move(args: &Value, cx: &Ctx) -> Result<Planned, ToolError> {
     }
     // LLToolPie::walkToClickedLocation under RLVa: where a local teleport
     // may not go (@tplocal, @sittp, @unsit while seated), no walk either
-    if !world.rlva_can_teleport_global(origin + local) {
+    if !world.rlva_can_teleport_local(origin + local) {
         return Err(not_allowed(
             "an RLV restriction (@tplocal, @sittp or @unsit) does not let the avatar go there, as for a double click on the ground",
         ));
