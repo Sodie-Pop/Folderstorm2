@@ -1,0 +1,120 @@
+name: Folderstorm macOS (manual)
+
+# A manual check that the fork builds and draws on an Apple Silicon Mac:
+# Actions tab › "Folderstorm macOS (manual)" › Run workflow (pick the branch
+# in "Use workflow from"). Upstream's macos.yml runs on every pull request
+# and push to main, and stays disabled on the fork because GitHub's macOS
+# runners did not start for it (folderstorm/CI.md); this one runs only when
+# asked, so a runner that never comes costs nothing but this run.
+#
+# Steps, as upstream's macos.yml: clippy with warnings as errors (dead code
+# is the Windows job's), the viewer and folderstorm-mcp built, the
+# workspace tests if asked, and one demo frame on the runner's Apple GPU.
+# That frame compiles every pipeline of the scene with Apple's Metal
+# compiler, which has refused shaders that Vulkan accepted.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: Also run the workspace tests (adds about half an hour)
+        type: boolean
+        default: false
+      demo:
+        description: Draw one demo frame on Metal
+        type: boolean
+        default: true
+
+concurrency:
+  group: folderstorm-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  macos:
+    name: clippy, build, demo (macOS)
+    # Apple Silicon (arm64), the only Macs Aurora supports
+    runs-on: macos-15
+    # a build from nothing on GitHub's runner takes 35 to 45 minutes
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      # the version of rust-toolchain.toml
+      - name: Rust stable
+        run: |
+          rustup toolchain install --profile minimal --no-self-update
+          rustup component add clippy
+      # a run on main saves its dependencies for the next ones (any branch
+      # restores main's cache)
+      - uses: ./.github/actions/rust-cache
+        id: cache
+        with:
+          name: folderstorm-macos
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --profile ci --workspace --all-targets --locked -- -D warnings -A dead-code
+      - name: Build the viewer and folderstorm-mcp
+        run: cargo build --profile ci --locked -p aurora-viewer -p folderstorm-mcp
+      - name: Save the Rust cache
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        # a cache that is not saved only slows the next run: never a red job
+        timeout-minutes: 10
+        continue-on-error: true
+        uses: ./.github/actions/rust-cache/save
+        with:
+          key: ${{ steps.cache.outputs.key }}
+      - name: Tests
+        if: inputs.tests
+        run: cargo test --profile ci --workspace --locked --no-fail-fast
+      # the offline demo past its loading fade, then quit, as upstream's
+      # macos.yml: a missing image, a non-zero exit, the GPU stall notice
+      # not shown, or a wgpu error in the log (a pipeline Metal refused)
+      # fails
+      - name: A demo frame on Metal
+        if: inputs.demo
+        timeout-minutes: 20
+        env:
+          AURORA_DEMO: '1'
+          AURORA_DEMO_GPU_STALL: '300:10'
+          AURORA_CAPTURE: ${{ runner.temp }}/metal-demo.png
+          AURORA_CAPTURE_FRAMES: '620'
+          AURORA_CAPTURE_EXIT: '1'
+        run: |
+          cargo run --profile ci --locked -p aurora-viewer -- --title "CI macOS"
+          test -s "$AURORA_CAPTURE"
+          # the data folder's name comes from folderstorm-brand: find the log
+          log=$(find "$HOME/Library/Application Support" -path '*/logs/aurora-demo-ci-macos.log' -print -quit)
+          if [ -z "$log" ]; then
+            echo "::error::no demo log found under ~/Library/Application Support"
+            exit 1
+          fi
+          echo "demo log: $log"
+          if ! grep -q "notice shown" "$log" || ! grep -q "the graphics card answered again" "$log"; then
+            echo "::error::the GPU stall and its notice did not happen as expected (see the demo log)"
+            exit 1
+          fi
+          if grep -q "wgpu error" "$log"; then
+            grep -A8 "wgpu error" "$log" | head -60
+            echo "::error::wgpu errors in the demo log (a shader or a pipeline Metal refused?)"
+            exit 1
+          fi
+      - name: Gather the demo image and log
+        if: always() && inputs.demo
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos-demo"
+          cp "$RUNNER_TEMP/metal-demo.png" "$RUNNER_TEMP/macos-demo/" 2>/dev/null || true
+          find "$HOME/Library/Application Support" -path '*/logs/aurora-demo-*.log' -exec cp {} "$RUNNER_TEMP/macos-demo/" \; 2>/dev/null || true
+      - name: Demo image and log
+        if: always() && inputs.demo
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-demo
+          path: ${{ runner.temp }}/macos-demo/
+          if-no-files-found: warn

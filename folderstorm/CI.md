@@ -19,6 +19,7 @@ GitHub turns Actions off on a fork until its owner enables them.
 | CI (`ci.yml`) | **Keep** | fmt, clippy (Windows and Linux), secret scan. Tests run on pushes to `main`. Without Aurora's private runners and token, it uses GitHub's runners. |
 | macOS (`macos.yml`) | Disable | clippy and tests on macOS when a change touches macOS code. Since 2026-11-16 GitHub's `macos-15` runners never start for the fork (jobs wait 15 minutes, then are cancelled without a log), and no Mac build ships, so the human disabled it in the Actions tab. The file stays as upstream's; enable it again there if a Mac build is ever wanted. |
 | Folderstorm tests (`folderstorm-tests.yml`) | **Keep** | Ours: Windows tests on every pull request (see below). |
+| Folderstorm macOS (`folderstorm-macos.yml`) | **Keep** | Ours: a manual macOS build and demo frame, in place of `macos.yml` (see below). |
 | Nightly (`nightly.yml`) | Disable | Tags and publishes Aurora nightly builds twice a day. |
 | Fuzz (`fuzz.yml`) | Disable | Nightly fuzzing of upstream's parsers. Upstream already runs it. |
 | PR description (`pr-description.yml`) | Disable | Upstream's bot that enforces its PR template and labels. |
@@ -45,6 +46,18 @@ request, and skips them when only documentation changed. Once it has run
 once, it can be required in **Settings → Branches → branch protection rule
 for `main`** through its check **tests (Windows, PR)**, alongside CI's
 **fmt, clippy (Windows)**, **clippy (Linux)** and **secret scan**.
+
+## Manual macOS check
+
+`folderstorm-macos.yml` checks that the fork builds and draws on an Apple
+Silicon Mac, only when started by hand: Actions tab › **Folderstorm macOS
+(manual)** › **Run workflow**, with the branch picked in *Use workflow
+from*. It runs clippy, builds the viewer and `folderstorm-mcp`, and draws
+one demo frame on Metal (as upstream's `macos.yml`); tick *Also run the
+workspace tests* for the tests. A run on `main` saves the dependencies'
+cache for the next runs. The demo's image and log are the run's
+`macos-demo` artifact. If GitHub's macOS runner never starts (the reason
+`macos.yml` is disabled), cancel the run: nothing else waits on it.
 
 ## Manual release build
 
