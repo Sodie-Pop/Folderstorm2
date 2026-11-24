@@ -899,7 +899,11 @@ mod tests {
             &inv,
             entry,
             &InventoryUi::default(),
-            &InventoryPreferences::default(),
+            // Folderstorm: "Wear" is greyed unless allowed (outfit_safety.rs)
+            &InventoryPreferences {
+                context_wear: true,
+                ..Default::default()
+            },
             &Facts::default(),
         );
         for (key, replace) in [("wear", true), ("add", false)] {

@@ -844,11 +844,11 @@ fn key(signer: &Ed25519KeyPair) -> signature::Key {
 /// (`feed::signed_name`).
 fn vouching(tag: &str) -> String {
     if cfg!(windows) {
-        format!("Aurora-Viewer-{tag}-windows-x64.zip")
+        branded(&format!("Aurora-Viewer-{tag}-windows-x64.zip")) // Folderstorm: branded
     } else if cfg!(target_os = "macos") {
         format!("Aurora-Viewer-{tag}-macos-arm64.dmg")
     } else {
-        format!("Aurora-Viewer-{tag}-linux-x64.tar.gz")
+        branded(&format!("Aurora-Viewer-{tag}-linux-x64.tar.gz")) // Folderstorm: branded
     }
 }
 

@@ -396,7 +396,7 @@ fn bare_id(window: egui::Id) -> egui::Id {
 pub fn take_bare(ctx: &egui::Context, window: egui::Id) -> Option<egui::Rect> {
     capture::remember_bare_size(ctx, window);
     let sized = egui::AreaState::load(ctx, window).is_some_and(|state| state.size.is_some());
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let id = bare_id(window);
     ctx.data_mut(|d| {
         let mut request = d.get_temp::<BareRequest>(id)?;
@@ -447,7 +447,7 @@ fn request(ctx: &egui::Context, s: &mut Session, window: &Window, room: &Room, f
         Target {
             pos,
             size: fitted.size,
-            asked: ctx.cumulative_frame_nr(),
+            asked: ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT),
             retries: 0,
         },
     );
@@ -457,7 +457,7 @@ fn request(ctx: &egui::Context, s: &mut Session, window: &Window, room: &Room, f
 /// stopped short of its place is asked for its position again. True when a
 /// request was made.
 fn follow_up(ctx: &egui::Context, s: &mut Session) -> bool {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let mut asked = false;
     s.targets.retain(|id, target| {
         let Some(window) = windows::find(id) else { return false };
@@ -586,7 +586,7 @@ fn start(
             report.fitted += 1;
         }
     }
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     session(ctx, |s| {
         // a new apply replaces one still under way
         s.viewer.begin(plan, report.missing == 0);
@@ -637,7 +637,7 @@ pub fn previous(ctx: &egui::Context, live: &mut Live) -> bool {
     let window = kept.window.as_ref().map(|(frame, monitors, _)| (frame, monitors.as_slice()));
     let (report, held) = start(ctx, live, window, Some(&kept.world), kept.windows.as_ref());
     if let Some((open, workspace, folders)) = kept.shown {
-        let frame = ctx.cumulative_frame_nr();
+        let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
         session(ctx, |s| s.queued_open = Some(QueuedOpen { open, folders, frame }));
         live.store.active_workspace = workspace.filter(|name| live.store.find_workspace(name).is_some());
     }
@@ -711,7 +711,7 @@ pub fn apply_workspace(ctx: &egui::Context, live: &mut Live, index: usize) -> Re
     // (only when it has HUDs of its own, and unless the user keeps them)
     let mut context = workspace.context();
     let undo_huds = !live.store.keep_huds;
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     session(ctx, |s| {
         if undo_huds && let (Some(ours), Some(huds)) = (&s.ours, &context.huds) {
             context.take_off = ours.take_off_for(huds);
@@ -889,7 +889,7 @@ pub fn ours(ctx: &egui::Context) -> Option<context::Ours> {
 /// The windows are as the active layout has them from now on: compared
 /// with a new baseline once settled.
 fn rebaseline(ctx: &egui::Context) {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     session(ctx, |s| {
         s.baseline = None;
         s.settle = Some(now + SETTLE);
@@ -1162,7 +1162,7 @@ pub fn frame(ctx: &egui::Context, live: &mut Live, seen: Option<Seen>, shell: &m
     );
     context::set_view(ctx, hud_view(live.store, shell));
     run_requests(ctx, live, &mut outcome);
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let mut s = session(ctx, std::mem::take);
     look_after_huds(&mut s, shell, now, ctx.input(|i| i.time));
     let found = s.viewer.frame(ctx, live.store, seen, &mut outcome.commands);
@@ -1310,7 +1310,7 @@ fn folder_windows(ctx: &egui::Context, room: &Room, folders: &Folders, shell: &m
 /// The windows' part of a frame, in the interface `room`. True when the
 /// store changed.
 fn windows_frame(ctx: &egui::Context, live: &mut Live, s: &mut Session, room: &Room, shell: &mut dyn Shell) -> bool {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let mut save = false;
     if !s.started {
         s.started = true;

@@ -180,7 +180,7 @@ fn sides_id() -> egui::Id {
 /// the area [`Areas::sides`] gives around it; None when the bars are not
 /// around the world (the side toolbars are then laid out with the others).
 pub fn set_sides(ctx: &egui::Context, around: Option<(Rect, Rect)>) {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let sides = around.map(|(world, area)| Sides { frame, world, area });
     ctx.data_mut(|d| d.insert_temp::<Option<Sides>>(sides_id(), sides));
 }
@@ -188,7 +188,7 @@ pub fn set_sides(ctx: &egui::Context, around: Option<(Rect, Rect)>) {
 /// What [`set_sides`] said this frame or the last one (the hidden
 /// interface's edges are read before the bars are laid out).
 fn sides_set(ctx: &egui::Context) -> Option<Sides> {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data(|d| d.get_temp::<Option<Sides>>(sides_id()))
         .flatten()
         .filter(|sides| sides.frame.saturating_add(1) >= now)
@@ -258,7 +258,7 @@ fn thickness_id() -> egui::Id {
 /// When the last frame drew no bars, or `room` is not one of that area (the
 /// bars were hidden while the world moved), the last measure stands.
 pub fn thickness(ctx: &egui::Context, room: Option<Rect>) -> Thickness {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let area = ctx
         .data(|d| d.get_temp::<super::BarsArea>(super::bars_frame_id()))
         .filter(|area| area.frame.saturating_add(1) >= now)

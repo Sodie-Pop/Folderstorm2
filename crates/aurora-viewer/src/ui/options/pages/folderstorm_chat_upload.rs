@@ -28,7 +28,7 @@ static WATCHING: Once = Once::new();
 fn forget(ui: &mut egui::Ui) {
     let ctx = ui.ctx();
     let mut typed = TYPED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if !typed.is_empty() && !shown_last_frame(DRAWN.load(Ordering::Relaxed), ctx.cumulative_frame_nr()) {
+    if !typed.is_empty() && !shown_last_frame(DRAWN.load(Ordering::Relaxed), ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT)) {
         wipe(&mut typed);
     }
 }
@@ -161,7 +161,7 @@ fn token_row(ui: &mut egui::Ui, p: &crate::theme::Palette, s: &settings::UploadS
     };
     let status = chat_upload::token_status(ui.ctx(), &origin);
     WATCHING.call_once(|| ui.ctx().on_begin_pass("fs-chat-upload-token", std::sync::Arc::new(forget)));
-    DRAWN.store(ui.ctx().cumulative_frame_nr(), Ordering::Relaxed);
+    DRAWN.store(ui.ctx().cumulative_frame_nr_for(egui::ViewportId::ROOT), Ordering::Relaxed);
     ui.vertical(|ui| {
         let (text, color) = match status {
             TokenStatus::Checking => (tr!("fs-chat-upload-token-checking"), p.muted),

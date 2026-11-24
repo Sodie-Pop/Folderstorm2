@@ -132,7 +132,7 @@ fn in_points([x, y, w, h]: [u32; 4], pixels_per_point: f32) -> egui::Rect {
 
 /// Remembers the bars' area for this frame (`bars_screen`, `floater_room`).
 pub fn set_bars_area(ctx: &egui::Context, rect: Option<egui::Rect>) {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data_mut(|d| d.insert_temp(bars_frame_id(), BarsArea { frame, rect }));
 }
 
@@ -152,7 +152,7 @@ fn bars_frame_id() -> egui::Id {
 /// or the last one (a window shown before the bars this frame reads the
 /// last one), None when they follow the whole window.
 fn confined_bars(ctx: &egui::Context) -> Option<egui::Rect> {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data(|d| d.get_temp::<BarsArea>(bars_frame_id()))
         .filter(|area| area.frame.saturating_add(1) >= now)
         .and_then(|area| area.rect)
@@ -194,7 +194,7 @@ fn world_area_id() -> egui::Id {
 /// Remembers the world's part of the window for this frame (None: the
 /// world fills it), whatever the bars do: the dialogs centre in it.
 pub fn set_world_area(ctx: &egui::Context, rect: Option<[u32; 4]>) {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data_mut(|d| d.insert_temp(world_area_id(), WorldArea { frame, rect }));
 }
 
@@ -218,7 +218,7 @@ pub fn dialog_area(ctx: &egui::Context) -> egui::Rect {
 /// None when the world fills the window or no world is shown (the
 /// backgrounds of the margins, `crate::folderstorm::backgrounds`).
 pub fn world_area(ctx: &egui::Context) -> Option<egui::Rect> {
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data(|d| d.get_temp::<WorldArea>(world_area_id()))
         .filter(|area| area.frame.saturating_add(1) >= now)
         .and_then(|area| area.rect)

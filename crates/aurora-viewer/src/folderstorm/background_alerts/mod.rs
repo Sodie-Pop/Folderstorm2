@@ -374,7 +374,7 @@ pub fn take_tests(ctx: &egui::Context) -> Vec<(AlertEvent, Sound)> {
 /// The inventory's sounds as last told by the app ([`inventory_sounds`]),
 /// and a request for them while Preferences shows the choice.
 pub fn inventory_list(ctx: &egui::Context) -> Option<std::sync::Arc<Vec<(Uuid, String)>>> {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data_mut(|d| {
         d.insert_temp(inventory_wanted_id(), frame);
         d.get_temp(inventory_id())
@@ -383,7 +383,7 @@ pub fn inventory_list(ctx: &egui::Context) -> Option<std::sync::Arc<Vec<(Uuid, S
 
 /// Preferences asked for the inventory's sounds in the last frames.
 pub fn inventory_wanted(ctx: &egui::Context) -> bool {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data(|d| d.get_temp::<u64>(inventory_wanted_id()))
         .is_some_and(|asked| asked.saturating_add(2) >= frame)
 }

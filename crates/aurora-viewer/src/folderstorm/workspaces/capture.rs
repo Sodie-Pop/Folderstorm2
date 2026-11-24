@@ -43,7 +43,7 @@ pub struct Room {
 pub fn room(ctx: &egui::Context) -> Option<Room> {
     let rect = ctx.content_rect();
     let scale = ctx.pixels_per_point();
-    let usable = ctx.cumulative_frame_nr() > 0
+    let usable = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT) > 0
         && rect.is_finite()
         && rect.width() >= MIN_FRAME.x
         && rect.height() >= MIN_FRAME.y
