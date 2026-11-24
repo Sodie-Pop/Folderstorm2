@@ -51,7 +51,8 @@ impl App {
     fn folderstorm_focused(&self) -> bool {
         let window = self.folderstorm_window().map(|w| w.has_focus());
         let window = crate::folderstorm_characters::window_focus(&self.folderstorm_characters.window_focus, window);
-        gpu::has_keyboard(self.focused, window)
+        // (a window outside in front counts: upstream's `in_front`, app/outside.rs)
+        gpu::has_keyboard(self.focused, window) || self.outside.focused()
     }
 
     /// The window: the renderer's, or the one kept without a renderer while

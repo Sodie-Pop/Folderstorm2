@@ -337,7 +337,7 @@ fn a_tab_opens_in_a_window_of_its_own() {
         assert!(v.in_front(&floater), "classic={classic}");
 
         // RLVa's @showinv closes it
-        v.st.close_additional_window();
+        v.st.close_showinv_windows();
         v.settle(false);
         assert!(v.st.windows.is_empty(), "classic={classic}: closed by @showinv");
 

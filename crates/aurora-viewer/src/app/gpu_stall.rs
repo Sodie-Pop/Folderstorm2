@@ -74,6 +74,10 @@ impl App {
         if renderer.device_lost() && !self.gpu_stall.lost && self.folderstorm_gpu_loss(recovers) {
             return;
         }
+        // once per loss, whether it is recovered or closes the viewer
+        if renderer.device_lost() && !self.gpu_stall.lost {
+            crate::crash::open_files_at_loss();
+        }
         if renderer.device_lost() && recovers && !self.gpu_stall.lost {
             crate::crash::gpu_loss_snapshot();
             use super::gpu_recovery::LossStep;

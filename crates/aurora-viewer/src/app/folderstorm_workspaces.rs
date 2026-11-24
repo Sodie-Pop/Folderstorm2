@@ -124,6 +124,7 @@ impl apply::Shell for Windows<'_> {
                 false,
                 false,
                 false,
+                false,
             ),
             // (the mini-map has no title bar: its flag alone, as its
             // toolbar button)
@@ -139,7 +140,7 @@ impl apply::Shell for Windows<'_> {
 
     fn close(&mut self, _: &egui::Context, window: &crate::folderstorm::workspaces::windows::Window) {
         let id = window.id;
-        // that window alone (not `close_additional_window`, RLVa's: every
+        // that window alone (not `close_showinv_windows`, RLVa's: every
         // additional window and every tab window)
         if let Some(slot) = inventory_slot(id) {
             self.inventory.folderstorm_close_slot(slot);

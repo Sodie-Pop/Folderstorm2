@@ -69,7 +69,14 @@ pub(crate) fn inspect(rig: &Rig, bytes: &[u8]) -> Result<(String, usize, Option<
         } else if joint.locked {
             why = Some("it pins joints to the world");
         } else if rig.names.get(&joint.name) == Some(&rig.pelvis)
-            && !same(rotation, if joint.change { Quat::IDENTITY } else { rig.local_rot[rig.pelvis] })
+            && !same(
+                rotation,
+                if joint.change == Some(true) {
+                    Quat::IDENTITY
+                } else {
+                    rig.local_rot[rig.pelvis]
+                },
+            )
         {
             why = Some("it turns the pelvis");
         }
@@ -126,6 +133,7 @@ mod tests {
             scales: rig.scale.clone(),
             locks: HashMap::new(),
             origin: rig.local_rot.clone(),
+            hold_rotation: vec![false; rig.len()],
         })
     }
 

@@ -102,6 +102,7 @@ mod net_profile;
 mod oiia;
 mod omnifilter;
 mod open_path;
+mod outside;
 mod overlay_hooks;
 mod own_motion;
 mod physics_editor;

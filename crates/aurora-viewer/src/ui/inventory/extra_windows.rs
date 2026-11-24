@@ -163,7 +163,7 @@ impl InventoryUi {
     }
 
     /// *Close all additional windows*: every slot, not the folder or tab
-    /// windows (RLVa's `close_additional_window` closes those too).
+    /// windows (RLVa's `close_showinv_windows` closes those too).
     pub(crate) fn folderstorm_close_all_slots(&mut self) {
         for w in self.windows.iter_mut().filter(|w| w.additional && slot_of(w.id).is_some()) {
             w.open = false;

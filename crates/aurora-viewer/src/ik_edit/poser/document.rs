@@ -22,10 +22,11 @@ pub(super) struct Joint {
     scale: [f32; 3],
     locked: bool,
     /// `rotation` is a change to apply on the destination's own origin, like
-    /// the Legacy Viewer's diff; a complete rotation otherwise. Absent in
-    /// complete joints and in the files saved before it existed.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    change: bool,
+    /// the Legacy Viewer's diff. Both false and absent remain absolute
+    /// for older readers. An explicit false also keeps a neutral key for
+    /// a deliberate T-pose; absence keeps older files sparse on upload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    change: Option<bool>,
 }
 impl Joint {
     pub fn new(name: String, rotation: Quat, translation: Vec3, scale: Vec3, locked: bool, change: bool) -> Self {
@@ -35,7 +36,7 @@ impl Joint {
             translation: translation.to_array(),
             scale: scale.to_array(),
             locked,
-            change,
+            change: change.then_some(true),
         }
     }
 }
@@ -51,7 +52,7 @@ impl Joint {
         self.locked
     }
     pub fn change(&self) -> bool {
-        self.change
+        self.change.unwrap_or(false)
     }
 }
 /// What a document's translations and scales are measured from. Aurora's
@@ -113,7 +114,9 @@ impl Document {
                     let complete = origin.dot(rig.local_rot[bone]).abs() > 0.9999999;
                     Joint {
                         name: name.clone(),
-                        rotation: if complete {
+                        rotation: if session.pose.hold_rotation[bone] {
+                            session.pose.authored_rotation(rig, bone)
+                        } else if complete {
                             rotation
                         } else {
                             (origin.inverse() * rotation).normalize()
@@ -122,7 +125,11 @@ impl Document {
                         translation: (session.pose.positions[bone] - session.base.positions[bone]).to_array(),
                         scale: (session.pose.scales[bone] / session.base.scales[bone]).to_array(),
                         locked: session.pose.locks.contains_key(&bone),
-                        change: !complete,
+                        change: if session.pose.hold_rotation[bone] {
+                            Some(false)
+                        } else {
+                            (!complete).then_some(true)
+                        },
                     }
                 })
                 .collect(),
@@ -169,11 +176,12 @@ impl Document {
                 continue;
             }
             let rotation = Quat::from_array(joint.rotation).normalize();
-            if joint.change {
+            if joint.change == Some(true) {
                 pose.rotations[bone] = (pose.origin[bone] * rotation).normalize();
             } else {
                 pose.rotations[bone] = rotation;
                 pose.origin[bone] = rig.local_rot[bone];
+                pose.hold_rotation[bone] = joint.change == Some(false);
             }
             if !rotations_only {
                 let (translation, scale) = (Vec3::from_array(joint.translation), Vec3::from_array(joint.scale));

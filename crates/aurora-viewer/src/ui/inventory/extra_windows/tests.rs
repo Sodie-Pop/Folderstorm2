@@ -131,7 +131,7 @@ fn close_all_closes_the_slots_and_rlva_every_additional_window() {
         st.folderstorm_new_window(&ctx);
     }
     assert_eq!(st.folderstorm_open_slots(), 16);
-    st.close_additional_window();
+    st.close_showinv_windows();
     assert!(open_slots(&st).is_empty());
     assert!(!st.windows.iter().any(|w| w.open && custom_tabs::window::is(w)));
 }
