@@ -309,6 +309,29 @@ fn item_details_hide_asset_ids_without_full_permissions() {
     );
 }
 
+/// An item's flags: decoded by type, raw beside, the same in inventory_get_many.
+#[test]
+fn item_details_give_the_flags_by_type() {
+    let mut inv = demo_inventory();
+    let object = inv.items.get_mut(&OBJECT).expect("demo object");
+    object.flags = crate::ui::inventory::OBJECT_HAS_MULTIPLE_ITEMS | 0x100;
+    let item = call(&inv, "inventory_item", json!({"item_id": OBJECT.to_string()}));
+    assert_eq!(item["flags"]["coalesced"], true);
+    assert_eq!(item["flags"]["slam_perm"], true);
+    assert_eq!(item["flags"]["slam_sale"], false);
+    assert_eq!(item["flags"]["perm_overwrite"]["everyone"], false);
+    assert_eq!(item["flags_raw"], 0x20_0100);
+    let many = call(
+        &inv,
+        "inventory_get_many",
+        json!({"ids": [OBJECT.to_string(), TEXTURE.to_string()]}),
+    );
+    let entries = many["entries"].as_array().expect("entries");
+    assert_eq!(entries[0]["flags"], item["flags"]);
+    assert_eq!(entries[1]["flags"], json!({}));
+    assert_eq!(entries[1]["flags_raw"], json!(inv.items[&TEXTURE].flags));
+}
+
 /// The rule for every kind of owner and mask (AGENTS.md § 2 "Tests").
 #[test]
 fn asset_ids_follow_the_viewer_rule_for_every_owner() {

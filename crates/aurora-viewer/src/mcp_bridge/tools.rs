@@ -495,6 +495,8 @@ pub(super) fn item(args: &Value, cx: &Ctx) -> Result<Value, ToolError> {
     out["library"] = json!(library(inv, item.parent));
     out["in_trash"] = json!(inv.in_folder_type(item.id, FT_TRASH));
     out["permissions"] = json!({"you": rights(held), "next_owner": rights(item.next_owner_mask)});
+    out["flags"] = super::item_flags::of(item);
+    out["flags_raw"] = json!(item.flags);
     match item.asset_type {
         // a link's "asset" is the item or folder it points to, not an asset
         24 => {

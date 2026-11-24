@@ -681,7 +681,7 @@ pub const TOOLS: &[ToolSpec] = &[
     },
     ToolSpec {
         name: "inventory_item",
-        description: "Details of one inventory item: name, description, type, folder, creator, creation date, permissions, whether it is worn. The asset id is given only for an item with full permissions, as in the viewer.",
+        description: "Details of one inventory item: name, description, type, folder, creator, creation date, permissions, whether it is worn, its flags (an object: coalesced, rez overrides; a landmark: visited; settings: their type; with the raw value as flags_raw). The asset id is given only for an item with full permissions, as in the viewer.",
         class: Some(Class::Read),
         also: None,
         schema: item_schema,
