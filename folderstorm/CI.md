@@ -81,7 +81,7 @@ folder: `Folderstorm2-v<V>-windows-x64-setup.exe` and its `.sha256`. Inno
 Setup 6 is on GitHub's `windows-latest` image (its software list, checked
 2026-11-20); the step installs it with Chocolatey if it is ever missing.
 The **Draft release** job, the only one with `contents: write`, then runs
-`gh release create v<V> --draft --target <commit>` with those six files,
+`gh release create v<V> --draft --target <commit>` with those six files (unsigned: viewers do not offer such a draft as an update, see RELEASING.md, "Signing key"),
 `folderstorm/release-notes-header.md` and GitHub's generated notes, and
 `--prerelease` for a beta. Nothing is visible to viewers until the human
 publishes the draft; GitHub creates the tag then. No update policy file is

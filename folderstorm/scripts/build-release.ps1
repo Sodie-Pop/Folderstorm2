@@ -15,10 +15,13 @@
       3. cargo build --release --locked -p aurora-viewer -p folderstorm-mcp
          --features aurora-viewer/xr-static-loader, with AURORA_VERSION_TAG;
       4. package-release.ps1 -Tag: the zip, the symbols and their .sha256;
+         then the zip's .sha256 signed with the maintainer's update key
+         (scripts/sign-release.ps1: <zip>.sha256.sig, which the updater
+         checks against folderstorm-brand's UPDATE_KEYS);
       5. build-installer.ps1: the setup .exe and its .sha256;
       6. a summary: each asset with its size and SHA-256, and the gh command;
       7. with -Draft: gh release create <tag> --draft (--prerelease for a
-         beta) with the six assets. Never published, never --latest: the
+         beta) with the seven assets. Never published, never --latest: the
          human reviews the draft and publishes it on GitHub.
 
     The files go to <target>/release-assets/<tag>/ (<target> is
@@ -76,7 +79,10 @@ param(
     # the Breakpad symbol tool (cargo install dump_syms --locked --version 2.3.9)
     [string]$DumpSyms = 'dump_syms',
     # Inno Setup's compiler (default: found by build-installer.ps1 -Locate)
-    [string]$Iscc
+    [string]$Iscc,
+    # the maintainer's Ed25519 update key (PEM); default: $env:FOLDERSTORM2_UPDATE_KEY,
+    # else folderstorm2-update-key.pem in the user's folder (RELEASING.md, "Signing key")
+    [string]$SigningKey
 )
 $ErrorActionPreference = 'Stop'
 
@@ -117,7 +123,7 @@ function Get-Sha256([string]$File) {
 }
 # Each file's .sha256 holds "<sha256>  <name>", the line the updater checks.
 function Assert-Checksums([string[]]$Files) {
-    foreach ($file in $Files | Where-Object { -not $_.EndsWith('.sha256') }) {
+    foreach ($file in $Files | Where-Object { -not $_.EndsWith('.sha256') -and -not $_.EndsWith('.sig') }) {
         $line = (Get-Content -Raw -LiteralPath "$file.sha256").Trim()
         if ($line -cne "$(Get-Sha256 $file)  $(Split-Path -Leaf $file)") { Stop-Release "checksum mismatch: $file" }
     }
@@ -161,6 +167,10 @@ try {
     if ($brand -notmatch 'macro_rules! product \{\s*\(\) => \{\s*"([^"]+)"') { Stop-Release 'folderstorm-brand has no product!()' }
     $product = $Matches[1]
     $prefix = Get-BrandConstant 'RELEASE_PREFIX'
+    # the public keys the updater trusts: a release signed with another key is never offered
+    if ($brand -notmatch '(?s)pub const UPDATE_KEYS: &\[&str\] = &\[(.*?)\];') { Stop-Release 'folderstorm-brand has no UPDATE_KEYS' }
+    $updateKeys = @([regex]::Matches($Matches[1], '"([0-9a-f]{64})"') | ForEach-Object { $_.Groups[1].Value })
+    if ($updateKeys.Count -eq 0) { Stop-Release 'folderstorm-brand lists no UPDATE_KEYS' }
     $github = Get-BrandConstant 'REPOSITORY'
     $target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $repo 'target' }
     $assetsRoot = $target
@@ -179,6 +189,7 @@ try {
     $assets = @(
         (Join-Path $dist "$name.zip"),
         (Join-Path $dist "$name.zip.sha256"),
+        (Join-Path $dist "$name.zip.sha256.sig"),
         (Join-Path $dist "$name-symbols.zip"),
         (Join-Path $dist "$name-symbols.zip.sha256"),
         (Join-Path $dist "$name-setup.exe"),
@@ -243,6 +254,22 @@ try {
         Write-Host "cargo: $($cargo.Source)"
         Write-Host "dump_syms: $($dumpSymsCommand.Source)"
         Write-Host "Inno Setup: $isccPath"
+
+        # the update key: its file only, never its content in the output
+        $home_ = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
+        $keyFile = if ($SigningKey) { $SigningKey } elseif ($env:FOLDERSTORM2_UPDATE_KEY) { $env:FOLDERSTORM2_UPDATE_KEY } else { Join-Path $home_ 'folderstorm2-update-key.pem' }
+        if (-not (Test-Path -LiteralPath $keyFile -PathType Leaf)) {
+            $message = "no update signing key at ${keyFile}: viewers would not offer an unsigned release. Give its path with -SigningKey (RELEASING.md, `"Signing key`")"
+            if ($DryRun) { Write-Warning $message } else { Stop-Release $message }
+        } else {
+            Write-Host "update signing key: $keyFile"
+        }
+        $openssl = Get-Command openssl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $openssl) {
+            $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            $found = if ($git) { @('mingw64\bin\openssl.exe', 'usr\bin\openssl.exe') | ForEach-Object { Join-Path (Split-Path (Split-Path $git.Source)) $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1 }
+            if (-not $found) { Stop-Release 'openssl not found (it comes with Git for Windows): needed to sign the release' }
+        }
     }
     if ($Draft) {
         $gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -297,11 +324,11 @@ try {
         }
         Write-Host "main's tree is the candidate's: the merged code is what was built"
 
-        # the same six names, each file with the recorded SHA-256 and a matching .sha256
+        # the same seven names, each file with the recorded SHA-256 and a matching .sha256
         $names = @($assets | ForEach-Object { Split-Path -Leaf $_ })
         $listed = @($manifest.assets | ForEach-Object { "$($_.name)" })
         if ($listed.Count -ne $names.Count -or (Compare-Object -ReferenceObject $names -DifferenceObject $listed -CaseSensitive)) {
-            Stop-Release "the candidate lists other assets than the six of ${tag}: $($listed -join ', ')"
+            Stop-Release "the candidate lists other assets than the seven of ${tag} (a candidate built before release signing? build it again): $($listed -join ', ')"
         }
         foreach ($file in $assets) {
             $leaf = Split-Path -Leaf $file
@@ -311,7 +338,7 @@ try {
             if ($hash -cne $recorded) { Stop-Release "$leaf is not the file that was tested (SHA-256 $hash, the candidate recorded $recorded): build and test a new candidate" }
         }
         Assert-Checksums $assets
-        Write-Host 'the six assets match the candidate and their .sha256 files'
+        Write-Host 'the seven assets match the candidate and their .sha256 files'
     }
 
     $features = 'aurora-viewer/xr-static-loader'
@@ -336,6 +363,7 @@ try {
         Write-Host "2. git tag $tag   (at $head, local only$(if ($Candidate) { ', removed right after the build' }))"
         Write-Host "3. `$env:AURORA_VERSION_TAG = '$tag'; $(Format-Command $build)"
         Write-Host "4. $(Format-Command @('package-release.ps1', '-Exe', $exe, '-Mcp', $mcp, '-Tag', $tag, '-Destination', $dist, '-DumpSyms', $dumpSymsCommand.Source))"
+        Write-Host "   $(Format-Command @('sign-release.ps1', '-Files', (Join-Path $dist "$name.zip.sha256"), '-KeyFile', $keyFile, '-PublicKey', ($updateKeys -join ',')))"
         Write-Host "5. $(Format-Command @('build-installer.ps1', '-Package', (Join-Path $dist $name), '-Tag', $tag, '-Destination', $dist, '-Iscc', $isccPath))"
         Write-Host '6. the release assets:'
         $assets | ForEach-Object { Write-Host "     $_" }
@@ -380,6 +408,14 @@ try {
         Write-Step 'Package (zip, symbols, checksums)'
         $packaged = & (Join-Path $PSScriptRoot 'package-release.ps1') -Exe $exe -Mcp $mcp -Tag $tag -Destination $dist -DumpSyms $dumpSymsCommand.Source
 
+        # --- 4b. Sign the zip's .sha256 for the updater -----------------------------
+        # upstream's script: it refuses a key that is none of UPDATE_KEYS and
+        # checks each signature it writes
+        Write-Step 'Sign for the updater (<zip>.sha256.sig)'
+        & (Join-Path $repo 'scripts/sign-release.ps1') -Files (Join-Path $dist "$name.zip.sha256") -KeyFile $keyFile -PublicKey $updateKeys | Out-Host
+        $signature = Join-Path $dist "$name.zip.sha256.sig"
+        if (-not (Test-Path -LiteralPath $signature -PathType Leaf) -or ((Get-Item -LiteralPath $signature).Length % 64) -ne 0) { Stop-Release "the signature $signature was not written" }
+
         # --- 5. Installer ------------------------------------------------------------
         Write-Step 'Installer (Inno Setup)'
         $installer = & (Join-Path $PSScriptRoot 'build-installer.ps1') -Package (Join-Path $dist $name) -Tag $tag -Destination $dist -Iscc $isccPath
@@ -387,7 +423,7 @@ try {
         # every asset is there, and every checksum matches its file
         # only the paths the two scripts return: a stray blank or text line from a
         # tool's console output is not an asset
-        $made = @($packaged) + @($installer) |
+        $made = @($packaged) + @($installer) + @($signature) |
             Where-Object { $_ -is [string] -and $_.Trim() -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
             ForEach-Object { (Resolve-Path -LiteralPath $_).Path }
         foreach ($asset in $assets) {
@@ -423,10 +459,11 @@ try {
 
     # --- 6. Summary --------------------------------------------------------------------
     Write-Step $(if ($Candidate) { "Candidate $tag is built: these are the files to test" } elseif ($FromExisting) { "Release ${tag}: the tested files" } else { "Release $tag is built" })
-    foreach ($file in $assets | Where-Object { -not $_.EndsWith('.sha256') }) {
+    foreach ($file in $assets | Where-Object { -not $_.EndsWith('.sha256') -and -not $_.EndsWith('.sig') }) {
         $item = Get-Item -LiteralPath $file
         Write-Host ("{0}`n    {1:N1} MB   SHA-256 {2}" -f $item.FullName, ($item.Length / 1MB), (Get-Sha256 $file))
         Write-Host "  $($item.FullName).sha256"
+        if (Test-Path -LiteralPath "$($item.FullName).sha256.sig") { Write-Host "  $($item.FullName).sha256.sig   (the updater's signature)" }
     }
     Write-Host ''
     Write-Host "The package folder $(Join-Path $dist $name) is not uploaded; try it: & '$(Join-Path (Join-Path $dist $name) (Get-BrandConstant 'EXE'))' --version"
@@ -448,7 +485,7 @@ try {
         Write-Step 'Draft GitHub release'
         Invoke-Checked 'gh release create' { & gh @ghArgs }
         Write-Host ''
-        Write-Host "Draft $tag created, not published. The human reviews it (title, notes, six assets$(if ($isBeta) { ', pre-release box ticked' })) and clicks Publish release:" -ForegroundColor Green
+        Write-Host "Draft $tag created, not published. The human reviews it (title, notes, seven assets$(if ($isBeta) { ', pre-release box ticked' })) and clicks Publish release:" -ForegroundColor Green
         Write-Host "  gh release view $tag --repo $github --web"
     } else {
         Write-Host ''

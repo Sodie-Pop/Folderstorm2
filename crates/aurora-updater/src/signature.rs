@@ -29,12 +29,7 @@ pub type Key = [u8; 32];
 /// before anything is published, rather than publish a release no viewer
 /// accepts; `scripts/setup-release-signing.ps1` adds a new one
 /// (docs/UPDATES.md, "Changing the key").
-pub const RELEASE_KEYS: &[&str] = &[
-    // release-keys-begin
-    // UPDATE_SIGNING_KEY_NEXT, 2026-11-23
-    "4eaa4034d0643e00a0d9daeddfb6f1b6f683a509a03c526c3673e71ee5c0034d",
-    // release-keys-end
-];
+pub const RELEASE_KEYS: &[&str] = folderstorm_brand::UPDATE_KEYS; // Folderstorm: the fork's own release keys
 
 /// What a signature file's name adds to the signed file's.
 pub const SUFFIX: &str = ".sig";

@@ -6,8 +6,9 @@ human's Windows PC. The background is in
 [plans/releases-and-installer.md](plans/releases-and-installer.md), sections
 1, 2, 3 and 8.
 
-There are three ways, with the same result (a **draft** release with the
-same six assets):
+There are three ways to make a **draft** release. The script and the
+manual steps give the same seven assets, signed for the updater; the
+GitHub workflow gives six, unsigned (see "Signing key"):
 
 - **One script** (the usual way): `folderstorm/scripts/build-release.ps1` on
   the human's Windows PC ([below](#the-usual-way-one-script)). To release
@@ -62,13 +63,14 @@ The human chooses the version.
 
 ## The release assets
 
-Six files, in `target/release-assets/<tag>/` (ignored by git; under
+Seven files, in `target/release-assets/<tag>/` (ignored by git; under
 `$env:CARGO_TARGET_DIR` instead of `target/` when it is set). For `v0.1.0`:
 
 | File | What |
 |---|---|
 | `Folderstorm2-v0.1.0-windows-x64.zip` | the update and download: `Folderstorm2.exe`, `folderstorm-mcp.exe`, `assets/`, `LICENSE`, `NOTICE.md`, `README.md`, `aurora-install.json`, all inside one folder of the same name |
 | `Folderstorm2-v0.1.0-windows-x64.zip.sha256` | `<sha256>  <zip name>`, the line the updater checks |
+| `Folderstorm2-v0.1.0-windows-x64.zip.sha256.sig` | the Ed25519 signature of that `.sha256` with the maintainer's update key: the updater offers no release without it ("Signing key" below) |
 | `Folderstorm2-v0.1.0-windows-x64-symbols.zip` | Breakpad symbols for crash reports |
 | `Folderstorm2-v0.1.0-windows-x64-symbols.zip.sha256` | its checksum |
 | `Folderstorm2-v0.1.0-windows-x64-setup.exe` | the per-user installer (Inno Setup): the same files as the zip, in `%LOCALAPPDATA%\Programs\Folderstorm2`, with Start menu shortcuts. The updater ignores it |
@@ -89,6 +91,34 @@ The human installs these, once:
 | Inno Setup 6 | `winget install --id JRSoftware.InnoSetup -e` (or `choco install innosetup`) | the installer |
 | GitHub CLI | `winget install --id GitHub.cli -e`, then the human runs `gh auth login` | the draft (`-Draft`) |
 | PowerShell 7 | `winget install --id Microsoft.PowerShell -e` | the scripts: run them from `pwsh`, not Windows PowerShell 5.1 |
+| The update signing key | made once by the human ("Signing key" below) | the `.sig` the updater checks |
+
+### Signing key
+
+Since the 2026-11-24 upstream sync, the updater offers a release only when
+its zip's `.sha256` carries a `.sha256.sig` made with a key the viewer
+trusts: `UPDATE_KEYS` in `crates/folderstorm-brand/src/lib.rs` (public
+halves only). The private key is the human's alone: never in the
+repository, a chat, a log or a GitHub secret an agent can read.
+
+- The key file: `%USERPROFILE%\folderstorm2-update-key.pem` by default.
+  Another place: `-SigningKey <path>`, or the `FOLDERSTORM2_UPDATE_KEY`
+  environment variable. `build-release.ps1` signs with it (through
+  upstream's `scripts/sign-release.ps1`, which refuses a key that is not in
+  `UPDATE_KEYS`) and stops before anything is built without it.
+- Keep a backup (a password manager's attachment, an encrypted drive). A
+  lost key means installed viewers never accept a new release: they would
+  have to be reinstalled by hand from a build that trusts a new key.
+- Made with Git for Windows' `openssl`:
+  `openssl genpkey -algorithm ed25519 -out folderstorm2-update-key.pem`;
+  its public half (hex) is bytes 12 to 43 of
+  `openssl pkey -in folderstorm2-update-key.pem -pubout -outform DER`.
+- Changing the key: add the new public key to `UPDATE_KEYS` beside the old
+  one, release once signed with the old key (viewers update to a build that
+  trusts both), then sign with the new one and remove the old one.
+
+The manual `folderstorm-release.yml` draft job signs nothing: viewers do
+not offer its drafts as updates.
 
 ## The usual way: one script
 
@@ -132,7 +162,7 @@ In order, it stops with a clear message at the first problem:
 6. **Summary**: every asset with its size and SHA-256, and the exact
    `gh release create` command.
 7. **Draft** (with `-Draft`): that command, `gh release create <tag> --draft
-   --target <commit>` (`--prerelease` for a beta) with the six assets and
+   --target <commit>` (`--prerelease` for a beta) with the seven assets and
    the notes. Never published, never `--latest`.
 
 **After a failure**, fix the cause and run the same command again with
@@ -232,8 +262,11 @@ it in the paths below.)
 $Dist = "target/release-assets/$Tag"
 $Name = "Folderstorm2-$Tag-windows-x64"
 ./folderstorm/scripts/package-release.ps1 -Exe target/release/aurora-viewer.exe -Mcp target/release/folderstorm-mcp.exe -Tag $Tag
+./scripts/sign-release.ps1 -Files "$Dist/$Name.zip.sha256" -KeyFile "$env:USERPROFILE\folderstorm2-update-key.pem" -PublicKey 992bb2812104c11f29c68c787c33b20c002510f1fcb4b17d4026441e9c33ad21
 ./folderstorm/scripts/build-installer.ps1 -Package "$Dist/$Name" -Tag $Tag
 ```
+
+(`-PublicKey`: the keys of `UPDATE_KEYS` in `folderstorm-brand`.)
 
 ### 4. Verify
 
@@ -251,7 +284,7 @@ foreach ($file in "$Dist/$Name.zip", "$Dist/$Name-symbols.zip", "$Dist/$Name-set
 `gh` must already be signed in by the human (`gh auth status`):
 
 ```powershell
-$assets = "$Dist/$Name.zip", "$Dist/$Name.zip.sha256", "$Dist/$Name-symbols.zip", "$Dist/$Name-symbols.zip.sha256",
+$assets = "$Dist/$Name.zip", "$Dist/$Name.zip.sha256", "$Dist/$Name.zip.sha256.sig", "$Dist/$Name-symbols.zip", "$Dist/$Name-symbols.zip.sha256",
     "$Dist/$Name-setup.exe", "$Dist/$Name-setup.exe.sha256"
 $ghArgs = @($Tag) + $assets + @('--repo', 'Sodie-Pop/Folderstorm2', '--draft', '--target', $Commit,
     '--title', "Folderstorm2 $Tag", '--notes-file', 'folderstorm/release-notes-header.md', '--generate-notes')
@@ -265,7 +298,7 @@ starts with `folderstorm/release-notes-header.md`, if they wrote some.
 
 ## The human reviews and publishes
 
-The human checks the draft on GitHub (title, notes, the six assets, the
+The human checks the draft on GitHub (title, notes, the seven assets, the
 pre-release box for a beta), then clicks **Publish release**. Installed
 viewers see it within ten minutes.
 
