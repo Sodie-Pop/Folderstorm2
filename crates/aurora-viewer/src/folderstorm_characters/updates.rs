@@ -114,7 +114,7 @@ mod tests {
             notes: "notes".into(),
             url: String::new(),
             archive: None,
-            checksum: None,
+            sha256: None,
             required: false,
             minimum: None,
             grace: std::time::Duration::ZERO,

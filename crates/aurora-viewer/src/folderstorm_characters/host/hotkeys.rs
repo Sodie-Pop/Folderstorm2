@@ -290,9 +290,17 @@ mod tests {
         };
         let down = std::collections::HashSet::from([input.clone()]);
         // (the HUD gesture is Ctrl itself, held with any key: not a key's)
-        bindings.triggered(&input, mods).or_else(|| {
+        // (off Windows the viewer's Rendering features › UI is Ctrl+Shift+F1,
+        // where desktops keep Ctrl+Alt+F1; the session host is Windows')
+        // (the inventory lists' shortcuts are read by the focused list alone, with
+        // their exact modifiers: `ui::inventory::shortcuts`, never by this dispatch)
+        let ours = |action: &crate::keybinds::Action| {
+            !crate::keybinds::is_inventory(*action) && (cfg!(windows) || *action != crate::keybinds::Action::ToggleUiFeature)
+        };
+        bindings.triggered(&input, mods).filter(ours).or_else(|| {
             all_actions()
                 .filter(|action| *action != crate::keybinds::Action::HudDrag)
+                .filter(ours)
                 .find(|action| bindings.held(*action, &down, mods))
         })
     }

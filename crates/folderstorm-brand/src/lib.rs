@@ -132,6 +132,16 @@ pub const RELEASES_PAGE: &str = "https://github.com/Sodie-Pop/Folderstorm2/relea
 pub const RELEASES_API: &str = "https://api.github.com/repos/Sodie-Pop/Folderstorm2/releases?per_page=100";
 /// Where release assets are downloaded from: `<this>/<tag>/<asset>`.
 pub const RELEASES_DOWNLOAD: &str = "https://github.com/Sodie-Pop/Folderstorm2/releases/download";
+/// The Ed25519 public keys (hex) a release's `.sha256` must be signed with
+/// for the updater to offer it (`aurora-updater` signature.rs, upstream's
+/// `RELEASE_KEYS`). The private key is the maintainer's alone, never in the
+/// repository; `folderstorm/scripts/build-release.ps1` signs with it
+/// (RELEASING.md, "Signing key"). While the key changes, list the old and
+/// the new one.
+pub const UPDATE_KEYS: &[&str] = &[
+    // the maintainer's key, 2026-11-25
+    "992bb2812104c11f29c68c787c33b20c002510f1fcb4b17d4026441e9c33ad21",
+];
 
 /// File name of the viewer in shipped Windows builds: packaging
 /// (`folderstorm/scripts/package-release.ps1`) renames cargo's

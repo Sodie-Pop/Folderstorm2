@@ -224,10 +224,26 @@ pub(super) fn shortcut(ui: &egui::Ui, st: &mut InventoryUi) {
 /// a new folder window otherwise.
 fn go(inv: &Inventory, st: &mut InventoryUi, id: Uuid) {
     let single_folder = !st.is_main() && !st.scope.is_nil() && st.scope != inv.root;
-    if single_folder {
-        st.navigate_to = Some(id);
+    if st.single_folder.is_some() {
+        // upstream's single folder mode ("Open in a new window"): its folder
+        // is `browse`, as "Open in current window" moves it (context_catalog/extra.rs)
+        st.browse = id;
+        st.search.clear();
+        st.selection.clear();
+        st.selected = None;
+    } else if single_folder {
+        st.folderstorm_navigate = Some(id);
     } else {
         st.open_folder_window(id);
+    }
+}
+
+/// After a folder window's frame: it moves to the folder `go` asked for.
+pub(super) fn navigate(w: &mut InventoryWindow) {
+    if let Some(root) = w.state.folderstorm_navigate.take() {
+        w.root = root;
+        w.state.scope = root;
+        w.state.view = Default::default();
     }
 }
 
@@ -524,7 +540,7 @@ mod tests {
             ..Default::default()
         };
         go(&inv, &mut window, id(13));
-        assert_eq!(window.navigate_to, Some(id(13)));
+        assert_eq!(window.folderstorm_navigate, Some(id(13)));
         assert!(window.windows.is_empty());
     }
 }

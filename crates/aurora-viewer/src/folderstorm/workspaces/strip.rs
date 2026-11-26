@@ -269,7 +269,7 @@ pub fn in_row(ui: &mut egui::Ui, p: &Palette, icons: &Icons, row: Rect, fold: Re
         crate::ui::widgets::divider_stroke(p),
     );
     pills(ui, p, icons, &view, &measured, left, cy);
-    let frame = ui.ctx().cumulative_frame_nr();
+    let frame = ui.ctx().cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ui.ctx().data_mut(|d| d.insert_temp(hosted_id(), frame));
     // (the row stops its own pills `GAP` before what it takes for the button)
     Rect::from_min_max(pos2(left - DIVIDER + GAP, fold.top()), fold.max)
@@ -285,7 +285,7 @@ pub fn own_row(ctx: &egui::Context, p: &Palette, icons: &Icons, under: Rect) {
     let Some(view) = shown(ctx) else {
         return;
     };
-    if ctx.data(|d| d.get_temp::<u64>(hosted_id())) == Some(ctx.cumulative_frame_nr()) {
+    if ctx.data(|d| d.get_temp::<u64>(hosted_id())) == Some(ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT)) {
         return;
     }
     let full = row_bounds(under, false);
@@ -305,7 +305,7 @@ pub fn own_row(ctx: &egui::Context, p: &Palette, icons: &Icons, under: Rect) {
     islands::set_favorites_row_bottom(ctx, Some(rect.bottom()));
     #[cfg(test)]
     {
-        let frame = ctx.cumulative_frame_nr();
+        let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
         ctx.data_mut(|d| d.insert_temp(Id::unique("folderstorm_strip_own"), (frame, rect)));
     }
 }
@@ -314,5 +314,5 @@ pub fn own_row(ctx: &egui::Context, p: &Palette, icons: &Icons, under: Rect) {
 #[cfg(test)]
 pub(super) fn own_island(ctx: &egui::Context) -> Option<Rect> {
     let (frame, rect) = ctx.data(|d| d.get_temp::<(u64, Rect)>(Id::unique("folderstorm_strip_own")))?;
-    (frame + 1 == ctx.cumulative_frame_nr()).then_some(rect)
+    (frame + 1 == ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT)).then_some(rect)
 }

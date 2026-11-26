@@ -179,7 +179,7 @@ fn open_dialog(ctx: &egui::Context, target: Target) {
         Ok(_) => {
             if let Ok(mut choosing) = choosing(ctx).lock() {
                 choosing.pending = Some((target, slot));
-                choosing.looked = ctx.cumulative_frame_nr();
+                choosing.looked = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
                 choosing.refused = None;
             }
         }
@@ -194,7 +194,7 @@ fn answer(ctx: &egui::Context, target: &Target) -> (Option<Result<Picture, Impor
     let Ok(mut choosing) = choosing.lock() else {
         return (None, false);
     };
-    let now = ctx.cumulative_frame_nr();
+    let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     if choosing.looked.saturating_add(3) < now {
         choosing.pending = None;
     }

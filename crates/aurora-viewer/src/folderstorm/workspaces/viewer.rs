@@ -157,7 +157,7 @@ impl State {
             self.running = None;
             return found;
         };
-        let now = ctx.cumulative_frame_nr();
+        let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
         let t = ctx.input(|i| i.time);
         if self.window != Some(seen.id) {
             // a new window is Aurora's own: nothing asked of it yet

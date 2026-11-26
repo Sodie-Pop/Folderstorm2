@@ -90,7 +90,7 @@ impl Loader {
     /// The texture of `file` to draw this frame, with the picture's own
     /// size; starts or finishes its decoding.
     pub(crate) fn poll(&mut self, ctx: &egui::Context, folder: &Path, file: &str, side: u32) -> Option<(egui::TextureId, [u32; 2])> {
-        let now = ctx.cumulative_frame_nr();
+        let now = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
         let same = self.file.as_deref() == Some(file);
         // a larger side is worth decoding again only when the picture was
         // reduced (the window grew over more monitors)

@@ -41,7 +41,7 @@ pub(super) fn frame(ctx: &egui::Context, st: &mut State, settings: &mut Settings
         }
         return false;
     }
-    if st.demo_done || ctx.cumulative_frame_nr() < OPEN_AT {
+    if st.demo_done || ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT) < OPEN_AT {
         return false;
     }
     st.demo_done = true;

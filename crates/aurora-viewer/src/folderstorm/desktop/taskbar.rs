@@ -109,7 +109,7 @@ fn registry_id() -> Id {
 ///
 /// With the taskbar off this is one read of egui's memory and false.
 pub fn holds(ctx: &egui::Context, floater: &Floater<'_>, icon: &str, collapsed: bool) -> bool {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data_mut(|d| {
         let registry = d.get_temp_mut_or_default::<Registry>(registry_id());
         if registry.live.is_none_or(|at| at + 1 < frame) {
@@ -171,7 +171,7 @@ pub fn holds(ctx: &egui::Context, floater: &Floater<'_>, icon: &str, collapsed: 
 /// button stands for it), for the tests.
 #[cfg(test)]
 pub(super) fn held(ctx: &egui::Context, id: &str) -> bool {
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     ctx.data(|d| d.get_temp::<Registry>(registry_id()))
         .is_some_and(|registry| registry.windows.iter().any(|w| w.id == id && w.held && w.seen + 1 >= frame))
 }
@@ -297,7 +297,7 @@ pub(super) fn drawn(ctx: &egui::Context) -> Drawn {
     let drawn: Drawn = ctx
         .data(|d| d.get_temp(Id::unique("folderstorm_taskbar_drawn")))
         .unwrap_or_default();
-    if drawn.frame + 1 >= ctx.cumulative_frame_nr() {
+    if drawn.frame + 1 >= ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT) {
         drawn
     } else {
         Drawn::default()
@@ -411,7 +411,7 @@ pub fn show(ctx: &egui::Context, desktop: &Desktop, env: &Env) {
         return;
     }
     let strip = super::taskbar_strip(ctx, desktop).map(|(_, rect)| rect);
-    let frame = ctx.cumulative_frame_nr();
+    let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
     let (windows, leaving) = ctx.data_mut(|d| {
         let registry = d.get_temp_mut_or_default::<Registry>(registry_id());
         let was = registry.holding && registry.live.is_some_and(|at| at + 1 >= frame);

@@ -147,7 +147,9 @@ fn uploads() -> MutexGuard<'static, Uploads> {
 pub fn frame(settings: &UploadSettings, p: &Palette) {
     let mut u = uploads();
     u.palette = Some(*p);
-    let dropped = u.dropped.take_if(|d| d.ctx.cumulative_frame_nr() > d.frame);
+    let dropped = u
+        .dropped
+        .take_if(|d| d.ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT) > d.frame);
     if let Some(dropped) = dropped {
         drop(u);
         if let Some(field) = dropped.target() {
@@ -214,7 +216,7 @@ pub fn paste(ui: &egui::Ui, field: egui::Id) {
             _ => true,
         });
     });
-    let frame = ui.ctx().cumulative_frame_nr();
+    let frame = ui.ctx().cumulative_frame_nr_for(egui::ViewportId::ROOT);
     for image in pasted {
         let key = (Arc::as_ptr(&image) as usize, frame);
         {
@@ -268,7 +270,7 @@ pub fn after_field(ui: &mut egui::Ui, field: egui::Id, rect: egui::Rect) {
     let ctx = ui.ctx().clone();
     let Some(p) = uploads().palette else { return };
     if usable() {
-        if demo::mode() == Some(demo::Mode::Staged) && ctx.cumulative_frame_nr() >= 240 {
+        if demo::mode() == Some(demo::Mode::Staged) && ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT) >= 240 {
             let first = !std::mem::replace(&mut uploads().demo_staged, true);
             if first {
                 stage(&ctx, field, Source::Pasted(Arc::new(demo::picture())));
@@ -289,7 +291,7 @@ pub fn after_field(ui: &mut egui::Ui, field: egui::Id, rect: egui::Rect) {
         }
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
         if !dropped.is_empty() {
-            let frame = ctx.cumulative_frame_nr();
+            let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
             let mut u = uploads();
             if u.dropped.as_ref().is_none_or(|d| d.frame != frame) {
                 u.dropped = Some(Dropped {

@@ -26,7 +26,7 @@ GitHub turns Actions off on a fork until its owner enables them.
 | Review slots (`pr-slots.yml`) | Disable | Upstream's limit on outside contributors' PRs. |
 | Crash triage (`crash-triage.yml`) | Disable | Sorts crash reports filed as issues on Aurora's repository. |
 | Wiki (`wiki.yml`) | Disable | Publishes upstream's guides to the repository wiki. |
-| Release (`release.yml`) | Disable | Builds and publishes "Aurora-Viewer" zips on a version tag, with Aurora's update policy. The fork releases with the local script of [RELEASING.md](RELEASING.md) or `folderstorm-release.yml` instead. |
+| Release (`release.yml`) | Disable | Builds and publishes "Aurora-Viewer" zips on a version tag, with Aurora's update policy. The fork releases with the local script of [RELEASING.md](RELEASING.md) or `folderstorm-release.yml` instead. Since the 2026-11-24 sync, Release and Nightly also check that an admin started them (`.github/actions/release-admin`) and sign each `.sha256` file and the update policy with the `UPDATE_SIGNING_KEY*` secrets of a `release` environment (`scripts/sign-release.ps1`), which the fork does not have: see [FOLLOW-UPS.md](FOLLOW-UPS.md), "Signed updates". |
 | Sign test (`sign-test.yml`) | Disable | Manual only. Tries upstream's SignPath code signing with Aurora's SignPath project; it fails without the `SIGNPATH_*` variable and secret, which the fork does not have. Release and Nightly (already disabled) also sign through SignPath now (`.github/actions/signpath-sign`). |
 | Folderstorm release build (`folderstorm-release.yml`) | **Keep** | Ours: a draft GitHub release from a version, or a test build artifact (see below). |
 | Media plugins (`media-plugins.yml`) | Disable | Manual only. Builds the media plugin packs. Aurora's published packs can be used instead. |
@@ -81,7 +81,7 @@ folder: `Folderstorm2-v<V>-windows-x64-setup.exe` and its `.sha256`. Inno
 Setup 6 is on GitHub's `windows-latest` image (its software list, checked
 2026-11-20); the step installs it with Chocolatey if it is ever missing.
 The **Draft release** job, the only one with `contents: write`, then runs
-`gh release create v<V> --draft --target <commit>` with those six files,
+`gh release create v<V> --draft --target <commit>` with those six files (unsigned: viewers do not offer such a draft as an update, see RELEASING.md, "Signing key"),
 `folderstorm/release-notes-header.md` and GitHub's generated notes, and
 `--prerelease` for a beta. Nothing is visible to viewers until the human
 publishes the draft; GitHub creates the tag then. No update policy file is
