@@ -167,7 +167,7 @@ impl Sides {
         match bar {
             Bar::Left => self.area.left() < self.world.left() - SLACK,
             Bar::Right => self.area.right() > self.world.right() + SLACK,
-            Bar::Bottom => false,
+            Bar::Bottom | Bar::Top => false,
         }
     }
 }
@@ -580,6 +580,7 @@ mod tests {
                         bar: Bar::Left,
                         style: Default::default(),
                         editing: false,
+                        floating: false,
                     };
                     let (room, _) = bars::side::bars(
                         &mut child,

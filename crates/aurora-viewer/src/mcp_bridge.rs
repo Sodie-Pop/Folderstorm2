@@ -1169,7 +1169,7 @@ pub fn sent(request: Option<Uuid>, failure: Option<String>) {
 /// that a waiting change learns its outcome.
 pub fn observe(event: &aurora_net::NetEvent) {
     // Folderstorm: the simulator's reason, for the assistant's teleport
-    if let aurora_net::NetEvent::TeleportFailed { reason } = event {
+    if let aurora_net::NetEvent::TeleportFailed { reason, .. } = event {
         with(|rt| rt.desk.teleport_failed(reason));
         return;
     }
