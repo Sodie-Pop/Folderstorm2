@@ -774,6 +774,10 @@ pub struct DrawLists {
     /// The poser subject's skinned faces, while a part is hovered: the part
     /// is kept on them by its joints (`FrameParams::part_joints`).
     pub part_faces: Vec<DrawCmd>,
+    /// LiveMesh's Fit lab (fit_clip.rs): the garment's faces, and the
+    /// faces of the bodies that wear it, on the avatars it is checked on.
+    pub fit_garment: Vec<DrawCmd>,
+    pub fit_body: Vec<DrawCmd>,
     /// Impostor pictures to take this frame (at most `IMPOSTOR_CAPTURES`).
     pub impostor_captures: Vec<ImpostorCapture>,
     /// Impostor cards to draw.
@@ -849,6 +853,8 @@ impl DrawLists {
         self.select_pattern.clear();
         self.hud_select_pattern.clear();
         self.part_faces.clear();
+        self.fit_garment.clear();
+        self.fit_body.clear();
     }
     /// Make `self` a copy of `src`, keeping the memory `self` already has:
     /// the lists of a frame packet, filled again every frame.
@@ -908,6 +914,8 @@ impl DrawLists {
         self.select_pattern.clone_from(&src.select_pattern);
         self.hud_select_pattern.clone_from(&src.hud_select_pattern);
         self.part_faces.clone_from(&src.part_faces);
+        self.fit_garment.clone_from(&src.fit_garment);
+        self.fit_body.clone_from(&src.fit_body);
         self.impostor_captures.clone_from(&src.impostor_captures);
         self.impostor_sprites.clone_from(&src.impostor_sprites);
         self.gpu = src.gpu;
@@ -969,6 +977,8 @@ impl DrawLists {
         self.select_pattern.clear();
         self.hud_select_pattern.clear();
         self.part_faces.clear();
+        self.fit_garment.clear();
+        self.fit_body.clear();
         self.impostor_captures.clear();
         self.impostor_sprites.clear();
         self.gpu = None;
@@ -1221,6 +1231,39 @@ pub enum AoMethod {
     Gtao { quality: u8 },
 }
 
+/// How finely the G-buffer keeps the normals the reflections read
+/// (Preferences › Graphics › Reflections; renderer.rs `gbuf_format`). The
+/// Legacy Viewer keeps its deferred normals in 16 bits whatever is drawn
+/// (LLPipeline::addDeferredAttachments, indra/newview/pipeline.cpp); Aurora
+/// keeps them so where it shows, and lets the user decide.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NormalPrecision {
+    /// High while the reflections are traced, Standard otherwise: a traced
+    /// ray shows the steps of 8 bits as terraces on a smooth face, where
+    /// the screen-space reflections' own march hides them (measured: little
+    /// to see between the two).
+    #[default]
+    Auto,
+    /// 8 bits per channel.
+    Standard,
+    /// 16 bits per channel: 4 bytes more per pixel and per sample.
+    High,
+}
+
+impl NormalPrecision {
+    /// Whether the G-buffer keeps 16 bits per channel. `ssr`: the
+    /// reflections are on (a G-buffer the rain alone asks for wets the
+    /// ground and mirrors nothing: 8 bits); `traced`: they are traced on
+    /// this device.
+    pub fn high(self, ssr: bool, traced: bool) -> bool {
+        ssr && match self {
+            NormalPrecision::Auto => traced,
+            NormalPrecision::Standard => false,
+            NormalPrecision::High => true,
+        }
+    }
+}
+
 /// What is ray-traced (rt_shadows.rs), on a device opened with ray
 /// queries ([`RayTracingSupport`]): Preferences › Graphics › Ray tracing,
 /// experimental and off by default.
@@ -1410,6 +1453,8 @@ pub struct RenderSettings {
     pub mirror_scale: f32,
     /// Screen-space reflections on glossy surfaces.
     pub ssr: bool,
+    /// The precision of the normals they read.
+    pub normal_precision: NormalPrecision,
     pub ray_tracing: RayTracing,
     /// The traced shadows' softness and lamps.
     pub rt_tuning: RtTuning,
@@ -1466,6 +1511,7 @@ impl Default for RenderSettings {
             water_reflection_scale: 0.25,
             mirror_scale: 0.25,
             ssr: false,
+            normal_precision: NormalPrecision::default(),
             ray_tracing: RayTracing::default(),
             rt_tuning: RtTuning::default(),
             rain_surfaces: false,
@@ -1810,6 +1856,9 @@ pub struct FrameParams {
     /// as a selection's halo with a light tint inside.
     pub part_joints: [u32; 8],
     pub part_color: [f32; 4],
+    /// LiveMesh's Fit lab clipping map on `fit_body` (fit_clip.rs): off
+    /// when None.
+    pub fit_clip: Option<crate::FitClipParams>,
     /// Palette-joint part classes (0 occluder, 1 body, 2 face, 3/4 hands,
     /// 5 wings, 6 tail), eight four-bit classes per word. The shader sums
     /// each part's weights and interpolates them before picking a part.
@@ -2119,7 +2168,8 @@ pub struct RenderStats {
     pub present_mode: Option<wgpu::PresentMode>,
     /// The settings the frame was drawn with: the MSAA samples and SSR of
     /// the previous ones while the pipelines for new ones compile (#1746).
-    /// None until the backend has answered a frame.
+    /// None until the backend has answered a frame, and while pipelines
+    /// compile (a set for another G-buffer format leaves them as asked).
     pub settings: Option<RenderSettings>,
     /// Aurora Weather: snow lies on the ground (local or the region's), as
     /// the footprints' map and the snow cover read it.
@@ -2338,6 +2388,22 @@ impl GpuElement {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_normals_keep_16_bits_for_the_reflections_that_show_it() {
+        use super::NormalPrecision::{Auto, High, Standard};
+        assert_eq!(super::NormalPrecision::default(), Auto);
+        // Automatic: with the traced reflections only
+        assert!(Auto.high(true, true));
+        assert!(!Auto.high(true, false));
+        // the user's choice holds either way
+        assert!(High.high(true, false) && High.high(true, true));
+        assert!(!Standard.high(true, true) && !Standard.high(true, false));
+        // without the reflections (the G-buffer of the rain alone), 8 bits
+        for precision in [Auto, Standard, High] {
+            assert!(!precision.high(false, true) && !precision.high(false, false), "{precision:?}");
+        }
+    }
+
     /// High is the default (the image before the qualities); each quality
     /// is cheaper than the one above.
     #[test]
