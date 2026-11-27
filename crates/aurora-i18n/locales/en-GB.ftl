@@ -846,3 +846,97 @@ notecard-lsl-demo =
     { "    }" }
     { "}" }
     ```
+
+# Folderstorm: British spellings of the fork's own messages (en.ftl's Folderstorm block)
+
+folderstorm-colour = Colour
+
+folderstorm-colour-none = No colour
+
+folderstorm-condensed-off-help = Back to a card per character, with every choice: standby, sound, monitor, alias and colour, close, add or remove a character, hotkeys.
+
+folderstorm-condensed-on-help = One line per character: its colour, its name, where it is, what is unread or waits for an answer, and its quick action. The cards and their choices are one click away.
+
+folderstorm-controller-metadata-help = The list then also gives each character's name, alias and colour, and what its monitor shows. Off: only the profile names, their states and which one is active.
+
+folderstorm-identity = Alias and colour
+
+folderstorm-identity-help = Alias and colour: a name and a colour of your choice for this character, to tell the characters apart in the host's windows.
+
+folderstorm-settings-characters-intro = One character's own settings: its name in the host, its colour, how it waits behind the active one, Attention and its alerts.
+
+fs-background-brightness-help = Dims the picture. The colour stays as chosen.
+
+fs-background-colour = Colour
+
+fs-background-fit-help = Fill covers each monitor and cuts what overflows. Fit shows the whole picture with the colour around it. Stretch fills the monitor exactly. Centre and Tile use the picture's own pixels.
+
+fs-background-kind-colour = A colour
+
+fs-background-missing = The picture cannot be found: its colour is shown instead. Choose it again.
+
+fs-background-unreadable = The picture cannot be read: its colour is shown instead. Choose another one.
+
+fs-desktop-icon-colour = Colour…
+
+fs-desktop-style-colour = Colour
+
+fs-desktop-style-colour-default = Default colour
+
+fs-desktop-style-colour-picture = A picture is drawn in its own colours: this colour shows again when the picture is removed.
+
+fs-desktop-style-custom = Another colour
+
+fs-gesture-board-custom-color = Any colour
+
+fs-gesture-board-help = Click a button to play its gesture or sound. A sound's button has a speaker: everyone nearby hears it, as when a sound is played from the Inventory. A gesture that is not active is activated when it is played; a click on a gesture that is playing stops it. Drag gestures, sounds or whole folders (with their sub-folders) from the Inventory onto the board, or choose Add. Right-click a button to rename it, colour it, resize it, move it or remove it (the inventory item stays as it is). Drag a button onto another to move it before it. Ctrl+F finds buttons on all the boards, or on this board only. Options holds the boards (new, rename, duplicate, delete) and the size of all the buttons.
+
+fs-keys-next-favorite = Next favourite layout
+
+fs-keys-previous-favorite = Previous favourite layout
+
+fs-layouts-favorite = Favourite
+
+fs-mcp-ask-build-surface = Change face { $face } of the object “{ $object }” (colour, glow or texture repeats)
+
+fs-mcp-ask-favorite-add = Add { $what } to Favourites
+
+fs-mcp-ask-favorite-remove = Remove { $what } from Favourites
+
+fs-mcp-edit-hint = Create folders and new items (notecards, scripts, landmarks…), rename items and folders, change descriptions, favourites and pictures. System folders, the Library and items without Modify permission stay as they are.
+
+fs-saved-list-hint = A double click applies. The star puts an entry in the favourites strip and first in World › Layouts.
+
+fs-search-layouts-list = favourite favourites star apply rename delete
+
+fs-search-layouts-quick = quick switch switcher toggle toolbar button shortcut keyboard hotkey favourite favourites
+
+fs-search-taskbar = taskbar task bar minimised minimised collapsed windows window tray dock
+
+fs-search-workspaces-list = apply rename delete favourite star graphics profile camera preset view hud huds
+
+fs-strip-box = Show the favourites strip
+
+fs-strip-hide = Hide the favourites strip
+
+fs-strip-show = Favourites strip
+
+fs-strip-show-help = Shows your favourite layouts and workspaces under the top bar, one click to apply: at the right end of the favourites' row when it is shown (Interface › Favourites access › Row below the top bar), in a small bar of their own otherwise. What does not fit is in More…, with the Layouts & workspaces window and Previous arrangement. Hidden in mouselook. Give a layout or a workspace its star in the Layouts & workspaces window.
+
+fs-switcher-favorites = Favourites
+
+fs-switcher-help = Type part of a name: the list keeps the workspaces and the layouts that have it, favourites first. Up and Down choose, Enter applies the chosen entry and closes this window, Esc closes it. A click on a star makes a favourite. A layout says where things go: the picture shows what it would give on the monitors connected now. A workspace says which windows are open: applying it opens them and closes the others, on its layout if it names one. Update saves the arrangement of now in the layout in use, or the windows open now in the workspace in use; Save new… keeps them under another name.
+
+fs-switcher-star = Add to the favourites
+
+fs-switcher-unstar = Remove from the favourites
+
+fs-switching-favorites-intro = Give an entry its star in the Saved tab: favourites come first in World › Layouts and in the Layouts & workspaces window.
+
+fs-switching-keys-help = The “Switch layout” button, the Layouts & workspaces window and the favourite layouts have shortcuts without a key until you give them one, in Shortcuts › Other › Layouts.
+
+inventory-custom-tab-customize = Customise tab…
+
+inventory-custom-tab-filters-title = Customise tab: { $name }
+
+inventory-tab-icon-palette = Colours

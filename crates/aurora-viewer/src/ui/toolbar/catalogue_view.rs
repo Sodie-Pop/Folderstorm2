@@ -167,6 +167,8 @@ pub(super) fn category(command: &str) -> Category {
         | "bar_volume" => Interface,
         "performance" | "beacons" | "settings_debug" | "statistics" | "soundexplorer" | "assetblacklist" | "omnifilter" | "RFO" => Advanced,
         "report_bug" | "reporter" | "gridstatus" | "howto" => Help,
+        "workspaces" | "layout_toggle" => Interface, // Folderstorm: the layouts' buttons
+        "gesture_board" => Avatar,                   // Folderstorm: beside Gestures
         _ => Custom,
     }
 }

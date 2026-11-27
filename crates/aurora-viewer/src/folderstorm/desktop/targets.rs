@@ -61,7 +61,34 @@ pub enum Class {
 }
 
 /// The commands whose button is their control.
-const BUTTON_ONLY: &[&str] = &["speak", "vr_view", "favorites"];
+const BUTTON_ONLY: &[&str] = &[
+    "speak",
+    "vr_view",
+    "favorites",
+    // upstream's interface blocks (2026-11-27 sync): spacers, dividers,
+    // floating blocks, drawers and the status bar's widgets are drawn in a
+    // bar; their button is their control, there is nothing to run
+    "toolbar_separator",
+    "toolbar_divider",
+    "toolbar_floating",
+    "drawer:interfaces",
+    "bar_navigation",
+    "bar_account",
+    "bar_system",
+    "bar_status",
+    "bar_balance",
+    "bar_clock",
+    "bar_ping",
+    "bar_fps",
+    "bar_network",
+    "bar_media",
+    "bar_music",
+    "bar_volume",
+    "bar_notifications",
+    "bar_conversations",
+    "bar_chat",
+    "aurora_menu",
+];
 
 /// The commands `run_command` runs as the button does (those Aurora cannot
 /// run yet are among them: the catalogue says which).
@@ -166,6 +193,21 @@ const RUNS: &[&str] = &[
     "movelock_options",
     "quickjump",
     "movement_enhancer",
+    // upstream's commands of the 2026-11-27 sync; the Build tools are
+    // gated by RLVa as the Build button is
+    "report_bug",
+    "location_bar",
+    "import_texture",
+    "import_sound",
+    "import_animation",
+    "import_material",
+    "import_mesh",
+    "import_local",
+    "import_advanced",
+    "import_settings",
+    "build_focus",
+    "build_grab",
+    "graphics_preferences",
 ];
 
 /// The class of the command `id`; None for one this table does not know
@@ -786,7 +828,7 @@ pub fn command_gate(id: &str, facts: &Facts) -> Result<(), Greyed> {
         "destinations" if facts.no_guide => Err(Greyed::NoGuide),
         "layout_toggle" if facts.toggle_unset => Err(Greyed::ToggleUnset),
         "sit" | "stand_up" if facts.sit_locked => Err(Greyed::Rlva),
-        "build" | "build_edit" | "build_create" | "build_land" if facts.build_locked => Err(Greyed::Rlva),
+        "build" | "build_focus" | "build_grab" | "build_edit" | "build_create" | "build_land" if facts.build_locked => Err(Greyed::Rlva),
         "fly" if facts.fly_locked => Err(Greyed::Rlva),
         _ => Ok(()),
     }
