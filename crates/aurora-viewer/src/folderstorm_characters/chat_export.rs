@@ -634,6 +634,7 @@ mod tests {
             blocked: false,
             beyond_range: false,
             speaker: Default::default(),
+            private_history: false,
         });
         w.chat_clock.pushed_back();
         say(&mut w, JANE, "Jane Doe", "two");
